@@ -1,0 +1,223 @@
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { PageHeader } from '@/src/components/layout/PageHeader';
+import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
+import { LoadingState } from '@/src/components/common/LoadingState';
+import { ErrorState } from '@/src/components/common/ErrorState';
+import { StatusBadge, meetingStatusColor } from '@/src/components/common/StatusBadge';
+import { RoleGuard } from '@/src/components/common/RoleGuard';
+import { AssignmentCard } from '@/src/components/cards/AssignmentCard';
+import { ThemedText } from '@/src/components/themed-text';
+import { AppColors } from '@/src/constants/app-colors';
+import { getMeetingById, updateMeeting, deleteMeeting } from '@/src/services/meetings/meetings-service';
+import { getAssignmentsByMeeting } from '@/src/services/assignments/assignments-service';
+import { Meeting, MEETING_STATUS_LABELS, MEETING_TYPE_LABELS } from '@/src/types/meeting';
+import { Assignment } from '@/src/types/assignment';
+import { formatDate, formatDateTime, formatTime } from '@/src/utils/dates/dates';
+import { formatFirestoreError } from '@/src/utils/errors/errors';
+
+export function MeetingDetailScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+
+  const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    Promise.all([getMeetingById(id), getAssignmentsByMeeting(id)])
+      .then(([m, a]) => {
+        setMeeting(m);
+        setAssignments(a);
+        if (!m) setError('Reunión no encontrada.');
+      })
+      .catch(() => setError('Error al cargar la reunión.'))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const handleDelete = async () => {
+    if (!meeting) return;
+    const confirmed =
+      Platform.OS === 'web'
+        ? window.confirm('¿Eliminar esta reunión?')
+        : await new Promise<boolean>((resolve) =>
+            Alert.alert('Eliminar reunión', '¿Estás seguro?', [
+              { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Eliminar', style: 'destructive', onPress: () => resolve(true) },
+            ])
+          );
+    if (!confirmed) return;
+    try {
+      await deleteMeeting(meeting.id);
+      router.back();
+    } catch (e) {
+      Alert.alert('Error', formatFirestoreError(e));
+    }
+  };
+
+  if (loading) return <LoadingState />;
+  if (error || !meeting)
+    return <ErrorState message={error ?? 'Reunión no encontrada.'} />;
+
+  return (
+    <ScreenContainer>
+      <PageHeader
+        title="Detalle de reunión"
+        showBack
+        actions={
+          <RoleGuard allowedRoles={['admin', 'supervisor']}>
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() => router.push(`/(protected)/meetings/edit/${meeting.id}` as any)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="pencil-outline" size={18} color={AppColors.primary} />
+            </TouchableOpacity>
+          </RoleGuard>
+        }
+      />
+
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Title + status */}
+        <View style={styles.titleSection}>
+          <StatusBadge
+            label={MEETING_STATUS_LABELS[meeting.status]}
+            color={meetingStatusColor[meeting.status]}
+          />
+          <ThemedText style={styles.title}>{meeting.title}</ThemedText>
+          <ThemedText style={styles.type}>
+            {MEETING_TYPE_LABELS[meeting.type]}
+          </ThemedText>
+        </View>
+
+        {/* Info card */}
+        <View style={styles.card}>
+          <InfoRow icon="calendar-outline" label="Fecha" value={formatDate(meeting.startDate)} />
+          <InfoRow
+            icon="time-outline"
+            label="Horario"
+            value={`${formatTime(meeting.startDate)} – ${formatTime(meeting.endDate)}`}
+          />
+          {meeting.location ? (
+            <InfoRow icon="location-outline" label="Lugar" value={meeting.location} />
+          ) : null}
+          {meeting.meetingUrl ? (
+            <InfoRow icon="link-outline" label="Enlace" value={meeting.meetingUrl} />
+          ) : null}
+          <InfoRow icon="person-outline" label="Organizador" value={meeting.organizerName} />
+          <InfoRow
+            icon="people-outline"
+            label="Asistentes"
+            value={`${meeting.attendees.length} persona${meeting.attendees.length !== 1 ? 's' : ''}`}
+          />
+        </View>
+
+        {/* Description */}
+        {meeting.description ? (
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>Descripción</ThemedText>
+            <ThemedText style={styles.description}>{meeting.description}</ThemedText>
+          </View>
+        ) : null}
+
+        {/* Notes */}
+        {meeting.notes ? (
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>Notas</ThemedText>
+            <ThemedText style={styles.description}>{meeting.notes}</ThemedText>
+          </View>
+        ) : null}
+
+        {/* Linked assignments */}
+        {assignments.length > 0 ? (
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>
+              Asignaciones vinculadas ({assignments.length})
+            </ThemedText>
+            <View style={styles.assignmentList}>
+              {assignments.map((a) => (
+                <AssignmentCard key={a.id} assignment={a} />
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {/* Danger zone */}
+        <RoleGuard allowedRoles={['admin', 'supervisor']}>
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={handleDelete}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="trash-outline" size={18} color={AppColors.error} />
+            <ThemedText style={styles.deleteBtnText}>Eliminar reunión</ThemedText>
+          </TouchableOpacity>
+        </RoleGuard>
+      </ScrollView>
+    </ScreenContainer>
+  );
+}
+
+function InfoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.infoRow}>
+      <Ionicons name={icon} size={16} color={AppColors.textMuted} />
+      <ThemedText style={styles.infoLabel}>{label}</ThemedText>
+      <ThemedText style={styles.infoValue} numberOfLines={2}>{value}</ThemedText>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: { padding: 16, gap: 16, paddingBottom: 32 },
+  titleSection: { gap: 6 },
+  title: { fontSize: 22, fontWeight: '800', color: AppColors.textPrimary, lineHeight: 28 },
+  type: { fontSize: 13, color: AppColors.textMuted },
+  card: {
+    backgroundColor: AppColors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    overflow: 'hidden',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.border,
+  },
+  infoLabel: { fontSize: 13, color: AppColors.textMuted, width: 100 },
+  infoValue: { flex: 1, fontSize: 14, color: AppColors.textPrimary, fontWeight: '500' },
+  section: { gap: 10 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: AppColors.textSecondary },
+  description: { fontSize: 14, color: AppColors.textMuted, lineHeight: 22 },
+  assignmentList: { gap: 10 },
+  editBtn: { padding: 8, backgroundColor: AppColors.primary + '22', borderRadius: 8 },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: AppColors.error + '44',
+    backgroundColor: AppColors.error + '11',
+    marginTop: 8,
+  },
+  deleteBtnText: { color: AppColors.error, fontWeight: '600' },
+});
