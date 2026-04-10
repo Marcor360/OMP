@@ -1,44 +1,83 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
+
 import { UserCard } from '@/src/components/cards/UserCard';
-import { LoadingState } from '@/src/components/common/LoadingState';
 import { EmptyState } from '@/src/components/common/EmptyState';
 import { ErrorState } from '@/src/components/common/ErrorState';
+import { LoadingState } from '@/src/components/common/LoadingState';
 import { RoleGuard } from '@/src/components/common/RoleGuard';
-import { AppColors } from '@/src/constants/app-colors';
+import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { subscribeToUsers } from '@/src/services/users/users-service';
+import { AppColors } from '@/src/constants/app-colors';
+import { useUser } from '@/src/context/user-context';
+import { getAllUsers, subscribeToUsers } from '@/src/services/users/users-service';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
 export function UsersListScreen() {
   const router = useRouter();
+  const {
+    congregationId,
+    isAdmin,
+    loadingProfile,
+    profileError,
+  } = useUser();
+
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    setError(null);
-    const unsub = subscribeToUsers((data) => {
-      setUsers(data);
+    if (loadingProfile) return;
+
+    if (!congregationId) {
+      setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
       setLoading(false);
+      return;
+    }
+
+    setError(null);
+
+    const unsubscribe = subscribeToUsers(
+      congregationId,
+      (data) => {
+        setUsers(data);
+        setLoading(false);
+        setRefreshing(false);
+      },
+      (snapshotError) => {
+        setError(formatFirestoreError(snapshotError));
+        setLoading(false);
+        setRefreshing(false);
+      }
+    );
+
+    return unsubscribe;
+  }, [congregationId, loadingProfile, profileError]);
+
+  const onRefresh = async () => {
+    if (!congregationId) return;
+
+    setRefreshing(true);
+
+    try {
+      const latestUsers = await getAllUsers(congregationId);
+      setUsers(latestUsers);
+    } catch (requestError) {
+      setError(formatFirestoreError(requestError));
+    } finally {
       setRefreshing(false);
-    });
-    return unsub;
-  }, []);
+    }
+  };
 
-  const onRefresh = () => setRefreshing(true);
-
-  if (loading) return <LoadingState message="Cargando usuarios..." />;
+  if (loading || loadingProfile) return <LoadingState message="Cargando usuarios..." />;
   if (error) return <ErrorState message={error} />;
 
-  return (
-    <ScreenContainer refreshing={refreshing} onRefresh={onRefresh} padded={false}>
-      {/* Toolbar */}
+  const header = (
+    <>
       <View style={styles.toolbar}>
         <ThemedText style={styles.count}>
           {users.length} usuario{users.length !== 1 ? 's' : ''}
@@ -55,24 +94,40 @@ export function UsersListScreen() {
         </RoleGuard>
       </View>
 
-      {users.length === 0 ? (
-        <EmptyState
-          icon="people-outline"
-          title="Sin usuarios"
-          description="Aún no hay usuarios registrados."
-          actionLabel="Crear usuario"
-          onAction={() => router.push('/(protected)/users/create')}
-        />
-      ) : (
-        <FlatList
-          data={users}
-          keyExtractor={(u) => u.uid}
-          renderItem={({ item }) => <UserCard user={item} />}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      {!isAdmin ? (
+        <View style={styles.permissionNotice}>
+          <ThemedText style={styles.permissionText}>
+            Solo administradores pueden crear, editar o desactivar usuarios.
+          </ThemedText>
+        </View>
+      ) : null}
+    </>
+  );
+
+  return (
+    <ScreenContainer scrollable={false} padded={false}>
+      <FlatList
+        data={users}
+        keyExtractor={(item) => item.uid}
+        renderItem={({ item }) => <UserCard user={item} />}
+        contentContainerStyle={styles.listContent}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <EmptyState
+              icon="people-outline"
+              title="Sin usuarios"
+              description="Aun no hay usuarios registrados en esta congregacion."
+              actionLabel={isAdmin ? 'Crear usuario' : undefined}
+              onAction={isAdmin ? () => router.push('/(protected)/users/create') : undefined}
+            />
+          </View>
+        }
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        showsVerticalScrollIndicator={false}
+      />
     </ScreenContainer>
   );
 }
@@ -105,11 +160,28 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  list: {
-    padding: 16,
+  listContent: {
     paddingBottom: 32,
   },
   separator: {
     height: 10,
+  },
+  emptyWrap: {
+    paddingTop: 16,
+    paddingHorizontal: 16,
+  },
+  permissionNotice: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: AppColors.warning + '66',
+    backgroundColor: AppColors.warning + '20',
+    borderRadius: 10,
+    padding: 12,
+  },
+  permissionText: {
+    fontSize: 13,
+    color: AppColors.warning,
+    fontWeight: '600',
   },
 });

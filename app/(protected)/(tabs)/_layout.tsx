@@ -1,12 +1,14 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { useUser } from '@/src/context/user-context';
+import { useAppColors } from '@/src/styles';
 import { getVisibleTabs } from '@/src/utils/permissions/permissions';
-import { AppColors } from '@/src/constants/app-colors';
 
 export default function TabsLayout() {
   const { role } = useUser();
+  const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const visible = getVisibleTabs(role);
   const bottomInset = Math.max(insets.bottom, 10);
@@ -20,15 +22,15 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarHideOnKeyboard: true,
         tabBarStyle: {
-          backgroundColor: AppColors.tabBar,
-          borderTopColor: AppColors.border,
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.border,
           borderTopWidth: 1,
           height: tabBarHeight,
           paddingTop: 8,
           paddingBottom: Math.max(bottomInset - 2, 8),
         },
-        tabBarActiveTintColor: AppColors.tabActive,
-        tabBarInactiveTintColor: AppColors.tabInactive,
+        tabBarActiveTintColor: colors.tabActive,
+        tabBarInactiveTintColor: colors.tabInactive,
         tabBarItemStyle: {
           paddingVertical: 2,
         },

@@ -2,15 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert, Platform, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
+import { ErrorState } from '@/src/components/common/ErrorState';
+import { LoadingState } from '@/src/components/common/LoadingState';
+import { RoleGuard } from '@/src/components/common/RoleGuard';
+import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common/StatusBadge';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
-import { LoadingState } from '@/src/components/common/LoadingState';
-import { ErrorState } from '@/src/components/common/ErrorState';
-import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common/StatusBadge';
-import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ThemedText } from '@/src/components/themed-text';
 import { AppColors } from '@/src/constants/app-colors';
-import { getUserById, updateUser } from '@/src/services/users/users-service';
+import { useUser } from '@/src/context/user-context';
+import { disableUserByAdmin, updateUserByAdmin } from '@/src/services/users/admin-users-service';
+import { getUserById } from '@/src/services/users/users-service';
 import { AppUser, ROLE_LABELS, STATUS_LABELS, UserStatus } from '@/src/types/user';
 import { formatDate } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -18,6 +21,7 @@ import { formatFirestoreError } from '@/src/utils/errors/errors';
 export function UserDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { congregationId, isAdmin, loadingProfile, profileError } = useUser();
 
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,49 +29,89 @@ export function UserDetailScreen() {
   const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
+    if (loadingProfile) return;
+
+    if (!id || !congregationId) {
+      setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
+      setLoading(false);
+      return;
+    }
+
     getUserById(id)
-      .then((u) => {
-        setUser(u);
-        if (!u) setError('Usuario no encontrado.');
+      .then((loadedUser) => {
+        if (!loadedUser) {
+          setError('Usuario no encontrado.');
+          return;
+        }
+
+        if (loadedUser.congregationId !== congregationId) {
+          setError('No tienes permisos para ver este usuario.');
+          return;
+        }
+
+        setUser(loadedUser);
       })
-      .catch(() => setError('Error al cargar el usuario.'))
+      .catch((requestError) => setError(formatFirestoreError(requestError)))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [congregationId, id, loadingProfile, profileError]);
 
   const handleToggleStatus = async () => {
     if (!user) return;
+
+    if (!isAdmin) {
+      Alert.alert('Permisos insuficientes', 'Solo administradores pueden cambiar el estado de usuarios.');
+      return;
+    }
+
     const newStatus: UserStatus = user.status === 'active' ? 'inactive' : 'active';
     const action = newStatus === 'inactive' ? 'desactivar' : 'activar';
 
     const confirmed =
       Platform.OS === 'web'
-        ? window.confirm(`¿Deseas ${action} a ${user.displayName}?`)
+        ? window.confirm(`Deseas ${action} a ${user.displayName}?`)
         : await new Promise<boolean>((resolve) =>
-            Alert.alert('Confirmar', `¿Deseas ${action} a ${user.displayName}?`, [
+            Alert.alert('Confirmar', `Deseas ${action} a ${user.displayName}?`, [
               { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
               { text: 'Confirmar', style: 'destructive', onPress: () => resolve(true) },
             ])
           );
 
     if (!confirmed) return;
+
     try {
       setToggling(true);
-      await updateUser(user.uid, { status: newStatus });
-      setUser((u) => (u ? { ...u, status: newStatus } : null));
-    } catch (e) {
-      Alert.alert('Error', formatFirestoreError(e));
+
+      if (newStatus === 'inactive') {
+        await disableUserByAdmin({ uid: user.uid });
+      } else {
+        await updateUserByAdmin({
+          uid: user.uid,
+          data: { isActive: true, status: 'active' },
+        });
+      }
+
+      setUser((current) =>
+        current
+          ? {
+              ...current,
+              status: newStatus,
+              isActive: newStatus === 'active',
+            }
+          : null
+      );
+    } catch (requestError) {
+      Alert.alert('Error', formatFirestoreError(requestError));
     } finally {
       setToggling(false);
     }
   };
 
-  if (loading) return <LoadingState />;
+  if (loading || loadingProfile) return <LoadingState />;
   if (error || !user) return <ErrorState message={error ?? 'Usuario no encontrado.'} />;
 
   const initials = user.displayName
     .split(' ')
-    .map((n) => n[0])
+    .map((segment) => segment[0])
     .slice(0, 2)
     .join('')
     .toUpperCase();
@@ -91,7 +135,6 @@ export function UserDetailScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Avatar */}
         <View style={styles.avatarSection}>
           <View style={[styles.avatar, { backgroundColor: roleColor[user.role] + '33' }]}>
             <ThemedText style={[styles.initials, { color: roleColor[user.role] }]}>
@@ -106,20 +149,22 @@ export function UserDetailScreen() {
           </View>
         </View>
 
-        {/* Info rows */}
         <View style={styles.card}>
-          <InfoRow icon="call-outline" label="Teléfono" value={user.phone ?? '—'} />
-          <InfoRow icon="business-outline" label="Departamento" value={user.department ?? '—'} />
+          <InfoRow icon="call-outline" label="Telefono" value={user.phone ?? '--'} />
+          <InfoRow icon="business-outline" label="Departamento" value={user.department ?? '--'} />
+          <InfoRow icon="home-outline" label="Congregacion" value={user.congregationId} />
           <InfoRow icon="calendar-outline" label="Creado" value={formatDate(user.createdAt)} />
           <InfoRow icon="time-outline" label="Actualizado" value={formatDate(user.updatedAt)} />
         </View>
 
-        {/* Actions */}
         <RoleGuard requiredRole="admin">
           <TouchableOpacity
             style={[
               styles.toggleBtn,
-              { backgroundColor: user.status === 'active' ? AppColors.error + '22' : AppColors.success + '22' },
+              {
+                backgroundColor:
+                  user.status === 'active' ? AppColors.error + '22' : AppColors.success + '22',
+              },
             ]}
             onPress={handleToggleStatus}
             disabled={toggling}
@@ -131,9 +176,16 @@ export function UserDetailScreen() {
               color={user.status === 'active' ? AppColors.error : AppColors.success}
             />
             <ThemedText
-              style={{ color: user.status === 'active' ? AppColors.error : AppColors.success, fontWeight: '600' }}
+              style={{
+                color: user.status === 'active' ? AppColors.error : AppColors.success,
+                fontWeight: '600',
+              }}
             >
-              {toggling ? 'Actualizando...' : user.status === 'active' ? 'Desactivar usuario' : 'Activar usuario'}
+              {toggling
+                ? 'Actualizando...'
+                : user.status === 'active'
+                  ? 'Desactivar usuario'
+                  : 'Activar usuario'}
             </ThemedText>
           </TouchableOpacity>
         </RoleGuard>

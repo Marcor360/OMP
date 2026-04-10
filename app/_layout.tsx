@@ -1,11 +1,13 @@
+import '../global.css';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useEffect } from 'react';
 
-import { useColorScheme } from '@/src/hooks/use-color-scheme';
 import { AuthProvider, useAuth } from '@/src/context/auth-context';
+import { ThemeModeProvider, useAppTheme } from '@/src/context/theme-context';
+import { getAppColors } from '@/src/styles';
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -43,16 +45,58 @@ function RootLayoutNav() {
   );
 }
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
+const navigationLight = getAppColors('light');
+const navigationDark = getAppColors('dark');
+
+const NavigationThemes = {
+  light: {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      primary: navigationLight.primary,
+      background: navigationLight.backgroundDark,
+      card: navigationLight.tabBar,
+      text: navigationLight.textPrimary,
+      border: navigationLight.border,
+      notification: navigationLight.error,
+    },
+  },
+  dark: {
+    ...DarkTheme,
+    colors: {
+      ...DarkTheme.colors,
+      primary: navigationDark.primary,
+      background: navigationDark.backgroundDark,
+      card: navigationDark.tabBar,
+      text: navigationDark.textPrimary,
+      border: navigationDark.border,
+      notification: navigationDark.error,
+    },
+  },
+} as const;
+
+function AppLayout() {
+  const { colorScheme, isReady } = useAppTheme();
+
+  if (!isReady) {
+    return null;
+  }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={colorScheme === 'dark' ? NavigationThemes.dark : NavigationThemes.light}>
       <AuthProvider>
         <RootLayoutNav />
       </AuthProvider>
-      <StatusBar style="auto" />
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
     </ThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeModeProvider>
+      <AppLayout />
+    </ThemeModeProvider>
   );
 }
 

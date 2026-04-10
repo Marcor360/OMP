@@ -9,15 +9,21 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+
+import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
-import { LoadingState } from '@/src/components/common/LoadingState';
 import { ThemedText } from '@/src/components/themed-text';
 import { AppColors } from '@/src/constants/app-colors';
-import { getUserById, createUserProfile, updateUser } from '@/src/services/users/users-service';
-import { AppUser, CreateUserDTO, UpdateUserDTO, UserRole, ROLE_LABELS } from '@/src/types/user';
-import { validateRequired, validateEmail, hasErrors } from '@/src/utils/validation/validation';
+import { useUser } from '@/src/context/user-context';
+import {
+  createUserByAdmin,
+  updateUserByAdmin,
+} from '@/src/services/users/admin-users-service';
+import { getUserById } from '@/src/services/users/users-service';
+import { ROLE_LABELS, UpdateUserDTO, UserRole } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { hasErrors, validateEmail, validateRequired } from '@/src/utils/validation/validation';
 
 type Mode = 'create' | 'edit';
 
@@ -31,6 +37,13 @@ export function UserFormScreen() {
   const router = useRouter();
   const mode: Mode = id ? 'edit' : 'create';
 
+  const {
+    congregationId,
+    isAdmin,
+    loadingProfile,
+    profileError,
+  } = useUser();
+
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('user');
@@ -41,54 +54,93 @@ export function UserFormScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (mode === 'edit' && id) {
-      getUserById(id)
-        .then((u) => {
-          if (u) {
-            setDisplayName(u.displayName);
-            setEmail(u.email);
-            setRole(u.role);
-            setPhone(u.phone ?? '');
-            setDepartment(u.department ?? '');
-          }
-        })
-        .finally(() => setLoading(false));
+    if (mode !== 'edit') {
+      setLoading(false);
+      return;
     }
-  }, [id, mode]);
+
+    if (!id || loadingProfile || !congregationId) return;
+
+    getUserById(id)
+      .then((loadedUser) => {
+        if (!loadedUser) {
+          Alert.alert('Error', 'Usuario no encontrado.');
+          router.back();
+          return;
+        }
+
+        if (loadedUser.congregationId !== congregationId) {
+          Alert.alert('Error', 'No tienes permisos para editar este usuario.');
+          router.back();
+          return;
+        }
+
+        setDisplayName(loadedUser.displayName);
+        setEmail(loadedUser.email);
+        setRole(loadedUser.role);
+        setPhone(loadedUser.phone ?? '');
+        setDepartment(loadedUser.department ?? '');
+      })
+      .catch((requestError) => {
+        Alert.alert('Error', formatFirestoreError(requestError));
+        router.back();
+      })
+      .finally(() => setLoading(false));
+  }, [congregationId, id, loadingProfile, mode, router]);
 
   const validate = (): boolean => {
-    const newErrors: FormErrors = {
+    const nextErrors: FormErrors = {
       displayName: validateRequired(displayName, 'El nombre'),
       email: mode === 'create' ? validateEmail(email) : undefined,
     };
-    setErrors(newErrors);
-    return !hasErrors(newErrors);
+
+    setErrors(nextErrors);
+    return !hasErrors(nextErrors as Record<string, string | undefined>);
   };
 
   const handleSave = async () => {
+    if (!isAdmin) {
+      Alert.alert('Permisos insuficientes', 'Solo administradores pueden crear o editar usuarios.');
+      return;
+    }
+
+    if (!congregationId) {
+      Alert.alert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
+      return;
+    }
+
     if (!validate()) return;
+
     setSaving(true);
+
     try {
       if (mode === 'create') {
-        // En producción, aquí llamarías a una Cloud Function para crear el usuario en Auth
-        // Por ahora, crea solo el perfil en Firestore con uid generado
-        const tempUid = `user_${Date.now()}`;
-        await createUserProfile(tempUid, { email, displayName, role, phone, department });
-        Alert.alert('Éxito', 'Usuario creado correctamente.');
+        await createUserByAdmin({
+          email,
+          displayName,
+          role,
+          congregationId,
+          phone,
+          department,
+          isActive: true,
+        });
+
+        Alert.alert('Exito', 'Usuario creado correctamente.');
       } else if (id) {
-        const data: UpdateUserDTO = { displayName, role, phone, department };
-        await updateUser(id, data);
-        Alert.alert('Éxito', 'Usuario actualizado correctamente.');
+        const payload: UpdateUserDTO = { displayName, role, phone, department };
+        await updateUserByAdmin({ uid: id, data: payload });
+        Alert.alert('Exito', 'Usuario actualizado correctamente.');
       }
+
       router.back();
-    } catch (e) {
-      Alert.alert('Error', formatFirestoreError(e));
+    } catch (requestError) {
+      Alert.alert('Error', formatFirestoreError(requestError));
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <LoadingState />;
+  if (loading || loadingProfile) return <LoadingState />;
 
   const roles: UserRole[] = ['admin', 'supervisor', 'user'];
 
@@ -99,18 +151,27 @@ export function UserFormScreen() {
         showBack
       />
       <ScrollView contentContainerStyle={styles.form}>
+        {!isAdmin ? (
+          <View style={styles.permissionNotice}>
+            <ThemedText style={styles.permissionText}>
+              Solo administradores pueden guardar cambios en usuarios.
+            </ThemedText>
+          </View>
+        ) : null}
+
         <Field label="Nombre completo *" error={errors.displayName}>
           <TextInput
             style={[styles.input, errors.displayName && styles.inputError]}
             value={displayName}
             onChangeText={setDisplayName}
-            placeholder="Ej: Juan Pérez"
+            placeholder="Ej: Juan Perez"
             placeholderTextColor={AppColors.textDisabled}
+            editable={isAdmin}
           />
         </Field>
 
         {mode === 'create' && (
-          <Field label="Correo electrónico *" error={errors.email}>
+          <Field label="Correo electronico *" error={errors.email}>
             <TextInput
               style={[styles.input, errors.email && styles.inputError]}
               value={email}
@@ -119,37 +180,38 @@ export function UserFormScreen() {
               placeholderTextColor={AppColors.textDisabled}
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={isAdmin}
             />
           </Field>
         )}
 
         <Field label="Rol">
           <View style={styles.roleRow}>
-            {roles.map((r) => (
+            {roles.map((item) => (
               <TouchableOpacity
-                key={r}
-                style={[styles.roleChip, role === r && styles.roleChipActive]}
-                onPress={() => setRole(r)}
+                key={item}
+                style={[styles.roleChip, role === item && styles.roleChipActive]}
+                onPress={() => setRole(item)}
                 activeOpacity={0.8}
+                disabled={!isAdmin}
               >
-                <ThemedText
-                  style={[styles.roleChipText, role === r && styles.roleChipTextActive]}
-                >
-                  {ROLE_LABELS[r]}
+                <ThemedText style={[styles.roleChipText, role === item && styles.roleChipTextActive]}>
+                  {ROLE_LABELS[item]}
                 </ThemedText>
               </TouchableOpacity>
             ))}
           </View>
         </Field>
 
-        <Field label="Teléfono">
+        <Field label="Telefono">
           <TextInput
             style={styles.input}
             value={phone}
             onChangeText={setPhone}
-            placeholder="10 dígitos"
+            placeholder="10 digitos"
             placeholderTextColor={AppColors.textDisabled}
             keyboardType="phone-pad"
+            editable={isAdmin}
           />
         </Field>
 
@@ -160,13 +222,14 @@ export function UserFormScreen() {
             onChangeText={setDepartment}
             placeholder="Ej: Recursos Humanos"
             placeholderTextColor={AppColors.textDisabled}
+            editable={isAdmin}
           />
         </Field>
 
         <TouchableOpacity
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+          style={[styles.saveButton, (saving || !isAdmin) && styles.saveButtonDisabled]}
           onPress={handleSave}
-          disabled={saving}
+          disabled={saving || !isAdmin}
           activeOpacity={0.8}
         >
           {saving ? (
@@ -269,5 +332,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  permissionNotice: {
+    borderWidth: 1,
+    borderColor: AppColors.warning + '66',
+    backgroundColor: AppColors.warning + '20',
+    borderRadius: 10,
+    padding: 12,
+  },
+  permissionText: {
+    fontSize: 13,
+    color: AppColors.warning,
+    fontWeight: '600',
   },
 });

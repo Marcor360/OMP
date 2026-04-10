@@ -1,52 +1,58 @@
 import {
-  collection,
-  doc,
+  addDoc,
+  deleteDoc,
   getDoc,
   getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
   onSnapshot,
+  orderBy,
+  query,
   serverTimestamp,
+  updateDoc,
+  where,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { db } from '@/src/config/firebase/firebase';
-import {
-  Meeting,
-  CreateMeetingDTO,
-  UpdateMeetingDTO,
-  MeetingStatus,
-} from '@/src/types/meeting';
 
-const COLLECTION = 'meetings';
-const col = () => collection(db, COLLECTION);
+import {
+  congregationMeetingsCollectionRef,
+  meetingDocRef,
+} from '@/src/lib/firebase/refs';
+import {
+  CreateMeetingDTO,
+  Meeting,
+  MeetingStatus,
+  UpdateMeetingDTO,
+} from '@/src/types/meeting';
 
 const docToMeeting = (id: string, data: Record<string, unknown>): Meeting =>
   ({ id, ...data } as Meeting);
 
-/** Obtiene una reunión por ID */
-export const getMeetingById = async (id: string): Promise<Meeting | null> => {
-  const snap = await getDoc(doc(db, COLLECTION, id));
+/** Obtiene una reunion por ID */
+export const getMeetingById = async (
+  congregationId: string,
+  id: string
+): Promise<Meeting | null> => {
+  const snap = await getDoc(meetingDocRef(congregationId, id));
   if (!snap.exists()) return null;
   return docToMeeting(snap.id, snap.data());
 };
 
 /** Obtiene todas las reuniones ordenadas por fecha */
-export const getAllMeetings = async (): Promise<Meeting[]> => {
-  const q = query(col(), orderBy('startDate', 'desc'));
+export const getAllMeetings = async (congregationId: string): Promise<Meeting[]> => {
+  const q = query(
+    congregationMeetingsCollectionRef(congregationId),
+    orderBy('startDate', 'desc')
+  );
   const snap = await getDocs(q);
   return snap.docs.map((d) => docToMeeting(d.id, d.data()));
 };
 
 /** Obtiene reuniones por estado */
 export const getMeetingsByStatus = async (
+  congregationId: string,
   status: MeetingStatus
 ): Promise<Meeting[]> => {
   const q = query(
-    col(),
+    congregationMeetingsCollectionRef(congregationId),
     where('status', '==', status),
     orderBy('startDate', 'desc')
   );
@@ -55,28 +61,33 @@ export const getMeetingsByStatus = async (
 };
 
 /** Obtiene reuniones donde el usuario es organizador o asistente */
-export const getMeetingsByUser = async (uid: string): Promise<Meeting[]> => {
+export const getMeetingsByUser = async (
+  congregationId: string,
+  uid: string
+): Promise<Meeting[]> => {
+  const meetingsRef = congregationMeetingsCollectionRef(congregationId);
+
   const [organizerSnap, attendeeSnap] = await Promise.all([
-    getDocs(query(col(), where('organizerUid', '==', uid), orderBy('startDate', 'desc'))),
-    getDocs(query(col(), where('attendees', 'array-contains', uid), orderBy('startDate', 'desc'))),
+    getDocs(query(meetingsRef, where('organizerUid', '==', uid), orderBy('startDate', 'desc'))),
+    getDocs(query(meetingsRef, where('attendees', 'array-contains', uid), orderBy('startDate', 'desc'))),
   ]);
 
   const byId = new Map<string, Meeting>();
   [...organizerSnap.docs, ...attendeeSnap.docs].forEach((d) => {
     byId.set(d.id, docToMeeting(d.id, d.data()));
   });
-  return Array.from(byId.values()).sort(
-    (a, b) => b.startDate.seconds - a.startDate.seconds
-  );
+
+  return Array.from(byId.values()).sort((a, b) => b.startDate.seconds - a.startDate.seconds);
 };
 
-/** Crea una reunión */
+/** Crea una reunion */
 export const createMeeting = async (
+  congregationId: string,
   data: CreateMeetingDTO,
   organizerUid: string,
   organizerName: string
 ): Promise<string> => {
-  const ref = await addDoc(col(), {
+  const ref = await addDoc(congregationMeetingsCollectionRef(congregationId), {
     ...data,
     organizerUid,
     organizerName,
@@ -84,42 +95,54 @@ export const createMeeting = async (
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
   return ref.id;
 };
 
-/** Actualiza una reunión */
+/** Actualiza una reunion */
 export const updateMeeting = async (
+  congregationId: string,
   id: string,
   data: UpdateMeetingDTO
 ): Promise<void> => {
-  await updateDoc(doc(db, COLLECTION, id), {
+  await updateDoc(meetingDocRef(congregationId, id), {
     ...data,
     updatedAt: serverTimestamp(),
   });
 };
 
-/** Elimina una reunión */
-export const deleteMeeting = async (id: string): Promise<void> => {
-  await deleteDoc(doc(db, COLLECTION, id));
+/** Elimina una reunion */
+export const deleteMeeting = async (congregationId: string, id: string): Promise<void> => {
+  await deleteDoc(meetingDocRef(congregationId, id));
 };
 
 /** Cuenta reuniones por estado */
 export const getMeetingsCount = async (
+  congregationId: string,
   status?: MeetingStatus
 ): Promise<number> => {
-  const q = status
-    ? query(col(), where('status', '==', status))
-    : col();
+  const meetingsRef = congregationMeetingsCollectionRef(congregationId);
+  const q = status ? query(meetingsRef, where('status', '==', status)) : meetingsRef;
   const snap = await getDocs(q);
   return snap.size;
 };
 
-/** Suscripción en tiempo real a todas las reuniones */
+/** Suscripcion en tiempo real a todas las reuniones */
 export const subscribeToMeetings = (
-  callback: (meetings: Meeting[]) => void
+  congregationId: string,
+  callback: (meetings: Meeting[]) => void,
+  onError?: (error: unknown) => void
 ): Unsubscribe => {
-  const q = query(col(), orderBy('startDate', 'desc'));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => docToMeeting(d.id, d.data())));
-  });
+  const q = query(
+    congregationMeetingsCollectionRef(congregationId),
+    orderBy('startDate', 'desc')
+  );
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      callback(snap.docs.map((d) => docToMeeting(d.id, d.data())));
+    },
+    onError
+  );
 };

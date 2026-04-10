@@ -1,5 +1,16 @@
-import { getDocs, collection, query, where } from 'firebase/firestore';
-import { db } from '@/src/config/firebase/firebase';
+import { Assignment } from '@/src/types/assignment';
+import { getAllAssignments, getAssignmentsByUser } from '@/src/services/assignments/assignments-service';
+import { getAllMeetings } from '@/src/services/meetings/meetings-service';
+import { getAllUsers } from '@/src/services/users/users-service';
+
+const countOverduePending = (assignments: Assignment[]): number => {
+  const now = Date.now();
+
+  return assignments.filter((assignment) => {
+    if (assignment.status !== 'pending' || !assignment.dueDate) return false;
+    return assignment.dueDate.toDate().getTime() < now;
+  }).length;
+};
 
 export interface DashboardMetrics {
   totalUsers: number;
@@ -12,72 +23,44 @@ export interface DashboardMetrics {
   overdueAssignments: number;
 }
 
-/** Carga todas las métricas del dashboard en paralelo */
-export const getDashboardMetrics = async (): Promise<DashboardMetrics> => {
-  const usersCol = collection(db, 'users');
-  const meetingsCol = collection(db, 'meetings');
-  const assignmentsCol = collection(db, 'assignments');
-
-  const [
-    totalUsersSnap,
-    activeUsersSnap,
-    totalMeetingsSnap,
-    scheduledMeetingsSnap,
-    totalAssignmentsSnap,
-    pendingAssignmentsSnap,
-    completedAssignmentsSnap,
-  ] = await Promise.all([
-    getDocs(usersCol),
-    getDocs(query(usersCol, where('status', '==', 'active'))),
-    getDocs(meetingsCol),
-    getDocs(query(meetingsCol, where('status', '==', 'scheduled'))),
-    getDocs(assignmentsCol),
-    getDocs(query(assignmentsCol, where('status', '==', 'pending'))),
-    getDocs(query(assignmentsCol, where('status', '==', 'completed'))),
+/** Carga metricas globales de la congregacion */
+export const getDashboardMetrics = async (
+  congregationId: string
+): Promise<DashboardMetrics> => {
+  const [users, meetings, assignments] = await Promise.all([
+    getAllUsers(congregationId),
+    getAllMeetings(congregationId),
+    getAllAssignments(congregationId),
   ]);
 
-  // Calcular vencidas: pending con dueDate < ahora
-  const now = new Date();
-  const overdueAssignments = pendingAssignmentsSnap.docs.filter((d) => {
-    const data = d.data();
-    if (!data.dueDate) return false;
-    return data.dueDate.toDate() < now;
-  }).length;
+  const pendingAssignments = assignments.filter((item) => item.status === 'pending');
+  const completedAssignments = assignments.filter((item) => item.status === 'completed');
 
   return {
-    totalUsers: totalUsersSnap.size,
-    activeUsers: activeUsersSnap.size,
-    totalMeetings: totalMeetingsSnap.size,
-    scheduledMeetings: scheduledMeetingsSnap.size,
-    totalAssignments: totalAssignmentsSnap.size,
-    pendingAssignments: pendingAssignmentsSnap.size,
-    completedAssignments: completedAssignmentsSnap.size,
-    overdueAssignments,
+    totalUsers: users.length,
+    activeUsers: users.filter((user) => user.isActive).length,
+    totalMeetings: meetings.length,
+    scheduledMeetings: meetings.filter((meeting) => meeting.status === 'scheduled').length,
+    totalAssignments: assignments.length,
+    pendingAssignments: pendingAssignments.length,
+    completedAssignments: completedAssignments.length,
+    overdueAssignments: countOverduePending(assignments),
   };
 };
 
-/** Métricas reducidas para roles sin acceso a usuarios */
+/** Metricas para usuario regular dentro de su congregacion */
 export const getDashboardMetricsForUser = async (
+  congregationId: string,
   uid: string
 ): Promise<Partial<DashboardMetrics>> => {
-  const assignmentsCol = collection(db, 'assignments');
-
-  const [totalSnap, pendingSnap, completedSnap] = await Promise.all([
-    getDocs(query(assignmentsCol, where('assignedToUid', '==', uid))),
-    getDocs(query(assignmentsCol, where('assignedToUid', '==', uid), where('status', '==', 'pending'))),
-    getDocs(query(assignmentsCol, where('assignedToUid', '==', uid), where('status', '==', 'completed'))),
-  ]);
-
-  const now = new Date();
-  const overdueAssignments = pendingSnap.docs.filter((d) => {
-    const data = d.data();
-    return data.dueDate && data.dueDate.toDate() < now;
-  }).length;
+  const assignments = await getAssignmentsByUser(congregationId, uid);
+  const pendingAssignments = assignments.filter((item) => item.status === 'pending');
+  const completedAssignments = assignments.filter((item) => item.status === 'completed');
 
   return {
-    totalAssignments: totalSnap.size,
-    pendingAssignments: pendingSnap.size,
-    completedAssignments: completedSnap.size,
-    overdueAssignments,
+    totalAssignments: assignments.length,
+    pendingAssignments: pendingAssignments.length,
+    completedAssignments: completedAssignments.length,
+    overdueAssignments: countOverduePending(assignments),
   };
 };

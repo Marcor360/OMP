@@ -10,25 +10,27 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
+
+import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
-import { LoadingState } from '@/src/components/common/LoadingState';
 import { ThemedText } from '@/src/components/themed-text';
 import { AppColors } from '@/src/constants/app-colors';
-import { getMeetingById, createMeeting, updateMeeting } from '@/src/services/meetings/meetings-service';
-import { MeetingType, MEETING_TYPE_LABELS, UpdateMeetingDTO } from '@/src/types/meeting';
-import { validateRequired, hasErrors } from '@/src/utils/validation/validation';
-import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { useUser } from '@/src/context/user-context';
 import { useAuth } from '@/src/context/auth-context';
+import { useUser } from '@/src/context/user-context';
+import { createMeeting, getMeetingById, updateMeeting } from '@/src/services/meetings/meetings-service';
+import { MeetingType, MEETING_TYPE_LABELS, UpdateMeetingDTO } from '@/src/types/meeting';
+import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
 type Mode = 'create' | 'edit';
 
 export function MeetingFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
-  const { appUser } = useUser();
   const { user } = useAuth();
+  const { appUser, congregationId, isAdminOrSupervisor, loadingProfile, profileError } = useUser();
+
   const mode: Mode = id ? 'edit' : 'create';
 
   const [title, setTitle] = useState('');
@@ -41,98 +43,148 @@ export function MeetingFormScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (mode === 'edit' && id) {
-      getMeetingById(id)
-        .then((m) => {
-          if (m) {
-            setTitle(m.title);
-            setDescription(m.description ?? '');
-            setType(m.type);
-            setLocation(m.location ?? '');
-            setMeetingUrl(m.meetingUrl ?? '');
-          }
-        })
-        .finally(() => setLoading(false));
+    if (mode !== 'edit') {
+      setLoading(false);
+      return;
     }
-  }, [id, mode]);
+
+    if (!id || !congregationId || loadingProfile) {
+      return;
+    }
+
+    getMeetingById(congregationId, id)
+      .then((meeting) => {
+        if (!meeting) {
+          Alert.alert('Error', 'No se encontro la reunion.');
+          router.back();
+          return;
+        }
+
+        setTitle(meeting.title);
+        setDescription(meeting.description ?? '');
+        setType(meeting.type);
+        setLocation(meeting.location ?? '');
+        setMeetingUrl(meeting.meetingUrl ?? '');
+      })
+      .catch((requestError) => {
+        Alert.alert('Error', formatFirestoreError(requestError));
+        router.back();
+      })
+      .finally(() => setLoading(false));
+  }, [congregationId, id, loadingProfile, mode, router]);
 
   const validate = () => {
-    const e = { title: validateRequired(title, 'El título') };
-    setErrors(e);
-    return !hasErrors(e);
+    const nextErrors = { title: validateRequired(title, 'El titulo') };
+    setErrors(nextErrors);
+    return !hasErrors(nextErrors);
   };
 
   const handleSave = async () => {
+    if (!isAdminOrSupervisor) {
+      Alert.alert('Permisos insuficientes', 'No tienes permisos para crear o editar reuniones.');
+      return;
+    }
+
+    if (!congregationId) {
+      Alert.alert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
+      return;
+    }
+
     if (!validate()) return;
+
     setSaving(true);
+
     try {
       const now = Timestamp.now();
       const oneHour = Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000);
 
       if (mode === 'create') {
         await createMeeting(
-          { title, description, type, location, meetingUrl, startDate: now, endDate: oneHour, attendees: [user?.uid ?? ''] },
+          congregationId,
+          {
+            title,
+            description,
+            type,
+            location,
+            meetingUrl,
+            startDate: now,
+            endDate: oneHour,
+            attendees: user?.uid ? [user.uid] : [],
+          },
           user?.uid ?? '',
           appUser?.displayName ?? user?.email ?? 'Usuario'
         );
-        Alert.alert('Éxito', 'Reunión creada correctamente.');
+
+        Alert.alert('Exito', 'Reunion creada correctamente.');
       } else if (id) {
-        const data: UpdateMeetingDTO = { title, description, type, location, meetingUrl };
-        await updateMeeting(id, data);
-        Alert.alert('Éxito', 'Reunión actualizada.');
+        const payload: UpdateMeetingDTO = { title, description, type, location, meetingUrl };
+        await updateMeeting(congregationId, id, payload);
+        Alert.alert('Exito', 'Reunion actualizada.');
       }
+
       router.back();
-    } catch (e) {
-      Alert.alert('Error', formatFirestoreError(e));
+    } catch (requestError) {
+      Alert.alert('Error', formatFirestoreError(requestError));
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <LoadingState />;
+  if (loading || loadingProfile) return <LoadingState />;
 
-  const types: MeetingType[] = ['internal', 'external', 'review', 'training'];
+  const meetingTypes: MeetingType[] = ['internal', 'external', 'review', 'training'];
 
   return (
     <ScreenContainer scrollable={false}>
       <PageHeader
-        title={mode === 'create' ? 'Nueva reunión' : 'Editar reunión'}
+        title={mode === 'create' ? 'Nueva reunion' : 'Editar reunion'}
         showBack
       />
       <ScrollView contentContainerStyle={styles.form}>
-        <Field label="Título *" error={errors.title}>
+        {!isAdminOrSupervisor ? (
+          <View style={styles.permissionNotice}>
+            <ThemedText style={styles.permissionText}>
+              No tienes permisos para guardar cambios en reuniones.
+            </ThemedText>
+          </View>
+        ) : null}
+
+        <Field label="Titulo *" error={errors.title}>
           <TextInput
             style={[styles.input, errors.title && styles.inputError]}
             value={title}
             onChangeText={setTitle}
-            placeholder="Ej: Revisión semanal de proyectos"
+            placeholder="Ej: Revision semanal de proyectos"
             placeholderTextColor={AppColors.textDisabled}
+            editable={isAdminOrSupervisor}
           />
         </Field>
 
-        <Field label="Descripción">
+        <Field label="Descripcion">
           <TextInput
             style={[styles.input, styles.textarea]}
             value={description}
             onChangeText={setDescription}
-            placeholder="Objetivos y agenda de la reunión..."
+            placeholder="Objetivos y agenda de la reunion..."
             placeholderTextColor={AppColors.textDisabled}
             multiline
             numberOfLines={4}
+            editable={isAdminOrSupervisor}
           />
         </Field>
 
-        <Field label="Tipo de reunión">
+        <Field label="Tipo de reunion">
           <View style={styles.chipRow}>
-            {types.map((t) => (
+            {meetingTypes.map((meetingType) => (
               <TouchableOpacity
-                key={t}
-                style={[styles.chip, type === t && styles.chipActive]}
-                onPress={() => setType(t)}
+                key={meetingType}
+                style={[styles.chip, type === meetingType && styles.chipActive]}
+                onPress={() => setType(meetingType)}
                 activeOpacity={0.8}
+                disabled={!isAdminOrSupervisor}
               >
-                <ThemedText style={[styles.chipText, type === t && styles.chipTextActive]}>
-                  {MEETING_TYPE_LABELS[t]}
+                <ThemedText style={[styles.chipText, type === meetingType && styles.chipTextActive]}>
+                  {MEETING_TYPE_LABELS[meetingType]}
                 </ThemedText>
               </TouchableOpacity>
             ))}
@@ -146,10 +198,11 @@ export function MeetingFormScreen() {
             onChangeText={setLocation}
             placeholder="Ej: Sala de juntas A"
             placeholderTextColor={AppColors.textDisabled}
+            editable={isAdminOrSupervisor}
           />
         </Field>
 
-        <Field label="Enlace de reunión">
+        <Field label="Enlace de reunion">
           <TextInput
             style={styles.input}
             value={meetingUrl}
@@ -158,20 +211,21 @@ export function MeetingFormScreen() {
             placeholderTextColor={AppColors.textDisabled}
             keyboardType="url"
             autoCapitalize="none"
+            editable={isAdminOrSupervisor}
           />
         </Field>
 
         <TouchableOpacity
-          style={[styles.saveButton, saving && styles.disabled]}
+          style={[styles.saveButton, (saving || !isAdminOrSupervisor) && styles.disabled]}
           onPress={handleSave}
-          disabled={saving}
+          disabled={saving || !isAdminOrSupervisor}
           activeOpacity={0.8}
         >
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <ThemedText style={styles.saveButtonText}>
-              {mode === 'create' ? 'Crear reunión' : 'Guardar cambios'}
+              {mode === 'create' ? 'Crear reunion' : 'Guardar cambios'}
             </ThemedText>
           )}
         </TouchableOpacity>
@@ -235,4 +289,16 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.6 },
   saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  permissionNotice: {
+    borderWidth: 1,
+    borderColor: AppColors.warning + '66',
+    backgroundColor: AppColors.warning + '20',
+    borderRadius: 10,
+    padding: 12,
+  },
+  permissionText: {
+    fontSize: 13,
+    color: AppColors.warning,
+    fontWeight: '600',
+  },
 });

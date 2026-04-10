@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,26 +10,50 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
+
+import { priorityColor } from '@/src/components/common/StatusBadge';
+import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
-import { LoadingState } from '@/src/components/common/LoadingState';
 import { ThemedText } from '@/src/components/themed-text';
 import { AppColors } from '@/src/constants/app-colors';
-import { getAssignmentById, createAssignment, updateAssignment } from '@/src/services/assignments/assignments-service';
-import { AssignmentPriority, ASSIGNMENT_PRIORITY_LABELS, UpdateAssignmentDTO } from '@/src/types/assignment';
-import { validateRequired, hasErrors } from '@/src/utils/validation/validation';
-import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { priorityColor } from '@/src/components/common/StatusBadge';
-import { useUser } from '@/src/context/user-context';
 import { useAuth } from '@/src/context/auth-context';
+import { useUser } from '@/src/context/user-context';
+import {
+  createAssignment,
+  getAssignmentById,
+  updateAssignment,
+} from '@/src/services/assignments/assignments-service';
+import { getAllMeetings } from '@/src/services/meetings/meetings-service';
+import {
+  AssignmentPriority,
+  ASSIGNMENT_PRIORITY_LABELS,
+  UpdateAssignmentDTO,
+} from '@/src/types/assignment';
+import { Meeting } from '@/src/types/meeting';
+import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
 type Mode = 'create' | 'edit';
+
+type FormErrors = {
+  title?: string;
+  meetingId?: string;
+};
 
 export function AssignmentFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
-  const { appUser } = useUser();
+
   const { user } = useAuth();
+  const {
+    appUser,
+    congregationId,
+    isAdminOrSupervisor,
+    loadingProfile,
+    profileError,
+  } = useUser();
+
   const mode: Mode = id ? 'edit' : 'create';
 
   const [title, setTitle] = useState('');
@@ -37,40 +61,92 @@ export function AssignmentFormScreen() {
   const [priority, setPriority] = useState<AssignmentPriority>('medium');
   const [assignedToName, setAssignedToName] = useState('');
   const [assignedToUid, setAssignedToUid] = useState('');
-  const [errors, setErrors] = useState<{ title?: string }>({});
-  const [loading, setLoading] = useState(mode === 'edit');
+  const [meetingId, setMeetingId] = useState('');
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (mode === 'edit' && id) {
-      getAssignmentById(id)
-        .then((a) => {
-          if (a) {
-            setTitle(a.title);
-            setDescription(a.description ?? '');
-            setPriority(a.priority);
-            setAssignedToName(a.assignedToName);
-            setAssignedToUid(a.assignedToUid);
-          }
-        })
-        .finally(() => setLoading(false));
-    }
-  }, [id, mode]);
+    if (loadingProfile) return;
 
-  const validate = () => {
-    const e = { title: validateRequired(title, 'El título') };
-    setErrors(e);
-    return !hasErrors(e);
+    if (!congregationId) {
+      setLoading(false);
+      return;
+    }
+
+    const loadData = async () => {
+      try {
+        const meetingsPromise = getAllMeetings(congregationId);
+        const assignmentPromise = mode === 'edit' && id ? getAssignmentById(congregationId, id) : Promise.resolve(null);
+
+        const [meetingDocs, assignmentDoc] = await Promise.all([meetingsPromise, assignmentPromise]);
+
+        setMeetings(meetingDocs);
+
+        if (mode === 'create') {
+          if (meetingDocs[0]) {
+            setMeetingId(meetingDocs[0].id);
+          }
+          return;
+        }
+
+        if (!assignmentDoc) {
+          Alert.alert('Error', 'No se encontro la asignacion.');
+          router.back();
+          return;
+        }
+
+        setTitle(assignmentDoc.title);
+        setDescription(assignmentDoc.description ?? '');
+        setPriority(assignmentDoc.priority);
+        setAssignedToName(assignmentDoc.assignedToName);
+        setAssignedToUid(assignmentDoc.assignedToUid);
+        setMeetingId(assignmentDoc.meetingId ?? '');
+      } catch (requestError) {
+        Alert.alert('Error', formatFirestoreError(requestError));
+        router.back();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadData();
+  }, [congregationId, id, loadingProfile, mode, router]);
+
+  const validate = (): boolean => {
+    const nextErrors: FormErrors = {
+      title: validateRequired(title, 'El titulo'),
+      meetingId: validateRequired(meetingId, 'La reunion'),
+    };
+
+    setErrors(nextErrors);
+    return !hasErrors(nextErrors as Record<string, string | undefined>);
   };
 
   const handleSave = async () => {
+    if (!isAdminOrSupervisor) {
+      Alert.alert('Permisos insuficientes', 'No tienes permisos para crear o editar asignaciones.');
+      return;
+    }
+
+    if (!congregationId) {
+      Alert.alert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
+      return;
+    }
+
     if (!validate()) return;
+
     setSaving(true);
+
     try {
-      const dueDate = Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000); // +7 días por defecto
+      const dueDate = Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       if (mode === 'create') {
         await createAssignment(
+          congregationId,
+          meetingId,
           {
             title,
             description,
@@ -78,46 +154,73 @@ export function AssignmentFormScreen() {
             assignedToUid: assignedToUid || (user?.uid ?? ''),
             assignedToName: assignedToName || (appUser?.displayName ?? 'Sin asignar'),
             dueDate,
+            meetingId,
           },
           user?.uid ?? '',
           appUser?.displayName ?? user?.email ?? 'Sistema'
         );
-        Alert.alert('Éxito', 'Asignación creada correctamente.');
+
+        Alert.alert('Exito', 'Asignacion creada correctamente.');
       } else if (id) {
-        const data: UpdateAssignmentDTO = { title, description, priority };
-        await updateAssignment(id, data);
-        Alert.alert('Éxito', 'Asignación actualizada.');
+        const payload: UpdateAssignmentDTO = { title, description, priority };
+        await updateAssignment(congregationId, meetingId, id, payload);
+        Alert.alert('Exito', 'Asignacion actualizada.');
       }
+
       router.back();
-    } catch (e) {
-      Alert.alert('Error', formatFirestoreError(e));
+    } catch (requestError) {
+      Alert.alert('Error', formatFirestoreError(requestError));
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <LoadingState />;
+  if (loading || loadingProfile) return <LoadingState />;
 
   const priorities: AssignmentPriority[] = ['low', 'medium', 'high', 'critical'];
+  const canSave = isAdminOrSupervisor && meetings.length > 0;
+  const noMeetings = meetings.length === 0;
+
+  const sortedMeetings = useMemo(
+    () => [...meetings].sort((a, b) => b.startDate.seconds - a.startDate.seconds),
+    [meetings]
+  );
 
   return (
     <ScreenContainer scrollable={false}>
       <PageHeader
-        title={mode === 'create' ? 'Nueva asignación' : 'Editar asignación'}
+        title={mode === 'create' ? 'Nueva asignacion' : 'Editar asignacion'}
         showBack
       />
       <ScrollView contentContainerStyle={styles.form}>
-        <Field label="Título *" error={errors.title}>
+        {!isAdminOrSupervisor ? (
+          <View style={styles.permissionNotice}>
+            <ThemedText style={styles.permissionText}>
+              No tienes permisos para guardar cambios en asignaciones.
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {noMeetings ? (
+          <View style={styles.permissionNotice}>
+            <ThemedText style={styles.permissionText}>
+              Debes tener al menos una reunion en tu congregacion para crear asignaciones.
+            </ThemedText>
+          </View>
+        ) : null}
+
+        <Field label="Titulo *" error={errors.title}>
           <TextInput
             style={[styles.input, errors.title && styles.inputError]}
             value={title}
             onChangeText={setTitle}
             placeholder="Ej: Preparar informe mensual"
             placeholderTextColor={AppColors.textDisabled}
+            editable={canSave}
           />
         </Field>
 
-        <Field label="Descripción">
+        <Field label="Descripcion">
           <TextInput
             style={[styles.input, styles.textarea]}
             value={description}
@@ -126,25 +229,49 @@ export function AssignmentFormScreen() {
             placeholderTextColor={AppColors.textDisabled}
             multiline
             numberOfLines={4}
+            editable={canSave}
           />
+        </Field>
+
+        <Field label="Reunion *" error={errors.meetingId}>
+          <View style={styles.chipRow}>
+            {sortedMeetings.map((meeting) => (
+              <TouchableOpacity
+                key={meeting.id}
+                style={[styles.chip, meetingId === meeting.id && styles.chipActive]}
+                onPress={() => setMeetingId(meeting.id)}
+                activeOpacity={0.8}
+                disabled={!canSave || mode === 'edit'}
+              >
+                <ThemedText style={[styles.chipText, meetingId === meeting.id && styles.chipTextActive]}>
+                  {meeting.title}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {mode === 'edit' ? (
+            <ThemedText style={styles.hintText}>La reunion vinculada no se puede cambiar.</ThemedText>
+          ) : null}
         </Field>
 
         <Field label="Prioridad">
           <View style={styles.chipRow}>
-            {priorities.map((p) => (
+            {priorities.map((item) => (
               <TouchableOpacity
-                key={p}
+                key={item}
                 style={[
                   styles.chip,
-                  priority === p && { backgroundColor: priorityColor[p], borderColor: priorityColor[p] },
+                  priority === item && {
+                    backgroundColor: priorityColor[item],
+                    borderColor: priorityColor[item],
+                  },
                 ]}
-                onPress={() => setPriority(p)}
+                onPress={() => setPriority(item)}
                 activeOpacity={0.8}
+                disabled={!canSave}
               >
-                <ThemedText
-                  style={[styles.chipText, priority === p && styles.chipTextActive]}
-                >
-                  {ASSIGNMENT_PRIORITY_LABELS[p]}
+                <ThemedText style={[styles.chipText, priority === item && styles.chipTextActive]}>
+                  {ASSIGNMENT_PRIORITY_LABELS[item]}
                 </ThemedText>
               </TouchableOpacity>
             ))}
@@ -159,21 +286,22 @@ export function AssignmentFormScreen() {
               onChangeText={setAssignedToName}
               placeholder="Nombre del responsable"
               placeholderTextColor={AppColors.textDisabled}
+              editable={canSave}
             />
           </Field>
         )}
 
         <TouchableOpacity
-          style={[styles.saveButton, saving && styles.disabled]}
+          style={[styles.saveButton, (saving || !canSave) && styles.disabled]}
           onPress={handleSave}
-          disabled={saving}
+          disabled={saving || !canSave}
           activeOpacity={0.8}
         >
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <ThemedText style={styles.saveButtonText}>
-              {mode === 'create' ? 'Crear asignación' : 'Guardar cambios'}
+              {mode === 'create' ? 'Crear asignacion' : 'Guardar cambios'}
             </ThemedText>
           )}
         </TouchableOpacity>
@@ -182,7 +310,15 @@ export function AssignmentFormScreen() {
   );
 }
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  error,
+  children,
+}: {
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
   return (
     <View style={styles.fieldWrap}>
       <ThemedText style={styles.label}>{label}</ThemedText>
@@ -217,6 +353,10 @@ const styles = StyleSheet.create({
     borderColor: AppColors.border,
     backgroundColor: AppColors.surface,
   },
+  chipActive: {
+    backgroundColor: AppColors.primary,
+    borderColor: AppColors.primary,
+  },
   chipText: { fontSize: 13, fontWeight: '600', color: AppColors.textMuted },
   chipTextActive: { color: '#fff' },
   saveButton: {
@@ -228,4 +368,20 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.6 },
   saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  permissionNotice: {
+    borderWidth: 1,
+    borderColor: AppColors.warning + '66',
+    backgroundColor: AppColors.warning + '20',
+    borderRadius: 10,
+    padding: 12,
+  },
+  permissionText: {
+    fontSize: 13,
+    color: AppColors.warning,
+    fontWeight: '600',
+  },
+  hintText: {
+    fontSize: 12,
+    color: AppColors.textMuted,
+  },
 });

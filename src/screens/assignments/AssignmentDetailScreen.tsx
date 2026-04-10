@@ -2,20 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
+import { ErrorState } from '@/src/components/common/ErrorState';
+import { LoadingState } from '@/src/components/common/LoadingState';
+import { RoleGuard } from '@/src/components/common/RoleGuard';
+import { StatusBadge, assignmentStatusColor, priorityColor } from '@/src/components/common/StatusBadge';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
-import { LoadingState } from '@/src/components/common/LoadingState';
-import { ErrorState } from '@/src/components/common/ErrorState';
-import { StatusBadge, assignmentStatusColor, priorityColor } from '@/src/components/common/StatusBadge';
-import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ThemedText } from '@/src/components/themed-text';
 import { AppColors } from '@/src/constants/app-colors';
-import { getAssignmentById, updateAssignment, deleteAssignment } from '@/src/services/assignments/assignments-service';
+import { useUser } from '@/src/context/user-context';
+import { deleteAssignment, getAssignmentById, updateAssignment } from '@/src/services/assignments/assignments-service';
 import {
   Assignment,
   AssignmentStatus,
-  ASSIGNMENT_STATUS_LABELS,
   ASSIGNMENT_PRIORITY_LABELS,
+  ASSIGNMENT_STATUS_LABELS,
 } from '@/src/types/assignment';
 import { formatDate, formatDateTime, isOverdue } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -28,6 +30,7 @@ const NEXT_STATUS: Partial<Record<AssignmentStatus, AssignmentStatus>> = {
 export function AssignmentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { congregationId, loadingProfile, profileError } = useUser();
 
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,54 +38,70 @@ export function AssignmentDetailScreen() {
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
-    getAssignmentById(id)
-      .then((a) => {
-        setAssignment(a);
-        if (!a) setError('Asignación no encontrada.');
+    if (loadingProfile) return;
+
+    if (!id || !congregationId) {
+      setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
+      setLoading(false);
+      return;
+    }
+
+    getAssignmentById(congregationId, id)
+      .then((assignmentDoc) => {
+        setAssignment(assignmentDoc);
+        if (!assignmentDoc) setError('Asignacion no encontrada.');
       })
-      .catch(() => setError('Error al cargar la asignación.'))
+      .catch((requestError) => setError(formatFirestoreError(requestError)))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [congregationId, id, loadingProfile, profileError]);
 
   const handleAdvanceStatus = async () => {
-    if (!assignment) return;
-    const next = NEXT_STATUS[assignment.status];
-    if (!next) return;
+    if (!assignment || !congregationId || !assignment.meetingId) return;
+
+    const nextStatus = NEXT_STATUS[assignment.status];
+    if (!nextStatus) return;
+
     setUpdating(true);
+
     try {
-      await updateAssignment(assignment.id, { status: next });
-      setAssignment((a) => (a ? { ...a, status: next } : null));
-    } catch (e) {
-      Alert.alert('Error', formatFirestoreError(e));
+      await updateAssignment(congregationId, assignment.meetingId, assignment.id, {
+        status: nextStatus,
+      });
+
+      setAssignment((current) => (current ? { ...current, status: nextStatus } : null));
+    } catch (requestError) {
+      Alert.alert('Error', formatFirestoreError(requestError));
     } finally {
       setUpdating(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!assignment) return;
+    if (!assignment || !congregationId || !assignment.meetingId) return;
+
     const confirmed =
       Platform.OS === 'web'
-        ? window.confirm('¿Eliminar esta asignación?')
+        ? window.confirm('Eliminar esta asignacion?')
         : await new Promise<boolean>((resolve) =>
-            Alert.alert('Eliminar', '¿Seguro?', [
+            Alert.alert('Eliminar', 'Seguro?', [
               { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
               { text: 'Eliminar', style: 'destructive', onPress: () => resolve(true) },
             ])
           );
+
     if (!confirmed) return;
+
     try {
-      await deleteAssignment(assignment.id);
+      await deleteAssignment(congregationId, assignment.meetingId, assignment.id);
       router.back();
-    } catch (e) {
-      Alert.alert('Error', formatFirestoreError(e));
+    } catch (requestError) {
+      Alert.alert('Error', formatFirestoreError(requestError));
     }
   };
 
-  if (loading) return <LoadingState />;
+  if (loading || loadingProfile) return <LoadingState />;
   if (error || !assignment)
-    return <ErrorState message={error ?? 'Asignación no encontrada.'} />;
+    return <ErrorState message={error ?? 'Asignacion no encontrada.'} />;
 
   const overdue = isOverdue(assignment.dueDate) && assignment.status === 'pending';
   const nextStatus = NEXT_STATUS[assignment.status];
@@ -90,7 +109,7 @@ export function AssignmentDetailScreen() {
   return (
     <ScreenContainer>
       <PageHeader
-        title="Detalle de asignación"
+        title="Detalle de asignacion"
         showBack
         actions={
           <RoleGuard allowedRoles={['admin', 'supervisor']}>
@@ -106,7 +125,6 @@ export function AssignmentDetailScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Header */}
         <View style={styles.titleSection}>
           <View style={styles.badgeRow}>
             <StatusBadge
@@ -124,23 +142,25 @@ export function AssignmentDetailScreen() {
           ) : null}
         </View>
 
-        {/* Info */}
         <View style={styles.card}>
           <InfoRow icon="person-outline" label="Asignado a" value={assignment.assignedToName} />
           <InfoRow icon="person-add-outline" label="Asignado por" value={assignment.assignedByName} />
           <InfoRow
             icon="calendar-outline"
-            label="Fecha límite"
+            label="Fecha limite"
             value={formatDate(assignment.dueDate)}
             valueStyle={overdue ? { color: AppColors.error } : undefined}
           />
           {assignment.completedAt ? (
-            <InfoRow icon="checkmark-circle-outline" label="Completada" value={formatDateTime(assignment.completedAt)} />
+            <InfoRow
+              icon="checkmark-circle-outline"
+              label="Completada"
+              value={formatDateTime(assignment.completedAt)}
+            />
           ) : null}
           <InfoRow icon="time-outline" label="Creada" value={formatDate(assignment.createdAt)} />
         </View>
 
-        {/* Advance status button */}
         {nextStatus ? (
           <RoleGuard allowedRoles={['admin', 'supervisor']}>
             <TouchableOpacity
@@ -157,11 +177,10 @@ export function AssignmentDetailScreen() {
           </RoleGuard>
         ) : null}
 
-        {/* Delete */}
         <RoleGuard allowedRoles={['admin', 'supervisor']}>
           <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} activeOpacity={0.8}>
             <Ionicons name="trash-outline" size={18} color={AppColors.error} />
-            <ThemedText style={styles.deleteBtnText}>Eliminar asignación</ThemedText>
+            <ThemedText style={styles.deleteBtnText}>Eliminar asignacion</ThemedText>
           </TouchableOpacity>
         </RoleGuard>
       </ScrollView>

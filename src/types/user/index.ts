@@ -8,19 +8,23 @@ export interface AppUser {
   email: string;
   displayName: string;
   role: UserRole;
+  congregationId: string;
+  isActive: boolean;
   status: UserStatus;
   phone?: string;
   department?: string;
   avatarUrl?: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface CreateUserDTO {
   email: string;
-  password: string;
+  password?: string;
   displayName: string;
   role: UserRole;
+  congregationId: string;
+  isActive?: boolean;
   phone?: string;
   department?: string;
 }
@@ -29,6 +33,8 @@ export interface UpdateUserDTO {
   displayName?: string;
   role?: UserRole;
   status?: UserStatus;
+  isActive?: boolean;
+  congregationId?: string;
   phone?: string;
   department?: string;
 }

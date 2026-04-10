@@ -1,19 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
+
 import { AssignmentCard } from '@/src/components/cards/AssignmentCard';
-import { LoadingState } from '@/src/components/common/LoadingState';
 import { EmptyState } from '@/src/components/common/EmptyState';
 import { ErrorState } from '@/src/components/common/ErrorState';
+import { LoadingState } from '@/src/components/common/LoadingState';
 import { RoleGuard } from '@/src/components/common/RoleGuard';
-import { AppColors } from '@/src/constants/app-colors';
+import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { subscribeToAssignments } from '@/src/services/assignments/assignments-service';
-import { Assignment, AssignmentStatus, ASSIGNMENT_STATUS_LABELS } from '@/src/types/assignment';
+import { AppColors } from '@/src/constants/app-colors';
 import { useUser } from '@/src/context/user-context';
-import { useAuth } from '@/src/context/auth-context';
+import {
+  getAllAssignments,
+  getAssignmentsByUser,
+  subscribeToAssignments,
+} from '@/src/services/assignments/assignments-service';
+import { Assignment, AssignmentStatus, ASSIGNMENT_STATUS_LABELS } from '@/src/types/assignment';
+import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { canManageAssignments } from '@/src/utils/permissions/permissions';
 
 const FILTERS: Array<{ label: string; value: AssignmentStatus | 'all' }> = [
@@ -25,8 +30,15 @@ const FILTERS: Array<{ label: string; value: AssignmentStatus | 'all' }> = [
 
 export function AssignmentsListScreen() {
   const router = useRouter();
-  const { role } = useUser();
-  const { user } = useAuth();
+  const {
+    uid,
+    congregationId,
+    role,
+    loadingProfile,
+    profileError,
+    isAdminOrSupervisor,
+  } = useUser();
+
   const isManager = canManageAssignments(role);
 
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -36,31 +48,66 @@ export function AssignmentsListScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    // Admin/supervisor ve todas; user solo las suyas
-    const unsub = subscribeToAssignments(
+    if (loadingProfile) return;
+
+    if (!congregationId) {
+      setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribe = subscribeToAssignments(
+      congregationId,
       (data) => {
         setAssignments(data);
         setLoading(false);
         setRefreshing(false);
       },
-      isManager ? undefined : user?.uid
+      {
+        userUid: isManager ? undefined : uid ?? undefined,
+      },
+      (snapshotError) => {
+        setError(formatFirestoreError(snapshotError));
+        setLoading(false);
+        setRefreshing(false);
+      }
     );
-    return unsub;
-  }, [isManager, user?.uid]);
 
-  const filtered =
-    filter === 'all' ? assignments : assignments.filter((a) => a.status === filter);
+    return unsubscribe;
+  }, [congregationId, isManager, loadingProfile, profileError, uid]);
 
-  const onRefresh = () => setRefreshing(true);
+  const filtered = useMemo(
+    () => (filter === 'all' ? assignments : assignments.filter((item) => item.status === filter)),
+    [assignments, filter]
+  );
 
-  if (loading) return <LoadingState message="Cargando asignaciones..." />;
+  const onRefresh = async () => {
+    if (!congregationId) return;
+    if (!isManager && !uid) return;
+
+    setRefreshing(true);
+
+    try {
+      const latestAssignments = isManager
+        ? await getAllAssignments(congregationId)
+        : await getAssignmentsByUser(congregationId, uid!);
+
+      setAssignments(latestAssignments);
+    } catch (requestError) {
+      setError(formatFirestoreError(requestError));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  if (loading || loadingProfile) return <LoadingState message="Cargando asignaciones..." />;
   if (error) return <ErrorState message={error} />;
 
-  return (
-    <ScreenContainer refreshing={refreshing} onRefresh={onRefresh} padded={false}>
+  const header = (
+    <>
       <View style={styles.toolbar}>
         <ThemedText style={styles.count}>
-          {filtered.length} asignación{filtered.length !== 1 ? 'es' : ''}
+          {filtered.length} asignacion{filtered.length !== 1 ? 'es' : ''}
         </ThemedText>
         <RoleGuard allowedRoles={['admin', 'supervisor']}>
           <TouchableOpacity
@@ -75,42 +122,50 @@ export function AssignmentsListScreen() {
       </View>
 
       <View style={styles.filterRow}>
-        {FILTERS.map((f) => (
+        {FILTERS.map((item) => (
           <TouchableOpacity
-            key={f.value}
-            style={[styles.chip, filter === f.value && styles.chipActive]}
-            onPress={() => setFilter(f.value)}
+            key={item.value}
+            style={[styles.chip, filter === item.value && styles.chipActive]}
+            onPress={() => setFilter(item.value)}
             activeOpacity={0.8}
           >
-            <ThemedText style={[styles.chipText, filter === f.value && styles.chipTextActive]}>
-              {f.label}
+            <ThemedText style={[styles.chipText, filter === item.value && styles.chipTextActive]}>
+              {item.label}
             </ThemedText>
           </TouchableOpacity>
         ))}
       </View>
+    </>
+  );
 
-      {filtered.length === 0 ? (
-        <EmptyState
-          icon="checkmark-done-outline"
-          title="Sin asignaciones"
-          description={
-            filter !== 'all'
-              ? `No hay asignaciones ${ASSIGNMENT_STATUS_LABELS[filter as AssignmentStatus]?.toLowerCase()}.`
-              : '¡Todo al día!'
-          }
-          actionLabel={isManager ? 'Crear asignación' : undefined}
-          onAction={isManager ? () => router.push('/(protected)/assignments/create') : undefined}
-        />
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(a) => a.id}
-          renderItem={({ item }) => <AssignmentCard assignment={item} />}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+  return (
+    <ScreenContainer scrollable={false} padded={false}>
+      <FlatList
+        data={filtered}
+        keyExtractor={(assignment) => assignment.id}
+        renderItem={({ item }) => <AssignmentCard assignment={item} />}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <EmptyState
+              icon="checkmark-done-outline"
+              title="Sin asignaciones"
+              description={
+                filter !== 'all'
+                  ? `No hay asignaciones ${ASSIGNMENT_STATUS_LABELS[filter as AssignmentStatus]?.toLowerCase()}.`
+                  : 'Todo al dia.'
+              }
+              actionLabel={isAdminOrSupervisor ? 'Crear asignacion' : undefined}
+              onAction={isAdminOrSupervisor ? () => router.push('/(protected)/assignments/create') : undefined}
+            />
+          </View>
+        }
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        showsVerticalScrollIndicator={false}
+      />
     </ScreenContainer>
   );
 }
@@ -155,6 +210,7 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: AppColors.primary, borderColor: AppColors.primary },
   chipText: { fontSize: 12, fontWeight: '600', color: AppColors.textMuted },
   chipTextActive: { color: '#fff' },
-  list: { padding: 16, paddingBottom: 32 },
+  listContent: { paddingBottom: 32 },
   separator: { height: 10 },
+  emptyWrap: { paddingTop: 16, paddingHorizontal: 16 },
 });

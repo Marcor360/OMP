@@ -1,32 +1,29 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
-import { StatCard } from '@/src/components/cards/StatCard';
-import { MeetingCard } from '@/src/components/cards/MeetingCard';
+
 import { AssignmentCard } from '@/src/components/cards/AssignmentCard';
-import { LoadingState } from '@/src/components/common/LoadingState';
+import { MeetingCard } from '@/src/components/cards/MeetingCard';
+import { StatCard } from '@/src/components/cards/StatCard';
 import { ErrorState } from '@/src/components/common/ErrorState';
+import { LoadingState } from '@/src/components/common/LoadingState';
+import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { AppColors } from '@/src/constants/app-colors';
-import { useUser } from '@/src/context/user-context';
 import { useAuth } from '@/src/context/auth-context';
-import { getDashboardMetrics, DashboardMetrics } from '@/src/services/dashboard/dashboard-service';
-import { getAllMeetings } from '@/src/services/meetings/meetings-service';
+import { useUser } from '@/src/context/user-context';
+import { AppColors } from '@/src/constants/app-colors';
 import { getAllAssignments, getAssignmentsByUser } from '@/src/services/assignments/assignments-service';
-import { canManageAssignments, canManageUsers } from '@/src/utils/permissions/permissions';
-import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { Meeting } from '@/src/types/meeting';
+import {
+  DashboardMetrics,
+  getDashboardMetrics,
+  getDashboardMetricsForUser,
+} from '@/src/services/dashboard/dashboard-service';
+import { getAllMeetings } from '@/src/services/meetings/meetings-service';
 import { Assignment } from '@/src/types/assignment';
-
-const isIndexError = (error: unknown): boolean => {
-  const err = error as { code?: string; message?: string };
-  const code = err?.code ?? '';
-  const message = (err?.message ?? '').toLowerCase();
-
-  return code.includes('failed-precondition') || message.includes('index');
-};
+import { Meeting } from '@/src/types/meeting';
+import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { canManageAssignments, canManageUsers } from '@/src/utils/permissions/permissions';
 
 const countOverduePending = (items: Assignment[]): number => {
   const now = Date.now();
@@ -52,18 +49,16 @@ const getUserMetrics = (items: Assignment[]): Partial<DashboardMetrics> => {
   };
 };
 
-const getDashboardErrorMessage = (error: unknown): string => {
-  if (isIndexError(error)) {
-    return 'No se pudo cargar el dashboard. Faltan indices en Firestore para algunas consultas.';
-  }
-
-  return `No se pudieron cargar los datos del dashboard. ${formatFirestoreError(error)}`;
-};
-
 export function DashboardScreen() {
   const router = useRouter();
-  const { appUser, role } = useUser();
   const { user } = useAuth();
+  const {
+    appUser,
+    congregationId,
+    role,
+    loadingProfile,
+    profileError,
+  } = useUser();
 
   const [metrics, setMetrics] = useState<Partial<DashboardMetrics>>({});
   const [recentMeetings, setRecentMeetings] = useState<Meeting[]>([]);
@@ -88,24 +83,31 @@ export function DashboardScreen() {
       return;
     }
 
+    if (!congregationId) {
+      setMetrics({});
+      setRecentMeetings([]);
+      setPendingAssignments([]);
+      setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     try {
       setError(null);
 
       const assignmentsPromise = canManage
-        ? getAllAssignments()
-        : getAssignmentsByUser(uid).catch(async (queryError) => {
-            if (!isIndexError(queryError)) {
-              throw queryError;
-            }
+        ? getAllAssignments(congregationId)
+        : getAssignmentsByUser(congregationId, uid);
 
-            const all = await getAllAssignments();
-            return all.filter((item) => item.assignedToUid === uid);
-          });
+      const metricsPromise = isAdmin
+        ? getDashboardMetrics(congregationId)
+        : getDashboardMetricsForUser(congregationId, uid);
 
       const [meetingsResult, assignmentsResult, metricsResult] = await Promise.allSettled([
-        getAllMeetings(),
+        getAllMeetings(congregationId),
         assignmentsPromise,
-        isAdmin ? getDashboardMetrics() : Promise.resolve(null),
+        metricsPromise,
       ]);
 
       const failures: unknown[] = [];
@@ -138,10 +140,12 @@ export function DashboardScreen() {
 
       let nextMetrics: Partial<DashboardMetrics> = {};
 
-      if (isAdmin) {
-        if (metricsResult.status === 'fulfilled' && metricsResult.value) {
-          nextMetrics = metricsResult.value;
-        } else if (assignmentsData.length > 0 || meetingsData.length > 0) {
+      if (metricsResult.status === 'fulfilled') {
+        nextMetrics = metricsResult.value;
+      } else {
+        failures.push(metricsResult.reason);
+
+        if (isAdmin) {
           nextMetrics = {
             totalMeetings: meetingsData.length,
             totalAssignments: assignmentsData.length,
@@ -149,16 +153,9 @@ export function DashboardScreen() {
             completedAssignments: assignmentsData.filter((item) => item.status === 'completed').length,
             overdueAssignments: countOverduePending(assignmentsData),
           };
-
-          if (metricsResult.status === 'rejected') {
-            failures.push(metricsResult.reason);
-          }
-        } else if (metricsResult.status === 'rejected') {
-          failures.push(metricsResult.reason);
+        } else {
+          nextMetrics = getUserMetrics(assignmentsForCards);
         }
-      } else {
-        const mine = assignmentsData.filter((item) => item.assignedToUid === uid);
-        nextMetrics = getUserMetrics(mine);
       }
 
       setMetrics(nextMetrics);
@@ -168,30 +165,34 @@ export function DashboardScreen() {
       const hasLoadedSource =
         meetingsResult.status === 'fulfilled' ||
         assignmentsResult.status === 'fulfilled' ||
-        (isAdmin ? metricsResult.status === 'fulfilled' : false);
+        metricsResult.status === 'fulfilled';
 
-      setError(hasLoadedSource ? null : getDashboardErrorMessage(failures[0]));
+      setError(hasLoadedSource ? null : formatFirestoreError(failures[0]));
     } catch (loadError) {
       setMetrics({});
       setRecentMeetings([]);
       setPendingAssignments([]);
-      setError(getDashboardErrorMessage(loadError));
+      setError(formatFirestoreError(loadError));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [canManage, isAdmin, user?.uid]);
+  }, [canManage, congregationId, isAdmin, profileError, user?.uid]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (loadingProfile) {
+      return;
+    }
+
+    void loadData();
+  }, [loadData, loadingProfile]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadData();
+    void loadData();
   };
 
-  if (loading) return <LoadingState message="Cargando dashboard..." />;
+  if (loading || loadingProfile) return <LoadingState message="Cargando dashboard..." />;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
 
   return (

@@ -2,25 +2,28 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
+import { AssignmentCard } from '@/src/components/cards/AssignmentCard';
+import { ErrorState } from '@/src/components/common/ErrorState';
+import { LoadingState } from '@/src/components/common/LoadingState';
+import { RoleGuard } from '@/src/components/common/RoleGuard';
+import { StatusBadge, meetingStatusColor } from '@/src/components/common/StatusBadge';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
-import { LoadingState } from '@/src/components/common/LoadingState';
-import { ErrorState } from '@/src/components/common/ErrorState';
-import { StatusBadge, meetingStatusColor } from '@/src/components/common/StatusBadge';
-import { RoleGuard } from '@/src/components/common/RoleGuard';
-import { AssignmentCard } from '@/src/components/cards/AssignmentCard';
 import { ThemedText } from '@/src/components/themed-text';
 import { AppColors } from '@/src/constants/app-colors';
-import { getMeetingById, updateMeeting, deleteMeeting } from '@/src/services/meetings/meetings-service';
+import { useUser } from '@/src/context/user-context';
 import { getAssignmentsByMeeting } from '@/src/services/assignments/assignments-service';
-import { Meeting, MEETING_STATUS_LABELS, MEETING_TYPE_LABELS } from '@/src/types/meeting';
+import { deleteMeeting, getMeetingById } from '@/src/services/meetings/meetings-service';
 import { Assignment } from '@/src/types/assignment';
-import { formatDate, formatDateTime, formatTime } from '@/src/utils/dates/dates';
+import { Meeting, MEETING_STATUS_LABELS, MEETING_TYPE_LABELS } from '@/src/types/meeting';
+import { formatDate, formatTime } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
 export function MeetingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { congregationId, loadingProfile, profileError } = useUser();
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -28,45 +31,63 @@ export function MeetingDetailScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!id) return;
-    Promise.all([getMeetingById(id), getAssignmentsByMeeting(id)])
-      .then(([m, a]) => {
-        setMeeting(m);
-        setAssignments(a);
-        if (!m) setError('Reunión no encontrada.');
+    if (loadingProfile) return;
+
+    if (!id || !congregationId) {
+      setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
+      setLoading(false);
+      return;
+    }
+
+    Promise.all([
+      getMeetingById(congregationId, id),
+      getAssignmentsByMeeting(congregationId, id),
+    ])
+      .then(([meetingDoc, assignmentDocs]) => {
+        setMeeting(meetingDoc);
+        setAssignments(assignmentDocs);
+
+        if (!meetingDoc) {
+          setError('Reunion no encontrada.');
+        }
       })
-      .catch(() => setError('Error al cargar la reunión.'))
+      .catch((requestError) => {
+        setError(formatFirestoreError(requestError));
+      })
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [congregationId, id, loadingProfile, profileError]);
 
   const handleDelete = async () => {
-    if (!meeting) return;
+    if (!meeting || !congregationId) return;
+
     const confirmed =
       Platform.OS === 'web'
-        ? window.confirm('¿Eliminar esta reunión?')
+        ? window.confirm('Eliminar esta reunion?')
         : await new Promise<boolean>((resolve) =>
-            Alert.alert('Eliminar reunión', '¿Estás seguro?', [
+            Alert.alert('Eliminar reunion', 'Estas seguro?', [
               { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
               { text: 'Eliminar', style: 'destructive', onPress: () => resolve(true) },
             ])
           );
+
     if (!confirmed) return;
+
     try {
-      await deleteMeeting(meeting.id);
+      await deleteMeeting(congregationId, meeting.id);
       router.back();
-    } catch (e) {
-      Alert.alert('Error', formatFirestoreError(e));
+    } catch (requestError) {
+      Alert.alert('Error', formatFirestoreError(requestError));
     }
   };
 
-  if (loading) return <LoadingState />;
+  if (loading || loadingProfile) return <LoadingState />;
   if (error || !meeting)
-    return <ErrorState message={error ?? 'Reunión no encontrada.'} />;
+    return <ErrorState message={error ?? 'Reunion no encontrada.'} />;
 
   return (
     <ScreenContainer>
       <PageHeader
-        title="Detalle de reunión"
+        title="Detalle de reunion"
         showBack
         actions={
           <RoleGuard allowedRoles={['admin', 'supervisor']}>
@@ -82,25 +103,21 @@ export function MeetingDetailScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Title + status */}
         <View style={styles.titleSection}>
           <StatusBadge
             label={MEETING_STATUS_LABELS[meeting.status]}
             color={meetingStatusColor[meeting.status]}
           />
           <ThemedText style={styles.title}>{meeting.title}</ThemedText>
-          <ThemedText style={styles.type}>
-            {MEETING_TYPE_LABELS[meeting.type]}
-          </ThemedText>
+          <ThemedText style={styles.type}>{MEETING_TYPE_LABELS[meeting.type]}</ThemedText>
         </View>
 
-        {/* Info card */}
         <View style={styles.card}>
           <InfoRow icon="calendar-outline" label="Fecha" value={formatDate(meeting.startDate)} />
           <InfoRow
             icon="time-outline"
             label="Horario"
-            value={`${formatTime(meeting.startDate)} – ${formatTime(meeting.endDate)}`}
+            value={`${formatTime(meeting.startDate)} - ${formatTime(meeting.endDate)}`}
           />
           {meeting.location ? (
             <InfoRow icon="location-outline" label="Lugar" value={meeting.location} />
@@ -116,15 +133,13 @@ export function MeetingDetailScreen() {
           />
         </View>
 
-        {/* Description */}
         {meeting.description ? (
           <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Descripción</ThemedText>
+            <ThemedText style={styles.sectionTitle}>Descripcion</ThemedText>
             <ThemedText style={styles.description}>{meeting.description}</ThemedText>
           </View>
         ) : null}
 
-        {/* Notes */}
         {meeting.notes ? (
           <View style={styles.section}>
             <ThemedText style={styles.sectionTitle}>Notas</ThemedText>
@@ -132,29 +147,23 @@ export function MeetingDetailScreen() {
           </View>
         ) : null}
 
-        {/* Linked assignments */}
         {assignments.length > 0 ? (
           <View style={styles.section}>
             <ThemedText style={styles.sectionTitle}>
               Asignaciones vinculadas ({assignments.length})
             </ThemedText>
             <View style={styles.assignmentList}>
-              {assignments.map((a) => (
-                <AssignmentCard key={a.id} assignment={a} />
+              {assignments.map((assignment) => (
+                <AssignmentCard key={assignment.id} assignment={assignment} />
               ))}
             </View>
           </View>
         ) : null}
 
-        {/* Danger zone */}
         <RoleGuard allowedRoles={['admin', 'supervisor']}>
-          <TouchableOpacity
-            style={styles.deleteBtn}
-            onPress={handleDelete}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} activeOpacity={0.8}>
             <Ionicons name="trash-outline" size={18} color={AppColors.error} />
-            <ThemedText style={styles.deleteBtnText}>Eliminar reunión</ThemedText>
+            <ThemedText style={styles.deleteBtnText}>Eliminar reunion</ThemedText>
           </TouchableOpacity>
         </RoleGuard>
       </ScrollView>
@@ -175,7 +184,9 @@ function InfoRow({
     <View style={styles.infoRow}>
       <Ionicons name={icon} size={16} color={AppColors.textMuted} />
       <ThemedText style={styles.infoLabel}>{label}</ThemedText>
-      <ThemedText style={styles.infoValue} numberOfLines={2}>{value}</ThemedText>
+      <ThemedText style={styles.infoValue} numberOfLines={2}>
+        {value}
+      </ThemedText>
     </View>
   );
 }

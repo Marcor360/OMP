@@ -14,10 +14,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/src/components/themed-text';
 import { ThemedView } from '@/src/components/themed-view';
 import { useAuth } from '@/src/hooks/use-auth';
+import { type AppColors, useAppColors } from '@/src/styles';
 import { handleAuthError } from '@/src/utils/firebase-auth-errors';
 import { LoginValidationErrors } from '@/src/types/auth.types';
 
 export default function LoginScreen() {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -85,6 +88,7 @@ export default function LoginScreen() {
                 <TextInput
                   style={[styles.input, errors.email && styles.inputError]}
                   placeholder="tu@email.com"
+                  placeholderTextColor={colors.textDisabled}
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -102,6 +106,7 @@ export default function LoginScreen() {
                   <TextInput
                     style={[styles.passwordInput, errors.password && styles.inputError]}
                     placeholder="********"
+                    placeholderTextColor={colors.textDisabled}
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
@@ -120,7 +125,7 @@ export default function LoginScreen() {
                     <Ionicons
                       name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                       size={22}
-                      color="#888"
+                      color={colors.textMuted}
                     />
                   </TouchableOpacity>
                 </View>
@@ -147,87 +152,93 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  content: {
-    padding: 24,
-    paddingBottom: 36,
-  },
-  title: {
-    fontSize: 32,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 32,
-    opacity: 0.7,
-  },
-  form: {
-    gap: 20,
-  },
-  inputContainer: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  passwordWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    borderColor: '#ccc',
-    overflow: 'hidden',
-  },
-  passwordInput: {
-    flex: 1,
-    padding: 12,
-    fontSize: 16,
-    borderWidth: 0,
-  },
-  eyeButton: {
-    paddingHorizontal: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  inputError: {
-    borderColor: '#ff4444',
-  },
-  errorText: {
-    color: '#ff4444',
-    fontSize: 12,
-  },
-  button: {
-    backgroundColor: '#0a7ea4',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
+const createStyles = (colors: AppColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+    },
+    keyboardContainer: {
+      flex: 1,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      justifyContent: 'center',
+    },
+    content: {
+      padding: 24,
+      paddingBottom: 36,
+    },
+    title: {
+      fontSize: 32,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    subtitle: {
+      fontSize: 16,
+      textAlign: 'center',
+      marginBottom: 32,
+      opacity: 0.7,
+    },
+    form: {
+      gap: 20,
+    },
+    inputContainer: {
+      gap: 8,
+    },
+    label: {
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      color: colors.textPrimary,
+      backgroundColor: colors.surface,
+    },
+    passwordWrapper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderRadius: 8,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      overflow: 'hidden',
+    },
+    passwordInput: {
+      flex: 1,
+      padding: 12,
+      fontSize: 16,
+      color: colors.textPrimary,
+      borderWidth: 0,
+    },
+    eyeButton: {
+      paddingHorizontal: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    inputError: {
+      borderColor: colors.error,
+    },
+    errorText: {
+      color: colors.error,
+      fontSize: 12,
+    },
+    button: {
+      backgroundColor: colors.primary,
+      borderRadius: 8,
+      padding: 16,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    buttonDisabled: {
+      opacity: 0.6,
+    },
+    buttonText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  });

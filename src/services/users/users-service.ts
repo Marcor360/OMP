@@ -1,64 +1,109 @@
 import {
-  collection,
-  doc,
+  deleteDoc,
   getDoc,
   getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
   setDoc,
   updateDoc,
-  deleteDoc,
-  query,
   where,
-  orderBy,
-  limit,
-  onSnapshot,
-  serverTimestamp,
-  Timestamp,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { db } from '@/src/config/firebase/firebase';
+
+import {
+  userDocRef,
+  usersCollectionRef,
+} from '@/src/lib/firebase/refs';
 import {
   AppUser,
   CreateUserDTO,
   UpdateUserDTO,
+  UserRole,
   UserStatus,
 } from '@/src/types/user';
 
-const COLLECTION = 'users';
-const col = () => collection(db, COLLECTION);
+const isUserRole = (value: unknown): value is UserRole =>
+  value === 'admin' || value === 'supervisor' || value === 'user';
+
+const isUserStatus = (value: unknown): value is UserStatus =>
+  value === 'active' || value === 'inactive' || value === 'suspended';
+
+const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
+  const role = isUserRole(data.role) ? data.role : 'user';
+  const isActive =
+    typeof data.isActive === 'boolean'
+      ? data.isActive
+      : data.status === 'active';
+  const status = isUserStatus(data.status)
+    ? data.status
+    : isActive
+      ? 'active'
+      : 'inactive';
+
+  return {
+    uid,
+    email: typeof data.email === 'string' ? data.email : '',
+    displayName:
+      typeof data.displayName === 'string' && data.displayName.trim().length > 0
+        ? data.displayName
+        : typeof data.email === 'string' && data.email.trim().length > 0
+          ? data.email
+          : 'Usuario',
+    role,
+    congregationId: typeof data.congregationId === 'string' ? data.congregationId : '',
+    isActive,
+    status,
+    phone: typeof data.phone === 'string' ? data.phone : undefined,
+    department: typeof data.department === 'string' ? data.department : undefined,
+    avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : undefined,
+    createdAt: data.createdAt as AppUser['createdAt'],
+    updatedAt: data.updatedAt as AppUser['updatedAt'],
+  };
+};
 
 /** Obtiene un usuario por UID */
 export const getUserById = async (uid: string): Promise<AppUser | null> => {
-  const snap = await getDoc(doc(db, COLLECTION, uid));
+  const snap = await getDoc(userDocRef(uid));
   if (!snap.exists()) return null;
-  return { uid: snap.id, ...snap.data() } as AppUser;
+  return normalizeUser(snap.id, snap.data());
 };
 
-/** Obtiene todos los usuarios */
-export const getAllUsers = async (): Promise<AppUser[]> => {
-  const q = query(col(), orderBy('displayName', 'asc'));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
-};
-
-/** Obtiene usuarios activos */
-export const getActiveUsers = async (): Promise<AppUser[]> => {
+/** Obtiene todos los usuarios de una congregacion */
+export const getAllUsers = async (congregationId: string): Promise<AppUser[]> => {
   const q = query(
-    col(),
-    where('status', '==', 'active'),
+    usersCollectionRef(),
+    where('congregationId', '==', congregationId),
     orderBy('displayName', 'asc')
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
+  return snap.docs.map((d) => normalizeUser(d.id, d.data()));
 };
 
-/** Crea un perfil de usuario en Firestore (sin crear cuenta Auth) */
+/** Obtiene usuarios activos de una congregacion */
+export const getActiveUsers = async (congregationId: string): Promise<AppUser[]> => {
+  const q = query(
+    usersCollectionRef(),
+    where('congregationId', '==', congregationId),
+    where('isActive', '==', true),
+    orderBy('displayName', 'asc')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => normalizeUser(d.id, d.data()));
+};
+
+/** Crea o actualiza el perfil de usuario en Firestore */
 export const createUserProfile = async (
   uid: string,
   data: Omit<CreateUserDTO, 'password'>
 ): Promise<void> => {
-  await setDoc(doc(db, COLLECTION, uid), {
+  const isActive = data.isActive ?? true;
+
+  await setDoc(userDocRef(uid), {
     ...data,
-    status: 'active' as UserStatus,
+    isActive,
+    status: isActive ? 'active' : 'inactive',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -69,39 +114,66 @@ export const updateUser = async (
   uid: string,
   data: UpdateUserDTO
 ): Promise<void> => {
-  await updateDoc(doc(db, COLLECTION, uid), {
+  const payload: Record<string, unknown> = {
     ...data,
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  if (typeof data.isActive === 'boolean' && !data.status) {
+    payload.status = data.isActive ? 'active' : 'inactive';
+  }
+
+  if (data.status && typeof data.isActive !== 'boolean') {
+    payload.isActive = data.status === 'active';
+  }
+
+  await updateDoc(userDocRef(uid), payload);
 };
 
 /** Elimina un usuario de Firestore (no de Auth) */
 export const deleteUser = async (uid: string): Promise<void> => {
-  await deleteDoc(doc(db, COLLECTION, uid));
+  await deleteDoc(userDocRef(uid));
 };
 
-/** Cuenta total de usuarios */
-export const getUsersCount = async (): Promise<number> => {
-  const snap = await getDocs(col());
+/** Cuenta total de usuarios por congregacion */
+export const getUsersCount = async (congregationId: string): Promise<number> => {
+  const q = query(usersCollectionRef(), where('congregationId', '==', congregationId));
+  const snap = await getDocs(q);
   return snap.size;
 };
 
-/** Suscripción en tiempo real a todos los usuarios */
+/** Suscripcion en tiempo real a usuarios por congregacion */
 export const subscribeToUsers = (
-  callback: (users: AppUser[]) => void
+  congregationId: string,
+  callback: (users: AppUser[]) => void,
+  onError?: (error: unknown) => void
 ): Unsubscribe => {
-  const q = query(col(), orderBy('displayName', 'asc'));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
-  });
+  const q = query(
+    usersCollectionRef(),
+    where('congregationId', '==', congregationId),
+    orderBy('displayName', 'asc')
+  );
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      callback(snap.docs.map((d) => normalizeUser(d.id, d.data())));
+    },
+    onError
+  );
 };
 
-/** Suscripción en tiempo real a un usuario específico */
+/** Suscripcion en tiempo real a un usuario especifico */
 export const subscribeToUser = (
   uid: string,
-  callback: (user: AppUser | null) => void
+  callback: (user: AppUser | null) => void,
+  onError?: (error: unknown) => void
 ): Unsubscribe => {
-  return onSnapshot(doc(db, COLLECTION, uid), (snap) => {
-    callback(snap.exists() ? ({ uid: snap.id, ...snap.data() } as AppUser) : null);
-  });
+  return onSnapshot(
+    userDocRef(uid),
+    (snap) => {
+      callback(snap.exists() ? normalizeUser(snap.id, snap.data()) : null);
+    },
+    onError
+  );
 };

@@ -1,50 +1,77 @@
-# Welcome to your Expo app 👋
+# App OMP - Dashboard Seguro y Autenticado
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Este es un proyecto desarrollado usando [React Native](https://reactnative.dev/) y [Expo](https://expo.dev/), utilizando enrutamiento basado en archivos a través de **Expo Router**, y una arquitectura modular escalable. Está diseñado para proveer una experiencia de usuario segura, autenticada y con control de acceso basado en roles.
 
-## Get started
+## 🚀 Características Principales
 
-1. Install dependencies
+* **Autenticación y Seguridad:**
+  * Sistema de inicio y cierre de sesión seguro mediante **Firebase**.
+  * Cierre de sesión automático tras 30 minutos de inactividad por seguridad.
+  * Funcionalidad de visibilidad de contraseña (icono de ojo) en el login.
+* **Control de Acceso Basado en Roles (RBAC):**
+  * Acceso diferenciado y vistas específicas para roles de `admin`, `supervisor` y `user`, integrados con los servicios de Firestore.
+* **Navegación Moderna:**
+  * Rutas públicas y protegidas gestionadas eficientemente con los *nested layouts* de **Expo Router** (grupos `(auth)` y `(protected)`).
+* **Arquitectura de Estilos Centralizada:**
+  * Sistema de diseño estructurado en el directorio `src/styles` (definiendo `global.ts` con la paleta de colores base).
+  * Integración con **NativeWind** (Tailwind CSS para React Native) para agilizar la construcción de la UI de manera consistente.
 
-   ```bash
-   npm install
-   ```
+## 🛠️ Tecnologías y Stack
 
-2. Start the app
+* **Framework:** React Native & Expo
+* **Navegación:** Expo Router (`expo-router`)
+* **Backend y Base de Datos:** Firebase (Authentication & Firestore)
+* **Estilos:** NativeWind (`nativewind`, `tailwindcss`) y Estilos Globales Centralizados
+* **Almacenamiento Local:** AsyncStorage (`@react-native-async-storage/async-storage`)
 
-   ```bash
-   npx expo start
-   ```
+## 📂 Estructura del Proyecto
 
-In the output, you'll find options to open the app in a
+La aplicación sigue las mejores prácticas manteniendo una arquitectura modular en la carpeta `src` y delegando las rutas a la carpeta `app/`:
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+├── app/                  # Enrutamiento basado en archivos (Expo Router)
+│   ├── (auth)/           # Rutas públicas (Archivos de Login, etc.)
+│   ├── (protected)/      # Rutas protegidas (Dashboards y flujos internos)
+│   └── _layout.tsx       # Layout principal de la aplicación
+├── src/                  # Código fuente modular
+│   ├── components/       # Componentes de UI reutilizables
+│   ├── config/           # Configuraciones (Ej. Inicialización de Firebase)
+│   ├── constants/        # Constantes globales compartidas
+│   ├── context/          # Estados globales y Context API (Ej. Estado de Sesión)
+│   ├── hooks/            # Custom Hooks (Ej. Control de inactividad)
+│   ├── screens/          # Vistas y componentes de pantalla completos
+│   ├── services/         # Integración y lógica de servicios (Firestore)
+│   ├── styles/           # Estilos globales y tokens de diseño (global.ts)
+│   ├── types/            # Interfaces y tipos de TypeScript
+│   └── utils/            # Funciones auxiliares y utilidades
+├── tailwind.config.js    # Configuración de Tailwind / NativeWind
+└── package.json          # Dependencias y scripts
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 🏁 Primeros Pasos
 
-## Learn more
+### 1. Variables de Entorno (Firebase)
+Antes de iniciar, debes asegurarte de contar con la configuración de tu entorno de Firebase en el proyecto.
 
-To learn more about developing your project with Expo, look at the following resources:
+### 2. Instalar Dependencias
+Ejecuta el siguiente comando en la raíz del proyecto para descargar todas las librerías necesarias:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npm install
+```
 
-## Join the community
+### 3. Iniciar la Aplicación
+Para levantar el entorno de desarrollo con Expo:
 
-Join our community of developers creating universal apps.
+```bash
+npx expo start
+```
+En la terminal verás instrucciones y un código QR que te permitirá abrir la app en tu dispositivo físico mediante la app de **Expo Go**, o bien presionando teclas para emuladores de Android / iOS.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 📝 Scripts Disponibles
+
+* `npm start`: Inicia el servidor nativo de Expo.
+* `npm run android`: Inicia la aplicación en un emulador de Android (requiere configuración local).
+* `npm run ios`: Inicia la aplicación en un simulador de iOS (sólo Mac).
+* `npm run web`: Lanza la aplicación en un navegador web.
+* `npm run lint`: Ejecuta el linter de código (eslint).
