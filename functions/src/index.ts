@@ -3,5 +3,8 @@ import { initializeApp } from 'firebase-admin/app';
 initializeApp();
 
 export {
-    createUserByAdmin, deleteUserByAdmin, disableUserByAdmin, updateUserByAdmin
-} from './users';
+  createUserByAdmin,
+  updateUserByAdmin,
+  disableUserByAdmin,
+  deleteUserByAdmin,
+} from './users.js';

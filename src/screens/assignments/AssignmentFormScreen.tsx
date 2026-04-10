@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -16,20 +16,12 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { AppColors } from '@/src/constants/app-colors';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
-import {
-  createAssignment,
-  getAssignmentById,
-  updateAssignment,
-} from '@/src/services/assignments/assignments-service';
+import { createAssignment, getAssignmentById, updateAssignment } from '@/src/services/assignments/assignments-service';
 import { getAllMeetings } from '@/src/services/meetings/meetings-service';
-import {
-  AssignmentPriority,
-  ASSIGNMENT_PRIORITY_LABELS,
-  UpdateAssignmentDTO,
-} from '@/src/types/assignment';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { AssignmentPriority, ASSIGNMENT_PRIORITY_LABELS, UpdateAssignmentDTO } from '@/src/types/assignment';
 import { Meeting } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
@@ -44,15 +36,11 @@ type FormErrors = {
 export function AssignmentFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
+  const colors = useAppColors();
+  const styles = createStyles(colors);
 
   const { user } = useAuth();
-  const {
-    appUser,
-    congregationId,
-    isAdminOrSupervisor,
-    loadingProfile,
-    profileError,
-  } = useUser();
+  const { appUser, congregationId, isAdminOrSupervisor, loadingProfile, profileError } = useUser();
 
   const mode: Mode = id ? 'edit' : 'create';
 
@@ -181,23 +169,19 @@ export function AssignmentFormScreen() {
   const canSave = isAdminOrSupervisor && meetings.length > 0;
   const noMeetings = meetings.length === 0;
 
-  const sortedMeetings = useMemo(
-    () => [...meetings].sort((a, b) => b.startDate.seconds - a.startDate.seconds),
-    [meetings]
-  );
+  const sortedMeetings = useMemo(() => [...meetings].sort((a, b) => b.startDate.seconds - a.startDate.seconds), [meetings]);
 
   return (
-    <ScreenContainer scrollable={false}>
-      <PageHeader
-        title={mode === 'create' ? 'Nueva asignacion' : 'Editar asignacion'}
-        showBack
-      />
-      <ScrollView contentContainerStyle={styles.form}>
+    <ScreenContainer scrollable={false} padded={false}>
+      <PageHeader title={mode === 'create' ? 'Nueva asignacion' : 'Editar asignacion'} showBack />
+      <ScrollView
+        contentContainerStyle={styles.form}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {!isAdminOrSupervisor ? (
           <View style={styles.permissionNotice}>
-            <ThemedText style={styles.permissionText}>
-              No tienes permisos para guardar cambios en asignaciones.
-            </ThemedText>
+            <ThemedText style={styles.permissionText}>No tienes permisos para guardar cambios en asignaciones.</ThemedText>
           </View>
         ) : null}
 
@@ -215,7 +199,7 @@ export function AssignmentFormScreen() {
             value={title}
             onChangeText={setTitle}
             placeholder="Ej: Preparar informe mensual"
-            placeholderTextColor={AppColors.textDisabled}
+            placeholderTextColor={colors.textDisabled}
             editable={canSave}
           />
         </Field>
@@ -226,7 +210,7 @@ export function AssignmentFormScreen() {
             value={description}
             onChangeText={setDescription}
             placeholder="Detalles de la tarea..."
-            placeholderTextColor={AppColors.textDisabled}
+            placeholderTextColor={colors.textDisabled}
             multiline
             numberOfLines={4}
             editable={canSave}
@@ -249,9 +233,7 @@ export function AssignmentFormScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          {mode === 'edit' ? (
-            <ThemedText style={styles.hintText}>La reunion vinculada no se puede cambiar.</ThemedText>
-          ) : null}
+          {mode === 'edit' ? <ThemedText style={styles.hintText}>La reunion vinculada no se puede cambiar.</ThemedText> : null}
         </Field>
 
         <Field label="Prioridad">
@@ -285,7 +267,7 @@ export function AssignmentFormScreen() {
               value={assignedToName}
               onChangeText={setAssignedToName}
               placeholder="Nombre del responsable"
-              placeholderTextColor={AppColors.textDisabled}
+              placeholderTextColor={colors.textDisabled}
               editable={canSave}
             />
           </Field>
@@ -319,6 +301,9 @@ function Field({
   error?: string;
   children: React.ReactNode;
 }) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.fieldWrap}>
       <ThemedText style={styles.label}>{label}</ThemedText>
@@ -328,60 +313,61 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
-  form: { padding: 16, gap: 20, paddingBottom: 32 },
-  fieldWrap: { gap: 6 },
-  label: { fontSize: 13, fontWeight: '600', color: AppColors.textSecondary },
-  input: {
-    backgroundColor: AppColors.surface,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 15,
-    color: AppColors.textPrimary,
-  },
-  textarea: { minHeight: 96, textAlignVertical: 'top' },
-  inputError: { borderColor: AppColors.error },
-  errorText: { color: AppColors.error, fontSize: 12 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-    backgroundColor: AppColors.surface,
-  },
-  chipActive: {
-    backgroundColor: AppColors.primary,
-    borderColor: AppColors.primary,
-  },
-  chipText: { fontSize: 13, fontWeight: '600', color: AppColors.textMuted },
-  chipTextActive: { color: '#fff' },
-  saveButton: {
-    backgroundColor: AppColors.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  disabled: { opacity: 0.6 },
-  saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  permissionNotice: {
-    borderWidth: 1,
-    borderColor: AppColors.warning + '66',
-    backgroundColor: AppColors.warning + '20',
-    borderRadius: 10,
-    padding: 12,
-  },
-  permissionText: {
-    fontSize: 13,
-    color: AppColors.warning,
-    fontWeight: '600',
-  },
-  hintText: {
-    fontSize: 12,
-    color: AppColors.textMuted,
-  },
-});
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    form: { padding: 16, gap: 20, paddingBottom: 32 },
+    fieldWrap: { gap: 6 },
+    label: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+    input: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: 12,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    textarea: { minHeight: 96, textAlignVertical: 'top' },
+    inputError: { borderColor: colors.error },
+    errorText: { color: colors.error, fontSize: 12 },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    chip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    chipActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    chipText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+    chipTextActive: { color: '#fff' },
+    saveButton: {
+      backgroundColor: colors.primary,
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    disabled: { opacity: 0.6 },
+    saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+    permissionNotice: {
+      borderWidth: 1,
+      borderColor: colors.warning + '66',
+      backgroundColor: colors.warning + '20',
+      borderRadius: 10,
+      padding: 12,
+    },
+    permissionText: {
+      fontSize: 13,
+      color: colors.warning,
+      fontWeight: '600',
+    },
+    hintText: {
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+  });

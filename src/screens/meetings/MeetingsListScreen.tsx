@@ -10,13 +10,13 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { AppColors } from '@/src/constants/app-colors';
 import { useUser } from '@/src/context/user-context';
 import { getAllMeetings, subscribeToMeetings } from '@/src/services/meetings/meetings-service';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Meeting, MeetingStatus, MEETING_STATUS_LABELS } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
-const STATUS_FILTERS: Array<{ label: string; value: MeetingStatus | 'all' }> = [
+const STATUS_FILTERS: { label: string; value: MeetingStatus | 'all' }[] = [
   { label: 'Todas', value: 'all' },
   { label: 'Programadas', value: 'scheduled' },
   { label: 'En progreso', value: 'in_progress' },
@@ -25,7 +25,9 @@ const STATUS_FILTERS: Array<{ label: string; value: MeetingStatus | 'all' }> = [
 
 export function MeetingsListScreen() {
   const router = useRouter();
-  const { congregationId, loadingProfile, profileError, isAdminOrSupervisor } = useUser();
+  const { congregationId, loadingProfile, isAdminOrSupervisor } = useUser();
+  const colors = useAppColors();
+  const styles = createStyles(colors);
 
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [filter, setFilter] = useState<MeetingStatus | 'all'>('all');
@@ -34,14 +36,15 @@ export function MeetingsListScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (loadingProfile) return;
-
-    if (!congregationId) {
-      setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
+    if (!congregationId || typeof congregationId !== 'string') {
+      setMeetings([]);
+      setError('El perfil actual no tiene congregationId.');
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
+    setLoading(true);
     setError(null);
 
     const unsubscribe = subscribeToMeetings(
@@ -52,6 +55,8 @@ export function MeetingsListScreen() {
         setRefreshing(false);
       },
       (snapshotError) => {
+        console.error('MeetingsListScreen subscribe error:', snapshotError);
+        setMeetings([]);
         setError(formatFirestoreError(snapshotError));
         setLoading(false);
         setRefreshing(false);
@@ -59,7 +64,7 @@ export function MeetingsListScreen() {
     );
 
     return unsubscribe;
-  }, [congregationId, loadingProfile, profileError]);
+  }, [congregationId]);
 
   const filtered = useMemo(
     () => (filter === 'all' ? meetings : meetings.filter((meeting) => meeting.status === filter)),
@@ -151,56 +156,57 @@ export function MeetingsListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: AppColors.border,
-  },
-  count: { fontSize: 13, color: AppColors.textMuted },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: AppColors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: AppColors.border,
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 100,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-  },
-  filterChipActive: {
-    backgroundColor: AppColors.primary,
-    borderColor: AppColors.primary,
-  },
-  filterText: { fontSize: 12, fontWeight: '600', color: AppColors.textMuted },
-  filterTextActive: { color: '#fff' },
-  listContent: {
-    paddingBottom: 32,
-  },
-  separator: {
-    height: 10,
-  },
-  emptyWrap: {
-    paddingTop: 16,
-    paddingHorizontal: 16,
-  },
-});
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    toolbar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    count: { fontSize: 13, color: colors.textMuted },
+    addButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    addButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+    filterRow: {
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      gap: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    filterChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 100,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    filterChipActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    filterText: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+    filterTextActive: { color: '#fff' },
+    listContent: {
+      paddingBottom: 32,
+    },
+    separator: {
+      height: 10,
+    },
+    emptyWrap: {
+      paddingTop: 16,
+      paddingHorizontal: 16,
+    },
+  });

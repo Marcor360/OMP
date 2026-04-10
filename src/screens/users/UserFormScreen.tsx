@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -14,13 +14,10 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { AppColors } from '@/src/constants/app-colors';
 import { useUser } from '@/src/context/user-context';
-import {
-  createUserByAdmin,
-  updateUserByAdmin,
-} from '@/src/services/users/admin-users-service';
+import { createUserByAdmin, updateUserByAdmin } from '@/src/services/users/admin-users-service';
 import { getUserById } from '@/src/services/users/users-service';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { ROLE_LABELS, UpdateUserDTO, UserRole } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { hasErrors, validateEmail, validateRequired } from '@/src/utils/validation/validation';
@@ -36,13 +33,10 @@ export function UserFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const mode: Mode = id ? 'edit' : 'create';
+  const colors = useAppColors();
+  const styles = createStyles(colors);
 
-  const {
-    congregationId,
-    isAdmin,
-    loadingProfile,
-    profileError,
-  } = useUser();
+  const { congregationId, isAdmin, loadingProfile, profileError } = useUser();
 
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -145,12 +139,13 @@ export function UserFormScreen() {
   const roles: UserRole[] = ['admin', 'supervisor', 'user'];
 
   return (
-    <ScreenContainer scrollable={false}>
-      <PageHeader
-        title={mode === 'create' ? 'Nuevo usuario' : 'Editar usuario'}
-        showBack
-      />
-      <ScrollView contentContainerStyle={styles.form}>
+    <ScreenContainer scrollable={false} padded={false}>
+      <PageHeader title={mode === 'create' ? 'Nuevo usuario' : 'Editar usuario'} showBack />
+      <ScrollView
+        contentContainerStyle={styles.form}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {!isAdmin ? (
           <View style={styles.permissionNotice}>
             <ThemedText style={styles.permissionText}>
@@ -165,7 +160,7 @@ export function UserFormScreen() {
             value={displayName}
             onChangeText={setDisplayName}
             placeholder="Ej: Juan Perez"
-            placeholderTextColor={AppColors.textDisabled}
+            placeholderTextColor={colors.textDisabled}
             editable={isAdmin}
           />
         </Field>
@@ -177,7 +172,7 @@ export function UserFormScreen() {
               value={email}
               onChangeText={setEmail}
               placeholder="juan@empresa.com"
-              placeholderTextColor={AppColors.textDisabled}
+              placeholderTextColor={colors.textDisabled}
               keyboardType="email-address"
               autoCapitalize="none"
               editable={isAdmin}
@@ -209,7 +204,7 @@ export function UserFormScreen() {
             value={phone}
             onChangeText={setPhone}
             placeholder="10 digitos"
-            placeholderTextColor={AppColors.textDisabled}
+            placeholderTextColor={colors.textDisabled}
             keyboardType="phone-pad"
             editable={isAdmin}
           />
@@ -221,7 +216,7 @@ export function UserFormScreen() {
             value={department}
             onChangeText={setDepartment}
             placeholder="Ej: Recursos Humanos"
-            placeholderTextColor={AppColors.textDisabled}
+            placeholderTextColor={colors.textDisabled}
             editable={isAdmin}
           />
         </Field>
@@ -254,6 +249,9 @@ function Field({
   error?: string;
   children: React.ReactNode;
 }) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.fieldWrap}>
       <ThemedText style={styles.label}>{label}</ThemedText>
@@ -263,86 +261,87 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
-  form: {
-    padding: 16,
-    gap: 20,
-    paddingBottom: 32,
-  },
-  fieldWrap: {
-    gap: 6,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: AppColors.textSecondary,
-  },
-  input: {
-    backgroundColor: AppColors.surface,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 15,
-    color: AppColors.textPrimary,
-  },
-  inputError: {
-    borderColor: AppColors.error,
-  },
-  errorText: {
-    color: AppColors.error,
-    fontSize: 12,
-  },
-  roleRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  roleChip: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-    backgroundColor: AppColors.surface,
-    alignItems: 'center',
-  },
-  roleChipActive: {
-    backgroundColor: AppColors.primary,
-    borderColor: AppColors.primary,
-  },
-  roleChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: AppColors.textMuted,
-  },
-  roleChipTextActive: {
-    color: '#fff',
-  },
-  saveButton: {
-    backgroundColor: AppColors.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  permissionNotice: {
-    borderWidth: 1,
-    borderColor: AppColors.warning + '66',
-    backgroundColor: AppColors.warning + '20',
-    borderRadius: 10,
-    padding: 12,
-  },
-  permissionText: {
-    fontSize: 13,
-    color: AppColors.warning,
-    fontWeight: '600',
-  },
-});
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    form: {
+      padding: 16,
+      gap: 20,
+      paddingBottom: 32,
+    },
+    fieldWrap: {
+      gap: 6,
+    },
+    label: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    input: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: 12,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    inputError: {
+      borderColor: colors.error,
+    },
+    errorText: {
+      color: colors.error,
+      fontSize: 12,
+    },
+    roleRow: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    roleChip: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+    },
+    roleChipActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    roleChipText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textMuted,
+    },
+    roleChipTextActive: {
+      color: '#fff',
+    },
+    saveButton: {
+      backgroundColor: colors.primary,
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    saveButtonDisabled: {
+      opacity: 0.6,
+    },
+    saveButtonText: {
+      color: '#fff',
+      fontWeight: '700',
+      fontSize: 16,
+    },
+    permissionNotice: {
+      borderWidth: 1,
+      borderColor: colors.warning + '66',
+      backgroundColor: colors.warning + '20',
+      borderRadius: 10,
+      padding: 12,
+    },
+    permissionText: {
+      fontSize: 13,
+      color: colors.warning,
+      fontWeight: '600',
+    },
+  });

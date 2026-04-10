@@ -6,8 +6,8 @@ import {
   RefreshControl,
   type ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { AppColors } from '@/src/constants/app-colors';
+import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
 interface ScreenContainerProps {
   children: React.ReactNode;
@@ -17,6 +17,7 @@ interface ScreenContainerProps {
   style?: ViewStyle;
   contentStyle?: ViewStyle;
   padded?: boolean;
+  safeAreaEdges?: Edge[];
 }
 
 /**
@@ -31,7 +32,11 @@ export function ScreenContainer({
   style,
   contentStyle,
   padded = true,
+  safeAreaEdges = ['top', 'bottom'],
 }: ScreenContainerProps) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
   const inner = (
     <View style={[styles.inner, padded && styles.padded, contentStyle]}>
       {children}
@@ -39,7 +44,7 @@ export function ScreenContainer({
   );
 
   return (
-    <SafeAreaView style={[styles.safe, style]} edges={['bottom']}>
+    <SafeAreaView style={[styles.safe, style]} edges={safeAreaEdges}>
       {scrollable ? (
         <ScrollView
           style={styles.scroll}
@@ -50,8 +55,8 @@ export function ScreenContainer({
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
-                tintColor={AppColors.primary}
-                colors={[AppColors.primary]}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
               />
             ) : undefined
           }
@@ -65,21 +70,22 @@ export function ScreenContainer({
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: AppColors.backgroundDark,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  inner: {
-    flex: 1,
-  },
-  padded: {
-    padding: 16,
-  },
-});
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: colors.backgroundDark,
+    },
+    scroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      flexGrow: 1,
+    },
+    inner: {
+      flex: 1,
+    },
+    padded: {
+      padding: 16,
+    },
+  });

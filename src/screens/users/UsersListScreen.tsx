@@ -10,20 +10,17 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { AppColors } from '@/src/constants/app-colors';
 import { useUser } from '@/src/context/user-context';
 import { getAllUsers, subscribeToUsers } from '@/src/services/users/users-service';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
 export function UsersListScreen() {
   const router = useRouter();
-  const {
-    congregationId,
-    isAdmin,
-    loadingProfile,
-    profileError,
-  } = useUser();
+  const { congregationId, isAdmin, loadingProfile } = useUser();
+  const colors = useAppColors();
+  const styles = createStyles(colors);
 
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,14 +28,15 @@ export function UsersListScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (loadingProfile) return;
-
-    if (!congregationId) {
-      setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
+    if (!congregationId || typeof congregationId !== 'string') {
+      setUsers([]);
+      setError('El perfil actual no tiene congregationId.');
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
+    setLoading(true);
     setError(null);
 
     const unsubscribe = subscribeToUsers(
@@ -49,6 +47,8 @@ export function UsersListScreen() {
         setRefreshing(false);
       },
       (snapshotError) => {
+        console.error('UsersListScreen subscribe error:', snapshotError);
+        setUsers([]);
         setError(formatFirestoreError(snapshotError));
         setLoading(false);
         setRefreshing(false);
@@ -56,7 +56,7 @@ export function UsersListScreen() {
     );
 
     return unsubscribe;
-  }, [congregationId, loadingProfile, profileError]);
+  }, [congregationId]);
 
   const onRefresh = async () => {
     if (!congregationId) return;
@@ -132,56 +132,57 @@ export function UsersListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: AppColors.border,
-  },
-  count: {
-    fontSize: 13,
-    color: AppColors.textMuted,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: AppColors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  listContent: {
-    paddingBottom: 32,
-  },
-  separator: {
-    height: 10,
-  },
-  emptyWrap: {
-    paddingTop: 16,
-    paddingHorizontal: 16,
-  },
-  permissionNotice: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: AppColors.warning + '66',
-    backgroundColor: AppColors.warning + '20',
-    borderRadius: 10,
-    padding: 12,
-  },
-  permissionText: {
-    fontSize: 13,
-    color: AppColors.warning,
-    fontWeight: '600',
-  },
-});
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    toolbar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    count: {
+      fontSize: 13,
+      color: colors.textMuted,
+    },
+    addButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    addButtonText: {
+      color: '#fff',
+      fontWeight: '600',
+      fontSize: 14,
+    },
+    listContent: {
+      paddingBottom: 32,
+    },
+    separator: {
+      height: 10,
+    },
+    emptyWrap: {
+      paddingTop: 16,
+      paddingHorizontal: 16,
+    },
+    permissionNotice: {
+      marginHorizontal: 16,
+      marginTop: 12,
+      borderWidth: 1,
+      borderColor: colors.warning + '66',
+      backgroundColor: colors.warning + '20',
+      borderRadius: 10,
+      padding: 12,
+    },
+    permissionText: {
+      fontSize: 13,
+      color: colors.warning,
+      fontWeight: '600',
+    },
+  });

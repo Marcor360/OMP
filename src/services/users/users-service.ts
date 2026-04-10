@@ -35,6 +35,8 @@ const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
   const isActive =
     typeof data.isActive === 'boolean'
       ? data.isActive
+      : typeof data.active === 'boolean'
+        ? data.active
       : data.status === 'active';
   const status = isUserStatus(data.status)
     ? data.status
@@ -63,6 +65,14 @@ const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
   };
 };
 
+const sortUsers = (items: AppUser[]): AppUser[] => {
+  return [...items].sort((a, b) => {
+    const left = String(a.displayName || a.email || a.uid || '').toLowerCase();
+    const right = String(b.displayName || b.email || b.uid || '').toLowerCase();
+    return left.localeCompare(right, 'es');
+  });
+};
+
 /** Obtiene un usuario por UID */
 export const getUserById = async (uid: string): Promise<AppUser | null> => {
   const snap = await getDoc(userDocRef(uid));
@@ -72,13 +82,13 @@ export const getUserById = async (uid: string): Promise<AppUser | null> => {
 
 /** Obtiene todos los usuarios de una congregacion */
 export const getAllUsers = async (congregationId: string): Promise<AppUser[]> => {
-  const q = query(
-    usersCollectionRef(),
-    where('congregationId', '==', congregationId),
-    orderBy('displayName', 'asc')
-  );
+  if (!congregationId || typeof congregationId !== 'string') {
+    return [];
+  }
+
+  const q = query(usersCollectionRef(), where('congregationId', '==', congregationId));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => normalizeUser(d.id, d.data()));
+  return sortUsers(snap.docs.map((d) => normalizeUser(d.id, d.data())));
 };
 
 /** Obtiene usuarios activos de una congregacion */
@@ -148,18 +158,23 @@ export const subscribeToUsers = (
   callback: (users: AppUser[]) => void,
   onError?: (error: unknown) => void
 ): Unsubscribe => {
-  const q = query(
-    usersCollectionRef(),
-    where('congregationId', '==', congregationId),
-    orderBy('displayName', 'asc')
-  );
+  if (!congregationId || typeof congregationId !== 'string') {
+    onError?.(new Error('No existe congregationId para cargar usuarios.'));
+    return () => {};
+  }
+
+  const q = query(usersCollectionRef(), where('congregationId', '==', congregationId));
 
   return onSnapshot(
     q,
     (snap) => {
-      callback(snap.docs.map((d) => normalizeUser(d.id, d.data())));
+      const users = sortUsers(snap.docs.map((d) => normalizeUser(d.id, d.data())));
+      callback(users);
     },
-    onError
+    (error) => {
+      console.error('subscribeToUsers error:', error);
+      onError?.(error);
+    }
   );
 };
 

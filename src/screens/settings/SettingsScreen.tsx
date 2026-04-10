@@ -67,7 +67,7 @@ export function SettingsScreen() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer scrollable={false}>
       <ScrollView contentContainerStyle={styles.content}>
         <Section title="Cuenta">
           <SettingRow icon="person-circle-outline" label="Nombre" value={appUser?.displayName ?? '--'} />

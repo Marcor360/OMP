@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,10 +11,10 @@ import { StatusBadge, meetingStatusColor } from '@/src/components/common/StatusB
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { AppColors } from '@/src/constants/app-colors';
 import { useUser } from '@/src/context/user-context';
 import { getAssignmentsByMeeting } from '@/src/services/assignments/assignments-service';
 import { deleteMeeting, getMeetingById } from '@/src/services/meetings/meetings-service';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Assignment } from '@/src/types/assignment';
 import { Meeting, MEETING_STATUS_LABELS, MEETING_TYPE_LABELS } from '@/src/types/meeting';
 import { formatDate, formatTime } from '@/src/utils/dates/dates';
@@ -24,6 +24,8 @@ export function MeetingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { congregationId, loadingProfile, profileError } = useUser();
+  const colors = useAppColors();
+  const styles = createStyles(colors);
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -39,10 +41,7 @@ export function MeetingDetailScreen() {
       return;
     }
 
-    Promise.all([
-      getMeetingById(congregationId, id),
-      getAssignmentsByMeeting(congregationId, id),
-    ])
+    Promise.all([getMeetingById(congregationId, id), getAssignmentsByMeeting(congregationId, id)])
       .then(([meetingDoc, assignmentDocs]) => {
         setMeeting(meetingDoc);
         setAssignments(assignmentDocs);
@@ -81,11 +80,10 @@ export function MeetingDetailScreen() {
   };
 
   if (loading || loadingProfile) return <LoadingState />;
-  if (error || !meeting)
-    return <ErrorState message={error ?? 'Reunion no encontrada.'} />;
+  if (error || !meeting) return <ErrorState message={error ?? 'Reunion no encontrada.'} />;
 
   return (
-    <ScreenContainer>
+    <ScreenContainer scrollable={false}>
       <PageHeader
         title="Detalle de reunion"
         showBack
@@ -96,35 +94,24 @@ export function MeetingDetailScreen() {
               onPress={() => router.push(`/(protected)/meetings/edit/${meeting.id}` as any)}
               activeOpacity={0.8}
             >
-              <Ionicons name="pencil-outline" size={18} color={AppColors.primary} />
+              <Ionicons name="pencil-outline" size={18} color={colors.primary} />
             </TouchableOpacity>
           </RoleGuard>
         }
       />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.titleSection}>
-          <StatusBadge
-            label={MEETING_STATUS_LABELS[meeting.status]}
-            color={meetingStatusColor[meeting.status]}
-          />
+          <StatusBadge label={MEETING_STATUS_LABELS[meeting.status]} color={meetingStatusColor[meeting.status]} />
           <ThemedText style={styles.title}>{meeting.title}</ThemedText>
           <ThemedText style={styles.type}>{MEETING_TYPE_LABELS[meeting.type]}</ThemedText>
         </View>
 
         <View style={styles.card}>
           <InfoRow icon="calendar-outline" label="Fecha" value={formatDate(meeting.startDate)} />
-          <InfoRow
-            icon="time-outline"
-            label="Horario"
-            value={`${formatTime(meeting.startDate)} - ${formatTime(meeting.endDate)}`}
-          />
-          {meeting.location ? (
-            <InfoRow icon="location-outline" label="Lugar" value={meeting.location} />
-          ) : null}
-          {meeting.meetingUrl ? (
-            <InfoRow icon="link-outline" label="Enlace" value={meeting.meetingUrl} />
-          ) : null}
+          <InfoRow icon="time-outline" label="Horario" value={`${formatTime(meeting.startDate)} - ${formatTime(meeting.endDate)}`} />
+          {meeting.location ? <InfoRow icon="location-outline" label="Lugar" value={meeting.location} /> : null}
+          {meeting.meetingUrl ? <InfoRow icon="link-outline" label="Enlace" value={meeting.meetingUrl} /> : null}
           <InfoRow icon="person-outline" label="Organizador" value={meeting.organizerName} />
           <InfoRow
             icon="people-outline"
@@ -149,9 +136,7 @@ export function MeetingDetailScreen() {
 
         {assignments.length > 0 ? (
           <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>
-              Asignaciones vinculadas ({assignments.length})
-            </ThemedText>
+            <ThemedText style={styles.sectionTitle}>Asignaciones vinculadas ({assignments.length})</ThemedText>
             <View style={styles.assignmentList}>
               {assignments.map((assignment) => (
                 <AssignmentCard key={assignment.id} assignment={assignment} />
@@ -162,7 +147,7 @@ export function MeetingDetailScreen() {
 
         <RoleGuard allowedRoles={['admin', 'supervisor']}>
           <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} activeOpacity={0.8}>
-            <Ionicons name="trash-outline" size={18} color={AppColors.error} />
+            <Ionicons name="trash-outline" size={18} color={colors.error} />
             <ThemedText style={styles.deleteBtnText}>Eliminar reunion</ThemedText>
           </TouchableOpacity>
         </RoleGuard>
@@ -180,9 +165,12 @@ function InfoRow({
   label: string;
   value: string;
 }) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.infoRow}>
-      <Ionicons name={icon} size={16} color={AppColors.textMuted} />
+      <Ionicons name={icon} size={16} color={colors.textMuted} />
       <ThemedText style={styles.infoLabel}>{label}</ThemedText>
       <ThemedText style={styles.infoValue} numberOfLines={2}>
         {value}
@@ -191,44 +179,45 @@ function InfoRow({
   );
 }
 
-const styles = StyleSheet.create({
-  content: { padding: 16, gap: 16, paddingBottom: 32 },
-  titleSection: { gap: 6 },
-  title: { fontSize: 22, fontWeight: '800', color: AppColors.textPrimary, lineHeight: 28 },
-  type: { fontSize: 13, color: AppColors.textMuted },
-  card: {
-    backgroundColor: AppColors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-    overflow: 'hidden',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: AppColors.border,
-  },
-  infoLabel: { fontSize: 13, color: AppColors.textMuted, width: 100 },
-  infoValue: { flex: 1, fontSize: 14, color: AppColors.textPrimary, fontWeight: '500' },
-  section: { gap: 10 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: AppColors.textSecondary },
-  description: { fontSize: 14, color: AppColors.textMuted, lineHeight: 22 },
-  assignmentList: { gap: 10 },
-  editBtn: { padding: 8, backgroundColor: AppColors.primary + '22', borderRadius: 8 },
-  deleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: AppColors.error + '44',
-    backgroundColor: AppColors.error + '11',
-    marginTop: 8,
-  },
-  deleteBtnText: { color: AppColors.error, fontWeight: '600' },
-});
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    content: { padding: 16, gap: 16, paddingBottom: 32 },
+    titleSection: { gap: 6 },
+    title: { fontSize: 22, fontWeight: '800', color: colors.textPrimary, lineHeight: 28 },
+    type: { fontSize: 13, color: colors.textMuted },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: 'hidden',
+    },
+    infoRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    infoLabel: { fontSize: 13, color: colors.textMuted, width: 100 },
+    infoValue: { flex: 1, fontSize: 14, color: colors.textPrimary, fontWeight: '500' },
+    section: { gap: 10 },
+    sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.textSecondary },
+    description: { fontSize: 14, color: colors.textMuted, lineHeight: 22 },
+    assignmentList: { gap: 10 },
+    editBtn: { padding: 8, backgroundColor: colors.primary + '22', borderRadius: 8 },
+    deleteBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.error + '44',
+      backgroundColor: colors.error + '11',
+      marginTop: 8,
+    },
+    deleteBtnText: { color: colors.error, fontWeight: '600' },
+  });

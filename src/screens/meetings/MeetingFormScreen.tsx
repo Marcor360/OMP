@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,10 +15,10 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { AppColors } from '@/src/constants/app-colors';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
 import { createMeeting, getMeetingById, updateMeeting } from '@/src/services/meetings/meetings-service';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { MeetingType, MEETING_TYPE_LABELS, UpdateMeetingDTO } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
@@ -30,6 +30,8 @@ export function MeetingFormScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { appUser, congregationId, isAdminOrSupervisor, loadingProfile, profileError } = useUser();
+  const colors = useAppColors();
+  const styles = createStyles(colors);
 
   const mode: Mode = id ? 'edit' : 'create';
 
@@ -135,12 +137,13 @@ export function MeetingFormScreen() {
   const meetingTypes: MeetingType[] = ['internal', 'external', 'review', 'training'];
 
   return (
-    <ScreenContainer scrollable={false}>
-      <PageHeader
-        title={mode === 'create' ? 'Nueva reunion' : 'Editar reunion'}
-        showBack
-      />
-      <ScrollView contentContainerStyle={styles.form}>
+    <ScreenContainer scrollable={false} padded={false}>
+      <PageHeader title={mode === 'create' ? 'Nueva reunion' : 'Editar reunion'} showBack />
+      <ScrollView
+        contentContainerStyle={styles.form}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {!isAdminOrSupervisor ? (
           <View style={styles.permissionNotice}>
             <ThemedText style={styles.permissionText}>
@@ -155,7 +158,7 @@ export function MeetingFormScreen() {
             value={title}
             onChangeText={setTitle}
             placeholder="Ej: Revision semanal de proyectos"
-            placeholderTextColor={AppColors.textDisabled}
+            placeholderTextColor={colors.textDisabled}
             editable={isAdminOrSupervisor}
           />
         </Field>
@@ -166,7 +169,7 @@ export function MeetingFormScreen() {
             value={description}
             onChangeText={setDescription}
             placeholder="Objetivos y agenda de la reunion..."
-            placeholderTextColor={AppColors.textDisabled}
+            placeholderTextColor={colors.textDisabled}
             multiline
             numberOfLines={4}
             editable={isAdminOrSupervisor}
@@ -197,7 +200,7 @@ export function MeetingFormScreen() {
             value={location}
             onChangeText={setLocation}
             placeholder="Ej: Sala de juntas A"
-            placeholderTextColor={AppColors.textDisabled}
+            placeholderTextColor={colors.textDisabled}
             editable={isAdminOrSupervisor}
           />
         </Field>
@@ -208,7 +211,7 @@ export function MeetingFormScreen() {
             value={meetingUrl}
             onChangeText={setMeetingUrl}
             placeholder="https://meet.google.com/..."
-            placeholderTextColor={AppColors.textDisabled}
+            placeholderTextColor={colors.textDisabled}
             keyboardType="url"
             autoCapitalize="none"
             editable={isAdminOrSupervisor}
@@ -243,6 +246,9 @@ function Field({
   error?: string;
   children: React.ReactNode;
 }) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.fieldWrap}>
       <ThemedText style={styles.label}>{label}</ThemedText>
@@ -252,53 +258,54 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
-  form: { padding: 16, gap: 20, paddingBottom: 32 },
-  fieldWrap: { gap: 6 },
-  label: { fontSize: 13, fontWeight: '600', color: AppColors.textSecondary },
-  input: {
-    backgroundColor: AppColors.surface,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 15,
-    color: AppColors.textPrimary,
-  },
-  textarea: { minHeight: 96, textAlignVertical: 'top' },
-  inputError: { borderColor: AppColors.error },
-  errorText: { color: AppColors.error, fontSize: 12 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-    backgroundColor: AppColors.surface,
-  },
-  chipActive: { backgroundColor: AppColors.primary, borderColor: AppColors.primary },
-  chipText: { fontSize: 13, fontWeight: '600', color: AppColors.textMuted },
-  chipTextActive: { color: '#fff' },
-  saveButton: {
-    backgroundColor: AppColors.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  disabled: { opacity: 0.6 },
-  saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  permissionNotice: {
-    borderWidth: 1,
-    borderColor: AppColors.warning + '66',
-    backgroundColor: AppColors.warning + '20',
-    borderRadius: 10,
-    padding: 12,
-  },
-  permissionText: {
-    fontSize: 13,
-    color: AppColors.warning,
-    fontWeight: '600',
-  },
-});
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    form: { padding: 16, gap: 20, paddingBottom: 32 },
+    fieldWrap: { gap: 6 },
+    label: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+    input: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: 12,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    textarea: { minHeight: 96, textAlignVertical: 'top' },
+    inputError: { borderColor: colors.error },
+    errorText: { color: colors.error, fontSize: 12 },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    chip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    chipText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+    chipTextActive: { color: '#fff' },
+    saveButton: {
+      backgroundColor: colors.primary,
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    disabled: { opacity: 0.6 },
+    saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+    permissionNotice: {
+      borderWidth: 1,
+      borderColor: colors.warning + '66',
+      backgroundColor: colors.warning + '20',
+      borderRadius: 10,
+      padding: 12,
+    },
+    permissionText: {
+      fontSize: 13,
+      color: colors.warning,
+      fontWeight: '600',
+    },
+  });

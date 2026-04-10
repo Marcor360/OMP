@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,14 +12,10 @@ import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
-import { AppColors } from '@/src/constants/app-colors';
 import { getAllAssignments, getAssignmentsByUser } from '@/src/services/assignments/assignments-service';
-import {
-  DashboardMetrics,
-  getDashboardMetrics,
-  getDashboardMetricsForUser,
-} from '@/src/services/dashboard/dashboard-service';
+import { DashboardMetrics, getDashboardMetrics, getDashboardMetricsForUser } from '@/src/services/dashboard/dashboard-service';
 import { getAllMeetings } from '@/src/services/meetings/meetings-service';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Assignment } from '@/src/types/assignment';
 import { Meeting } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -52,13 +48,9 @@ const getUserMetrics = (items: Assignment[]): Partial<DashboardMetrics> => {
 export function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const {
-    appUser,
-    congregationId,
-    role,
-    loadingProfile,
-    profileError,
-  } = useUser();
+  const { appUser, congregationId, role, loadingProfile, profileError } = useUser();
+  const colors = useAppColors();
+  const styles = createStyles(colors);
 
   const [metrics, setMetrics] = useState<Partial<DashboardMetrics>>({});
   const [recentMeetings, setRecentMeetings] = useState<Meeting[]>([]);
@@ -126,17 +118,13 @@ export function DashboardScreen() {
         failures.push(assignmentsResult.reason);
       }
 
-      const nextRecentMeetings = meetingsData
-        .filter((meeting) => meeting.status === 'scheduled')
-        .slice(0, 3);
+      const nextRecentMeetings = meetingsData.filter((meeting) => meeting.status === 'scheduled').slice(0, 3);
 
       const assignmentsForCards = canManage
         ? assignmentsData
         : assignmentsData.filter((item) => item.assignedToUid === uid);
 
-      const nextPendingAssignments = assignmentsForCards
-        .filter((item) => item.status === 'pending')
-        .slice(0, 5);
+      const nextPendingAssignments = assignmentsForCards.filter((item) => item.status === 'pending').slice(0, 5);
 
       let nextMetrics: Partial<DashboardMetrics> = {};
 
@@ -200,50 +188,27 @@ export function DashboardScreen() {
       <View style={styles.greeting}>
         <View>
           <ThemedText style={styles.greetingLabel}>Bienvenido,</ThemedText>
-          <ThemedText style={styles.greetingName}>
-            {appUser?.displayName?.split(' ')[0] ?? 'Usuario'}
-          </ThemedText>
+          <ThemedText style={styles.greetingName}>{appUser?.displayName?.split(' ')[0] ?? 'Usuario'}</ThemedText>
         </View>
       </View>
 
       <View style={styles.statsRow}>
-        <StatCard
-          title="Asignaciones"
-          value={metrics.totalAssignments ?? 0}
-          icon="checkmark-done-outline"
-          color={AppColors.primary}
-        />
-        <StatCard
-          title="Pendientes"
-          value={metrics.pendingAssignments ?? 0}
-          icon="time-outline"
-          color={AppColors.warning}
-        />
+        <StatCard title="Asignaciones" value={metrics.totalAssignments ?? 0} icon="checkmark-done-outline" color={colors.primary} />
+        <StatCard title="Pendientes" value={metrics.pendingAssignments ?? 0} icon="time-outline" color={colors.warning} />
       </View>
 
       {isAdmin && (
         <View style={styles.statsRow}>
-          <StatCard
-            title="Reuniones"
-            value={metrics.totalMeetings ?? 0}
-            icon="calendar-outline"
-            color={AppColors.accent}
-          />
-          <StatCard
-            title="Usuarios"
-            value={metrics.totalUsers ?? 0}
-            icon="people-outline"
-            color={AppColors.secondary}
-          />
+          <StatCard title="Reuniones" value={metrics.totalMeetings ?? 0} icon="calendar-outline" color={colors.accent} />
+          <StatCard title="Usuarios" value={metrics.totalUsers ?? 0} icon="people-outline" color={colors.secondary} />
         </View>
       )}
 
       {metrics.overdueAssignments ? (
         <View style={styles.alertBanner}>
-          <Ionicons name="warning-outline" size={16} color={AppColors.error} />
+          <Ionicons name="warning-outline" size={16} color={colors.error} />
           <ThemedText style={styles.alertText}>
-            {metrics.overdueAssignments} asignacion
-            {metrics.overdueAssignments > 1 ? 'es vencidas' : ' vencida'}
+            {metrics.overdueAssignments} asignacion{metrics.overdueAssignments > 1 ? 'es vencidas' : ' vencida'}
           </ThemedText>
         </View>
       ) : null}
@@ -287,67 +252,68 @@ export function DashboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  greeting: {
-    marginBottom: 20,
-  },
-  greetingLabel: {
-    fontSize: 14,
-    color: AppColors.textMuted,
-  },
-  greetingName: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: AppColors.textPrimary,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
-  alertBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: AppColors.error + '22',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: AppColors.error + '44',
-  },
-  alertText: {
-    color: AppColors.error,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  section: {
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: AppColors.textPrimary,
-  },
-  seeAll: {
-    fontSize: 13,
-    color: AppColors.primary,
-    fontWeight: '600',
-  },
-  list: {
-    gap: 10,
-  },
-  emptyText: {
-    fontSize: 13,
-    color: AppColors.textMuted,
-    textAlign: 'center',
-    paddingVertical: 16,
-  },
-});
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    greeting: {
+      marginBottom: 20,
+    },
+    greetingLabel: {
+      fontSize: 14,
+      color: colors.textMuted,
+    },
+    greetingName: {
+      fontSize: 26,
+      fontWeight: '800',
+      color: colors.textPrimary,
+    },
+    statsRow: {
+      flexDirection: 'row',
+      gap: 12,
+      marginBottom: 12,
+    },
+    alertBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.error + '22',
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: colors.error + '44',
+    },
+    alertText: {
+      color: colors.error,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    section: {
+      marginTop: 8,
+      marginBottom: 16,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    seeAll: {
+      fontSize: 13,
+      color: colors.primary,
+      fontWeight: '600',
+    },
+    list: {
+      gap: 10,
+    },
+    emptyText: {
+      fontSize: 13,
+      color: colors.textMuted,
+      textAlign: 'center',
+      paddingVertical: 16,
+    },
+  });

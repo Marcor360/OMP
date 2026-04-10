@@ -1,10 +1,11 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
 import { ThemedText } from '@/src/components/themed-text';
 import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common/StatusBadge';
-import { AppColors } from '@/src/constants/app-colors';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser, ROLE_LABELS, STATUS_LABELS } from '@/src/types/user';
 
 interface UserCardProps {
@@ -14,6 +15,8 @@ interface UserCardProps {
 
 export function UserCard({ user, onPress }: UserCardProps) {
   const router = useRouter();
+  const colors = useAppColors();
+  const styles = createStyles(colors);
 
   const initials = user.displayName
     .split(' ')
@@ -33,9 +36,7 @@ export function UserCard({ user, onPress }: UserCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={handlePress} activeOpacity={0.8}>
       <View style={[styles.avatar, { backgroundColor: roleColor[user.role] + '33' }]}>
-        <ThemedText style={[styles.initials, { color: roleColor[user.role] }]}>
-          {initials}
-        </ThemedText>
+        <ThemedText style={[styles.initials, { color: roleColor[user.role] }]}>{initials}</ThemedText>
       </View>
 
       <View style={styles.info}>
@@ -46,62 +47,55 @@ export function UserCard({ user, onPress }: UserCardProps) {
           {user.email}
         </ThemedText>
         <View style={styles.badges}>
-          <StatusBadge
-            label={ROLE_LABELS[user.role]}
-            color={roleColor[user.role]}
-            size="sm"
-          />
-          <StatusBadge
-            label={STATUS_LABELS[user.status]}
-            color={userStatusColor[user.status]}
-            size="sm"
-          />
+          <StatusBadge label={ROLE_LABELS[user.role]} color={roleColor[user.role]} size="sm" />
+          <StatusBadge label={STATUS_LABELS[user.status]} color={userStatusColor[user.status]} size="sm" />
         </View>
       </View>
 
-      <Ionicons name="chevron-forward" size={18} color={AppColors.textDisabled} />
+      <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: AppColors.surface,
-    borderRadius: 12,
-    padding: 14,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  initials: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  info: {
-    flex: 1,
-    gap: 3,
-  },
-  name: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: AppColors.textPrimary,
-  },
-  email: {
-    fontSize: 13,
-    color: AppColors.textMuted,
-  },
-  badges: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 4,
-  },
-});
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 14,
+      gap: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    avatar: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    initials: {
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    info: {
+      flex: 1,
+      gap: 3,
+    },
+    name: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    email: {
+      fontSize: 13,
+      color: colors.textMuted,
+    },
+    badges: {
+      flexDirection: 'row',
+      gap: 6,
+      marginTop: 4,
+    },
+  });

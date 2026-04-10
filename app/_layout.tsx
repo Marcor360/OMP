@@ -77,6 +77,7 @@ const NavigationThemes = {
 
 function AppLayout() {
   const { colorScheme, isReady } = useAppTheme();
+  const colors = getAppColors(colorScheme);
 
   if (!isReady) {
     return null;
@@ -87,7 +88,11 @@ function AppLayout() {
       <AuthProvider>
         <RootLayoutNav />
       </AuthProvider>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar
+        style={colorScheme === 'dark' ? 'light' : 'dark'}
+        translucent={false}
+        backgroundColor={colors.backgroundDark}
+      />
     </ThemeProvider>
   );
 }

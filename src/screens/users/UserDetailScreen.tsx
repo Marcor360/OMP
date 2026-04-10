@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert, Platform, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,10 +10,10 @@ import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { AppColors } from '@/src/constants/app-colors';
 import { useUser } from '@/src/context/user-context';
 import { disableUserByAdmin, updateUserByAdmin } from '@/src/services/users/admin-users-service';
 import { getUserById } from '@/src/services/users/users-service';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser, ROLE_LABELS, STATUS_LABELS, UserStatus } from '@/src/types/user';
 import { formatDate } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -22,6 +22,8 @@ export function UserDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { congregationId, isAdmin, loadingProfile, profileError } = useUser();
+  const colors = useAppColors();
+  const styles = createStyles(colors);
 
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -117,7 +119,7 @@ export function UserDetailScreen() {
     .toUpperCase();
 
   return (
-    <ScreenContainer>
+    <ScreenContainer scrollable={false}>
       <PageHeader
         title="Detalle de usuario"
         showBack
@@ -128,18 +130,16 @@ export function UserDetailScreen() {
               onPress={() => router.push(`/(protected)/users/edit/${user.uid}` as any)}
               activeOpacity={0.8}
             >
-              <Ionicons name="pencil-outline" size={18} color={AppColors.primary} />
+              <Ionicons name="pencil-outline" size={18} color={colors.primary} />
             </TouchableOpacity>
           </RoleGuard>
         }
       />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.avatarSection}>
           <View style={[styles.avatar, { backgroundColor: roleColor[user.role] + '33' }]}>
-            <ThemedText style={[styles.initials, { color: roleColor[user.role] }]}>
-              {initials}
-            </ThemedText>
+            <ThemedText style={[styles.initials, { color: roleColor[user.role] }]}>{initials}</ThemedText>
           </View>
           <ThemedText style={styles.name}>{user.displayName}</ThemedText>
           <ThemedText style={styles.email}>{user.email}</ThemedText>
@@ -162,8 +162,7 @@ export function UserDetailScreen() {
             style={[
               styles.toggleBtn,
               {
-                backgroundColor:
-                  user.status === 'active' ? AppColors.error + '22' : AppColors.success + '22',
+                backgroundColor: user.status === 'active' ? colors.error + '22' : colors.success + '22',
               },
             ]}
             onPress={handleToggleStatus}
@@ -173,11 +172,11 @@ export function UserDetailScreen() {
             <Ionicons
               name={user.status === 'active' ? 'ban-outline' : 'checkmark-circle-outline'}
               size={18}
-              color={user.status === 'active' ? AppColors.error : AppColors.success}
+              color={user.status === 'active' ? colors.error : colors.success}
             />
             <ThemedText
               style={{
-                color: user.status === 'active' ? AppColors.error : AppColors.success,
+                color: user.status === 'active' ? colors.error : colors.success,
                 fontWeight: '600',
               }}
             >
@@ -203,90 +202,94 @@ function InfoRow({
   label: string;
   value: string;
 }) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.infoRow}>
-      <Ionicons name={icon} size={16} color={AppColors.textMuted} />
+      <Ionicons name={icon} size={16} color={colors.textMuted} />
       <ThemedText style={styles.infoLabel}>{label}</ThemedText>
       <ThemedText style={styles.infoValue}>{value}</ThemedText>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    padding: 16,
-    gap: 16,
-  },
-  avatarSection: {
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 16,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  initials: {
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  name: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: AppColors.textPrimary,
-  },
-  email: {
-    fontSize: 14,
-    color: AppColors.textMuted,
-  },
-  badges: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
-  card: {
-    backgroundColor: AppColors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-    overflow: 'hidden',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: AppColors.border,
-  },
-  infoLabel: {
-    fontSize: 13,
-    color: AppColors.textMuted,
-    width: 110,
-  },
-  infoValue: {
-    flex: 1,
-    fontSize: 14,
-    color: AppColors.textPrimary,
-    fontWeight: '500',
-  },
-  editBtn: {
-    padding: 8,
-    backgroundColor: AppColors.primary + '22',
-    borderRadius: 8,
-  },
-  toggleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-  },
-});
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    content: {
+      padding: 16,
+      gap: 16,
+    },
+    avatarSection: {
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 16,
+    },
+    avatar: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    initials: {
+      fontSize: 28,
+      fontWeight: '800',
+    },
+    name: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    email: {
+      fontSize: 14,
+      color: colors.textMuted,
+    },
+    badges: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 4,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: 'hidden',
+    },
+    infoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    infoLabel: {
+      fontSize: 13,
+      color: colors.textMuted,
+      width: 110,
+    },
+    infoValue: {
+      flex: 1,
+      fontSize: 14,
+      color: colors.textPrimary,
+      fontWeight: '500',
+    },
+    editBtn: {
+      padding: 8,
+      backgroundColor: colors.primary + '22',
+      borderRadius: 8,
+    },
+    toggleBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+  });

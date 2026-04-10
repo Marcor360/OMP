@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,13 +10,13 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { AppColors } from '@/src/constants/app-colors';
 import { useUser } from '@/src/context/user-context';
 import {
   getAllAssignments,
   getAssignmentsByUser,
   subscribeToAssignments,
 } from '@/src/services/assignments/assignments-service';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Assignment, AssignmentStatus, ASSIGNMENT_STATUS_LABELS } from '@/src/types/assignment';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { canManageAssignments } from '@/src/utils/permissions/permissions';
@@ -30,14 +30,9 @@ const FILTERS: Array<{ label: string; value: AssignmentStatus | 'all' }> = [
 
 export function AssignmentsListScreen() {
   const router = useRouter();
-  const {
-    uid,
-    congregationId,
-    role,
-    loadingProfile,
-    profileError,
-    isAdminOrSupervisor,
-  } = useUser();
+  const { uid, congregationId, role, loadingProfile, profileError, isAdminOrSupervisor } = useUser();
+  const colors = useAppColors();
+  const styles = createStyles(colors);
 
   const isManager = canManageAssignments(role);
 
@@ -170,47 +165,48 @@ export function AssignmentsListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: AppColors.border,
-  },
-  count: { fontSize: 13, color: AppColors.textMuted },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: AppColors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: AppColors.border,
-    flexWrap: 'wrap',
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 100,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-  },
-  chipActive: { backgroundColor: AppColors.primary, borderColor: AppColors.primary },
-  chipText: { fontSize: 12, fontWeight: '600', color: AppColors.textMuted },
-  chipTextActive: { color: '#fff' },
-  listContent: { paddingBottom: 32 },
-  separator: { height: 10 },
-  emptyWrap: { paddingTop: 16, paddingHorizontal: 16 },
-});
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    toolbar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    count: { fontSize: 13, color: colors.textMuted },
+    addButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    addButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+    filterRow: {
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      gap: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      flexWrap: 'wrap',
+    },
+    chip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 100,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    chipText: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+    chipTextActive: { color: '#fff' },
+    listContent: { paddingBottom: 32 },
+    separator: { height: 10 },
+    emptyWrap: { paddingTop: 16, paddingHorizontal: 16 },
+  });
