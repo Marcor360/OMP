@@ -44,6 +44,7 @@ export function StatusBadge({
 }
 
 export const meetingStatusColor: Record<string, string> = {
+  pending: '#6B7280',
   scheduled: '#2563EB',
   in_progress: '#D97706',
   completed: '#16A34A',

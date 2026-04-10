@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert, Platform, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,11 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { disableUserByAdmin, updateUserByAdmin } from '@/src/services/users/admin-users-service';
+import {
+  deleteUserByAdmin,
+  disableUserByAdmin,
+  updateUserByAdmin,
+} from '@/src/services/users/admin-users-service';
 import { getUserById } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser, ROLE_LABELS, STATUS_LABELS, UserStatus } from '@/src/types/user';
@@ -21,7 +25,7 @@ import { formatFirestoreError } from '@/src/utils/errors/errors';
 export function UserDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { congregationId, isAdmin, loadingProfile, profileError } = useUser();
+  const { congregationId, isAdmin, loadingProfile, profileError, uid: currentUid } = useUser();
   const colors = useAppColors();
   const styles = createStyles(colors);
 
@@ -29,6 +33,7 @@ export function UserDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (loadingProfile) return;
@@ -105,6 +110,43 @@ export function UserDetailScreen() {
       Alert.alert('Error', formatFirestoreError(requestError));
     } finally {
       setToggling(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!user) return;
+
+    if (!isAdmin) {
+      Alert.alert('Permisos insuficientes', 'Solo administradores pueden eliminar usuarios.');
+      return;
+    }
+
+    if (user.uid === currentUid) {
+      Alert.alert('Accion no permitida', 'No puedes eliminar tu propio usuario.');
+      return;
+    }
+
+    const confirmed =
+      Platform.OS === 'web'
+        ? window.confirm(`Deseas eliminar de forma permanente a ${user.displayName}?`)
+        : await new Promise<boolean>((resolve) =>
+            Alert.alert('Confirmar eliminacion', `Deseas eliminar de forma permanente a ${user.displayName}?`, [
+              { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Eliminar', style: 'destructive', onPress: () => resolve(true) },
+            ])
+          );
+
+    if (!confirmed) return;
+
+    try {
+      setDeleting(true);
+      await deleteUserByAdmin({ uid: user.uid });
+      Alert.alert('Usuario eliminado', `${user.displayName} fue eliminado correctamente.`);
+      router.replace('/(protected)/(tabs)/users');
+    } catch (requestError) {
+      Alert.alert('Error', formatFirestoreError(requestError));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -185,6 +227,18 @@ export function UserDetailScreen() {
                 : user.status === 'active'
                   ? 'Desactivar usuario'
                   : 'Activar usuario'}
+            </ThemedText>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
+            onPress={handleDeleteUser}
+            disabled={deleting}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="trash-outline" size={18} color={colors.error} />
+            <ThemedText style={styles.deleteBtnText}>
+              {deleting ? 'Eliminando...' : 'Eliminar usuario'}
             </ThemedText>
           </TouchableOpacity>
         </RoleGuard>
@@ -291,5 +345,22 @@ const createStyles = (colors: AppColorSet) =>
       borderRadius: 12,
       borderWidth: 1,
       borderColor: colors.border,
+    },
+    deleteBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.error + '66',
+      backgroundColor: colors.error + '15',
+    },
+    deleteBtnDisabled: {
+      opacity: 0.6,
+    },
+    deleteBtnText: {
+      color: colors.error,
+      fontWeight: '600',
     },
   });

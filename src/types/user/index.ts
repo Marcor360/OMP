@@ -2,6 +2,42 @@ import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'admin' | 'supervisor' | 'user';
 export type UserStatus = 'active' | 'inactive' | 'suspended';
+export type UserServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar';
+export type UserServiceDepartment =
+  | 'limpieza'
+  | 'literatura'
+  | 'tesoreria'
+  | 'mantenimiento'
+  | 'discursos'
+  | 'predicacion'
+  | 'acomodadores_microfonos';
+
+export const USER_SERVICE_POSITION_LABELS: Record<UserServicePosition, string> = {
+  coordinador: 'Coordinador',
+  secretario: 'Secretario',
+  encargado: 'Encargado',
+  auxiliar: 'Auxiliar',
+};
+
+export const USER_SERVICE_DEPARTMENT_LABELS: Record<UserServiceDepartment, string> = {
+  limpieza: 'Limpieza',
+  literatura: 'Literatura',
+  tesoreria: 'Tesoreria',
+  mantenimiento: 'Mantenimiento',
+  discursos: 'Discursos',
+  predicacion: 'Predicacion',
+  acomodadores_microfonos: 'Acomodadores y Microfonos',
+};
+
+export const USER_SERVICE_DEPARTMENTS: UserServiceDepartment[] = [
+  'limpieza',
+  'literatura',
+  'tesoreria',
+  'mantenimiento',
+  'discursos',
+  'predicacion',
+  'acomodadores_microfonos',
+];
 
 export interface AppUser {
   uid: string;
@@ -13,6 +49,8 @@ export interface AppUser {
   status: UserStatus;
   phone?: string;
   department?: string;
+  servicePosition?: UserServicePosition;
+  serviceDepartment?: UserServiceDepartment;
   avatarUrl?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -27,6 +65,8 @@ export interface CreateUserDTO {
   isActive?: boolean;
   phone?: string;
   department?: string;
+  servicePosition?: UserServicePosition;
+  serviceDepartment?: UserServiceDepartment;
 }
 
 export interface UpdateUserDTO {
@@ -37,6 +77,8 @@ export interface UpdateUserDTO {
   congregationId?: string;
   phone?: string;
   department?: string;
+  servicePosition?: UserServicePosition;
+  serviceDepartment?: UserServiceDepartment;
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {

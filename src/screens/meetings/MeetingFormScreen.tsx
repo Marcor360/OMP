@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
+import { Ionicons } from '@expo/vector-icons';
 
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
@@ -17,13 +18,19 @@ import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
-import { createMeeting, getMeetingById, updateMeeting } from '@/src/services/meetings/meetings-service';
+import {
+  createMeeting,
+  getMeetingById,
+  updateMeeting,
+} from '@/src/services/meetings/meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { MeetingType, MEETING_TYPE_LABELS, UpdateMeetingDTO } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
 type Mode = 'create' | 'edit';
+
+const MEETING_TYPE_OPTIONS: MeetingType[] = ['midweek', 'weekend'];
 
 export function MeetingFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -37,9 +44,16 @@ export function MeetingFormScreen() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [type, setType] = useState<MeetingType>('internal');
+  const [type, setType] = useState<MeetingType>('weekend');
   const [location, setLocation] = useState('');
   const [meetingUrl, setMeetingUrl] = useState('');
+  const [chairman, setChairman] = useState('');
+  const [openingSong, setOpeningSong] = useState('');
+  const [openingPrayer, setOpeningPrayer] = useState('');
+  const [closingSong, setClosingSong] = useState('');
+  const [closingPrayer, setClosingPrayer] = useState('');
+  const [notes, setNotes] = useState('');
+
   const [errors, setErrors] = useState<{ title?: string }>({});
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
@@ -64,9 +78,15 @@ export function MeetingFormScreen() {
 
         setTitle(meeting.title);
         setDescription(meeting.description ?? '');
-        setType(meeting.type);
+        setType(meeting.type === 'midweek' ? 'midweek' : 'weekend');
         setLocation(meeting.location ?? '');
         setMeetingUrl(meeting.meetingUrl ?? '');
+        setChairman(meeting.chairman ?? '');
+        setOpeningSong(meeting.openingSong ?? '');
+        setOpeningPrayer(meeting.openingPrayer ?? '');
+        setClosingSong(meeting.closingSong ?? '');
+        setClosingPrayer(meeting.closingPrayer ?? '');
+        setNotes(meeting.notes ?? '');
       })
       .catch((requestError) => {
         Alert.alert('Error', formatFirestoreError(requestError));
@@ -75,10 +95,29 @@ export function MeetingFormScreen() {
       .finally(() => setLoading(false));
   }, [congregationId, id, loadingProfile, mode, router]);
 
+  const isMidweek = type === 'midweek';
+
+  const saveButtonText = useMemo(() => {
+    if (isMidweek) {
+      return 'Abrir formulario completo de entre semana';
+    }
+
+    return mode === 'create' ? 'Crear reunion' : 'Guardar cambios';
+  }, [isMidweek, mode]);
+
   const validate = () => {
     const nextErrors = { title: validateRequired(title, 'El titulo') };
     setErrors(nextErrors);
     return !hasErrors(nextErrors);
+  };
+
+  const openMidweekForm = () => {
+    if (mode === 'edit' && id) {
+      router.push(`/(protected)/meetings/midweek/${id}` as never);
+      return;
+    }
+
+    router.push('/(protected)/meetings/midweek/create');
   };
 
   const handleSave = async () => {
@@ -94,6 +133,15 @@ export function MeetingFormScreen() {
 
     if (!validate()) return;
 
+    if (isMidweek) {
+      Alert.alert(
+        'Reunion entre semana',
+        'Abre el formulario especializado para capturar secciones, partes y asignados.'
+      );
+      openMidweekForm();
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -106,9 +154,16 @@ export function MeetingFormScreen() {
           {
             title,
             description,
-            type,
+            type: 'weekend',
+            meetingCategory: 'general',
             location,
             meetingUrl,
+            chairman,
+            openingSong,
+            openingPrayer,
+            closingSong,
+            closingPrayer,
+            notes,
             startDate: now,
             endDate: oneHour,
             attendees: user?.uid ? [user.uid] : [],
@@ -119,7 +174,20 @@ export function MeetingFormScreen() {
 
         Alert.alert('Exito', 'Reunion creada correctamente.');
       } else if (id) {
-        const payload: UpdateMeetingDTO = { title, description, type, location, meetingUrl };
+        const payload: UpdateMeetingDTO = {
+          title,
+          description,
+          type: 'weekend',
+          meetingCategory: 'general',
+          location,
+          meetingUrl,
+          chairman,
+          openingSong,
+          openingPrayer,
+          closingSong,
+          closingPrayer,
+          notes,
+        };
         await updateMeeting(congregationId, id, payload);
         Alert.alert('Exito', 'Reunion actualizada.');
       }
@@ -133,8 +201,6 @@ export function MeetingFormScreen() {
   };
 
   if (loading || loadingProfile) return <LoadingState />;
-
-  const meetingTypes: MeetingType[] = ['internal', 'external', 'review', 'training'];
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
@@ -157,7 +223,7 @@ export function MeetingFormScreen() {
             style={[styles.input, errors.title && styles.inputError]}
             value={title}
             onChangeText={setTitle}
-            placeholder="Ej: Revision semanal de proyectos"
+            placeholder="Ej: Reunion semanal"
             placeholderTextColor={colors.textDisabled}
             editable={isAdminOrSupervisor}
           />
@@ -178,7 +244,7 @@ export function MeetingFormScreen() {
 
         <Field label="Tipo de reunion">
           <View style={styles.chipRow}>
-            {meetingTypes.map((meetingType) => (
+            {MEETING_TYPE_OPTIONS.map((meetingType) => (
               <TouchableOpacity
                 key={meetingType}
                 style={[styles.chip, type === meetingType && styles.chipActive]}
@@ -194,29 +260,135 @@ export function MeetingFormScreen() {
           </View>
         </Field>
 
-        <Field label="Lugar / Sala">
-          <TextInput
-            style={styles.input}
-            value={location}
-            onChangeText={setLocation}
-            placeholder="Ej: Sala de juntas A"
-            placeholderTextColor={colors.textDisabled}
-            editable={isAdminOrSupervisor}
-          />
-        </Field>
+        {isMidweek ? (
+          <View style={styles.midweekBox}>
+            <ThemedText style={styles.midweekTitle}>Datos que lleva la reunion de entre semana</ThemedText>
+            <ThemedText style={styles.midweekItem}>- Semana y lectura biblica</ThemedText>
+            <ThemedText style={styles.midweekItem}>- Presidente, canciones y oraciones</ThemedText>
+            <ThemedText style={styles.midweekItem}>- 3 secciones fijas con partes dinamicas</ThemedText>
+            <ThemedText style={styles.midweekItem}>- Asignados por usuario o nombre manual</ThemedText>
 
-        <Field label="Enlace de reunion">
-          <TextInput
-            style={styles.input}
-            value={meetingUrl}
-            onChangeText={setMeetingUrl}
-            placeholder="https://meet.google.com/..."
-            placeholderTextColor={colors.textDisabled}
-            keyboardType="url"
-            autoCapitalize="none"
-            editable={isAdminOrSupervisor}
-          />
-        </Field>
+            <TouchableOpacity style={styles.midweekButton} onPress={openMidweekForm} activeOpacity={0.8}>
+              <Ionicons name="open-outline" size={16} color="#fff" />
+              <ThemedText style={styles.midweekButtonText}>Abrir formulario de entre semana</ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.midweekImportButton}
+              onPress={() => router.push('/(protected)/meetings/midweek' as never)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="document-attach-outline" size={16} color={colors.infoDark} />
+              <ThemedText style={styles.midweekImportButtonText}>Ir a Importar PDF</ThemedText>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <Field label="Lugar / Sala">
+              <TextInput
+                style={styles.input}
+                value={location}
+                onChangeText={setLocation}
+                placeholder="Ej: Salon principal"
+                placeholderTextColor={colors.textDisabled}
+                editable={isAdminOrSupervisor}
+              />
+            </Field>
+
+            <Field label="Enlace de reunion">
+              <TextInput
+                style={styles.input}
+                value={meetingUrl}
+                onChangeText={setMeetingUrl}
+                placeholder="https://meet.google.com/..."
+                placeholderTextColor={colors.textDisabled}
+                keyboardType="url"
+                autoCapitalize="none"
+                editable={isAdminOrSupervisor}
+              />
+            </Field>
+
+            <Field label="Presidente">
+              <TextInput
+                style={styles.input}
+                value={chairman}
+                onChangeText={setChairman}
+                placeholder="Nombre del presidente"
+                placeholderTextColor={colors.textDisabled}
+                editable={isAdminOrSupervisor}
+              />
+            </Field>
+
+            <View style={styles.inlineRow}>
+              <View style={styles.inlineField}>
+                <Field label="Cancion inicial">
+                  <TextInput
+                    style={styles.input}
+                    value={openingSong}
+                    onChangeText={setOpeningSong}
+                    placeholder="Ej: Cancion 25"
+                    placeholderTextColor={colors.textDisabled}
+                    editable={isAdminOrSupervisor}
+                  />
+                </Field>
+              </View>
+
+              <View style={styles.inlineField}>
+                <Field label="Oracion inicial">
+                  <TextInput
+                    style={styles.input}
+                    value={openingPrayer}
+                    onChangeText={setOpeningPrayer}
+                    placeholder="Asignado"
+                    placeholderTextColor={colors.textDisabled}
+                    editable={isAdminOrSupervisor}
+                  />
+                </Field>
+              </View>
+            </View>
+
+            <View style={styles.inlineRow}>
+              <View style={styles.inlineField}>
+                <Field label="Cancion final">
+                  <TextInput
+                    style={styles.input}
+                    value={closingSong}
+                    onChangeText={setClosingSong}
+                    placeholder="Ej: Cancion 54"
+                    placeholderTextColor={colors.textDisabled}
+                    editable={isAdminOrSupervisor}
+                  />
+                </Field>
+              </View>
+
+              <View style={styles.inlineField}>
+                <Field label="Oracion final">
+                  <TextInput
+                    style={styles.input}
+                    value={closingPrayer}
+                    onChangeText={setClosingPrayer}
+                    placeholder="Asignado"
+                    placeholderTextColor={colors.textDisabled}
+                    editable={isAdminOrSupervisor}
+                  />
+                </Field>
+              </View>
+            </View>
+
+            <Field label="Notas">
+              <TextInput
+                style={[styles.input, styles.textarea]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Tema publico, lector, observaciones..."
+                placeholderTextColor={colors.textDisabled}
+                multiline
+                numberOfLines={4}
+                editable={isAdminOrSupervisor}
+              />
+            </Field>
+          </>
+        )}
 
         <TouchableOpacity
           style={[styles.saveButton, (saving || !isAdminOrSupervisor) && styles.disabled]}
@@ -227,9 +399,7 @@ export function MeetingFormScreen() {
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <ThemedText style={styles.saveButtonText}>
-              {mode === 'create' ? 'Crear reunion' : 'Guardar cambios'}
-            </ThemedText>
+            <ThemedText style={styles.saveButtonText}>{saveButtonText}</ThemedText>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -295,7 +465,7 @@ const createStyles = (colors: AppColorSet) =>
       marginTop: 8,
     },
     disabled: { opacity: 0.6 },
-    saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+    saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 15, textAlign: 'center' },
     permissionNotice: {
       borderWidth: 1,
       borderColor: colors.warning + '66',
@@ -307,5 +477,64 @@ const createStyles = (colors: AppColorSet) =>
       fontSize: 13,
       color: colors.warning,
       fontWeight: '600',
+    },
+    midweekBox: {
+      borderWidth: 1,
+      borderColor: colors.info + '55',
+      backgroundColor: colors.infoLight,
+      borderRadius: 10,
+      padding: 12,
+      gap: 6,
+    },
+    midweekTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.infoDark,
+      marginBottom: 4,
+    },
+    midweekItem: {
+      fontSize: 13,
+      color: colors.infoDark,
+    },
+    midweekButton: {
+      marginTop: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: colors.info,
+      borderRadius: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+    },
+    midweekButtonText: {
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    midweekImportButton: {
+      marginTop: 6,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: colors.infoLight,
+      borderWidth: 1,
+      borderColor: colors.info + '55',
+      borderRadius: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+    },
+    midweekImportButtonText: {
+      color: colors.infoDark,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    inlineRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    inlineField: {
+      flex: 1,
     },
   });

@@ -19,6 +19,8 @@ const meetingTypeIcon: Record<string, keyof typeof Ionicons.glyphMap> = {
   external: 'business-outline',
   review: 'clipboard-outline',
   training: 'school-outline',
+  midweek: 'book-outline',
+  weekend: 'calendar-clear-outline',
 };
 
 export function MeetingCard({ meeting, onPress }: MeetingCardProps) {

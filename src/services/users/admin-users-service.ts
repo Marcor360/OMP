@@ -3,17 +3,29 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/src/lib/firebase/app';
 import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import { deleteUser, updateUser } from '@/src/services/users/users-service';
-import { UpdateUserDTO } from '@/src/types/user';
+import { UpdateUserDTO, UserServiceDepartment, UserServicePosition } from '@/src/types/user';
 import { AppError } from '@/src/utils/errors/errors';
 
-type CreateUserByAdminPayload = {
-  email: string;
-  displayName: string;
+export type CreateUserByAdminPayload = {
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  password: string;
+  displayName?: string;
+  email?: string;
   role: 'admin' | 'supervisor' | 'user';
   congregationId: string;
   isActive?: boolean;
   phone?: string;
   department?: string;
+  servicePosition?: UserServicePosition;
+  serviceDepartment?: UserServiceDepartment;
+};
+
+export type CreateUserByAdminResult = {
+  uid: string;
+  email: string;
+  requiredDomain: string;
 };
 
 type UpdateUserByAdminPayload = {
@@ -23,6 +35,11 @@ type UpdateUserByAdminPayload = {
 
 type ToggleUserByAdminPayload = {
   uid: string;
+};
+
+type UpdateUserPasswordByAdminPayload = {
+  uid: string;
+  newPassword: string;
 };
 
 const callFunction = async <TRequest extends object, TResponse>(
@@ -35,16 +52,29 @@ const callFunction = async <TRequest extends object, TResponse>(
 };
 
 const isFunctionUnavailable = (error: unknown): boolean => {
-  return (
-    isFirebaseErrorCode(error, 'unimplemented') ||
-    isFirebaseErrorCode(error, 'not-found') ||
-    isFirebaseErrorCode(error, 'permission-denied')
-  );
+  return isFirebaseErrorCode(error, 'unimplemented') || isFirebaseErrorCode(error, 'not-found');
 };
 
-export const createUserByAdmin = async (payload: CreateUserByAdminPayload): Promise<void> => {
+export const createUserByAdmin = async (
+  payload: CreateUserByAdminPayload
+): Promise<CreateUserByAdminResult> => {
   try {
-    await callFunction<CreateUserByAdminPayload, unknown>('createUserByAdmin', payload);
+    const result = await callFunction<CreateUserByAdminPayload, Partial<CreateUserByAdminResult>>(
+      'createUserByAdmin',
+      payload
+    );
+
+    if (!result || typeof result.uid !== 'string') {
+      throw new AppError(
+        'No se pudo confirmar la creacion del usuario. Verifica que Cloud Functions este desplegado.'
+      );
+    }
+
+    return {
+      uid: result.uid,
+      email: result.email ?? payload.email ?? '',
+      requiredDomain: result.requiredDomain ?? (payload.email?.split('@').pop() ?? ''),
+    };
   } catch (error) {
     if (isFunctionUnavailable(error)) {
       throw new AppError(
@@ -91,6 +121,22 @@ export const deleteUserByAdmin = async ({ uid }: ToggleUserByAdminPayload): Prom
       // Fallback temporal: elimina solo el documento de Firestore.
       await deleteUser(uid);
       return;
+    }
+
+    throw error;
+  }
+};
+
+export const updateUserPasswordByAdmin = async (
+  payload: UpdateUserPasswordByAdminPayload
+): Promise<void> => {
+  try {
+    await callFunction<UpdateUserPasswordByAdminPayload, unknown>('updateUserPasswordByAdmin', payload);
+  } catch (error) {
+    if (isFunctionUnavailable(error)) {
+      throw new AppError(
+        'La operacion de cambiar contrasena requiere Cloud Functions (updateUserPasswordByAdmin) y no esta disponible.'
+      );
     }
 
     throw error;

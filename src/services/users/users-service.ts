@@ -20,6 +20,9 @@ import {
   AppUser,
   CreateUserDTO,
   UpdateUserDTO,
+  USER_SERVICE_DEPARTMENT_LABELS,
+  UserServiceDepartment,
+  UserServicePosition,
   UserRole,
   UserStatus,
 } from '@/src/types/user';
@@ -29,6 +32,43 @@ const isUserRole = (value: unknown): value is UserRole =>
 
 const isUserStatus = (value: unknown): value is UserStatus =>
   value === 'active' || value === 'inactive' || value === 'suspended';
+
+const isUserServicePosition = (value: unknown): value is UserServicePosition => {
+  return (
+    value === 'coordinador' ||
+    value === 'secretario' ||
+    value === 'encargado' ||
+    value === 'auxiliar'
+  );
+};
+
+const isUserServiceDepartment = (value: unknown): value is UserServiceDepartment => {
+  return (
+    value === 'limpieza' ||
+    value === 'literatura' ||
+    value === 'tesoreria' ||
+    value === 'mantenimiento' ||
+    value === 'discursos' ||
+    value === 'predicacion' ||
+    value === 'acomodadores_microfonos'
+  );
+};
+
+const buildDepartmentLabel = (
+  position?: UserServicePosition,
+  department?: UserServiceDepartment
+): string | undefined => {
+  if (position === 'coordinador') return 'Coordinador';
+  if (position === 'secretario') return 'Secretario';
+  if (position === 'encargado' && department) {
+    return `Encargado de ${USER_SERVICE_DEPARTMENT_LABELS[department]}`;
+  }
+  if (position === 'auxiliar' && department) {
+    return `Auxiliar de ${USER_SERVICE_DEPARTMENT_LABELS[department]}`;
+  }
+
+  return undefined;
+};
 
 const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
   const role = isUserRole(data.role) ? data.role : 'user';
@@ -43,6 +83,13 @@ const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
     : isActive
       ? 'active'
       : 'inactive';
+  const servicePosition = isUserServicePosition(data.servicePosition)
+    ? data.servicePosition
+    : undefined;
+  const serviceDepartment = isUserServiceDepartment(data.serviceDepartment)
+    ? data.serviceDepartment
+    : undefined;
+  const computedDepartment = buildDepartmentLabel(servicePosition, serviceDepartment);
 
   return {
     uid,
@@ -58,7 +105,13 @@ const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
     isActive,
     status,
     phone: typeof data.phone === 'string' ? data.phone : undefined,
-    department: typeof data.department === 'string' ? data.department : undefined,
+    department:
+      computedDepartment ??
+      (typeof data.department === 'string' && data.department.trim().length > 0
+        ? data.department
+        : undefined),
+    servicePosition,
+    serviceDepartment,
     avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : undefined,
     createdAt: data.createdAt as AppUser['createdAt'],
     updatedAt: data.updatedAt as AppUser['updatedAt'],

@@ -13,11 +13,17 @@ import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
 import { getAllMeetings, subscribeToMeetings } from '@/src/services/meetings/meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { Meeting, MeetingStatus, MEETING_STATUS_LABELS } from '@/src/types/meeting';
+import {
+  Meeting,
+  MeetingStatus,
+  MEETING_STATUS_LABELS,
+  resolveMeetingCategory,
+} from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
 const STATUS_FILTERS: { label: string; value: MeetingStatus | 'all' }[] = [
   { label: 'Todas', value: 'all' },
+  { label: 'Pendientes', value: 'pending' },
   { label: 'Programadas', value: 'scheduled' },
   { label: 'En progreso', value: 'in_progress' },
   { label: 'Completadas', value: 'completed' },
@@ -66,9 +72,17 @@ export function MeetingsListScreen() {
     return unsubscribe;
   }, [congregationId]);
 
+  const genericMeetings = useMemo(
+    () => meetings.filter((meeting) => resolveMeetingCategory(meeting) !== 'midweek'),
+    [meetings]
+  );
+
   const filtered = useMemo(
-    () => (filter === 'all' ? meetings : meetings.filter((meeting) => meeting.status === filter)),
-    [filter, meetings]
+    () =>
+      filter === 'all'
+        ? genericMeetings
+        : genericMeetings.filter((meeting) => meeting.status === filter),
+    [filter, genericMeetings]
   );
 
   const onRefresh = async () => {
@@ -95,16 +109,28 @@ export function MeetingsListScreen() {
         <ThemedText style={styles.count}>
           {filtered.length} reunion{filtered.length !== 1 ? 'es' : ''}
         </ThemedText>
-        <RoleGuard allowedRoles={['admin', 'supervisor']}>
+
+        <View style={styles.toolbarActions}>
           <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => router.push('/(protected)/meetings/create')}
+            style={styles.midweekButton}
+            onPress={() => router.push('/(protected)/meetings/midweek')}
             activeOpacity={0.8}
           >
-            <Ionicons name="add" size={20} color="#fff" />
-            <ThemedText style={styles.addButtonText}>Nueva</ThemedText>
+            <Ionicons name="book-outline" size={18} color={colors.primary} />
+            <ThemedText style={styles.midweekButtonText}>VyMC</ThemedText>
           </TouchableOpacity>
-        </RoleGuard>
+
+          <RoleGuard allowedRoles={['admin', 'supervisor']}>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => router.push('/(protected)/meetings/create')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={20} color="#fff" />
+              <ThemedText style={styles.addButtonText}>Nueva</ThemedText>
+            </TouchableOpacity>
+          </RoleGuard>
+        </View>
       </View>
 
       <View style={styles.filterRow}>
@@ -166,8 +192,26 @@ const createStyles = (colors: AppColorSet) =>
       paddingVertical: 12,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+      gap: 10,
     },
     count: { fontSize: 13, color: colors.textMuted },
+    toolbarActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    midweekButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: colors.primary + '22',
+      borderWidth: 1,
+      borderColor: colors.primary + '66',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    midweekButtonText: { color: colors.primary, fontWeight: '700', fontSize: 13 },
     addButton: {
       flexDirection: 'row',
       alignItems: 'center',

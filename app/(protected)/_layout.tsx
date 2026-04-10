@@ -12,6 +12,9 @@ export default function ProtectedLayout() {
         <Stack.Screen name="meetings/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="meetings/create" options={{ headerShown: false }} />
         <Stack.Screen name="meetings/edit/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="meetings/midweek" options={{ headerShown: false }} />
+        <Stack.Screen name="meetings/midweek/create" options={{ headerShown: false }} />
+        <Stack.Screen name="meetings/midweek/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/create" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/edit/[id]" options={{ headerShown: false }} />

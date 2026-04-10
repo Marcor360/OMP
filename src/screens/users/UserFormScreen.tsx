@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,25 +9,105 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { createUserByAdmin, updateUserByAdmin } from '@/src/services/users/admin-users-service';
+import { getCongregationEmailDomain } from '@/src/services/congregations/congregations-service';
+import {
+  createUserByAdmin,
+  updateUserByAdmin,
+  updateUserPasswordByAdmin,
+} from '@/src/services/users/admin-users-service';
 import { getUserById } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { ROLE_LABELS, UpdateUserDTO, UserRole } from '@/src/types/user';
+import {
+  ROLE_LABELS,
+  USER_SERVICE_DEPARTMENTS,
+  USER_SERVICE_DEPARTMENT_LABELS,
+  USER_SERVICE_POSITION_LABELS,
+  UpdateUserDTO,
+  UserServiceDepartment,
+  UserServicePosition,
+  UserRole,
+} from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { hasErrors, validateEmail, validateRequired } from '@/src/utils/validation/validation';
+import { hasErrors, validateMinLength, validateRequired } from '@/src/utils/validation/validation';
 
 type Mode = 'create' | 'edit';
+type ServiceSelection = UserServicePosition | 'none';
 
 interface FormErrors {
   displayName?: string;
-  email?: string;
+  firstName?: string;
+  lastName?: string;
+  password?: string;
+  newPassword?: string;
+  assignment?: string;
 }
+
+const DEPARTMENT_LABEL_TO_KEY: Record<string, UserServiceDepartment> = Object.fromEntries(
+  Object.entries(USER_SERVICE_DEPARTMENT_LABELS).map(([key, label]) => [label, key as UserServiceDepartment])
+) as Record<string, UserServiceDepartment>;
+
+const normalizeNameForEmail = (value: string): string => {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+};
+
+const buildGeneratedEmailPreview = (
+  firstName: string,
+  middleName: string,
+  lastName: string,
+  domain: string
+): string => {
+  const primary = `${normalizeNameForEmail(firstName)}${normalizeNameForEmail(lastName)}`;
+  const fallback =
+    `${normalizeNameForEmail(firstName)}${normalizeNameForEmail(middleName)}${normalizeNameForEmail(lastName)}` ||
+    'usuario';
+  return `${(primary || fallback)}@${domain.toLowerCase()}`;
+};
+
+const parseLegacyAssignment = (
+  value: string | undefined
+): { position: ServiceSelection; department: UserServiceDepartment | '' } => {
+  if (!value) return { position: 'none', department: '' };
+  if (value === 'Coordinador') return { position: 'coordinador', department: '' };
+  if (value === 'Secretario') return { position: 'secretario', department: '' };
+  if (value.startsWith('Encargado de ')) {
+    const label = value.replace('Encargado de ', '').trim();
+    return { position: 'encargado', department: DEPARTMENT_LABEL_TO_KEY[label] ?? '' };
+  }
+  if (value.startsWith('Auxiliar de ')) {
+    const label = value.replace('Auxiliar de ', '').trim();
+    return { position: 'auxiliar', department: DEPARTMENT_LABEL_TO_KEY[label] ?? '' };
+  }
+  return { position: 'none', department: '' };
+};
+
+const needsDepartment = (position: ServiceSelection): boolean =>
+  position === 'encargado' || position === 'auxiliar';
+
+const buildDepartmentLabel = (
+  position: ServiceSelection,
+  department: UserServiceDepartment | ''
+): string | undefined => {
+  if (position === 'coordinador') return 'Coordinador';
+  if (position === 'secretario') return 'Secretario';
+  if (position === 'encargado' && department) {
+    return `Encargado de ${USER_SERVICE_DEPARTMENT_LABELS[department]}`;
+  }
+  if (position === 'auxiliar' && department) {
+    return `Auxiliar de ${USER_SERVICE_DEPARTMENT_LABELS[department]}`;
+  }
+  return undefined;
+};
 
 export function UserFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -39,13 +119,29 @@ export function UserFormScreen() {
   const { congregationId, isAdmin, loadingProfile, profileError } = useUser();
 
   const [displayName, setDisplayName] = useState('');
-  const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [role, setRole] = useState<UserRole>('user');
   const [phone, setPhone] = useState('');
-  const [department, setDepartment] = useState('');
+  const [servicePosition, setServicePosition] = useState<ServiceSelection>('none');
+  const [serviceDepartment, setServiceDepartment] = useState<UserServiceDepartment | ''>('');
+  const [allowedEmailDomain, setAllowedEmailDomain] = useState('congregacion.com');
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!congregationId) return;
+
+    getCongregationEmailDomain(congregationId)
+      .then((domain) => setAllowedEmailDomain(domain))
+      .catch(() => setAllowedEmailDomain('congregacion.com'));
+  }, [congregationId]);
 
   useEffect(() => {
     if (mode !== 'edit') {
@@ -70,10 +166,17 @@ export function UserFormScreen() {
         }
 
         setDisplayName(loadedUser.displayName);
-        setEmail(loadedUser.email);
         setRole(loadedUser.role);
         setPhone(loadedUser.phone ?? '');
-        setDepartment(loadedUser.department ?? '');
+
+        if (loadedUser.servicePosition) {
+          setServicePosition(loadedUser.servicePosition);
+          setServiceDepartment(loadedUser.serviceDepartment ?? '');
+        } else {
+          const legacy = parseLegacyAssignment(loadedUser.department);
+          setServicePosition(legacy.position);
+          setServiceDepartment(legacy.department);
+        }
       })
       .catch((requestError) => {
         Alert.alert('Error', formatFirestoreError(requestError));
@@ -82,11 +185,54 @@ export function UserFormScreen() {
       .finally(() => setLoading(false));
   }, [congregationId, id, loadingProfile, mode, router]);
 
+  const generatedEmailPreview = useMemo(
+    () => buildGeneratedEmailPreview(firstName, middleName, lastName, allowedEmailDomain),
+    [allowedEmailDomain, firstName, middleName, lastName]
+  );
+
+  const positionOptions = useMemo<ServiceSelection[]>(
+    () =>
+      role === 'admin'
+        ? ['none', 'coordinador', 'secretario', 'encargado', 'auxiliar']
+        : ['none', 'encargado', 'auxiliar'],
+    [role]
+  );
+
+  useEffect(() => {
+    if (!positionOptions.includes(servicePosition)) {
+      setServicePosition('none');
+      setServiceDepartment('');
+      return;
+    }
+
+    if (!needsDepartment(servicePosition) && serviceDepartment) {
+      setServiceDepartment('');
+    }
+  }, [positionOptions, serviceDepartment, servicePosition]);
+
   const validate = (): boolean => {
-    const nextErrors: FormErrors = {
-      displayName: validateRequired(displayName, 'El nombre'),
-      email: mode === 'create' ? validateEmail(email) : undefined,
-    };
+    const assignmentError = needsDepartment(servicePosition)
+      ? validateRequired(serviceDepartment, 'El departamento')
+      : undefined;
+
+    const nextErrors: FormErrors =
+      mode === 'create'
+        ? {
+            firstName: validateRequired(firstName, 'El primer nombre'),
+            lastName: validateRequired(lastName, 'El apellido'),
+            password:
+              validateRequired(password, 'La contrasena') ??
+              validateMinLength(password, 6, 'La contrasena'),
+            assignment: assignmentError,
+          }
+        : {
+            displayName: validateRequired(displayName, 'El nombre'),
+            newPassword:
+              newPassword.trim().length > 0
+                ? validateMinLength(newPassword, 6, 'La nueva contrasena')
+                : undefined,
+            assignment: assignmentError,
+          };
 
     setErrors(nextErrors);
     return !hasErrors(nextErrors as Record<string, string | undefined>);
@@ -108,21 +254,54 @@ export function UserFormScreen() {
     setSaving(true);
 
     try {
+      const normalizedMiddle = middleName.trim() || undefined;
+      const normalizedServicePosition =
+        servicePosition === 'none' ? undefined : servicePosition;
+      const normalizedServiceDepartment = needsDepartment(servicePosition)
+        ? serviceDepartment || undefined
+        : undefined;
+      const departmentLabel = buildDepartmentLabel(servicePosition, serviceDepartment);
+
       if (mode === 'create') {
-        await createUserByAdmin({
-          email,
-          displayName,
+        const createdUser = await createUserByAdmin({
+          firstName,
+          middleName: normalizedMiddle,
+          lastName,
+          password,
+          displayName: [firstName, normalizedMiddle, lastName].filter(Boolean).join(' ').trim(),
+          email: generatedEmailPreview,
           role,
           congregationId,
           phone,
-          department,
+          department: departmentLabel,
+          servicePosition: normalizedServicePosition,
+          serviceDepartment: normalizedServiceDepartment,
           isActive: true,
         });
 
-        Alert.alert('Exito', 'Usuario creado correctamente.');
+        Alert.alert(
+          'Usuario creado',
+          `Correo asignado: ${createdUser.email ?? generatedEmailPreview}\nDominio: @${createdUser.requiredDomain ?? allowedEmailDomain}`
+        );
       } else if (id) {
-        const payload: UpdateUserDTO = { displayName, role, phone, department };
+        const payload: UpdateUserDTO = {
+          displayName,
+          role,
+          phone,
+          department: departmentLabel,
+          servicePosition: normalizedServicePosition,
+          serviceDepartment: normalizedServiceDepartment,
+        };
+
         await updateUserByAdmin({ uid: id, data: payload });
+
+        if (newPassword.trim().length > 0) {
+          await updateUserPasswordByAdmin({
+            uid: id,
+            newPassword: newPassword.trim(),
+          });
+        }
+
         Alert.alert('Exito', 'Usuario actualizado correctamente.');
       }
 
@@ -154,30 +333,85 @@ export function UserFormScreen() {
           </View>
         ) : null}
 
-        <Field label="Nombre completo *" error={errors.displayName}>
-          <TextInput
-            style={[styles.input, errors.displayName && styles.inputError]}
-            value={displayName}
-            onChangeText={setDisplayName}
-            placeholder="Ej: Juan Perez"
-            placeholderTextColor={colors.textDisabled}
-            editable={isAdmin}
-          />
-        </Field>
+        {mode === 'create' ? (
+          <>
+            <Field label="Primer nombre *" error={errors.firstName}>
+              <TextInput
+                style={[styles.input, errors.firstName && styles.inputError]}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Ej: Juan"
+                placeholderTextColor={colors.textDisabled}
+                editable={isAdmin}
+              />
+            </Field>
 
-        {mode === 'create' && (
-          <Field label="Correo electronico *" error={errors.email}>
-            <TextInput
-              style={[styles.input, errors.email && styles.inputError]}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="juan@empresa.com"
-              placeholderTextColor={colors.textDisabled}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              editable={isAdmin}
-            />
-          </Field>
+            <Field label="Segundo nombre">
+              <TextInput
+                style={styles.input}
+                value={middleName}
+                onChangeText={setMiddleName}
+                placeholder="Ej: Carlos"
+                placeholderTextColor={colors.textDisabled}
+                editable={isAdmin}
+              />
+            </Field>
+
+            <Field label="Apellido *" error={errors.lastName}>
+              <TextInput
+                style={[styles.input, errors.lastName && styles.inputError]}
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Ej: Perez"
+                placeholderTextColor={colors.textDisabled}
+                editable={isAdmin}
+              />
+            </Field>
+
+            <Field label="Contrasena inicial *" error={errors.password}>
+              <PasswordInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Minimo 6 caracteres"
+                visible={showPassword}
+                onToggleVisibility={() => setShowPassword((value) => !value)}
+                hasError={Boolean(errors.password)}
+                editable={isAdmin}
+              />
+            </Field>
+
+            <Field label="Correo generado automaticamente">
+              <TextInput style={styles.inputReadOnly} value={generatedEmailPreview} editable={false} />
+              <ThemedText style={styles.hintText}>
+                Si ya existe un correo igual, se intentara con primer+segundo+apellido y despues numeracion.
+              </ThemedText>
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label="Nombre completo *" error={errors.displayName}>
+              <TextInput
+                style={[styles.input, errors.displayName && styles.inputError]}
+                value={displayName}
+                onChangeText={setDisplayName}
+                placeholder="Ej: Juan Perez"
+                placeholderTextColor={colors.textDisabled}
+                editable={isAdmin}
+              />
+            </Field>
+
+            <Field label="Nueva contrasena (opcional)" error={errors.newPassword}>
+              <PasswordInput
+                value={newPassword}
+                onChangeText={setNewPassword}
+                placeholder="Dejar vacio para no cambiar"
+                visible={showNewPassword}
+                onToggleVisibility={() => setShowNewPassword((value) => !value)}
+                hasError={Boolean(errors.newPassword)}
+                editable={isAdmin}
+              />
+            </Field>
+          </>
         )}
 
         <Field label="Rol">
@@ -210,16 +444,56 @@ export function UserFormScreen() {
           />
         </Field>
 
-        <Field label="Departamento">
-          <TextInput
-            style={styles.input}
-            value={department}
-            onChangeText={setDepartment}
-            placeholder="Ej: Recursos Humanos"
-            placeholderTextColor={colors.textDisabled}
-            editable={isAdmin}
-          />
+        <Field label="Asignacion de servicio" error={errors.assignment}>
+          <View style={styles.departmentRow}>
+            {positionOptions.map((item) => (
+              <TouchableOpacity
+                key={item}
+                style={[styles.departmentChip, servicePosition === item && styles.departmentChipActive]}
+                onPress={() => setServicePosition(item)}
+                activeOpacity={0.8}
+                disabled={!isAdmin}
+              >
+                <ThemedText
+                  style={[
+                    styles.departmentChipText,
+                    servicePosition === item && styles.departmentChipTextActive,
+                  ]}
+                >
+                  {item === 'none' ? 'Sin asignacion' : USER_SERVICE_POSITION_LABELS[item]}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+          </View>
         </Field>
+
+        {needsDepartment(servicePosition) ? (
+          <Field label="Departamento" error={errors.assignment}>
+            <View style={styles.departmentRow}>
+              {USER_SERVICE_DEPARTMENTS.map((item) => (
+                <TouchableOpacity
+                  key={item}
+                  style={[
+                    styles.departmentChip,
+                    serviceDepartment === item && styles.departmentChipActive,
+                  ]}
+                  onPress={() => setServiceDepartment(item)}
+                  activeOpacity={0.8}
+                  disabled={!isAdmin}
+                >
+                  <ThemedText
+                    style={[
+                      styles.departmentChipText,
+                      serviceDepartment === item && styles.departmentChipTextActive,
+                    ]}
+                  >
+                    {USER_SERVICE_DEPARTMENT_LABELS[item]}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Field>
+        ) : null}
 
         <TouchableOpacity
           style={[styles.saveButton, (saving || !isAdmin) && styles.saveButtonDisabled]}
@@ -237,6 +511,49 @@ export function UserFormScreen() {
         </TouchableOpacity>
       </ScrollView>
     </ScreenContainer>
+  );
+}
+
+function PasswordInput({
+  value,
+  onChangeText,
+  placeholder,
+  visible,
+  onToggleVisibility,
+  hasError,
+  editable,
+}: {
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  visible: boolean;
+  onToggleVisibility: () => void;
+  hasError: boolean;
+  editable: boolean;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
+  return (
+    <View style={[styles.passwordWrap, hasError && styles.inputError]}>
+      <TextInput
+        style={styles.passwordInput}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textDisabled}
+        secureTextEntry={!visible}
+        autoCapitalize="none"
+        editable={editable}
+      />
+      <TouchableOpacity style={styles.eyeButton} onPress={onToggleVisibility} activeOpacity={0.8}>
+        <Ionicons
+          name={visible ? 'eye-off-outline' : 'eye-outline'}
+          size={18}
+          color={colors.textMuted}
+        />
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -285,6 +602,34 @@ const createStyles = (colors: AppColorSet) =>
       fontSize: 15,
       color: colors.textPrimary,
     },
+    passwordWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingLeft: 12,
+      paddingRight: 8,
+    },
+    passwordInput: {
+      flex: 1,
+      paddingVertical: 12,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    eyeButton: {
+      padding: 6,
+    },
+    inputReadOnly: {
+      backgroundColor: colors.surfaceRaised,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: 12,
+      fontSize: 15,
+      color: colors.textMuted,
+    },
     inputError: {
       borderColor: colors.error,
     },
@@ -292,9 +637,38 @@ const createStyles = (colors: AppColorSet) =>
       color: colors.error,
       fontSize: 12,
     },
+    hintText: {
+      color: colors.textMuted,
+      fontSize: 12,
+    },
     roleRow: {
       flexDirection: 'row',
       gap: 8,
+    },
+    departmentRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    departmentChip: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 999,
+      backgroundColor: colors.surface,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    departmentChipActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    departmentChipText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textMuted,
+    },
+    departmentChipTextActive: {
+      color: '#fff',
     },
     roleChip: {
       flex: 1,
