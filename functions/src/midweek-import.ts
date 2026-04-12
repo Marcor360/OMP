@@ -102,7 +102,7 @@ const WEEK_RANGE_TO_REGEX =
 const MONTH_NAMES = Object.keys(MONTH_INDEX);
 const MONTH_NAMES_SORTED = [...MONTH_NAMES].sort((a, b) => b.length - a.length);
 const ASSIGNMENT_ITEM_REGEX =
-  /(?<![:\d])\b((?:[1-9]|1[0-5]))\.\s+(.+?)\s*\((\d{1,2})\s*MIN(?:S?)?\.?\)/g;
+  /(?<![:\d])\b((?:[1-9]|1[0-5]))\.\s+(.+?)\s*\((\d{1,2})\s*(?:MIN|MINS|min|mins|Mins)\.?\)/g;
 const SONG_WITH_PRAYER_REGEX = /CANCION\s+(\d{1,3})\s+Y\s+ORACION/g;
 const SONG_GENERIC_REGEX = /CANCION\s+(\d{1,3})/g;
 const CLOCK_TIME_REGEX = /\b([01]?\d|2[0-3])[.](\d{2})\b/g;
@@ -165,7 +165,23 @@ const sanitizeText = (value: string): string => {
     return repaired.replace(/\s+/g, " ").trim();
   };
 
-  const compact = value
+  // Preserve verse references like "Jer 13:1-11" or "Juan 3:16"
+  const verseReferencePattern = /([A-Za-z]+\s*\d+:\d+(?:-\d+)?)/g;
+  const verseReferences: string[] = [];
+  let preserved = value.replace(verseReferencePattern, (match) => {
+    verseReferences.push(match);
+    return `__VERSE_${verseReferences.length - 1}__`;
+  });
+
+  // Preserve parentheses content for themes/subtitles
+  const parenthesesPattern = /\(([^)]+)\)/g;
+  const parenthesesContents: string[] = [];
+  preserved = preserved.replace(parenthesesPattern, (match) => {
+    parenthesesContents.push(match);
+    return `__PAREN_${parenthesesContents.length - 1}__`;
+  });
+
+  const compact = preserved
     .replace(/[´`¨^~]/g, "")
     .replace(/[^\w\s:.,;!?()\-\u00C0-\u017F]/g, " ")
     .replace(/\s+/g, " ")
@@ -175,11 +191,23 @@ const sanitizeText = (value: string): string => {
 
   const words = compact.toLowerCase().split(" ");
   const titleWords = words.map((word) => {
-    if (/\d/.test(word)) return word;
+    if (/\d/.test(word) || word.startsWith("__")) return word;
     return `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
   });
 
-  return repairTitleWordSpacing(titleWords.join(" "));
+  let result = titleWords.join(" ");
+
+  // Restore verse references
+  verseReferences.forEach((ref, index) => {
+    result = result.replace(`__VERSE_${index}__`, ref);
+  });
+
+  // Restore parentheses content (themes)
+  parenthesesContents.forEach((content, index) => {
+    result = result.replace(`__PAREN_${index}__`, content);
+  });
+
+  return repairTitleWordSpacing(result);
 };
 
 const normalizeForKey = (value: string): string =>
@@ -460,6 +488,7 @@ type ParsedAssignmentMatch = {
   number: number;
   index: number;
   title: string;
+  theme?: string;
   durationMinutes?: number;
 };
 
@@ -498,15 +527,33 @@ const extractAssignmentMatches = (
     if (!rawTitle || rawTitle.length < 3) continue;
     if (rawTitle.length > 140) continue;
 
-    const cleanTitle = sanitizeText(rawTitle.replace(/\s*-\s*/g, "-"));
-    if (!cleanTitle || cleanTitle.length < 3) continue;
+    // Extract theme/subtitle from parentheses if present
+    // Pattern: "Title (Theme) (X min)" -> theme = "Theme"
+    const themePattern = /\(([^()]+)\)\s*\(/;
+    let theme: string | undefined;
+    let cleanTitle = rawTitle;
+
+    const themeMatch = themePattern.exec(rawTitle);
+    if (themeMatch && themeMatch[1]) {
+      const potentialTheme = themeMatch[1].trim();
+      // Check if it's not a duration pattern
+      if (!/^\d+\s*(?:min|MINS|MIN)$/i.test(potentialTheme)) {
+        theme = sanitizeText(potentialTheme);
+        // Remove theme from title
+        cleanTitle = rawTitle.replace(themeMatch[0], "(").trim();
+      }
+    }
+
+    const processedTitle = sanitizeText(cleanTitle.replace(/\s*-\s*/g, "-"));
+    if (!processedTitle || processedTitle.length < 3) continue;
 
     const minutes = Number(match[3]);
 
     matches.push({
       number,
       index: indexOffset + match.index,
-      title: cleanTitle,
+      title: processedTitle,
+      theme,
       durationMinutes: Number.isFinite(minutes) ? minutes : undefined,
     });
   }
@@ -748,8 +795,8 @@ const buildSections = (
       sectionId,
       order: grouped[sectionId].length,
       title: assignment.title,
+      theme: assignment.theme ?? "",
       durationMinutes: assignment.durationMinutes,
-      theme: "",
       notes: "",
       assignmentType: inferAssignmentType(sectionId, assignment.title),
       participants: [],
@@ -1186,6 +1233,8 @@ export const importMidweekMeetingsFromPdf = onCall(
           midweekSections: mergedSections,
           updatedBy: request.auth.uid,
           updatedAt: FieldValue.serverTimestamp(),
+          // Marcar como recién importada para facilitar edición
+          lastImportedAt: FieldValue.serverTimestamp(),
         });
 
         updatedCount += 1;
@@ -1219,6 +1268,7 @@ export const importMidweekMeetingsFromPdf = onCall(
         updatedBy: request.auth.uid,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
+        lastImportedAt: FieldValue.serverTimestamp(),
       });
 
       createdCount += 1;

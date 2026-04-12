@@ -14,7 +14,8 @@
         "NSCameraUsageDescription": "Necesitamos acceso a tu cámara para actualizar tu foto de perfil.",
         "NSPhotoLibraryUsageDescription": "Necesitamos acceso a tu galería para seleccionar una foto de perfil.",
         "NSMicrophoneUsageDescription": "Acceso al micrófono requerido para grabación de video.",
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": ["remote-notification"],
+        "NSUserNotificationsUsageDescription": "Necesitamos enviarte notificaciones sobre asignaciones, reuniones y grupos de limpieza."
       }
     },
     "android": {

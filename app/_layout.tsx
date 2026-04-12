@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from '@/src/context/auth-context';
 import { ThemeModeProvider, useAppTheme } from '@/src/context/theme-context';
 import { getAppColors } from '@/src/styles';
 import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
+import { useInitialPermissions } from '@/src/hooks/use-initial-permissions';
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -18,6 +19,9 @@ function RootLayoutNav() {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+
+  // Solicitar permisos iniciales al montar la app (solo la primera vez)
+  useInitialPermissions();
 
   // Inicializar notificaciones push en segundo plano cuando el usuario se autentica
   useNotificationSetup({
