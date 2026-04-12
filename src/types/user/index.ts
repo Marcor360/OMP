@@ -52,6 +52,16 @@ export interface AppUser {
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
   avatarUrl?: string;
+  // Campos de modulo de limpieza
+  cleaningEligible?: boolean;
+  cleaningGroupId?: string | null;
+  cleaningGroupName?: string | null;
+  // Campos de notificaciones
+  notificationTokens?: string[];
+  notificationsEnabled?: boolean;
+  platformNotifications?: boolean;
+  cleaningNotifications?: boolean;
+  hospitalityNotifications?: boolean;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -79,6 +89,16 @@ export interface UpdateUserDTO {
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
+  // Campos de modulo de limpieza
+  cleaningEligible?: boolean;
+  cleaningGroupId?: string | null;
+  cleaningGroupName?: string | null;
+  // Campos de notificaciones
+  notificationTokens?: string[];
+  notificationsEnabled?: boolean;
+  platformNotifications?: boolean;
+  cleaningNotifications?: boolean;
+  hospitalityNotifications?: boolean;
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {

@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/src/context/auth-context';
 import { ThemeModeProvider, useAppTheme } from '@/src/context/theme-context';
 import { getAppColors } from '@/src/styles';
+import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -17,6 +18,12 @@ function RootLayoutNav() {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+
+  // Inicializar notificaciones push en segundo plano cuando el usuario se autentica
+  useNotificationSetup({
+    uid: user?.uid ?? null,
+    isAuthenticated: !!user,
+  });
 
   useEffect(() => {
     if (loading) {
@@ -104,4 +111,3 @@ export default function RootLayout() {
     </ThemeModeProvider>
   );
 }
-

@@ -2,8 +2,8 @@ import {
   Timestamp,
   addDoc,
   deleteDoc,
-  getDoc,
   getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -14,6 +14,16 @@ import {
 } from 'firebase/firestore';
 
 import { congregationMeetingsCollectionRef, meetingDocRef } from '@/src/lib/firebase/refs';
+import {
+  logFirestoreListenerCreated,
+  logFirestoreListenerDestroyed,
+} from '@/src/services/firebase/firestore-debug';
+import {
+  getDocumentCacheFirst,
+  getQueryCacheFirst,
+  invalidateCacheEntry,
+} from '@/src/services/repositories/firestore-cache-first';
+import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
 import {
   CreateMeetingDTO,
   Meeting,
@@ -116,11 +126,27 @@ const sortMeetings = (items: Meeting[]): Meeting[] => {
   return [...items].sort((a, b) => getMeetingTime(b) - getMeetingTime(a));
 };
 
+const MEETINGS_RANGE_CACHE_TTL_MS = 60 * 1000;
+const MEETING_DOC_CACHE_TTL_MS = 60 * 1000;
+
+const toRangeKey = (startDate: Date, endDate: Date): string =>
+  `${startDate.toISOString()}::${endDate.toISOString()}`;
+
+const isInvalidDateRange = (startDate: Date, endDate: Date): boolean =>
+  Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate > endDate;
+
 /** Obtiene una reunion por ID */
 export const getMeetingById = async (congregationId: string, id: string): Promise<Meeting | null> => {
-  const snap = await getDoc(meetingDocRef(congregationId, id));
-  if (!snap.exists()) return null;
-  return normalizeMeeting(snap.id, snap.data());
+  if (!congregationId || typeof congregationId !== 'string' || !id) {
+    return null;
+  }
+
+  return getDocumentCacheFirst<Meeting>({
+    cacheKey: `meetings/${congregationId}/doc/${id}`,
+    ref: meetingDocRef(congregationId, id),
+    mapSnapshot: (snapshot) => normalizeMeeting(snapshot.id, snapshot.data() as Record<string, unknown>),
+    maxAgeMs: MEETING_DOC_CACHE_TTL_MS,
+  });
 };
 
 /** Obtiene todas las reuniones ordenadas por fecha */
@@ -129,9 +155,58 @@ export const getAllMeetings = async (congregationId: string): Promise<Meeting[]>
     return [];
   }
 
-  const q = query(congregationMeetingsCollectionRef(congregationId));
+  const q = query(
+    congregationMeetingsCollectionRef(congregationId),
+    orderBy('startDate', 'desc'),
+    limit(200)
+  );
   const snap = await getDocs(q);
   return sortMeetings(snap.docs.map((d) => normalizeMeeting(d.id, d.data())));
+};
+
+/** Obtiene reuniones del rango visible (semana/rango) con cache-first */
+export const getMeetingsByWeek = async (
+  congregationId: string,
+  startDate: Date,
+  endDate: Date,
+  options?: {
+    forceServer?: boolean;
+    includeMidweek?: boolean;
+    maxItems?: number;
+  }
+): Promise<Meeting[]> => {
+  if (!congregationId || typeof congregationId !== 'string') {
+    return [];
+  }
+
+  if (isInvalidDateRange(startDate, endDate)) {
+    return [];
+  }
+
+  const maxItems = options?.maxItems ?? 60;
+  const rangeKey = toRangeKey(startDate, endDate);
+  const q = query(
+    congregationMeetingsCollectionRef(congregationId),
+    where('startDate', '>=', Timestamp.fromDate(startDate)),
+    where('startDate', '<=', Timestamp.fromDate(endDate)),
+    orderBy('startDate', 'desc'),
+    limit(maxItems)
+  );
+
+  const meetings = await getQueryCacheFirst<Meeting[]>({
+    cacheKey: `meetings/${congregationId}/range/${rangeKey}/limit/${maxItems}`,
+    query: q,
+    maxAgeMs: MEETINGS_RANGE_CACHE_TTL_MS,
+    forceServer: options?.forceServer,
+    mapSnapshot: (snapshot) =>
+      sortMeetings(snapshot.docs.map((docSnapshot) => normalizeMeeting(docSnapshot.id, docSnapshot.data()))),
+  });
+
+  if (options?.includeMidweek) {
+    return meetings;
+  }
+
+  return meetings.filter((meeting) => meeting.meetingCategory !== 'midweek' && meeting.type !== 'midweek');
 };
 
 /** Obtiene reuniones por estado */
@@ -188,6 +263,7 @@ export const createMeeting = async (
     updatedAt: serverTimestamp(),
   });
 
+  clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
   return ref.id;
 };
 
@@ -207,11 +283,15 @@ export const updateMeeting = async (
   }
 
   await updateDoc(meetingDocRef(congregationId, id), payload);
+  invalidateCacheEntry(`meetings/${congregationId}/doc/${id}`);
+  clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
 };
 
 /** Elimina una reunion */
 export const deleteMeeting = async (congregationId: string, id: string): Promise<void> => {
   await deleteDoc(meetingDocRef(congregationId, id));
+  invalidateCacheEntry(`meetings/${congregationId}/doc/${id}`);
+  clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
 };
 
 /** Cuenta reuniones por estado */
@@ -237,8 +317,10 @@ export const subscribeToMeetings = (
   }
 
   const q = query(congregationMeetingsCollectionRef(congregationId));
+  const listenerKey = `meetings:congregation:${congregationId}`;
+  logFirestoreListenerCreated(listenerKey);
 
-  return onSnapshot(
+  const unsubscribe = onSnapshot(
     q,
     (snap) => {
       const meetings = sortMeetings(snap.docs.map((d) => normalizeMeeting(d.id, d.data())));
@@ -249,4 +331,9 @@ export const subscribeToMeetings = (
       onError?.(error);
     }
   );
+
+  return () => {
+    logFirestoreListenerDestroyed(listenerKey);
+    unsubscribe();
+  };
 };

@@ -10,40 +10,16 @@ import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
+import { NotificationsBadge } from '@/src/features/notifications/components/NotificationsBadge';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
-import { getAllAssignments, getAssignmentsByUser } from '@/src/services/assignments/assignments-service';
-import { DashboardMetrics, getDashboardMetrics, getDashboardMetricsForUser } from '@/src/services/dashboard/dashboard-service';
-import { getAllMeetings } from '@/src/services/meetings/meetings-service';
+import { getDashboardData } from '@/src/services/dashboard/dashboard-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Assignment } from '@/src/types/assignment';
+import { DashboardMetrics } from '@/src/types/dashboard';
 import { Meeting } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { canManageAssignments, canManageUsers } from '@/src/utils/permissions/permissions';
-
-const countOverduePending = (items: Assignment[]): number => {
-  const now = Date.now();
-
-  return items.filter((item) => {
-    if (item.status !== 'pending' || !item.dueDate) {
-      return false;
-    }
-
-    return item.dueDate.toDate().getTime() < now;
-  }).length;
-};
-
-const getUserMetrics = (items: Assignment[]): Partial<DashboardMetrics> => {
-  const pending = items.filter((item) => item.status === 'pending').length;
-  const completed = items.filter((item) => item.status === 'completed').length;
-
-  return {
-    totalAssignments: items.length,
-    pendingAssignments: pending,
-    completedAssignments: completed,
-    overdueAssignments: countOverduePending(items),
-  };
-};
 
 export function DashboardScreen() {
   const router = useRouter();
@@ -58,11 +34,12 @@ export function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [usingSummary, setUsingSummary] = useState(true);
 
   const isAdmin = canManageUsers(role);
   const canManage = canManageAssignments(role);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (forceServer = false) => {
     const uid = user?.uid;
 
     if (!uid) {
@@ -87,79 +64,23 @@ export function DashboardScreen() {
 
     try {
       setError(null);
+      const dashboard = await getDashboardData({
+        congregationId,
+        uid,
+        isAdmin,
+        canManageAssignments: canManage,
+        forceServer,
+      });
 
-      const assignmentsPromise = canManage
-        ? getAllAssignments(congregationId)
-        : getAssignmentsByUser(congregationId, uid);
-
-      const metricsPromise = isAdmin
-        ? getDashboardMetrics(congregationId)
-        : getDashboardMetricsForUser(congregationId, uid);
-
-      const [meetingsResult, assignmentsResult, metricsResult] = await Promise.allSettled([
-        getAllMeetings(congregationId),
-        assignmentsPromise,
-        metricsPromise,
-      ]);
-
-      const failures: unknown[] = [];
-
-      let meetingsData: Meeting[] = [];
-      if (meetingsResult.status === 'fulfilled') {
-        meetingsData = meetingsResult.value;
-      } else {
-        failures.push(meetingsResult.reason);
-      }
-
-      let assignmentsData: Assignment[] = [];
-      if (assignmentsResult.status === 'fulfilled') {
-        assignmentsData = assignmentsResult.value;
-      } else {
-        failures.push(assignmentsResult.reason);
-      }
-
-      const nextRecentMeetings = meetingsData.filter((meeting) => meeting.status === 'scheduled').slice(0, 3);
-
-      const assignmentsForCards = canManage
-        ? assignmentsData
-        : assignmentsData.filter((item) => item.assignedToUid === uid);
-
-      const nextPendingAssignments = assignmentsForCards.filter((item) => item.status === 'pending').slice(0, 5);
-
-      let nextMetrics: Partial<DashboardMetrics> = {};
-
-      if (metricsResult.status === 'fulfilled') {
-        nextMetrics = metricsResult.value;
-      } else {
-        failures.push(metricsResult.reason);
-
-        if (isAdmin) {
-          nextMetrics = {
-            totalMeetings: meetingsData.length,
-            totalAssignments: assignmentsData.length,
-            pendingAssignments: assignmentsData.filter((item) => item.status === 'pending').length,
-            completedAssignments: assignmentsData.filter((item) => item.status === 'completed').length,
-            overdueAssignments: countOverduePending(assignmentsData),
-          };
-        } else {
-          nextMetrics = getUserMetrics(assignmentsForCards);
-        }
-      }
-
-      setMetrics(nextMetrics);
-      setRecentMeetings(nextRecentMeetings);
-      setPendingAssignments(nextPendingAssignments);
-
-      const hasLoadedSource =
-        meetingsResult.status === 'fulfilled' ||
-        assignmentsResult.status === 'fulfilled' ||
-        metricsResult.status === 'fulfilled';
-
-      setError(hasLoadedSource ? null : formatFirestoreError(failures[0]));
+      setMetrics(dashboard.metrics);
+      setRecentMeetings(dashboard.recentMeetings);
+      setPendingAssignments(dashboard.pendingAssignments);
+      setUsingSummary(dashboard.usedSummary);
     } catch (loadError) {
       setMetrics({});
       setRecentMeetings([]);
       setPendingAssignments([]);
+      setUsingSummary(false);
       setError(formatFirestoreError(loadError));
     } finally {
       setLoading(false);
@@ -172,16 +93,16 @@ export function DashboardScreen() {
       return;
     }
 
-    void loadData();
+    void loadData(false);
   }, [loadData, loadingProfile]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    void loadData();
+    void loadData(true);
   };
 
   if (loading || loadingProfile) return <LoadingState message="Cargando dashboard..." />;
-  if (error) return <ErrorState message={error} onRetry={loadData} />;
+  if (error) return <ErrorState message={error} onRetry={() => void loadData(true)} />;
 
   return (
     <ScreenContainer refreshing={refreshing} onRefresh={onRefresh}>
@@ -190,6 +111,15 @@ export function DashboardScreen() {
           <ThemedText style={styles.greetingLabel}>Bienvenido,</ThemedText>
           <ThemedText style={styles.greetingName}>{appUser?.displayName?.split(' ')[0] ?? 'Usuario'}</ThemedText>
         </View>
+
+        <TouchableOpacity
+          style={styles.notificationsButton}
+          onPress={() => router.push('/(protected)/notifications' as any)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="notifications-outline" size={18} color={colors.textPrimary} />
+          <NotificationsBadge compact />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.statsRow}>
@@ -209,6 +139,15 @@ export function DashboardScreen() {
           <Ionicons name="warning-outline" size={16} color={colors.error} />
           <ThemedText style={styles.alertText}>
             {metrics.overdueAssignments} asignacion{metrics.overdueAssignments > 1 ? 'es vencidas' : ' vencida'}
+          </ThemedText>
+        </View>
+      ) : null}
+
+      {!usingSummary ? (
+        <View style={styles.summaryNotice}>
+          <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
+          <ThemedText style={styles.summaryNoticeText}>
+            Resumen precalculado no disponible. Mostrando datos del rango visible.
           </ThemedText>
         </View>
       ) : null}
@@ -255,6 +194,9 @@ export function DashboardScreen() {
 const createStyles = (colors: AppColorSet) =>
   StyleSheet.create({
     greeting: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
       marginBottom: 20,
     },
     greetingLabel: {
@@ -265,6 +207,19 @@ const createStyles = (colors: AppColorSet) =>
       fontSize: 26,
       fontWeight: '800',
       color: colors.textPrimary,
+    },
+    notificationsButton: {
+      minWidth: 42,
+      height: 42,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
     },
     statsRow: {
       flexDirection: 'row',
@@ -286,6 +241,23 @@ const createStyles = (colors: AppColorSet) =>
       color: colors.error,
       fontSize: 13,
       fontWeight: '600',
+    },
+    summaryNotice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.warning + '20',
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: colors.warning + '44',
+    },
+    summaryNoticeText: {
+      color: colors.warning,
+      fontSize: 12,
+      fontWeight: '600',
+      flex: 1,
     },
     section: {
       marginTop: 8,

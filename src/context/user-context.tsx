@@ -4,11 +4,13 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
 import { useAuth } from '@/src/context/auth-context';
-import { subscribeToUser } from '@/src/services/users/users-service';
+import { registerPushTokenForCurrentUser } from '@/src/services/notifications/registerPushToken';
+import { getCurrentUserProfile } from '@/src/services/users/users-service';
 import { AppUser, UserRole } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
@@ -17,6 +19,7 @@ interface UserContextType {
   uid: string | null;
   email: string | null;
   role: UserRole | undefined;
+  servicePosition: string | undefined;
   isActive: boolean;
   congregationId: string | null;
   isAdmin: boolean;
@@ -37,8 +40,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const forceServerNextLoadRef = useRef(false);
+  const pushRegisteredUidRef = useRef<string | null>(null);
 
   const refreshProfile = useCallback(() => {
+    forceServerNextLoadRef.current = true;
     setRefreshKey((k) => k + 1);
   }, []);
 
@@ -47,15 +53,27 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       setAppUser(null);
       setProfileError(null);
       setLoadingProfile(false);
+      pushRegisteredUidRef.current = null;
       return;
     }
 
     setLoadingProfile(true);
     setProfileError(null);
+    setAppUser(null);
 
-    const unsubscribe = subscribeToUser(
-      user.uid,
-      (profile) => {
+    let cancelled = false;
+
+    const loadProfile = async () => {
+      const forceServer = forceServerNextLoadRef.current;
+      forceServerNextLoadRef.current = false;
+
+      try {
+        const profile = await getCurrentUserProfile(user.uid, {
+          forceServer,
+        });
+
+        if (cancelled) return;
+
         setAppUser(profile);
 
         if (!profile) {
@@ -69,23 +87,47 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         } else {
           setProfileError(null);
         }
-
-        setLoadingProfile(false);
-      },
-      (error) => {
+      } catch (error) {
+        if (cancelled) return;
         setAppUser(null);
         setProfileError(formatFirestoreError(error));
-        setLoadingProfile(false);
+      } finally {
+        if (!cancelled) {
+          setLoadingProfile(false);
+        }
       }
-    );
+    };
 
-    return unsubscribe;
+    void loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, refreshKey]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    if (!appUser?.isActive) return;
+
+    if (pushRegisteredUidRef.current === user.uid) {
+      return;
+    }
+
+    pushRegisteredUidRef.current = user.uid;
+
+    registerPushTokenForCurrentUser(user.uid).catch((error) => {
+      if (__DEV__) {
+        console.warn('No se pudo registrar token push:', error);
+      }
+      pushRegisteredUidRef.current = null;
+    });
+  }, [appUser?.isActive, user?.uid]);
 
   const value = useMemo<UserContextType>(() => {
     const uid = user?.uid ?? null;
     const email = appUser?.email ?? user?.email ?? null;
     const role = appUser?.role;
+    const servicePosition = appUser?.servicePosition;
     const isActive = appUser?.isActive ?? false;
     const congregationId = appUser?.congregationId ?? null;
 
@@ -100,6 +142,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       uid,
       email,
       role,
+      servicePosition,
       isActive,
       congregationId,
       isAdmin,

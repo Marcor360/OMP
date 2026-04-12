@@ -3,7 +3,9 @@ import {
   addDoc,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   updateDoc,
@@ -12,6 +14,12 @@ import {
 } from 'firebase/firestore';
 
 import { congregationMeetingsCollectionRef, meetingDocRef } from '@/src/lib/firebase/refs';
+import {
+  logFirestoreListenerCreated,
+  logFirestoreListenerDestroyed,
+} from '@/src/services/firebase/firestore-debug';
+import { getQueryCacheFirst } from '@/src/services/repositories/firestore-cache-first';
+import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
 import {
   MIDWEEK_SECTION_IDS,
   MIDWEEK_SECTION_TITLES,
@@ -242,6 +250,14 @@ const toMidweekMeeting = (
 const sortByStartDateDesc = (items: MidweekMeeting[]): MidweekMeeting[] =>
   [...items].sort((left, right) => right.startDate.toMillis() - left.startDate.toMillis());
 
+const MIDWEEK_RANGE_CACHE_TTL_MS = 60 * 1000;
+
+const buildRangeKey = (startDate: Date, endDate: Date): string =>
+  `${startDate.toISOString()}::${endDate.toISOString()}`;
+
+const isInvalidRange = (startDate: Date, endDate: Date): boolean =>
+  Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate > endDate;
+
 export const getMidweekMeetingById = async (
   congregationId: string,
   meetingId: string
@@ -274,6 +290,72 @@ export const getMidweekMeetings = async (congregationId: string): Promise<Midwee
   const snap = await getDocs(q);
 
   return sortByStartDateDesc(snap.docs.map((docSnap) => toMidweekMeeting(congregationId, docSnap.id, docSnap.data())));
+};
+
+export const getMidweekMeetingsByWeek = async (
+  congregationId: string,
+  startDate: Date,
+  endDate: Date,
+  options?: { forceServer?: boolean; maxItems?: number }
+): Promise<MidweekMeeting[]> => {
+  if (!congregationId || typeof congregationId !== 'string') {
+    return [];
+  }
+
+  if (isInvalidRange(startDate, endDate)) {
+    return [];
+  }
+
+  const maxItems = options?.maxItems ?? 50;
+  const cacheKey = `midweek/${congregationId}/range/${buildRangeKey(startDate, endDate)}/limit/${maxItems}`;
+
+  const q = query(
+    congregationMeetingsCollectionRef(congregationId),
+    where('meetingCategory', '==', 'midweek'),
+    where('startDate', '>=', Timestamp.fromDate(startDate)),
+    where('startDate', '<=', Timestamp.fromDate(endDate)),
+    orderBy('startDate', 'desc'),
+    limit(maxItems)
+  );
+
+  try {
+    return await getQueryCacheFirst<MidweekMeeting[]>({
+      cacheKey,
+      query: q,
+      forceServer: options?.forceServer,
+      maxAgeMs: MIDWEEK_RANGE_CACHE_TTL_MS,
+      mapSnapshot: (snapshot) =>
+        sortByStartDateDesc(
+          snapshot.docs.map((docSnap) => toMidweekMeeting(congregationId, docSnap.id, docSnap.data()))
+        ),
+    });
+  } catch {
+    const fallbackQuery = query(
+      congregationMeetingsCollectionRef(congregationId),
+      where('meetingCategory', '==', 'midweek'),
+      orderBy('startDate', 'desc'),
+      limit(maxItems * 2)
+    );
+
+    const fallback = await getQueryCacheFirst<MidweekMeeting[]>({
+      cacheKey: `${cacheKey}/fallback`,
+      query: fallbackQuery,
+      forceServer: options?.forceServer,
+      maxAgeMs: MIDWEEK_RANGE_CACHE_TTL_MS,
+      mapSnapshot: (snapshot) =>
+        sortByStartDateDesc(
+          snapshot.docs.map((docSnap) => toMidweekMeeting(congregationId, docSnap.id, docSnap.data()))
+        ),
+    });
+
+    const startMillis = Timestamp.fromDate(startDate).toMillis();
+    const endMillis = Timestamp.fromDate(endDate).toMillis();
+
+    return fallback.filter((meeting) => {
+      const millis = meeting.startDate.toMillis();
+      return millis >= startMillis && millis <= endMillis;
+    });
+  }
 };
 
 export const createMidweekMeeting = async (
@@ -312,6 +394,8 @@ export const createMidweekMeeting = async (
     updatedAt: serverTimestamp(),
   });
 
+  clearSessionCacheByPrefix(`query:midweek/${congregationId}/`);
+  clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
   return ref.id;
 };
 
@@ -350,6 +434,8 @@ export const updateMidweekMeeting = async (
   }
 
   await updateDoc(meetingDocRef(congregationId, meetingId), updatePayload);
+  clearSessionCacheByPrefix(`query:midweek/${congregationId}/`);
+  clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
 };
 
 export const subscribeToMidweekMeetings = (
@@ -366,8 +452,10 @@ export const subscribeToMidweekMeetings = (
     congregationMeetingsCollectionRef(congregationId),
     where('meetingCategory', '==', 'midweek')
   );
+  const listenerKey = `midweek:congregation:${congregationId}`;
+  logFirestoreListenerCreated(listenerKey);
 
-  return onSnapshot(
+  const unsubscribe = onSnapshot(
     q,
     (snapshot) => {
       const meetings = sortByStartDateDesc(
@@ -381,4 +469,9 @@ export const subscribeToMidweekMeetings = (
       onError?.(error);
     }
   );
+
+  return () => {
+    logFirestoreListenerDestroyed(listenerKey);
+    unsubscribe();
+  };
 };

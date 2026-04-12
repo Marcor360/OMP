@@ -3,6 +3,7 @@ import { AppState, AppStateStatus, Platform } from 'react-native';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/src/config/firebase/firebase';
 import { loginWithEmail, logout } from '@/src/services/auth-service';
+import { clearAllSessionCache } from '@/src/services/repositories/session-cache';
 import { AuthContextType } from '@/src/types/auth.types';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,6 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         resetInactivityTimer();
       } else {
         clearInactivityTimer();
+        clearAllSessionCache();
       }
     });
 
@@ -140,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleLogout = async () => {
     clearInactivityTimer();
+    clearAllSessionCache();
     await logout();
   };
 

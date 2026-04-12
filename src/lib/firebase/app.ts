@@ -2,9 +2,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import * as FirebaseAuth from 'firebase/auth';
 import { getAuth, initializeAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentSingleTabManager,
+  type Firestore,
+} from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { Platform } from 'react-native';
+
+import { logFirestoreConfig } from '@/src/services/firebase/firestore-debug';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyDPIp_Omy9GrNyCdmIgLz2RK4IjEfWpMnA',
@@ -40,5 +48,36 @@ if (Platform.OS === 'web') {
 }
 
 export const auth = authInstance;
-export const db = getFirestore(app);
+
+const isWebBrowserEnvironment =
+  Platform.OS === 'web' &&
+  typeof window !== 'undefined' &&
+  typeof indexedDB !== 'undefined';
+
+const initializeDb = (): Firestore => {
+  if (!isWebBrowserEnvironment) {
+    logFirestoreConfig('persistence platform=mobile/default');
+    return getFirestore(app);
+  }
+
+  try {
+    const firestore = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentSingleTabManager(undefined),
+      }),
+    });
+
+    logFirestoreConfig('persistence platform=web mode=persistentLocalCache');
+    return firestore;
+  } catch (error) {
+    logFirestoreConfig(
+      `persistence platform=web mode=fallback reason=${
+        error instanceof Error ? error.message : 'unknown'
+      }`
+    );
+    return getFirestore(app);
+  }
+};
+
+export const db = initializeDb();
 export const functions = getFunctions(app);

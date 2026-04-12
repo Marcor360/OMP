@@ -29,7 +29,12 @@ export function AssignmentCard({ assignment, onPress }: AssignmentCardProps) {
 
   const handlePress = () => {
     if (onPress) onPress();
-    else router.push(`/(protected)/assignments/${assignment.id}` as any);
+    else {
+      const query = assignment.meetingId
+        ? `?meetingId=${encodeURIComponent(assignment.meetingId)}`
+        : '';
+      router.push(`/(protected)/assignments/${assignment.id}${query}` as any);
+    }
   };
 
   return (

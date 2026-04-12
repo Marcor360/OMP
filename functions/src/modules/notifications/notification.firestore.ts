@@ -1,0 +1,114 @@
+import { FieldValue } from 'firebase-admin/firestore';
+
+import { adminDb } from '../../config/firebaseAdmin.js';
+import {
+  NotificationDocument,
+  NotificationMetadata,
+  UserNotificationSettings,
+} from './notification.types.js';
+
+const USERS_COLLECTION = 'users';
+const CLEANING_GROUPS_COLLECTION = 'cleaningGroups';
+const NOTIFICATIONS_COLLECTION = 'notifications';
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+
+const asStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((item): item is string => isNonEmptyString(item))
+    .map((item) => item.trim());
+};
+
+const dedupeStrings = (items: string[]): string[] => {
+  return Array.from(new Set(items.filter((item) => item.trim().length > 0)));
+};
+
+export const getCleaningGroupMemberIds = async (
+  groupId: string | null | undefined
+): Promise<string[]> => {
+  if (!groupId || groupId.trim().length === 0) {
+    return [];
+  }
+
+  const snap = await adminDb.collection(CLEANING_GROUPS_COLLECTION).doc(groupId).get();
+
+  if (!snap.exists) {
+    return [];
+  }
+
+  const data = snap.data() as Record<string, unknown>;
+
+  return dedupeStrings(asStringArray(data.memberIds));
+};
+
+export const getUserNotificationSettings = async (
+  uid: string
+): Promise<UserNotificationSettings | null> => {
+  const snap = await adminDb.collection(USERS_COLLECTION).doc(uid).get();
+
+  if (!snap.exists) {
+    return null;
+  }
+
+  const data = snap.data() as Record<string, unknown>;
+
+  const tokens = dedupeStrings(asStringArray(data.notificationTokens));
+
+  return {
+    uid,
+    congregationId: isNonEmptyString(data.congregationId) ? data.congregationId : null,
+    isActive: data.isActive === true,
+    notificationTokens: tokens,
+    notificationsEnabled: data.notificationsEnabled !== false,
+    platformNotifications: data.platformNotifications !== false,
+    cleaningNotifications: data.cleaningNotifications !== false,
+    hospitalityNotifications: data.hospitalityNotifications !== false,
+  };
+};
+
+export const createInternalNotification = async (params: {
+  notificationId: string;
+  userId: string;
+  congregationId: string | null;
+  category: NotificationDocument['category'];
+  title: string;
+  body: string;
+  assignmentId: string;
+  sentBy: string | null;
+  metadata: NotificationMetadata;
+}): Promise<void> => {
+  const payload: NotificationDocument = {
+    userId: params.userId,
+    congregationId: params.congregationId,
+    type: 'assignment',
+    category: params.category,
+    title: params.title,
+    body: params.body,
+    assignmentId: params.assignmentId,
+    read: false,
+    createdAt: FieldValue.serverTimestamp(),
+    sentBy: params.sentBy,
+    metadata: params.metadata,
+  };
+
+  await adminDb.collection(NOTIFICATIONS_COLLECTION).doc(params.notificationId).set(payload);
+};
+
+export const removeInvalidTokens = async (
+  uid: string,
+  invalidTokens: string[]
+): Promise<void> => {
+  const tokens = dedupeStrings(invalidTokens);
+
+  if (tokens.length === 0) {
+    return;
+  }
+
+  await adminDb.collection(USERS_COLLECTION).doc(uid).update({
+    notificationTokens: FieldValue.arrayRemove(...tokens),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+};

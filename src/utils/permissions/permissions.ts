@@ -35,16 +35,23 @@ export const canViewUsers = (role: UserRole | undefined): boolean =>
 export const canAccessSettings = (role: UserRole | undefined): boolean =>
   role === 'admin' || role === 'supervisor';
 
+/** ¿Puede gestionar grupos de limpieza? (admin, supervisor o encargado de servicio) */
+export const canManageCleaning = (
+  role: UserRole | undefined,
+  servicePosition?: string | undefined
+): boolean =>
+  role === 'admin' || role === 'supervisor' || servicePosition === 'encargado';
+
 /** Retorna las tabs visibles según el rol */
 export const getVisibleTabs = (
   role: UserRole | undefined
-): Array<'index' | 'users' | 'meetings' | 'assignments' | 'profile' | 'settings'> => {
+): Array<'index' | 'users' | 'meetings' | 'assignments' | 'profile' | 'settings' | 'cleaning'> => {
   const base = ['index', 'meetings', 'assignments', 'profile'] as const;
   if (role === 'admin') {
-    return [...base, 'users', 'settings'];
+    return [...base, 'users', 'settings', 'cleaning'];
   }
   if (role === 'supervisor') {
-    return [...base, 'settings'];
+    return [...base, 'settings', 'cleaning'];
   }
   return [...base];
 };

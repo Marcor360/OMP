@@ -18,6 +18,12 @@ export default function ProtectedLayout() {
         <Stack.Screen name="assignments/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/create" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/edit/[id]" options={{ headerShown: false }} />
+        {/* Módulo de limpieza */}
+        <Stack.Screen name="cleaning/index" options={{ headerShown: false }} />
+        <Stack.Screen name="cleaning/create" options={{ headerShown: false }} />
+        <Stack.Screen name="cleaning/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="cleaning/edit/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
         <Stack.Screen name="unauthorized" options={{ headerShown: false }} />
       </Stack>
     </UserProvider>

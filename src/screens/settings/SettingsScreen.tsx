@@ -1,12 +1,21 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Switch,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
+import { PermissionRow } from '@/src/components/common/PermissionRow';
 import { useAppTheme } from '@/src/context/theme-context';
 import { useUser } from '@/src/context/user-context';
+import { usePermissions } from '@/src/hooks/use-permissions';
 import { ROLE_LABELS } from '@/src/types/user';
 import { type AppColors, useAppColors } from '@/src/styles';
 
@@ -15,6 +24,7 @@ export function SettingsScreen() {
   const { isDarkMode, toggleThemeMode } = useAppTheme();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const permissions = usePermissions();
 
   const handleToggleTheme = () => {
     void toggleThemeMode();
@@ -60,7 +70,9 @@ export function SettingsScreen() {
             </ThemedText>
           ) : null}
           {rightElement}
-          {showArrow ? <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} /> : null}
+          {showArrow ? (
+            <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
+          ) : null}
         </View>
       </TouchableOpacity>
     );
@@ -69,9 +81,19 @@ export function SettingsScreen() {
   return (
     <ScreenContainer scrollable={false}>
       <ScrollView contentContainerStyle={styles.content}>
+
+        {/* ── Cuenta ── */}
         <Section title="Cuenta">
-          <SettingRow icon="person-circle-outline" label="Nombre" value={appUser?.displayName ?? '--'} />
-          <SettingRow icon="mail-outline" label="Correo" value={appUser?.email ?? '--'} />
+          <SettingRow
+            icon="person-circle-outline"
+            label="Nombre"
+            value={appUser?.displayName ?? '--'}
+          />
+          <SettingRow
+            icon="mail-outline"
+            label="Correo"
+            value={appUser?.email ?? '--'}
+          />
           <SettingRow
             icon="shield-checkmark-outline"
             label="Rol"
@@ -79,17 +101,37 @@ export function SettingsScreen() {
           />
         </Section>
 
+        {/* ── Administración (solo admin) ── */}
         <RoleGuard requiredRole="admin">
           <Section title="Administracion">
-            <SettingRow icon="people-outline" label="Gestion de usuarios" value="Ver usuarios" showArrow />
-            <SettingRow icon="stats-chart-outline" label="Reportes del sistema" value="Proximamente" />
-            <SettingRow icon="server-outline" label="Configuracion de Firebase" value="ormeprassig-public" />
+            <SettingRow
+              icon="people-outline"
+              label="Gestion de usuarios"
+              value="Ver usuarios"
+              showArrow
+            />
+            <SettingRow
+              icon="stats-chart-outline"
+              label="Reportes del sistema"
+              value="Proximamente"
+            />
+            <SettingRow
+              icon="server-outline"
+              label="Configuracion de Firebase"
+              value="ormeprassig-public"
+            />
           </Section>
         </RoleGuard>
 
+        {/* ── Gestión (admin + supervisor) ── */}
         <RoleGuard allowedRoles={['admin', 'supervisor']}>
           <Section title="Gestion">
-            <SettingRow icon="calendar-outline" label="Reuniones activas" value="Ver calendario" showArrow />
+            <SettingRow
+              icon="calendar-outline"
+              label="Reuniones activas"
+              value="Ver calendario"
+              showArrow
+            />
             <SettingRow
               icon="checkmark-done-outline"
               label="Asignaciones pendientes"
@@ -99,6 +141,40 @@ export function SettingsScreen() {
           </Section>
         </RoleGuard>
 
+        {/* ── Permisos del dispositivo (solo móvil) ── */}
+        {Platform.OS !== 'web' && (
+          <Section title="Permisos del dispositivo">
+            <PermissionRow
+              icon="notifications-outline"
+              title="Notificaciones"
+              description="Recibe alertas sobre asignaciones, reuniones y grupos de limpieza."
+              status={permissions.state.notifications}
+              onRequest={permissions.requestNotifications}
+              onOpenSettings={permissions.openSettings}
+              loading={permissions.loading}
+            />
+            <PermissionRow
+              icon="camera-outline"
+              title="Cámara"
+              description="Necesario para actualizar tu foto de perfil directamente."
+              status={permissions.state.camera}
+              onRequest={permissions.requestCamera}
+              onOpenSettings={permissions.openSettings}
+              loading={permissions.loading}
+            />
+            <PermissionRow
+              icon="images-outline"
+              title="Galería de fotos"
+              description="Permite seleccionar una imagen existente como foto de perfil."
+              status={permissions.state.mediaLibrary}
+              onRequest={permissions.requestMediaLibrary}
+              onOpenSettings={permissions.openSettings}
+              loading={permissions.loading}
+            />
+          </Section>
+        )}
+
+        {/* ── Aplicación ── */}
         <Section title="Aplicacion">
           <SettingRow
             icon="moon-outline"
@@ -118,9 +194,14 @@ export function SettingsScreen() {
           <SettingRow icon="information-circle-outline" label="Version" value="1.0.0" />
         </Section>
 
+        {/* ── Legal ── */}
         <Section title="Legal">
           <SettingRow icon="document-text-outline" label="Terminos de uso" showArrow />
-          <SettingRow icon="lock-closed-outline" label="Politica de privacidad" showArrow />
+          <SettingRow
+            icon="lock-closed-outline"
+            label="Politica de privacidad"
+            showArrow
+          />
         </Section>
       </ScrollView>
     </ScreenContainer>

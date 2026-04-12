@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -23,13 +23,13 @@ import { useUser } from '@/src/context/user-context';
 import { importMidweekMeetingsFromPdf } from '@/src/services/meetings/midweek-import-service';
 import {
   MidweekMeeting,
-  getMidweekMeetings,
-  subscribeToMidweekMeetings,
+  getMidweekMeetingsByWeek,
 } from '@/src/services/meetings/midweek-meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { MeetingStatus, MEETING_STATUS_LABELS } from '@/src/types/meeting';
 import { readDocumentPickerAssetAsBase64 } from '@/src/utils/files/document-picker';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { formatWeekLabel, getWeekEnd, getWeekStart, moveWeek } from '@/src/utils/dates/week-range';
 
 const STATUS_FILTERS: { label: string; value: MeetingStatus | 'all' }[] = [
   { label: 'Todas', value: 'all' },
@@ -52,8 +52,11 @@ export function MidweekMeetingsListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()));
+  const weekEnd = useMemo(() => getWeekEnd(weekStart), [weekStart]);
+  const weekLabel = useMemo(() => formatWeekLabel(weekStart, weekEnd), [weekEnd, weekStart]);
 
-  useEffect(() => {
+  const loadMeetings = useCallback(async (forceServer = false) => {
     if (loadingProfile) return;
 
     if (!congregationId) {
@@ -63,24 +66,29 @@ export function MidweekMeetingsListScreen() {
     }
 
     setError(null);
-    setLoading(true);
+    if (!forceServer) {
+      setLoading(true);
+    }
 
-    const unsubscribe = subscribeToMidweekMeetings(
-      congregationId,
-      (docs) => {
-        setMeetings(docs);
-        setLoading(false);
-        setRefreshing(false);
-      },
-      (snapshotError) => {
-        setError(formatFirestoreError(snapshotError));
-        setLoading(false);
-        setRefreshing(false);
-      }
-    );
+    try {
+      const docs = await getMidweekMeetingsByWeek(congregationId, weekStart, weekEnd, {
+        forceServer,
+        maxItems: 60,
+      });
+      setMeetings(docs);
+      setError(null);
+    } catch (requestError) {
+      setError(formatFirestoreError(requestError));
+      setMeetings([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [congregationId, loadingProfile, profileError, weekEnd, weekStart]);
 
-    return unsubscribe;
-  }, [congregationId, loadingProfile, profileError]);
+  useEffect(() => {
+    void loadMeetings(false);
+  }, [loadMeetings]);
 
   const filteredMeetings = useMemo(
     () => (filter === 'all' ? meetings : meetings.filter((meeting) => meeting.status === filter)),
@@ -91,15 +99,19 @@ export function MidweekMeetingsListScreen() {
     if (!congregationId) return;
 
     setRefreshing(true);
+    await loadMeetings(true);
+  };
 
-    try {
-      const docs = await getMidweekMeetings(congregationId);
-      setMeetings(docs);
-    } catch (requestError) {
-      setError(formatFirestoreError(requestError));
-    } finally {
-      setRefreshing(false);
-    }
+  const goToPreviousWeek = () => {
+    setWeekStart((current) => moveWeek(current, -1));
+  };
+
+  const goToNextWeek = () => {
+    setWeekStart((current) => moveWeek(current, 1));
+  };
+
+  const goToCurrentWeek = () => {
+    setWeekStart(getWeekStart(new Date()));
   };
 
   const handleImportPdf = async () => {
@@ -196,6 +208,22 @@ export function MidweekMeetingsListScreen() {
             </TouchableOpacity>
           </View>
         </RoleGuard>
+      </View>
+
+      <View style={styles.weekNavRow}>
+        <TouchableOpacity style={styles.weekNavButton} onPress={goToPreviousWeek} activeOpacity={0.8}>
+          <Ionicons name="chevron-back-outline" size={16} color={colors.textMuted} />
+          <ThemedText style={styles.weekNavButtonText}>Anterior</ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.weekCurrentButton} onPress={goToCurrentWeek} activeOpacity={0.8}>
+          <ThemedText style={styles.weekCurrentText}>{weekLabel}</ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.weekNavButton} onPress={goToNextWeek} activeOpacity={0.8}>
+          <ThemedText style={styles.weekNavButtonText}>Siguiente</ThemedText>
+          <Ionicons name="chevron-forward-outline" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.importHintWrap}>
@@ -314,6 +342,48 @@ const createStyles = (colors: AppColorSet) =>
     importHint: {
       fontSize: 12,
       color: colors.textMuted,
+    },
+    weekNavRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      gap: 8,
+    },
+    weekNavButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    weekNavButtonText: {
+      fontSize: 12,
+      color: colors.textMuted,
+      fontWeight: '600',
+    },
+    weekCurrentButton: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.primary + '55',
+      backgroundColor: colors.primary + '12',
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+    },
+    weekCurrentText: {
+      color: colors.primary,
+      fontWeight: '700',
+      fontSize: 12,
     },
     filterRow: {
       flexDirection: 'row',

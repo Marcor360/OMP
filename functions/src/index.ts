@@ -1,6 +1,4 @@
-import { initializeApp } from 'firebase-admin/app';
-
-initializeApp();
+import './config/firebaseAdmin.js';
 
 export {
   createUserByAdmin,
@@ -16,3 +14,9 @@ export {
   deleteAuthUserOnProfileDelete,
   deleteUserProfileOnAuthDelete,
 } from "./users-sync.js";
+
+export {
+  notifyAssignmentUsers,
+  notifyCongregationAssignmentUsers,
+  notifyMeetingAssignmentUsers,
+} from './modules/notifications/notifyAssignmentUsers.js';

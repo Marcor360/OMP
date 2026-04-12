@@ -410,3 +410,51 @@
 [info] 2026-04-10T22:29:45.885950Z I importmidweekmeetingsfrompdf: Starting new instance. Reason: DEPLOYMENT_ROLLOUT - Instance started due to traffic shifting between revisions due to deployment, traffic split adjustment, or deployment health check.
 [info] 2026-04-10T22:29:48.466043Z I importmidweekmeetingsfrompdf: Default STARTUP TCP probe succeeded after 1 attempt for container "worker" on port 8080.
 [info] 2026-04-10T22:29:50.341529495Z N importMidweekMeetingsFromPdf: {"@type":"type.googleapis.com/google.cloud.audit.AuditLog","status":{},"authenticationInfo":{"principalEmail":"Marcorulfo100@gmail.com","principalSubject":"user:Marcorulfo100@gmail.com","oauthInfo":{"oauthClientId":"563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com"}},"requestMetadata":{"requestAttributes":{},"destinationAttributes":{}},"serviceName":"cloudfunctions.googleapis.com","methodName":"google.cloud.functions.v2.FunctionService.CreateFunction","resourceName":"projects/ormeprassig-public/locations/us-central1/functions/importMidweekMeetingsFromPdf","response":{"url":"https://us-central1-ormeprassig-public.cloudfunctions.net/importMidweekMeetingsFromPdf","satisfiesPzi":true,"state":"ACTIVE","createTime":"2026-04-10T22:28:43.802267527Z","buildConfig":{"entryPoint":"importMidweekMeetingsFromPdf","dockerRegistry":"ARTIFACT_REGISTRY","source":{},"serviceAccount":"projects/ormeprassig-public/serviceAccounts/525513661085-compute@developer.gserviceaccount.com","dockerRepository":"projects/ormeprassig-public/locations/us-central1/repositories/gcf-artifacts","runtime":"nodejs24","automaticUpdatePolicy":{}},"updateTime":"2026-04-10T22:28:43.802267527Z","name":"projects/ormeprassig-public/locations/us-central1/functions/importMidweekMeetingsFromPdf","labels":{"deployment-tool":"cli-firebase","firebase-functions-hash":"ae66ae534777fecc16771ef05b8fe31956e99a63","deployment-callable":"true"},"@type":"type.googleapis.com/google.cloud.functions.v2.Function","serviceConfig":{"timeoutSeconds":120,"availableCpu":"1","availableMemory":"1024Mi","allTrafficOnLatestRevision":true,"ingressSettings":"ALLOW_ALL","revision":"importmidweekmeetingsfrompdf-00001-vel","maxInstanceRequestConcurrency":80,"serviceAccountEmail":"525513661085-compute@developer.gserviceaccount.com","uri":"https://importmidweekmeetingsfrompdf-iwshi5edkq-uc.a.run.app"},"environment":"GEN_2"},"resourceLocation":{"currentLocations":["us-central1"]}}
+[debug] [2026-04-12T02:31:10.846Z] ----------------------------------------------------------------------
+[debug] [2026-04-12T02:31:10.848Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\bin\firebase.js use
+[debug] [2026-04-12T02:31:10.849Z] CLI Version:   15.14.0
+[debug] [2026-04-12T02:31:10.849Z] Platform:      win32
+[debug] [2026-04-12T02:31:10.849Z] Node Version:  v24.14.0
+[debug] [2026-04-12T02:31:10.849Z] Time:          Sat Apr 11 2026 20:31:10 GMT-0600 (hora estándar central)
+[debug] [2026-04-12T02:31:10.849Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-12T02:31:10.850Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-04-12T02:31:11.016Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-12T02:31:11.016Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[info] ormeprassig-public
+[debug] [2026-04-12T03:30:41.462Z] ----------------------------------------------------------------------
+[debug] [2026-04-12T03:30:41.463Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\bin\firebase.js use
+[debug] [2026-04-12T03:30:41.464Z] CLI Version:   15.14.0
+[debug] [2026-04-12T03:30:41.464Z] Platform:      win32
+[debug] [2026-04-12T03:30:41.464Z] Node Version:  v24.14.0
+[debug] [2026-04-12T03:30:41.464Z] Time:          Sat Apr 11 2026 21:30:41 GMT-0600 (hora estándar central)
+[debug] [2026-04-12T03:30:41.464Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-12T03:30:41.466Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-04-12T03:30:41.617Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-12T03:30:41.617Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[info] ormeprassig-public
+[debug] [2026-04-12T03:43:59.071Z] ----------------------------------------------------------------------
+[debug] [2026-04-12T03:43:59.073Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\bin\firebase.js use
+[debug] [2026-04-12T03:43:59.073Z] CLI Version:   15.14.0
+[debug] [2026-04-12T03:43:59.073Z] Platform:      win32
+[debug] [2026-04-12T03:43:59.074Z] Node Version:  v24.14.0
+[debug] [2026-04-12T03:43:59.074Z] Time:          Sat Apr 11 2026 21:43:59 GMT-0600 (hora estándar central)
+[debug] [2026-04-12T03:43:59.074Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-12T03:43:59.075Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-04-12T03:43:59.231Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-12T03:43:59.232Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[info] ormeprassig-public
+[debug] [2026-04-12T04:09:56.522Z] ----------------------------------------------------------------------
+[debug] [2026-04-12T04:09:56.524Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\bin\firebase.js use
+[debug] [2026-04-12T04:09:56.525Z] CLI Version:   15.14.0
+[debug] [2026-04-12T04:09:56.525Z] Platform:      win32
+[debug] [2026-04-12T04:09:56.525Z] Node Version:  v24.14.0
+[debug] [2026-04-12T04:09:56.525Z] Time:          Sat Apr 11 2026 22:09:56 GMT-0600 (hora estándar central)
+[debug] [2026-04-12T04:09:56.525Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-12T04:09:56.527Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-04-12T04:09:56.681Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-12T04:09:56.682Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[info] ormeprassig-public

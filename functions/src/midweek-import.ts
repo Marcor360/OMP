@@ -96,12 +96,80 @@ const MONTH_INDEX: Record<string, number> = {
   DICIEMBRE: 12,
 };
 
-const WEEK_RANGE_REGEX = /\b(\d{1,2}\s*-\s*\d{1,2})\s+DE\s+/g;
+const WEEK_RANGE_DASH_REGEX = /\b(\d{1,2})\s*-\s*(\d{1,2})\s+DE\s+/g;
+const WEEK_RANGE_TO_REGEX =
+  /\b(\d{1,2})\s+DE\s+([A-Z]+)(?:\s+DE\s+(20\d{2}))?\s+A\s+(\d{1,2})\s+DE\s+([A-Z]+)(?:\s+DE\s+(20\d{2}))?/g;
 const MONTH_NAMES = Object.keys(MONTH_INDEX);
 const MONTH_NAMES_SORTED = [...MONTH_NAMES].sort((a, b) => b.length - a.length);
+const ASSIGNMENT_ITEM_REGEX =
+  /(?<![:\d])\b((?:[1-9]|1[0-5]))\.\s+(.+?)\s*\((\d{1,2})\s*MIN(?:S?)?\.?\)/g;
+const SONG_WITH_PRAYER_REGEX = /CANCION\s+(\d{1,3})\s+Y\s+ORACION/g;
+const SONG_GENERIC_REGEX = /CANCION\s+(\d{1,3})/g;
+const CLOCK_TIME_REGEX = /\b([01]?\d|2[0-3])[.](\d{2})\b/g;
+const PRE_HEADER_ASSIGNMENTS_WINDOW = 1250;
+const MAX_WEEK_ASSIGNMENT_NUMBER = 9;
+const MINISTRY_TITLE_HINTS = [
+  "EMPIECE CONVERSACIONES",
+  "HAGA REVISITAS",
+  "HAGA DISCIPULOS",
+  "EXPLIQUE SUS CREENCIAS",
+  "DISCURSO",
+  "PREDICACION",
+];
 
 const sanitizeText = (value: string): string => {
-  const compact = value.replace(/\s+/g, " ").trim();
+  const shortWordStoplist = new Set([
+    "a",
+    "al",
+    "de",
+    "del",
+    "el",
+    "en",
+    "la",
+    "las",
+    "lo",
+    "los",
+    "o",
+    "u",
+    "un",
+    "una",
+    "y",
+  ]);
+
+  const repairTitleWordSpacing = (text: string): string => {
+    let repaired = text;
+    let previous = "";
+
+    while (previous !== repaired) {
+      previous = repaired;
+
+      repaired = repaired.replace(
+        /\b([A-Za-z]{1,2})\s+([A-Za-z]{3,})\b/g,
+        (_full, left: string, right: string) => {
+          if (/\d/.test(left) || /\d/.test(right)) return `${left} ${right}`;
+          if (shortWordStoplist.has(left.toLowerCase())) return `${left} ${right}`;
+          return `${left}${right}`;
+        }
+      );
+
+      repaired = repaired.replace(
+        /\b([A-Za-z]{3,})\s+([A-Za-z]{1,2})\b/g,
+        (_full, left: string, right: string) => {
+          if (/\d/.test(left) || /\d/.test(right)) return `${left} ${right}`;
+          if (shortWordStoplist.has(right.toLowerCase())) return `${left} ${right}`;
+          return `${left}${right}`;
+        }
+      );
+    }
+
+    return repaired.replace(/\s+/g, " ").trim();
+  };
+
+  const compact = value
+    .replace(/[´`¨^~]/g, "")
+    .replace(/[^\w\s:.,;!?()\-\u00C0-\u017F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   if (!compact) return "";
 
@@ -111,7 +179,7 @@ const sanitizeText = (value: string): string => {
     return `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
   });
 
-  return titleWords.join(" ");
+  return repairTitleWordSpacing(titleWords.join(" "));
 };
 
 const normalizeForKey = (value: string): string =>
@@ -144,20 +212,40 @@ type ParsedWeekHeader = {
 
 const extractWeekHeaders = (normalizedText: string): ParsedWeekHeader[] => {
   const headers: ParsedWeekHeader[] = [];
-  let match: RegExpExecArray | null;
 
-  while ((match = WEEK_RANGE_REGEX.exec(normalizedText)) !== null) {
-    const range = match[1].replace(/\s*-\s*/g, "-").trim();
-    const tail = normalizedText.slice(WEEK_RANGE_REGEX.lastIndex, WEEK_RANGE_REGEX.lastIndex + 120);
+  const pushHeader = (candidate: ParsedWeekHeader) => {
+    const sameLabel = headers.find(
+      (header) =>
+        header.rawWeekLabel === candidate.rawWeekLabel &&
+        Math.abs(header.index - candidate.index) <= 10
+    );
+
+    if (sameLabel) {
+      return;
+    }
+
+    headers.push(candidate);
+  };
+
+  WEEK_RANGE_DASH_REGEX.lastIndex = 0;
+  let dashMatch: RegExpExecArray | null;
+
+  while ((dashMatch = WEEK_RANGE_DASH_REGEX.exec(normalizedText)) !== null) {
+    const startDay = Number(dashMatch[1]);
+    const endDay = Number(dashMatch[2]);
+
+    const tail = normalizedText.slice(
+      WEEK_RANGE_DASH_REGEX.lastIndex,
+      WEEK_RANGE_DASH_REGEX.lastIndex + 140
+    );
     const compactTail = compactLetters(tail);
-
     const firstMonth = resolveLeadingMonth(compactTail);
 
     if (!firstMonth) {
       continue;
     }
 
-    let rawWeekLabel = `${range} DE ${firstMonth}`;
+    let rawWeekLabel = `${startDay}-${endDay} DE ${firstMonth}`;
     const rest = compactTail.slice(firstMonth.length);
 
     if (rest.startsWith("Y")) {
@@ -167,23 +255,92 @@ const extractWeekHeaders = (normalizedText: string): ParsedWeekHeader[] => {
       }
     }
 
-    if (headers.length === 0 || headers[headers.length - 1].rawWeekLabel !== rawWeekLabel) {
-      headers.push({
-        index: match.index,
-        rawWeekLabel,
-      });
-    }
+    pushHeader({
+      index: dashMatch.index,
+      rawWeekLabel,
+    });
   }
 
-  return headers;
+  WEEK_RANGE_TO_REGEX.lastIndex = 0;
+  let toMatch: RegExpExecArray | null;
+
+  while ((toMatch = WEEK_RANGE_TO_REGEX.exec(normalizedText)) !== null) {
+    const startDay = Number(toMatch[1]);
+    const startMonth = resolveLeadingMonth(toMatch[2]) ?? toMatch[2];
+    const endDay = Number(toMatch[4]);
+    const endMonth = resolveLeadingMonth(toMatch[5]) ?? toMatch[5];
+
+    let rawWeekLabel = `${startDay}-${endDay} DE ${startMonth}`;
+
+    if (startMonth !== endMonth) {
+      rawWeekLabel = `${rawWeekLabel} Y ${endMonth}`;
+    }
+
+    pushHeader({
+      index: toMatch.index,
+      rawWeekLabel,
+    });
+  }
+
+  return headers.sort((left, right) => left.index - right.index);
 };
 
 const normalizePdfText = (text: string): string => {
+  const shortWordStoplist = new Set([
+    "A",
+    "AL",
+    "DE",
+    "DEL",
+    "EL",
+    "EN",
+    "LA",
+    "LAS",
+    "LO",
+    "LOS",
+    "O",
+    "U",
+    "UN",
+    "UNA",
+    "Y",
+  ]);
+
+  const repairBrokenWordSpacing = (value: string): string => {
+    let repaired = value;
+    let previous = "";
+
+    while (previous !== repaired) {
+      previous = repaired;
+
+      repaired = repaired.replace(
+        /\b([A-Z]{3,})\s+([A-Z]{1,3})\b/g,
+        (_full, left: string, right: string) => {
+          if (/\d/.test(left) || /\d/.test(right)) return `${left} ${right}`;
+          if (shortWordStoplist.has(left) || shortWordStoplist.has(right)) {
+            return `${left} ${right}`;
+          }
+          return `${left}${right}`;
+        }
+      );
+
+      repaired = repaired.replace(
+        /\b([A-Z]{1,2})\s+([A-Z]{3,})\b/g,
+        (_full, left: string, right: string) => {
+          if (/\d/.test(left) || /\d/.test(right)) return `${left} ${right}`;
+          if (shortWordStoplist.has(left)) return `${left} ${right}`;
+          return `${left}${right}`;
+        }
+      );
+    }
+
+    return repaired;
+  };
+
   let normalized = text
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase();
 
+  normalized = normalized.replace(/[´`¨^~]/g, " ");
   normalized = normalized.replace(/[\u0000-\u001F\u007F]/g, " ");
   normalized = normalized.replace(/(?:\/CR\s*){2,}/g, " ");
   normalized = normalized.replace(/\/CR/g, " ");
@@ -195,6 +352,36 @@ const normalizePdfText = (text: string): string => {
     previous = normalized;
     normalized = normalized.replace(/\b([A-Z])\s+([A-Z])\b/g, "$1$2");
     normalized = normalized.replace(/(\d)\s+(?=\d)/g, "$1");
+    normalized = normalized.replace(/CANCION\s+(\d{3,4})\./g, (full, digits: string) => {
+      const combined = Number(digits);
+      if (!Number.isFinite(combined) || combined <= 151) return full;
+
+      const splitCandidates = [2, 1];
+
+      for (const assignmentDigits of splitCandidates) {
+        if (digits.length <= assignmentDigits) continue;
+
+        const songPart = digits.slice(0, -assignmentDigits);
+        const assignmentPart = digits.slice(-assignmentDigits);
+
+        const songNumber = Number(songPart);
+        const assignmentNumber = Number(assignmentPart);
+
+        if (
+          Number.isFinite(songNumber) &&
+          Number.isFinite(assignmentNumber) &&
+          songNumber >= 1 &&
+          songNumber <= 151 &&
+          assignmentNumber >= 1 &&
+          assignmentNumber <= 15
+        ) {
+          return `CANCION ${songNumber} ${assignmentNumber}.`;
+        }
+      }
+
+      return full;
+    });
+    normalized = repairBrokenWordSpacing(normalized);
   }
 
   return normalized.replace(/\s+/g, " ").trim();
@@ -269,94 +456,312 @@ const inferAssignmentType = (
   return "other";
 };
 
-const parseAssignmentsFromChunk = (
-  chunk: string,
-  sectionId: MidweekSectionId,
-  weekSeed: string
-): MidweekAssignment[] => {
-  const assignments: MidweekAssignment[] = [];
-  const itemRegex = /(\d+)\.\s+(.+?)\s*\((\d{1,2})\s*MINS?\.?\)/g;
+type ParsedAssignmentMatch = {
+  number: number;
+  index: number;
+  title: string;
+  durationMinutes?: number;
+};
 
+type WeekAssignmentCandidate = ParsedAssignmentMatch & {
+  source: "pre" | "post";
+  distanceToHeader: number;
+};
+
+type WeekAssignmentsResolution = {
+  assignments: WeekAssignmentCandidate[];
+  livingStartNumber: number;
+  livingMarkerIndex?: number;
+};
+
+const extractAssignmentMatches = (
+  block: string,
+  indexOffset = 0
+): ParsedAssignmentMatch[] => {
+  const matches: ParsedAssignmentMatch[] = [];
+
+  ASSIGNMENT_ITEM_REGEX.lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = itemRegex.exec(chunk)) !== null) {
-    const rawTitle = match[2].replace(/\s+/g, " ").trim();
+  while ((match = ASSIGNMENT_ITEM_REGEX.exec(block)) !== null) {
+    const number = Number(match[1]);
+    if (!Number.isFinite(number)) continue;
+
+    let rawTitle = match[2].replace(/\s+/g, " ").trim();
     if (!rawTitle) continue;
 
+    const nestedAssignmentPattern = /\b(?:[1-9]|1[0-5])\.\s+/;
+    if (nestedAssignmentPattern.test(rawTitle)) {
+      rawTitle = rawTitle.split(nestedAssignmentPattern)[0]?.trim() ?? "";
+    }
+
+    if (!rawTitle || rawTitle.length < 3) continue;
+    if (rawTitle.length > 140) continue;
+
     const cleanTitle = sanitizeText(rawTitle.replace(/\s*-\s*/g, "-"));
+    if (!cleanTitle || cleanTitle.length < 3) continue;
+
     const minutes = Number(match[3]);
 
-    assignments.push({
-      id: `${sectionId}-${weekSeed}-${assignments.length + 1}`,
-      sectionId,
-      order: assignments.length,
+    matches.push({
+      number,
+      index: indexOffset + match.index,
       title: cleanTitle,
       durationMinutes: Number.isFinite(minutes) ? minutes : undefined,
-      theme: "",
-      notes: "",
-      assignmentType: inferAssignmentType(sectionId, cleanTitle),
-      participants: [],
     });
   }
 
-  return assignments;
+  return matches.sort((left, right) => left.index - right.index);
+};
+
+const findClosestLivingMarkerIndex = (
+  normalizedText: string,
+  headerIndex: number,
+  searchStart: number,
+  searchEnd: number
+): number | undefined => {
+  let cursor = Math.max(0, searchStart);
+  let closest: number | undefined;
+
+  while (cursor <= searchEnd) {
+    const next = normalizedText.indexOf("NUESTRA VIDA CRISTIANA", cursor);
+    if (next < 0 || next > searchEnd) break;
+
+    if (
+      typeof closest !== "number" ||
+      Math.abs(next - headerIndex) < Math.abs(closest - headerIndex)
+    ) {
+      closest = next;
+    }
+
+    cursor = next + 1;
+  }
+
+  return closest;
+};
+
+const isCongregationStudyTitle = (title: string): boolean => {
+  const compact = normalizeForKey(title).replace(/[^A-Z]/g, "");
+  return compact.includes("ESTUDIOBIBLICODELACONGREGACION");
+};
+
+const scoreAssignmentCandidate = (
+  candidate: WeekAssignmentCandidate,
+  number: number
+): number => {
+  let score = candidate.distanceToHeader;
+
+  if (number === 1 && candidate.source === "pre") {
+    score += 260;
+  }
+
+  if (number >= 2 && number <= 6 && candidate.source === "post") {
+    score += 220;
+  }
+
+  if (number >= 7 && candidate.source === "pre") {
+    score += 120;
+  }
+
+  const normalizedTitle = normalizeForKey(candidate.title);
+
+  if (number === 9 && !isCongregationStudyTitle(candidate.title)) {
+    score += 640;
+  }
+
+  if (number > 3 && normalizedTitle.includes("BUSQUEMOS PERLAS")) {
+    score += 360;
+  }
+
+  if (number > 3 && normalizedTitle.includes("LECTURA DE LA BIBLIA")) {
+    score += 320;
+  }
+
+  return score;
+};
+
+const pickAssignmentsByNumber = (
+  candidates: WeekAssignmentCandidate[]
+): Map<number, WeekAssignmentCandidate> => {
+  const selected = new Map<number, WeekAssignmentCandidate>();
+
+  for (let number = 1; number <= MAX_WEEK_ASSIGNMENT_NUMBER; number += 1) {
+    const options = candidates.filter((candidate) => candidate.number === number);
+    if (options.length === 0) continue;
+
+    const sorted = [...options].sort((left, right) => {
+      const scoreDiff =
+        scoreAssignmentCandidate(left, number) - scoreAssignmentCandidate(right, number);
+      if (scoreDiff !== 0) return scoreDiff;
+
+      if (left.distanceToHeader !== right.distanceToHeader) {
+        return left.distanceToHeader - right.distanceToHeader;
+      }
+
+      if (left.source !== right.source) {
+        if (number >= 2 && number <= 6) {
+          return left.source === "pre" ? -1 : 1;
+        }
+        return left.source === "post" ? -1 : 1;
+      }
+
+      return left.index - right.index;
+    });
+
+    selected.set(number, sorted[0]);
+  }
+
+  return selected;
+};
+
+const inferLivingStartNumber = (
+  selectedByNumber: Map<number, WeekAssignmentCandidate>,
+  livingMarkerIndex: number | undefined
+): number => {
+  const numberSeven = selectedByNumber.get(7);
+
+  if (!numberSeven) {
+    if (selectedByNumber.has(8)) return 8;
+    if (selectedByNumber.has(9)) return 9;
+    return 8;
+  }
+
+  if (typeof livingMarkerIndex === "number") {
+    return numberSeven.index >= livingMarkerIndex ? 7 : 8;
+  }
+
+  const normalizedTitle = normalizeForKey(numberSeven.title);
+  const looksLikeMinistry = MINISTRY_TITLE_HINTS.some((hint) =>
+    normalizedTitle.includes(hint)
+  );
+
+  return looksLikeMinistry ? 8 : 7;
+};
+
+const resolveWeekAssignments = (
+  normalizedText: string,
+  headerIndex: number,
+  nextHeaderIndex: number | undefined
+): WeekAssignmentsResolution => {
+  const preStart = Math.max(0, headerIndex - PRE_HEADER_ASSIGNMENTS_WINDOW);
+  const postEnd = nextHeaderIndex ?? normalizedText.length;
+
+  const preSlice = normalizedText.slice(preStart, headerIndex);
+  const postSlice = normalizedText.slice(headerIndex, postEnd);
+
+  const preCandidates = extractAssignmentMatches(preSlice, preStart).map((candidate) => ({
+    ...candidate,
+    source: "pre" as const,
+    distanceToHeader: Math.max(0, headerIndex - candidate.index),
+  }));
+
+  const postCandidates = extractAssignmentMatches(postSlice, headerIndex).map((candidate) => ({
+    ...candidate,
+    source: "post" as const,
+    distanceToHeader: Math.max(0, candidate.index - headerIndex),
+  }));
+
+  const allCandidates = [...preCandidates, ...postCandidates];
+  const selectedByNumber = pickAssignmentsByNumber(allCandidates);
+
+  const livingMarkerIndex = findClosestLivingMarkerIndex(
+    normalizedText,
+    headerIndex,
+    preStart,
+    postEnd
+  );
+
+  const livingStartNumber = inferLivingStartNumber(
+    selectedByNumber,
+    livingMarkerIndex
+  );
+
+  const assignments = Array.from(selectedByNumber.values()).sort((left, right) => {
+    if (left.number !== right.number) return left.number - right.number;
+    return left.index - right.index;
+  });
+
+  return {
+    assignments,
+    livingStartNumber,
+    livingMarkerIndex,
+  };
+};
+
+const resolveLivingSectionSong = (
+  block: string,
+  livingSectionIndex: number | undefined
+): string | undefined => {
+  const allSongs: Array<{ index: number; number: string }> = [];
+  SONG_GENERIC_REGEX.lastIndex = 0;
+  let songMatch: RegExpExecArray | null;
+
+  while ((songMatch = SONG_GENERIC_REGEX.exec(block)) !== null) {
+    if (!songMatch[1]) continue;
+    allSongs.push({
+      index: songMatch.index,
+      number: songMatch[1],
+    });
+  }
+
+  if (allSongs.length === 0) return undefined;
+
+  if (typeof livingSectionIndex === "number" && livingSectionIndex >= 0) {
+    const candidate = allSongs.find((song) => song.index > livingSectionIndex);
+    if (candidate) return candidate.number;
+  }
+
+  return allSongs.length >= 2 ? allSongs[1].number : allSongs[0].number;
 };
 
 const buildSections = (
   weekKey: string,
-  block: string
+  assignments: WeekAssignmentCandidate[],
+  livingStartNumber: number,
+  middleSongNumber: string | undefined
 ): MidweekSection[] => {
-  const treasuresIndex = block.indexOf("TESOROS DE LA BIBLIA");
-  const ministryIndex = block.indexOf("SEAMOS MEJORES MAESTROS");
-  const livingIndex = block.indexOf("NUESTRA VIDA CRISTIANA");
+  const resolveSectionByNumber = (number: number): MidweekSectionId => {
+    if (number <= 3) return "treasuresOfTheBible";
+    if (number < livingStartNumber) return "applyYourselfToTheFieldMinistry";
+    return "livingAsChristians";
+  };
 
-  const treasuresChunk =
-    treasuresIndex >= 0
-      ? block.slice(
-          treasuresIndex,
-          ministryIndex > treasuresIndex ? ministryIndex : block.length
-      )
-      : "";
+  const grouped: Record<MidweekSectionId, MidweekAssignment[]> = {
+    treasuresOfTheBible: [],
+    applyYourselfToTheFieldMinistry: [],
+    livingAsChristians: [],
+  };
 
-  const ministryChunk =
-    ministryIndex >= 0
-      ? block.slice(
-          ministryIndex,
-          livingIndex > ministryIndex ? livingIndex : block.length
-      )
-      : "";
+  assignments.forEach((assignment) => {
+    if (assignment.number < 1 || assignment.number > MAX_WEEK_ASSIGNMENT_NUMBER) {
+      return;
+    }
 
-  const livingChunk =
-    livingIndex >= 0 ? block.slice(livingIndex, block.length) : "";
+    if (assignment.number === 9 && !isCongregationStudyTitle(assignment.title)) {
+      return;
+    }
 
-  const treasuresItems = parseAssignmentsFromChunk(
-    treasuresChunk,
-    "treasuresOfTheBible",
-    weekKey
-  );
+    const sectionId = resolveSectionByNumber(assignment.number);
 
-  const ministryItems = parseAssignmentsFromChunk(
-    ministryChunk,
-    "applyYourselfToTheFieldMinistry",
-    weekKey
-  );
+    grouped[sectionId].push({
+      id: `${sectionId}-${weekKey}-${assignment.number}`,
+      sectionId,
+      order: grouped[sectionId].length,
+      title: assignment.title,
+      durationMinutes: assignment.durationMinutes,
+      theme: "",
+      notes: "",
+      assignmentType: inferAssignmentType(sectionId, assignment.title),
+      participants: [],
+    });
+  });
 
-  const livingItems = parseAssignmentsFromChunk(
-    livingChunk,
-    "livingAsChristians",
-    weekKey
-  );
-
-  const middleSongMatch =
-    livingChunk.match(/\/SUBCANCION\s+(\d{1,3})/) ??
-    block.match(/NUESTRA VIDA CRISTIANA\s*\/SUBCANCION\s+(\d{1,3})/);
-
-  if (middleSongMatch?.[1]) {
-    livingItems.unshift({
+  if (middleSongNumber) {
+    grouped.livingAsChristians.unshift({
       id: `living-song-${weekKey}`,
       sectionId: "livingAsChristians",
       order: 0,
-      title: `Cancion ${middleSongMatch[1]}`,
+      title: `Cancion ${middleSongNumber}`,
       theme: "",
       notes: "",
       assignmentType: "song",
@@ -372,21 +777,115 @@ const buildSections = (
       id: "treasuresOfTheBible",
       title: SECTION_TITLES.treasuresOfTheBible,
       order: 0,
-      items: normalizeOrder(treasuresItems),
+      items: normalizeOrder(grouped.treasuresOfTheBible),
     },
     {
       id: "applyYourselfToTheFieldMinistry",
       title: SECTION_TITLES.applyYourselfToTheFieldMinistry,
       order: 1,
-      items: normalizeOrder(ministryItems),
+      items: normalizeOrder(grouped.applyYourselfToTheFieldMinistry),
     },
     {
       id: "livingAsChristians",
       title: SECTION_TITLES.livingAsChristians,
       order: 2,
-      items: normalizeOrder(livingItems),
+      items: normalizeOrder(grouped.livingAsChristians),
     },
   ];
+};
+
+const extractSongsWithPrayer = (block: string): string[] => {
+  const songs: string[] = [];
+  SONG_WITH_PRAYER_REGEX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = SONG_WITH_PRAYER_REGEX.exec(block)) !== null) {
+    if (!match[1]) continue;
+    songs.push(match[1]);
+  }
+
+  return songs;
+};
+
+const resolveMeetingTimes = (
+  block: string,
+  baseStartDate: Date,
+  sections: MidweekSection[]
+): { startDate: Date; endDate: Date } => {
+  const times: Array<{ hour: number; minute: number }> = [];
+  CLOCK_TIME_REGEX.lastIndex = 0;
+  let clockMatch: RegExpExecArray | null;
+
+  while ((clockMatch = CLOCK_TIME_REGEX.exec(block)) !== null) {
+    const hour = Number(clockMatch[1]);
+    const minute = Number(clockMatch[2]);
+
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) continue;
+    if (minute > 59) continue;
+
+    times.push({ hour, minute });
+  }
+
+  const startDate = new Date(baseStartDate);
+
+  if (times.length > 0) {
+    startDate.setHours(times[0].hour, times[0].minute, 0, 0);
+
+    const last = times[times.length - 1];
+    const endDateByClock = new Date(baseStartDate);
+    endDateByClock.setHours(last.hour, last.minute, 0, 0);
+
+    if (endDateByClock.getTime() > startDate.getTime()) {
+      return { startDate, endDate: endDateByClock };
+    }
+  }
+
+  const totalAssignmentsMinutes = sections.reduce((total, section) => {
+    return (
+      total +
+      section.items.reduce((sectionTotal, assignment) => {
+        return sectionTotal + (assignment.durationMinutes ?? 0);
+      }, 0)
+    );
+  }, 0);
+
+  const estimatedMinutes = Math.min(
+    150,
+    Math.max(95, totalAssignmentsMinutes + 8)
+  );
+
+  return {
+    startDate,
+    endDate: new Date(startDate.getTime() + estimatedMinutes * 60 * 1000),
+  };
+};
+
+const extractBibleReadingFromWeekBlock = (weekBlock: string): string => {
+  const songIndex = weekBlock.indexOf("CANCION");
+
+  if (songIndex > 0) {
+    const headerChunk = weekBlock.slice(0, songIndex);
+    const withoutRange = headerChunk.replace(
+      /^\s*\d{1,2}\s*-\s*\d{1,2}\s+DE\s+[A-Z\s]+?(?:\s+Y\s+[A-Z\s]+)?\s+/,
+      ""
+    );
+
+    const cleaned = sanitizeText(withoutRange.replace(/\s*-\s*/g, "-"));
+    if (cleaned.length >= 3) {
+      return cleaned;
+    }
+  }
+
+  const fallbackMatch =
+    weekBlock.match(
+      /\b\d{1,2}\s*(?:-\s*\d{1,2}|DE\s+[A-Z]+(?:\s+DE\s+20\d{2})?\s+A\s+\d{1,2})\s+DE\s+[A-Z]+(?:\s+Y\s+[A-Z]+)?\s+([A-Z0-9 ,.-]{4,90})\s+CANCION\s+\d{1,3}/
+    ) ??
+    weekBlock.match(/\/CAN\s*([A-Z0-9 ,.-]+?)\s*\/SUBCANCION/) ??
+    weekBlock.match(
+      /\bDE\s+[A-Z]+(?:\s+Y\s+[A-Z]+)?\s+([A-Z0-9 ,.-]{4,80})\s+CANCION\s+\d{1,3}/
+    );
+
+  return sanitizeText((fallbackMatch?.[1] ?? "").replace(/\s*-\s*/g, "-"));
 };
 
 const parseMidweekWeeks = (rawText: string): ParsedWeekMeeting[] => {
@@ -423,24 +922,52 @@ const parseMidweekWeeks = (rawText: string): ParsedWeekMeeting[] => {
       rawWeekLabel.charAt(0) + rawWeekLabel.slice(1).toLowerCase();
 
     const weekKey = normalizeForKey(rawWeekLabel);
+    const bibleReading = extractBibleReadingFromWeekBlock(block);
 
-    const bibleReadingMatch =
-      block.match(/\/CAN\s*([A-Z0-9 ,.-]+?)\s*\/SUBCANCION/) ??
-      block.match(/\bDE\s+[A-Z]+(?:\s+Y\s+[A-Z]+)?\s+([A-Z0-9 ,.-]{4,70})\s+CANCION\s+\d+/);
+    const songsWithPrayer = extractSongsWithPrayer(block);
 
-    const bibleReading = sanitizeText(
-      (bibleReadingMatch?.[1] ?? "").replace(/\s*-\s*/g, "-")
+    const openingSongNumber = songsWithPrayer[0];
+    const closingSongNumber =
+      songsWithPrayer.length > 1
+        ? songsWithPrayer[songsWithPrayer.length - 1]
+        : undefined;
+
+    const weekAssignments = resolveWeekAssignments(
+      normalizedText,
+      current.index,
+      next?.index
     );
 
-    const openingSongNumber =
-      block.match(/\/SUBCANCION\s+(\d{1,3})\s+Y\s+ORACION/)?.[1];
+    const songSearchStart = Math.max(
+      0,
+      current.index - PRE_HEADER_ASSIGNMENTS_WINDOW
+    );
+    const songSearchBlock = normalizedText.slice(songSearchStart, blockEnd);
 
-    const closingSongNumber =
-      block.match(/\/CAN\/SUBCANCION\s+(\d{1,3})\s+Y\s+ORACION/)?.[1];
+    const livingMarkerInSongBlock =
+      typeof weekAssignments.livingMarkerIndex === "number" &&
+      weekAssignments.livingMarkerIndex >= songSearchStart
+        ? weekAssignments.livingMarkerIndex - songSearchStart
+        : undefined;
 
-    const sections = buildSections(weekKey, block);
+    const middleSongNumber = resolveLivingSectionSong(
+      songSearchBlock,
+      livingMarkerInSongBlock
+    );
+
+    const sections = buildSections(
+      weekKey,
+      weekAssignments.assignments,
+      weekAssignments.livingStartNumber,
+      middleSongNumber
+    );
 
     const parsedRange = parseWeekRange(rawWeekLabel, year);
+    const parsedTimes = resolveMeetingTimes(
+      block,
+      parsedRange.startDate,
+      sections
+    );
 
     weeks.push({
       weekLabel,
@@ -453,14 +980,18 @@ const parseMidweekWeeks = (rawText: string): ParsedWeekMeeting[] => {
       closingSong: closingSongNumber
         ? `Cancion ${closingSongNumber}`
         : undefined,
-      startDate: parsedRange.startDate,
-      endDate: parsedRange.endDate,
+      startDate: parsedTimes.startDate,
+      endDate: parsedTimes.endDate,
       sections,
     });
   }
 
   return weeks;
 };
+
+export const __parseMidweekWeeksForTesting = parseMidweekWeeks;
+export const __normalizePdfTextForTesting = normalizePdfText;
+export const __extractWeekHeadersForTesting = extractWeekHeaders;
 
 const normalizeWeekKey = (value: string): string =>
   normalizeForKey(value.replace(/\s*\-\s*/g, "-"));

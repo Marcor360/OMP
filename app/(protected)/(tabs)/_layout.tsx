@@ -77,6 +77,16 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="cleaning"
+        options={{
+          title: 'Limpieza',
+          href: hide('cleaning') ? null : undefined,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="sparkles-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Perfil',

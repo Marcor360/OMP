@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,7 @@ import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { getAllMeetings, subscribeToMeetings } from '@/src/services/meetings/meetings-service';
+import { getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   Meeting,
@@ -20,6 +20,7 @@ import {
   resolveMeetingCategory,
 } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { formatWeekLabel, getWeekEnd, getWeekStart, moveWeek } from '@/src/utils/dates/week-range';
 
 const STATUS_FILTERS: { label: string; value: MeetingStatus | 'all' }[] = [
   { label: 'Todas', value: 'all' },
@@ -40,8 +41,11 @@ export function MeetingsListScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()));
+  const weekEnd = useMemo(() => getWeekEnd(weekStart), [weekStart]);
+  const weekLabel = useMemo(() => formatWeekLabel(weekStart, weekEnd), [weekEnd, weekStart]);
 
-  useEffect(() => {
+  const loadMeetings = useCallback(async (forceServer = false) => {
     if (!congregationId || typeof congregationId !== 'string') {
       setMeetings([]);
       setError('El perfil actual no tiene congregationId.');
@@ -50,27 +54,31 @@ export function MeetingsListScreen() {
       return;
     }
 
-    setLoading(true);
+    if (!forceServer) {
+      setLoading(true);
+    }
     setError(null);
 
-    const unsubscribe = subscribeToMeetings(
-      congregationId,
-      (data) => {
-        setMeetings(data);
-        setLoading(false);
-        setRefreshing(false);
-      },
-      (snapshotError) => {
-        console.error('MeetingsListScreen subscribe error:', snapshotError);
-        setMeetings([]);
-        setError(formatFirestoreError(snapshotError));
-        setLoading(false);
-        setRefreshing(false);
-      }
-    );
+    try {
+      const data = await getMeetingsByWeek(congregationId, weekStart, weekEnd, {
+        forceServer,
+        includeMidweek: false,
+        maxItems: 80,
+      });
+      setMeetings(data);
+      setError(null);
+    } catch (requestError) {
+      setMeetings([]);
+      setError(formatFirestoreError(requestError));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [congregationId, weekEnd, weekStart]);
 
-    return unsubscribe;
-  }, [congregationId]);
+  useEffect(() => {
+    void loadMeetings(false);
+  }, [loadMeetings]);
 
   const genericMeetings = useMemo(
     () => meetings.filter((meeting) => resolveMeetingCategory(meeting) !== 'midweek'),
@@ -89,15 +97,19 @@ export function MeetingsListScreen() {
     if (!congregationId) return;
 
     setRefreshing(true);
+    await loadMeetings(true);
+  };
 
-    try {
-      const latestMeetings = await getAllMeetings(congregationId);
-      setMeetings(latestMeetings);
-    } catch (requestError) {
-      setError(formatFirestoreError(requestError));
-    } finally {
-      setRefreshing(false);
-    }
+  const goToPreviousWeek = () => {
+    setWeekStart((current) => moveWeek(current, -1));
+  };
+
+  const goToNextWeek = () => {
+    setWeekStart((current) => moveWeek(current, 1));
+  };
+
+  const goToCurrentWeek = () => {
+    setWeekStart(getWeekStart(new Date()));
   };
 
   if (loading || loadingProfile) return <LoadingState message="Cargando reuniones..." />;
@@ -131,6 +143,22 @@ export function MeetingsListScreen() {
             </TouchableOpacity>
           </RoleGuard>
         </View>
+      </View>
+
+      <View style={styles.weekNavRow}>
+        <TouchableOpacity style={styles.weekNavButton} onPress={goToPreviousWeek} activeOpacity={0.8}>
+          <Ionicons name="chevron-back-outline" size={16} color={colors.textMuted} />
+          <ThemedText style={styles.weekNavButtonText}>Anterior</ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.weekCurrentButton} onPress={goToCurrentWeek} activeOpacity={0.8}>
+          <ThemedText style={styles.weekCurrentText}>{weekLabel}</ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.weekNavButton} onPress={goToNextWeek} activeOpacity={0.8}>
+          <ThemedText style={styles.weekNavButtonText}>Siguiente</ThemedText>
+          <Ionicons name="chevron-forward-outline" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.filterRow}>
@@ -229,6 +257,48 @@ const createStyles = (colors: AppColorSet) =>
       gap: 8,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+    },
+    weekNavRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      gap: 8,
+    },
+    weekNavButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    weekNavButtonText: {
+      fontSize: 12,
+      color: colors.textMuted,
+      fontWeight: '600',
+    },
+    weekCurrentButton: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.primary + '55',
+      backgroundColor: colors.primary + '12',
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+    },
+    weekCurrentText: {
+      color: colors.primary,
+      fontWeight: '700',
+      fontSize: 12,
     },
     filterChip: {
       paddingHorizontal: 12,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,7 @@ import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { getAllUsers, subscribeToUsers } from '@/src/services/users/users-service';
+import { getAllUsers } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -27,50 +27,47 @@ export function UsersListScreen() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  const loadUsers = useCallback(async (forceServer = false) => {
+    if (loadingProfile) return;
+
     if (!congregationId || typeof congregationId !== 'string') {
       setUsers([]);
-      setError('El perfil actual no tiene congregationId.');
+      setError('No se encontro la congregacion del usuario actual.');
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
-    setLoading(true);
+    if (!forceServer) {
+      setLoading(true);
+    }
     setError(null);
 
-    const unsubscribe = subscribeToUsers(
-      congregationId,
-      (data) => {
-        setUsers(data);
-        setLoading(false);
-        setRefreshing(false);
-      },
-      (snapshotError) => {
-        console.error('UsersListScreen subscribe error:', snapshotError);
-        setUsers([]);
-        setError(formatFirestoreError(snapshotError));
-        setLoading(false);
-        setRefreshing(false);
-      }
-    );
+    try {
+      const data = await getAllUsers(congregationId, {
+        forceServer,
+      });
+      setUsers(data);
+      setError(null);
+    } catch (requestError) {
+      console.error('UsersListScreen load error:', requestError);
+      setUsers([]);
+      setError(formatFirestoreError(requestError));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [congregationId, loadingProfile]);
 
-    return unsubscribe;
-  }, [congregationId]);
+  useEffect(() => {
+    void loadUsers(false);
+  }, [loadUsers]);
 
   const onRefresh = async () => {
     if (!congregationId) return;
 
     setRefreshing(true);
-
-    try {
-      const latestUsers = await getAllUsers(congregationId);
-      setUsers(latestUsers);
-    } catch (requestError) {
-      setError(formatFirestoreError(requestError));
-    } finally {
-      setRefreshing(false);
-    }
+    await loadUsers(true);
   };
 
   if (loading || loadingProfile) return <LoadingState message="Cargando usuarios..." />;

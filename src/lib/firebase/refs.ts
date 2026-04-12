@@ -4,6 +4,9 @@ import { db } from '@/src/lib/firebase/app';
 
 export const usersCollectionRef = () => collection(db, 'users');
 export const userDocRef = (uid: string) => doc(db, 'users', uid);
+export const notificationsCollectionRef = () => collection(db, 'notifications');
+export const notificationDocRef = (notificationId: string) =>
+  doc(db, 'notifications', notificationId);
 
 export const congregationsCollectionRef = () => collection(db, 'congregations');
 export const congregationDocRef = (congregationId: string) => doc(db, 'congregations', congregationId);
@@ -31,3 +34,10 @@ export const congregationNotificationsCollectionRef = (congregationId: string) =
 
 export const congregationChangeLogsCollectionRef = (congregationId: string) =>
   collection(db, 'congregations', congregationId, 'changeLogs');
+
+export const dashboardSummaryDocRef = (congregationId: string) =>
+  doc(db, 'dashboardSummary', congregationId);
+
+// Módulo de limpieza
+export const cleaningGroupsCollectionRef = () => collection(db, 'cleaningGroups');
+export const cleaningGroupDocRef = (groupId: string) => doc(db, 'cleaningGroups', groupId);

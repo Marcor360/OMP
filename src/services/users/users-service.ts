@@ -1,6 +1,5 @@
 import {
   deleteDoc,
-  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -12,6 +11,16 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 
+import {
+  logFirestoreListenerCreated,
+  logFirestoreListenerDestroyed,
+} from '@/src/services/firebase/firestore-debug';
+import {
+  getDocumentCacheFirst,
+  getQueryCacheFirst,
+  invalidateCacheEntry,
+} from '@/src/services/repositories/firestore-cache-first';
+import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
 import {
   userDocRef,
   usersCollectionRef,
@@ -70,7 +79,18 @@ const buildDepartmentLabel = (
   return undefined;
 };
 
-const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
+const USER_PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
+const USERS_QUERY_CACHE_TTL_MS = 60 * 1000;
+
+const normalizeStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    .map((item) => item.trim());
+};
+
+export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
   const role = isUserRole(data.role) ? data.role : 'user';
   const isActive =
     typeof data.isActive === 'boolean'
@@ -113,6 +133,22 @@ const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
     servicePosition,
     serviceDepartment,
     avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : undefined,
+    // Campos del módulo de limpieza
+    cleaningEligible: typeof data.cleaningEligible === 'boolean' ? data.cleaningEligible : true,
+    cleaningGroupId:
+      typeof data.cleaningGroupId === 'string' && data.cleaningGroupId.length > 0
+        ? data.cleaningGroupId
+        : null,
+    cleaningGroupName:
+      typeof data.cleaningGroupName === 'string' && data.cleaningGroupName.length > 0
+        ? data.cleaningGroupName
+        : null,
+    // Campos de notificaciones
+    notificationTokens: normalizeStringArray(data.notificationTokens),
+    notificationsEnabled: data.notificationsEnabled !== false,
+    platformNotifications: data.platformNotifications !== false,
+    cleaningNotifications: data.cleaningNotifications !== false,
+    hospitalityNotifications: data.hospitalityNotifications !== false,
     createdAt: data.createdAt as AppUser['createdAt'],
     updatedAt: data.updatedAt as AppUser['updatedAt'],
   };
@@ -126,22 +162,56 @@ const sortUsers = (items: AppUser[]): AppUser[] => {
   });
 };
 
+const isIncompleteProfile = (user: AppUser): boolean =>
+  user.uid.trim().length === 0 || user.congregationId.trim().length === 0;
+
 /** Obtiene un usuario por UID */
-export const getUserById = async (uid: string): Promise<AppUser | null> => {
-  const snap = await getDoc(userDocRef(uid));
-  if (!snap.exists()) return null;
-  return normalizeUser(snap.id, snap.data());
+export const getUserById = async (
+  uid: string,
+  options?: { forceServer?: boolean; maxAgeMs?: number }
+): Promise<AppUser | null> => {
+  if (!uid || typeof uid !== 'string') return null;
+
+  return getDocumentCacheFirst<AppUser>({
+    cacheKey: `users/${uid}`,
+    ref: userDocRef(uid),
+    mapSnapshot: (snapshot) => normalizeUser(snapshot.id, snapshot.data() as Record<string, unknown>),
+    maxAgeMs: options?.maxAgeMs ?? USER_PROFILE_CACHE_TTL_MS,
+    forceServer: options?.forceServer,
+    isIncomplete: isIncompleteProfile,
+  });
+};
+
+/** Perfil del usuario autenticado con estrategia cache-first */
+export const getCurrentUserProfile = async (
+  uid: string,
+  options?: { forceServer?: boolean }
+): Promise<AppUser | null> => {
+  return getUserById(uid, {
+    forceServer: options?.forceServer,
+    maxAgeMs: USER_PROFILE_CACHE_TTL_MS,
+  });
 };
 
 /** Obtiene todos los usuarios de una congregacion */
-export const getAllUsers = async (congregationId: string): Promise<AppUser[]> => {
+export const getAllUsers = async (
+  congregationId: string,
+  options?: { forceServer?: boolean }
+): Promise<AppUser[]> => {
   if (!congregationId || typeof congregationId !== 'string') {
     return [];
   }
 
   const q = query(usersCollectionRef(), where('congregationId', '==', congregationId));
-  const snap = await getDocs(q);
-  return sortUsers(snap.docs.map((d) => normalizeUser(d.id, d.data())));
+
+  return getQueryCacheFirst<AppUser[]>({
+    cacheKey: `users/congregation/${congregationId}`,
+    query: q,
+    maxAgeMs: USERS_QUERY_CACHE_TTL_MS,
+    forceServer: options?.forceServer,
+    mapSnapshot: (snapshot) =>
+      sortUsers(snapshot.docs.map((docSnapshot) => normalizeUser(docSnapshot.id, docSnapshot.data()))),
+  });
 };
 
 /** Obtiene usuarios activos de una congregacion */
@@ -170,6 +240,9 @@ export const createUserProfile = async (
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  invalidateCacheEntry(`users/${uid}`);
+  clearSessionCacheByPrefix('query:users/');
 };
 
 /** Actualiza un usuario */
@@ -191,11 +264,15 @@ export const updateUser = async (
   }
 
   await updateDoc(userDocRef(uid), payload);
+  invalidateCacheEntry(`users/${uid}`);
+  clearSessionCacheByPrefix('query:users/');
 };
 
 /** Elimina un usuario de Firestore (no de Auth) */
 export const deleteUser = async (uid: string): Promise<void> => {
   await deleteDoc(userDocRef(uid));
+  invalidateCacheEntry(`users/${uid}`);
+  clearSessionCacheByPrefix('query:users/');
 };
 
 /** Cuenta total de usuarios por congregacion */
@@ -217,8 +294,10 @@ export const subscribeToUsers = (
   }
 
   const q = query(usersCollectionRef(), where('congregationId', '==', congregationId));
+  const listenerKey = `users:congregation:${congregationId}`;
+  logFirestoreListenerCreated(listenerKey);
 
-  return onSnapshot(
+  const unsubscribe = onSnapshot(
     q,
     (snap) => {
       const users = sortUsers(snap.docs.map((d) => normalizeUser(d.id, d.data())));
@@ -229,6 +308,11 @@ export const subscribeToUsers = (
       onError?.(error);
     }
   );
+
+  return () => {
+    logFirestoreListenerDestroyed(listenerKey);
+    unsubscribe();
+  };
 };
 
 /** Suscripcion en tiempo real a un usuario especifico */
@@ -237,11 +321,19 @@ export const subscribeToUser = (
   callback: (user: AppUser | null) => void,
   onError?: (error: unknown) => void
 ): Unsubscribe => {
-  return onSnapshot(
+  const listenerKey = `users:doc:${uid}`;
+  logFirestoreListenerCreated(listenerKey);
+
+  const unsubscribe = onSnapshot(
     userDocRef(uid),
     (snap) => {
       callback(snap.exists() ? normalizeUser(snap.id, snap.data()) : null);
     },
     onError
   );
+
+  return () => {
+    logFirestoreListenerDestroyed(listenerKey);
+    unsubscribe();
+  };
 };

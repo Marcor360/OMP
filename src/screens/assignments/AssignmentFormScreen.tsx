@@ -34,7 +34,7 @@ type FormErrors = {
 };
 
 export function AssignmentFormScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, meetingId: meetingIdParam } = useLocalSearchParams<{ id?: string; meetingId?: string }>();
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -67,7 +67,14 @@ export function AssignmentFormScreen() {
     const loadData = async () => {
       try {
         const meetingsPromise = getAllMeetings(congregationId);
-        const assignmentPromise = mode === 'edit' && id ? getAssignmentById(congregationId, id) : Promise.resolve(null);
+        const assignmentPromise =
+          mode === 'edit' && id
+            ? getAssignmentById(
+                congregationId,
+                id,
+                typeof meetingIdParam === 'string' ? meetingIdParam : undefined
+              )
+            : Promise.resolve(null);
 
         const [meetingDocs, assignmentDoc] = await Promise.all([meetingsPromise, assignmentPromise]);
 
@@ -101,7 +108,7 @@ export function AssignmentFormScreen() {
     };
 
     void loadData();
-  }, [congregationId, id, loadingProfile, mode, router]);
+  }, [congregationId, id, loadingProfile, meetingIdParam, mode, router]);
 
   const validate = (): boolean => {
     const nextErrors: FormErrors = {
@@ -163,13 +170,16 @@ export function AssignmentFormScreen() {
     }
   };
 
+  const sortedMeetings = useMemo(
+    () => [...meetings].sort((a, b) => b.startDate.seconds - a.startDate.seconds),
+    [meetings]
+  );
+
   if (loading || loadingProfile) return <LoadingState />;
 
   const priorities: AssignmentPriority[] = ['low', 'medium', 'high', 'critical'];
   const canSave = isAdminOrSupervisor && meetings.length > 0;
   const noMeetings = meetings.length === 0;
-
-  const sortedMeetings = useMemo(() => [...meetings].sort((a, b) => b.startDate.seconds - a.startDate.seconds), [meetings]);
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
