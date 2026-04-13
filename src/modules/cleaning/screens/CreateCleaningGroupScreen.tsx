@@ -50,6 +50,11 @@ export function CreateCleaningGroupScreen() {
       return;
     }
 
+    if (selectedMemberIds.length < 2) {
+      setGlobalError('Un grupo de limpieza debe crearse con al menos 2 integrantes.');
+      return;
+    }
+
     setFormErrors({});
     setGlobalError(null);
     setSubmitting(true);
@@ -244,9 +249,9 @@ export function CreateCleaningGroupScreen() {
 
       {/* Botón crear */}
       <TouchableOpacity
-        style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
+        style={[styles.submitBtn, (submitting || selectedMemberIds.length < 2) && styles.submitBtnDisabled]}
         onPress={handleSubmit}
-        disabled={submitting}
+        disabled={submitting || selectedMemberIds.length < 2}
         accessibilityRole="button"
         accessibilityLabel="Crear grupo de limpieza"
       >

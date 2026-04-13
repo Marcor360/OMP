@@ -6,7 +6,6 @@ export type PermissionStatus = 'granted' | 'denied' | 'undetermined' | 'unavaila
 
 export interface PermissionState {
   notifications: PermissionStatus;
-  camera: PermissionStatus;
 }
 
 export interface AppPermissions {
@@ -16,8 +15,6 @@ export interface AppPermissions {
   loading: boolean;
   /** Solicita el permiso de notificaciones push */
   requestNotifications: () => Promise<PermissionStatus>;
-  /** Solicita el permiso de cámara */
-  requestCamera: () => Promise<PermissionStatus>;
   /** Re-verifica todos los permisos del sistema */
   refresh: () => Promise<void>;
   /** Abre la configuración del SO para este permiso */

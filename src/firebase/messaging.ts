@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 let notificationHandlerConfigured = false;
 
@@ -53,6 +54,11 @@ export const configureMessaging = async (): Promise<void> => {
 };
 
 export const getNativePushToken = async (): Promise<string | null> => {
+  if (Platform.OS === 'android' && Constants.appOwnership === 'expo') {
+    // Expo Go en Android (SDK 53+) ya no soporta push notifications.
+    return null;
+  }
+
   await configureMessaging();
 
   const hasPermission = await ensureNotificationPermission();

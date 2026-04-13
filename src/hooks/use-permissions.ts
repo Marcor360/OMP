@@ -3,30 +3,20 @@
  * Unifica notificaciones + cámara + galería en una sola interfaz reactiva.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Linking } from 'react-native';
 
 import {
   getNotificationPermissionStatus,
   requestNotificationPermission,
 } from '@/src/services/notifications/notifications-service';
-import {
-  getCameraPermissionStatus,
-  getMediaLibraryPermissionStatus,
-  openAppSettings,
-  requestCameraPermission,
-  requestMediaLibraryPermission,
-} from '@/src/services/notifications/camera-service';
+
 import { PermissionState, PermissionStatus } from '@/src/types/permissions.types';
 
 interface UsePermissionsResult {
-  state: PermissionState & { mediaLibrary: PermissionStatus };
+  state: PermissionState;
   loading: boolean;
   /** Solicita permiso de notificaciones push */
   requestNotifications: () => Promise<PermissionStatus>;
-  /** Solicita permiso de cámara */
-  requestCamera: () => Promise<PermissionStatus>;
-  /** Solicita permiso de galería/fotos */
-  requestMediaLibrary: () => Promise<PermissionStatus>;
   /** Abre la configuración del sistema para conceder permisos manualmente */
   openSettings: () => Promise<void>;
   /** Re-verifica todos los permisos (útil al volver de Settings) */
@@ -38,10 +28,8 @@ interface UsePermissionsResult {
  * Re-verifica automáticamente cuando la app vuelve al frente (útil después de Settings).
  */
 export function usePermissions(): UsePermissionsResult {
-  const [state, setState] = useState<PermissionState & { mediaLibrary: PermissionStatus }>({
+  const [state, setState] = useState<PermissionState>({
     notifications: 'undetermined',
-    camera: 'undetermined',
-    mediaLibrary: 'undetermined',
   });
   const [loading, setLoading] = useState(true);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -49,12 +37,10 @@ export function usePermissions(): UsePermissionsResult {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [notifications, camera, mediaLibrary] = await Promise.all([
+      const [notifications] = await Promise.all([
         getNotificationPermissionStatus(),
-        getCameraPermissionStatus(),
-        getMediaLibraryPermissionStatus(),
       ]);
-      setState({ notifications, camera, mediaLibrary });
+      setState({ notifications });
     } catch {
       // Si falla alguna verificación, dejamos el estado previo
     } finally {
@@ -87,25 +73,19 @@ export function usePermissions(): UsePermissionsResult {
     return result;
   }, []);
 
-  const requestCamera = useCallback(async (): Promise<PermissionStatus> => {
-    const result = await requestCameraPermission();
-    setState((prev) => ({ ...prev, camera: result }));
-    return result;
-  }, []);
-
-  const requestMediaLibrary = useCallback(async (): Promise<PermissionStatus> => {
-    const result = await requestMediaLibraryPermission();
-    setState((prev) => ({ ...prev, mediaLibrary: result }));
-    return result;
+  const openSettings = useCallback(async () => {
+    try {
+      await Linking.openSettings();
+    } catch {
+      // Silencioso
+    }
   }, []);
 
   return {
     state,
     loading,
     requestNotifications,
-    requestCamera,
-    requestMediaLibrary,
-    openSettings: openAppSettings,
+    openSettings,
     refresh: fetchAll,
   };
 }

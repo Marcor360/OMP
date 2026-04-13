@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-
-import { getCleaningGroups } from '@/src/modules/cleaning/services/cleaning-service';
+import { useCallback, useEffect } from 'react';
+import { useCleaningCache } from '@/src/modules/cleaning/context/CleaningCacheContext';
 import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types';
 
 interface UseCleaningGroupsResult {
@@ -10,47 +9,21 @@ interface UseCleaningGroupsResult {
   refresh: () => void;
 }
 
-/** Carga y gestiona la lista de grupos de limpieza de una congregación. */
+/** Carga y gestiona la lista de grupos de limpieza usando el caché. */
 export function useCleaningGroups(congregationId: string): UseCleaningGroupsResult {
-  const [groups, setGroups] = useState<CleaningGroup[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+  const { groups, loading, error, refreshGroups, lastSyncAt, refreshAll } = useCleaningCache();
 
   useEffect(() => {
-    if (!congregationId) {
-      setGroups([]);
-      setLoading(false);
-      return;
+    if (congregationId && !lastSyncAt && !loading && groups.length === 0) {
+      void refreshAll(congregationId);
     }
+  }, [congregationId, lastSyncAt, loading, groups.length, refreshAll]);
 
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(() => {
+    if (congregationId) {
+      void refreshGroups(congregationId);
+    }
+  }, [congregationId, refreshGroups]);
 
-    const load = async () => {
-      try {
-        const data = await getCleaningGroups(congregationId);
-        if (!cancelled) setGroups(data);
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : 'Error al cargar los grupos de limpieza.'
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [congregationId, refreshKey]);
-
-  return { groups, loading, error, refresh };
+  return { groups, loading: loading && groups.length === 0, error, refresh };
 }

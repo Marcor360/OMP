@@ -21,7 +21,7 @@ import { CleaningMemberItem } from '@/src/modules/cleaning/components/CleaningMe
 import { AddMembersToCleaningGroupModal } from '@/src/modules/cleaning/screens/AddMembersToCleaningGroupModal';
 import {
   addUsersToCleaningGroup,
-  deleteCleaningGroup,
+  deactivateCleaningGroup,
   removeUserFromCleaningGroup,
 } from '@/src/modules/cleaning/services/cleaning-service';
 import { CleaningServiceError } from '@/src/modules/cleaning/types/cleaning-group.types';
@@ -62,6 +62,14 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
 
   const handleRemoveMember = useCallback(
     async (uid: string) => {
+      if (group && group.memberCount <= 2) {
+        Alert.alert(
+          'Acción no permitida',
+          'Un grupo de limpieza debe mantener al menos 2 integrantes. Agrega otro integrante antes de remover a este.'
+        );
+        return;
+      }
+
       Alert.alert(
         'Quitar integrante',
         '¿Estás seguro de que deseas quitar a este usuario del grupo?',
@@ -113,24 +121,24 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
 
   const handleDeleteGroup = () => {
     Alert.alert(
-      'Eliminar grupo',
-      `¿Deseas eliminar el grupo "${group?.name ?? ''}"? Todos sus integrantes quedarán liberados. Esta acción no se puede deshacer.`,
+      'Desactivar grupo',
+      `¿Deseas desactivar el grupo "${group?.name ?? ''}"? Los integrantes quedarán liberados.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: 'Desactivar',
           style: 'destructive',
           onPress: async () => {
             setDeletingGroup(true);
             setActionError(null);
             try {
-              await deleteCleaningGroup(groupId);
+              await deactivateCleaningGroup(groupId);
               router.back();
             } catch (err) {
               setActionError(
                 err instanceof CleaningServiceError
                   ? err.message
-                  : 'Error al eliminar el grupo.'
+                  : 'Error al desactivar el grupo.'
               );
               setDeletingGroup(false);
             }
@@ -383,20 +391,20 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
           )}
         </View>
 
-        {/* Eliminar grupo */}
+        {/* Desactivar grupo */}
         <TouchableOpacity
           style={styles.deleteBtn}
           onPress={handleDeleteGroup}
-          disabled={deletingGroup}
+          disabled={deletingGroup || !group.isActive}
           accessibilityRole="button"
-          accessibilityLabel="Eliminar grupo de limpieza"
+          accessibilityLabel="Desactivar grupo de limpieza"
         >
           {deletingGroup ? (
             <ActivityIndicator color={colors.error} size="small" />
           ) : (
             <>
               <Ionicons name="trash-outline" size={18} color={colors.error} />
-              <Text style={styles.deleteBtnText}>Eliminar grupo</Text>
+              <Text style={styles.deleteBtnText}>Desactivar grupo</Text>
             </>
           )}
         </TouchableOpacity>

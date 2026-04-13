@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-
-import { getCleaningAssignableUsers } from '@/src/modules/cleaning/services/cleaning-service';
+import { useCallback, useEffect, useMemo } from 'react';
+import { useCleaningCache } from '@/src/modules/cleaning/context/CleaningCacheContext';
 import {
   CleaningAssignableUser,
   CleaningMemberStatus,
@@ -11,78 +10,70 @@ interface UseCleaningAssignableUsersResult {
   loading: boolean;
   error: string | null;
   refresh: () => void;
-  /** Solo los usuarios que pueden ser seleccionados (estado 'available') */
   selectableUsers: CleaningAssignableUser[];
 }
 
+const deriveStatus = (
+  user: CleaningAssignableUser,
+  currentGroupId: string | null
+): CleaningMemberStatus => {
+  if (!user.isActive) return 'inactive';
+  if (!user.cleaningEligible) return 'not_eligible';
+  if (!user.cleaningGroupId) return 'available';
+  if (currentGroupId && user.cleaningGroupId === currentGroupId) return 'assigned_here';
+  return 'assigned_other';
+};
+
 /**
- * Carga usuarios asignables a grupos de limpieza de la congregación.
- * Calcula el estado de cada usuario en relación con el grupo actual.
+ * Carga usuarios asignables a grupos de limpieza consumiendo caché.
+ * Calcula el estado de cada usuario en relación con el grupo actual localmente.
  */
 export function useCleaningAssignableUsers(
   congregationId: string,
   currentGroupId: string | null = null
 ): UseCleaningAssignableUsersResult {
-  const [users, setUsers] = useState<CleaningAssignableUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+  const { assignableUsers, loading, error, refreshUsers, lastSyncAt, refreshAll } = useCleaningCache();
 
   useEffect(() => {
-    if (!congregationId) {
-      setUsers([]);
-      setLoading(false);
-      return;
+    // Si no tenemos sincro inicial y no está cargando el general, disparamos
+    if (congregationId && !lastSyncAt && !loading && assignableUsers.length === 0) {
+      void refreshAll(congregationId);
     }
+  }, [congregationId, lastSyncAt, loading, assignableUsers.length, refreshAll]);
 
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(() => {
+    if (congregationId) {
+      // Pedimos refresh de datos base (currentGroupId=null) al caché para evitar contaminar el scope global
+      void refreshUsers(congregationId, null);
+    }
+  }, [congregationId, refreshUsers]);
 
-    const load = async () => {
-      try {
-        const data = await getCleaningAssignableUsers(congregationId, currentGroupId);
-        if (!cancelled) {
-          // Ordenar: disponibles primero, luego los del grupo actual, luego bloqueados
-          const ORDER: Record<CleaningMemberStatus, number> = {
-            available: 0,
-            assigned_here: 1,
-            assigned_other: 2,
-            not_eligible: 3,
-            inactive: 4,
-          };
-          setUsers(
-            [...data].sort(
-              (a, b) =>
-                ORDER[a.memberStatus] - ORDER[b.memberStatus] ||
-                a.displayName.localeCompare(b.displayName, 'es')
-            )
-          );
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : 'Error al cargar los usuarios.'
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  // Recalcular estados dinámicamente según el grupo elegido
+  const users = useMemo(() => {
+    const ORDER: Record<CleaningMemberStatus, number> = {
+      available: 0,
+      assigned_here: 1,
+      assigned_other: 2,
+      not_eligible: 3,
+      inactive: 4,
     };
 
-    void load();
+    const derived = assignableUsers.map((u) => ({
+      ...u,
+      memberStatus: deriveStatus(u, currentGroupId),
+    }));
 
-    return () => {
-      cancelled = true;
-    };
-  }, [congregationId, currentGroupId, refreshKey]);
+    return derived.sort(
+      (a, b) =>
+        ORDER[a.memberStatus] - ORDER[b.memberStatus] ||
+        a.displayName.localeCompare(b.displayName, 'es')
+    );
+  }, [assignableUsers, currentGroupId]);
 
   const selectableUsers = useMemo(
     () => users.filter((u) => u.memberStatus === 'available'),
     [users]
   );
 
-  return { users, loading, error, refresh, selectableUsers };
+  return { users, loading: loading && users.length === 0, error, refresh, selectableUsers };
 }

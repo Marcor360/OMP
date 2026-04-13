@@ -89,6 +89,9 @@ export const createCleaningGroup = async (
   if (!dto.name.trim()) {
     throw new CleaningServiceError('INVALID_DATA', 'El nombre del grupo es requerido.');
   }
+  if (initialMemberIds.length < 2) {
+    throw new CleaningServiceError('INVALID_DATA', 'Un grupo de limpieza debe crearse con al menos 2 integrantes.');
+  }
 
   // Crear documento del grupo primero para obtener el ID
   const groupRef = await addDoc(cleaningGroupsCollectionRef(), {
@@ -105,10 +108,8 @@ export const createCleaningGroup = async (
 
   const groupId = groupRef.id;
 
-  // Si hay integrantes iniciales, agregarlos con transacción
-  if (initialMemberIds.length > 0) {
-    await addUsersToCleaningGroup(groupId, initialMemberIds, dto.name.trim());
-  }
+  // Agregar integrantes iniciales asegurando transaccionalidad
+  await addUsersToCleaningGroup(groupId, initialMemberIds, dto.name.trim());
 
   return groupId;
 };
@@ -269,6 +270,13 @@ export const removeUserFromCleaningGroup = async (
     }
 
     const newMemberIds = currentMemberIds.filter((id) => id !== userId);
+
+    if (newMemberIds.length < 2) {
+      throw new CleaningServiceError(
+        'INVALID_DATA',
+        'El grupo de limpieza debe mantener al menos 2 integrantes.'
+      );
+    }
 
     // Liberar el usuario
     tx.update(userDocRef(userId), {

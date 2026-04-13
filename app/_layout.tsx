@@ -4,6 +4,11 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useEffect } from 'react';
+import { LogBox } from 'react-native';
+
+LogBox.ignoreLogs([
+  "expo-notifications: Android Push notifications functionality provided by expo-notifications was removed from Expo Go",
+]);
 
 import { AuthProvider, useAuth } from '@/src/context/auth-context';
 import { ThemeModeProvider, useAppTheme } from '@/src/context/theme-context';

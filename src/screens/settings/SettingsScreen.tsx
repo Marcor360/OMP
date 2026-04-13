@@ -153,24 +153,6 @@ export function SettingsScreen() {
               onOpenSettings={permissions.openSettings}
               loading={permissions.loading}
             />
-            <PermissionRow
-              icon="camera-outline"
-              title="Cámara"
-              description="Necesario para actualizar tu foto de perfil directamente."
-              status={permissions.state.camera}
-              onRequest={permissions.requestCamera}
-              onOpenSettings={permissions.openSettings}
-              loading={permissions.loading}
-            />
-            <PermissionRow
-              icon="images-outline"
-              title="Galería de fotos"
-              description="Permite seleccionar una imagen existente como foto de perfil."
-              status={permissions.state.mediaLibrary}
-              onRequest={permissions.requestMediaLibrary}
-              onOpenSettings={permissions.openSettings}
-              loading={permissions.loading}
-            />
           </Section>
         )}
 
