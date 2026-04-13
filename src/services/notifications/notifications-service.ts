@@ -49,7 +49,6 @@ export async function requestNotificationPermission(): Promise<PermissionStatus>
         allowAlert: true,
         allowBadge: true,
         allowSound: true,
-        allowAnnouncements: true,
       },
     });
     return mapExpoStatus(status);

@@ -176,7 +176,7 @@ export function PermissionRow({
             },
           ]}
           onPress={handlePress}
-          disabled={requesting || loading || status === 'unavailable'}
+          disabled={requesting || loading}
           accessibilityRole="button"
           accessibilityLabel={`${btnLabel} permiso de ${title}`}
         >
