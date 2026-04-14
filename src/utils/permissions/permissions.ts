@@ -42,10 +42,16 @@ export const canManageCleaning = (
 ): boolean =>
   role === 'admin' || role === 'supervisor' || servicePosition === 'encargado';
 
+/** ¿Puede gestionar grupos de hospitalidad? (mismos permisos que limpieza) */
+export const canManageHospitality = (
+  role: UserRole | undefined,
+  servicePosition?: string | undefined
+): boolean => canManageCleaning(role, servicePosition);
+
 /** Retorna las tabs visibles según el rol */
 export const getVisibleTabs = (
   role: UserRole | undefined
-): Array<'index' | 'users' | 'meetings' | 'assignments' | 'profile' | 'settings' | 'cleaning'> => {
+): ('index' | 'users' | 'meetings' | 'assignments' | 'profile' | 'settings' | 'cleaning')[] => {
   const base = ['index', 'meetings', 'assignments', 'profile'] as const;
   if (role === 'admin') {
     return [...base, 'users', 'settings', 'cleaning'];

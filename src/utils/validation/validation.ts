@@ -61,7 +61,7 @@ export const validatePhone = (phone: string | null | undefined): string | undefi
 };
 
 /** Combina errores: retorna el primero encontrado */
-export const firstError = (...errors: Array<string | undefined>): string | undefined =>
+export const firstError = (...errors: (string | undefined)[]): string | undefined =>
   errors.find((e) => e !== undefined);
 
 /** Verifica si hay algún error en un objeto de errores */

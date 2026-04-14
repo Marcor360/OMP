@@ -25,6 +25,10 @@ export default function ProtectedLayout() {
         <Stack.Screen name="cleaning/edit/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
         <Stack.Screen name="unauthorized" options={{ headerShown: false }} />
+        {/* Settings */}
+        <Stack.Screen name="settings/theme" options={{ title: 'Tema', headerShown: true }} />
+        <Stack.Screen name="settings/language" options={{ title: 'Idioma', headerShown: true }} />
+        <Stack.Screen name="settings/about" options={{ title: 'Acerca de', headerShown: true }} />
       </Stack>
     </UserProvider>
   );

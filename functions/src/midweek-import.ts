@@ -1,3 +1,4 @@
+import { Buffer } from "buffer";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { PDFParse } from "pdf-parse";
@@ -739,7 +740,7 @@ const resolveLivingSectionSong = (
   block: string,
   livingSectionIndex: number | undefined
 ): string | undefined => {
-  const allSongs: Array<{ index: number; number: string }> = [];
+  const allSongs: { index: number; number: string }[] = [];
   SONG_GENERIC_REGEX.lastIndex = 0;
   let songMatch: RegExpExecArray | null;
 
@@ -859,7 +860,7 @@ const resolveMeetingTimes = (
   baseStartDate: Date,
   sections: MidweekSection[]
 ): { startDate: Date; endDate: Date } => {
-  const times: Array<{ hour: number; minute: number }> = [];
+  const times: { hour: number; minute: number }[] = [];
   CLOCK_TIME_REGEX.lastIndex = 0;
   let clockMatch: RegExpExecArray | null;
 

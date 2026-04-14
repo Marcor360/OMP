@@ -6,16 +6,17 @@ import 'react-native-reanimated';
 import { useEffect } from 'react';
 import { LogBox } from 'react-native';
 
-LogBox.ignoreLogs([
-  "expo-notifications: Android Push notifications functionality provided by expo-notifications was removed from Expo Go",
-]);
-
 import { AuthProvider, useAuth } from '@/src/context/auth-context';
 import { ThemeModeProvider, useAppTheme } from '@/src/context/theme-context';
+import { I18nProvider } from '@/src/i18n/index';
 import { getAppColors } from '@/src/styles';
 import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
 import { useInitialPermissions } from '@/src/hooks/use-initial-permissions';
 import { useCacheControlCleanup } from '@/src/hooks/use-cache-control-cleanup';
+
+LogBox.ignoreLogs([
+  "expo-notifications: Android Push notifications functionality provided by expo-notifications was removed from Expo Go",
+]);
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -52,7 +53,7 @@ function RootLayoutNav() {
       // Usuario autenticado → redirigir a dashboard con tabs
       router.replace('/(protected)/(tabs)/' as any);
     }
-  }, [user, loading, segments]);
+  }, [user, loading, segments, router]);
 
   return (
     <Stack>
@@ -106,7 +107,9 @@ function AppLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? NavigationThemes.dark : NavigationThemes.light}>
       <AuthProvider>
-        <RootLayoutNav />
+        <I18nProvider>
+          <RootLayoutNav />
+        </I18nProvider>
       </AuthProvider>
       <StatusBar
         style={colorScheme === 'dark' ? 'light' : 'dark'}

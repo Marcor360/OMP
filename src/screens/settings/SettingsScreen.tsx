@@ -1,13 +1,7 @@
 import React from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Switch,
-  Platform,
-} from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
@@ -15,19 +9,40 @@ import { ThemedText } from '@/src/components/themed-text';
 import { PermissionRow } from '@/src/components/common/PermissionRow';
 import { useAppTheme } from '@/src/context/theme-context';
 import { useUser } from '@/src/context/user-context';
+import { useI18n } from '@/src/i18n/index';
 import { usePermissions } from '@/src/hooks/use-permissions';
 import { ROLE_LABELS } from '@/src/types/user';
 import { type AppColors, useAppColors } from '@/src/styles';
+import { canManageUsers, canManageMeetings, canManageAssignments, canManageCleaning } from '@/src/utils/permissions/permissions';
 
 export function SettingsScreen() {
+  const router = useRouter();
   const { appUser } = useUser();
   const { isDarkMode, toggleThemeMode } = useAppTheme();
+  const { t, language, setLanguage } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const permissions = usePermissions();
 
-  const handleToggleTheme = () => {
-    void toggleThemeMode();
+  const handleToggleTheme = async () => {
+    await toggleThemeMode();
+  };
+
+  const handleNavigateToTheme = () => {
+    router.push('/(protected)/settings/theme' as any);
+  };
+
+  const handleNavigateToLanguage = () => {
+    router.push('/(protected)/settings/language' as any);
+  };
+
+  const handleNavigateToAbout = () => {
+    router.push('/(protected)/settings/about' as any);
+  };
+
+  const handleToggleLanguage = async () => {
+    const nextLanguage = language === 'es' ? 'en' : 'es';
+    await setLanguage(nextLanguage);
   };
 
   function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -83,71 +98,101 @@ export function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
 
         {/* ── Cuenta ── */}
-        <Section title="Cuenta">
+        <Section title={t('settings.section.account')}>
           <SettingRow
             icon="person-circle-outline"
-            label="Nombre"
+            label={t('settings.account.fullName')}
             value={appUser?.displayName ?? '--'}
           />
           <SettingRow
             icon="mail-outline"
-            label="Correo"
+            label={t('settings.account.email')}
             value={appUser?.email ?? '--'}
           />
           <SettingRow
             icon="shield-checkmark-outline"
-            label="Rol"
+            label={t('settings.account.role')}
             value={appUser ? ROLE_LABELS[appUser.role] : '--'}
           />
         </Section>
 
         {/* ── Administración (solo admin) ── */}
         <RoleGuard requiredRole="admin">
-          <Section title="Administracion">
+          <Section title={t('settings.section.administration')}>
             <SettingRow
               icon="people-outline"
-              label="Gestion de usuarios"
-              value="Ver usuarios"
+              label={t('settings.admin.userManagement')}
               showArrow
+              onPress={() => router.push('/(protected)/users' as any)}
             />
             <SettingRow
-              icon="stats-chart-outline"
-              label="Reportes del sistema"
-              value="Proximamente"
+              icon="calendar-outline"
+              label={t('settings.admin.meetingManagement')}
+              showArrow
+              onPress={() => router.push('/(protected)/meetings' as any)}
             />
             <SettingRow
-              icon="server-outline"
-              label="Configuracion de Firebase"
-              value="ormeprassig-public"
+              icon="checkmark-done-outline"
+              label={t('settings.admin.assignmentManagement')}
+              showArrow
+              onPress={() => router.push('/(protected)/assignments' as any)}
+            />
+            <SettingRow
+              icon="sparkles-outline"
+              label={t('settings.admin.cleaningGroups')}
+              showArrow
+              onPress={() => router.push('/(protected)/cleaning' as any)}
+            />
+            <SettingRow
+              icon="notifications-outline"
+              label={t('settings.admin.notifications')}
+              showArrow
+              onPress={() => {
+                // Scroll to permissions section or open notifications settings
+              }}
             />
           </Section>
         </RoleGuard>
 
-        {/* ── Gestión (admin + supervisor) ── */}
-        <RoleGuard allowedRoles={['admin', 'supervisor']}>
-          <Section title="Gestion">
-            <SettingRow
-              icon="calendar-outline"
-              label="Reuniones activas"
-              value="Ver calendario"
-              showArrow
-            />
-            <SettingRow
-              icon="checkmark-done-outline"
-              label="Asignaciones pendientes"
-              value="Ver asignaciones"
-              showArrow
-            />
-          </Section>
-        </RoleGuard>
+        {/* ── Organización (todos los roles) ── */}
+        <Section title={t('settings.section.organization')}>
+          <SettingRow
+            icon="calendar-outline"
+            label={t('settings.organization.meetingCalendar')}
+            value={t('common.view')}
+            showArrow
+            onPress={() => router.push('/(protected)/meetings' as any)}
+          />
+          <SettingRow
+            icon="person-outline"
+            label={t('settings.organization.myAssignments')}
+            value={t('common.view')}
+            showArrow
+            onPress={() => router.push('/(protected)/assignments' as any)}
+          />
+          <SettingRow
+            icon="time-outline"
+            label={t('settings.organization.upcomingResponsibilities')}
+            value={t('common.view')}
+            showArrow
+            onPress={() => router.push('/(protected)/dashboard' as any)}
+          />
+          <SettingRow
+            icon="archive-outline"
+            label={t('settings.organization.assignmentHistory')}
+            value={t('common.view')}
+            showArrow
+            onPress={() => router.push('/(protected)/assignments' as any)}
+          />
+        </Section>
 
         {/* ── Permisos del dispositivo (solo móvil) ── */}
         {Platform.OS !== 'web' && (
           <Section title="Permisos del dispositivo">
             <PermissionRow
               icon="notifications-outline"
-              title="Notificaciones"
-              description="Recibe alertas sobre asignaciones, reuniones y grupos de limpieza."
+              title={t('permission.notifications.title')}
+              description={t('permission.notifications.description')}
               status={permissions.state.notifications}
               onRequest={permissions.requestNotifications}
               onOpenSettings={permissions.openSettings}
@@ -157,32 +202,53 @@ export function SettingsScreen() {
         )}
 
         {/* ── Aplicación ── */}
-        <Section title="Aplicacion">
+        <Section title={t('settings.section.application')}>
           <SettingRow
-            icon="moon-outline"
-            label="Modo oscuro"
-            value={isDarkMode ? 'Activo' : 'Inactivo'}
-            onPress={handleToggleTheme}
-            rightElement={
-              <Switch
-                value={isDarkMode}
-                onValueChange={handleToggleTheme}
-                trackColor={{ false: colors.border, true: colors.primaryLight }}
-                thumbColor={isDarkMode ? colors.primary : colors.surfaceRaised}
-              />
-            }
+            icon="color-palette-outline"
+            label={t('settings.app.theme')}
+            value={isDarkMode ? t('theme.option.dark') : t('theme.option.light')}
+            showArrow
+            onPress={handleNavigateToTheme}
           />
-          <SettingRow icon="language-outline" label="Idioma" value="Espanol" />
-          <SettingRow icon="information-circle-outline" label="Version" value="1.0.0" />
+          <SettingRow
+            icon="language-outline"
+            label={t('settings.app.language')}
+            value={language === 'es' ? 'Español' : 'English'}
+            showArrow
+            onPress={handleNavigateToLanguage}
+          />
+          <SettingRow
+            icon="information-circle-outline"
+            label={t('settings.app.version')}
+            value="1.3.5"
+            showArrow
+            onPress={handleNavigateToAbout}
+          />
         </Section>
 
         {/* ── Legal ── */}
-        <Section title="Legal">
-          <SettingRow icon="document-text-outline" label="Terminos de uso" showArrow />
+        <Section title={t('settings.section.legal')}>
+          <SettingRow
+            icon="document-text-outline"
+            label={t('settings.legal.terms')}
+            showArrow
+            onPress={() => {
+              // Placeholder para términos de uso
+            }}
+          />
           <SettingRow
             icon="lock-closed-outline"
-            label="Politica de privacidad"
+            label={t('settings.legal.privacy')}
             showArrow
+            onPress={() => {
+              // Placeholder para política de privacidad
+            }}
+          />
+          <SettingRow
+            icon="information-circle-outline"
+            label={t('settings.legal.about')}
+            showArrow
+            onPress={handleNavigateToAbout}
           />
         </Section>
       </ScrollView>

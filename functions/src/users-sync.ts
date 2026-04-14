@@ -1,6 +1,6 @@
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import * as functionsV1 from 'firebase-functions/v1';
+import * as functions from 'firebase-functions';
 import { logger } from 'firebase-functions/v2';
 import { onDocumentDeleted } from 'firebase-functions/v2/firestore';
 
@@ -13,7 +13,7 @@ const isAuthUserNotFound = (error: unknown): boolean => {
   return code === "auth/user-not-found";
 };
 
-export const deleteUserProfileOnAuthDelete = functionsV1
+export const deleteUserProfileOnAuthDelete = functions
   .region('us-central1')
   .auth.user()
   .onDelete(async (user) => {
