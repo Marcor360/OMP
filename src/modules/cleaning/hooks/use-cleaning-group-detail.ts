@@ -11,7 +11,10 @@ interface UseCleaningGroupDetailResult {
 }
 
 /** Carga el detalle de un grupo de limpieza por su ID. */
-export function useCleaningGroupDetail(groupId: string): UseCleaningGroupDetailResult {
+export function useCleaningGroupDetail(
+  groupId: string,
+  congregationId?: string | null
+): UseCleaningGroupDetailResult {
   const [group, setGroup] = useState<CleaningGroup | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +35,7 @@ export function useCleaningGroupDetail(groupId: string): UseCleaningGroupDetailR
 
     const load = async () => {
       try {
-        const data = await getCleaningGroupById(groupId);
+        const data = await getCleaningGroupById(groupId, congregationId);
         if (!cancelled) {
           setGroup(data);
           if (!data) setError('El grupo no fue encontrado.');
@@ -53,7 +56,7 @@ export function useCleaningGroupDetail(groupId: string): UseCleaningGroupDetailR
     return () => {
       cancelled = true;
     };
-  }, [groupId, refreshKey]);
+  }, [congregationId, groupId, refreshKey]);
 
   return { group, loading, error, refresh };
 }

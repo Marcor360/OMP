@@ -42,6 +42,30 @@ const isUserRole = (value: unknown): value is UserRole =>
 const isUserStatus = (value: unknown): value is UserStatus =>
   value === 'active' || value === 'inactive' || value === 'suspended';
 
+const normalizeRole = (value: unknown): UserRole => {
+  if (isUserRole(value)) return value;
+  if (typeof value !== 'string') return 'user';
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'admin' || normalized === 'administrador') return 'admin';
+  if (normalized === 'supervisor') return 'supervisor';
+  if (normalized === 'user' || normalized === 'usuario') return 'user';
+
+  return 'user';
+};
+
+const normalizeStatus = (value: unknown): UserStatus | undefined => {
+  if (isUserStatus(value)) return value;
+  if (typeof value !== 'string') return undefined;
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'active' || normalized === 'activo') return 'active';
+  if (normalized === 'inactive' || normalized === 'inactivo') return 'inactive';
+  if (normalized === 'suspended' || normalized === 'suspendido') return 'suspended';
+
+  return undefined;
+};
+
 const isUserServicePosition = (value: unknown): value is UserServicePosition => {
   return (
     value === 'coordinador' ||
@@ -91,15 +115,16 @@ const normalizeStringArray = (value: unknown): string[] => {
 };
 
 export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
-  const role = isUserRole(data.role) ? data.role : 'user';
+  const role = normalizeRole(data.role);
+  const normalizedStatus = normalizeStatus(data.status);
   const isActive =
     typeof data.isActive === 'boolean'
       ? data.isActive
       : typeof data.active === 'boolean'
         ? data.active
-      : data.status === 'active';
-  const status = isUserStatus(data.status)
-    ? data.status
+      : normalizedStatus === 'active';
+  const status = normalizedStatus
+    ? normalizedStatus
     : isActive
       ? 'active'
       : 'inactive';

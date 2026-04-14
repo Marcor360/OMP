@@ -1,8 +1,10 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -53,6 +55,15 @@ export function AddMembersToCleaningGroupModal({
     currentGroupId
   );
 
+  useEffect(() => {
+    if (visible) {
+      setSelectedIds(preSelectedIds);
+      return;
+    }
+
+    setSearch('');
+  }, [preSelectedIds, visible]);
+
   const filteredUsers = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return users;
@@ -74,11 +85,20 @@ export function AddMembersToCleaningGroupModal({
   };
 
   const newSelections = selectedIds.filter((id) => !preSelectedIds.includes(id));
+  const isCreateMode = currentGroupId === null;
+  const hasSelectionChangedInCreateMode =
+    selectedIds.length !== preSelectedIds.length ||
+    selectedIds.some((id) => !preSelectedIds.includes(id));
+  const canConfirm = isCreateMode ? hasSelectionChangedInCreateMode : newSelections.length > 0;
 
   const styles = StyleSheet.create({
     overlay: {
       flex: 1,
       backgroundColor: colors.overlay,
+      justifyContent: 'flex-end',
+    },
+    keyboardWrap: {
+      flex: 1,
       justifyContent: 'flex-end',
     },
     sheet: {
@@ -218,6 +238,10 @@ export function AddMembersToCleaningGroupModal({
       statusBarTranslucent
     >
       <SafeAreaView style={styles.overlay}>
+        <KeyboardAvoidingView
+          style={styles.keyboardWrap}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
         <View style={styles.sheet}>
           <View style={styles.handle} />
 
@@ -275,6 +299,7 @@ export function AddMembersToCleaningGroupModal({
                 </Text>
               }
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             />
           )}
 
@@ -290,25 +315,32 @@ export function AddMembersToCleaningGroupModal({
             <TouchableOpacity
               style={[
                 styles.confirmBtn,
-                (newSelections.length === 0 || confirming) && styles.confirmBtnDisabled,
+                (!canConfirm || confirming) && styles.confirmBtnDisabled,
               ]}
               onPress={handleConfirm}
-              disabled={newSelections.length === 0 || confirming}
+              disabled={!canConfirm || confirming}
               accessibilityRole="button"
-              accessibilityLabel={`Agregar ${newSelections.length} usuario${newSelections.length !== 1 ? 's' : ''}`}
+              accessibilityLabel={
+                isCreateMode
+                  ? 'Guardar seleccion de integrantes'
+                  : `Agregar ${newSelections.length} usuario${newSelections.length !== 1 ? 's' : ''}`
+              }
             >
               {confirming ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <Text style={styles.confirmText}>
-                  {newSelections.length === 0
-                    ? 'Seleccionar usuarios'
-                    : `Agregar ${newSelections.length} usuario${newSelections.length !== 1 ? 's' : ''}`}
+                  {isCreateMode
+                    ? 'Guardar seleccion'
+                    : newSelections.length === 0
+                      ? 'Seleccionar usuarios'
+                      : `Agregar ${newSelections.length} usuario${newSelections.length !== 1 ? 's' : ''}`}
                 </Text>
               )}
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
   );

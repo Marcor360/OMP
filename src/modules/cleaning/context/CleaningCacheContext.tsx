@@ -10,6 +10,7 @@ import {
   CleaningGroup,
   CleaningAssignableUser,
 } from '@/src/modules/cleaning/types/cleaning-group.types';
+import { formatFirestoreError } from '@/src/utils/errors/errors';
 
 const CACHE_KEY_GROUPS = '@cleaning_groups';
 const CACHE_KEY_USERS = '@cleaning_assignable_users';
@@ -40,7 +41,7 @@ export const CleaningCacheProvider: React.FC<{ children: React.ReactNode }> = ({
     groups: [],
     assignableUsers: [],
     lastSyncAt: null,
-    loading: true,
+    loading: false,
     error: null,
   });
 
@@ -86,15 +87,16 @@ export const CleaningCacheProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!congregationId) return;
     try {
       const data = await getCleaningGroups(congregationId);
+      const now = Date.now();
       setState((prev) => {
-        const newState = { ...prev, groups: data, error: null };
+        const newState = { ...prev, groups: data, error: null, lastSyncAt: now };
         void saveToAsyncStorage(data, prev.assignableUsers);
         return newState;
       });
     } catch (err) {
       setState((prev) => ({
         ...prev,
-        error: err instanceof Error ? err.message : 'Error al sincronizar grupos',
+        error: formatFirestoreError(err),
       }));
     }
   }, []);
@@ -103,15 +105,16 @@ export const CleaningCacheProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!congregationId) return;
     try {
       const data = await getCleaningAssignableUsers(congregationId, currentGroupId);
+      const now = Date.now();
       setState((prev) => {
-        const newState = { ...prev, assignableUsers: data, error: null };
+        const newState = { ...prev, assignableUsers: data, error: null, lastSyncAt: now };
         void saveToAsyncStorage(prev.groups, data);
         return newState;
       });
     } catch (err) {
       setState((prev) => ({
         ...prev,
-        error: err instanceof Error ? err.message : 'Error al sincronizar usuarios',
+        error: formatFirestoreError(err),
       }));
     }
   }, []);
@@ -140,7 +143,7 @@ export const CleaningCacheProvider: React.FC<{ children: React.ReactNode }> = ({
         setState((prev) => ({
           ...prev,
           loading: false,
-          error: err instanceof Error ? err.message : 'Error global de sincronización',
+          error: formatFirestoreError(err),
         }));
       }
     },
@@ -197,3 +200,4 @@ export const useCleaningCache = () => {
   }
   return context;
 };
+

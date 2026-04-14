@@ -15,6 +15,7 @@ import { ThemeModeProvider, useAppTheme } from '@/src/context/theme-context';
 import { getAppColors } from '@/src/styles';
 import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
 import { useInitialPermissions } from '@/src/hooks/use-initial-permissions';
+import { useCacheControlCleanup } from '@/src/hooks/use-cache-control-cleanup';
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -33,6 +34,9 @@ function RootLayoutNav() {
     uid: user?.uid ?? null,
     isAuthenticated: !!user,
   });
+
+  // Limpieza controlada de cache temporal cuando backend lo solicite.
+  useCacheControlCleanup();
 
   useEffect(() => {
     if (loading) {

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
+import { Ionicons } from '@expo/vector-icons';
 
 import { priorityColor } from '@/src/components/common/StatusBadge';
 import { LoadingState } from '@/src/components/common/LoadingState';
@@ -20,9 +21,11 @@ import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
 import { createAssignment, getAssignmentById, updateAssignment } from '@/src/services/assignments/assignments-service';
 import { getAllMeetings } from '@/src/services/meetings/meetings-service';
+import { getAllUsers } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AssignmentPriority, ASSIGNMENT_PRIORITY_LABELS, UpdateAssignmentDTO } from '@/src/types/assignment';
 import { Meeting } from '@/src/types/meeting';
+import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
@@ -31,6 +34,7 @@ type Mode = 'create' | 'edit';
 type FormErrors = {
   title?: string;
   meetingId?: string;
+  assignedTo?: string;
 };
 
 export function AssignmentFormScreen() {
@@ -49,6 +53,9 @@ export function AssignmentFormScreen() {
   const [priority, setPriority] = useState<AssignmentPriority>('medium');
   const [assignedToName, setAssignedToName] = useState('');
   const [assignedToUid, setAssignedToUid] = useState('');
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [meetingId, setMeetingId] = useState('');
   const [meetings, setMeetings] = useState<Meeting[]>([]);
 
@@ -67,6 +74,10 @@ export function AssignmentFormScreen() {
     const loadData = async () => {
       try {
         const meetingsPromise = getAllMeetings(congregationId);
+        const usersPromise =
+          isAdminOrSupervisor
+            ? getAllUsers(congregationId, { forceServer: true })
+            : Promise.resolve<AppUser[]>([]);
         const assignmentPromise =
           mode === 'edit' && id
             ? getAssignmentById(
@@ -76,13 +87,32 @@ export function AssignmentFormScreen() {
               )
             : Promise.resolve(null);
 
-        const [meetingDocs, assignmentDoc] = await Promise.all([meetingsPromise, assignmentPromise]);
+        const [meetingDocs, usersDocs, assignmentDoc] = await Promise.all([
+          meetingsPromise,
+          usersPromise,
+          assignmentPromise,
+        ]);
 
         setMeetings(meetingDocs);
+        const activeUsers = usersDocs.filter((item) => item.isActive);
+        setUsers(activeUsers);
 
         if (mode === 'create') {
           if (meetingDocs[0]) {
             setMeetingId(meetingDocs[0].id);
+          }
+
+          const defaultAssignee =
+            activeUsers.find((item) => item.uid === user?.uid) ?? activeUsers[0] ?? null;
+
+          if (defaultAssignee) {
+            setAssignedToUid(defaultAssignee.uid);
+            setAssignedToName(defaultAssignee.displayName);
+            setUserSearch(defaultAssignee.displayName);
+          } else {
+            setAssignedToUid('');
+            setAssignedToName(appUser?.displayName ?? '');
+            setUserSearch('');
           }
           return;
         }
@@ -98,6 +128,7 @@ export function AssignmentFormScreen() {
         setPriority(assignmentDoc.priority);
         setAssignedToName(assignmentDoc.assignedToName);
         setAssignedToUid(assignmentDoc.assignedToUid);
+        setUserSearch(assignmentDoc.assignedToName ?? '');
         setMeetingId(assignmentDoc.meetingId ?? '');
       } catch (requestError) {
         Alert.alert('Error', formatFirestoreError(requestError));
@@ -108,12 +139,26 @@ export function AssignmentFormScreen() {
     };
 
     void loadData();
-  }, [congregationId, id, loadingProfile, meetingIdParam, mode, router]);
+  }, [
+    appUser?.displayName,
+    congregationId,
+    id,
+    isAdminOrSupervisor,
+    loadingProfile,
+    meetingIdParam,
+    mode,
+    router,
+    user?.uid,
+  ]);
 
   const validate = (): boolean => {
     const nextErrors: FormErrors = {
       title: validateRequired(title, 'El titulo'),
       meetingId: validateRequired(meetingId, 'La reunion'),
+      assignedTo:
+        mode === 'create'
+          ? validateRequired(assignedToUid, 'La persona asignada')
+          : undefined,
     };
 
     setErrors(nextErrors);
@@ -175,11 +220,61 @@ export function AssignmentFormScreen() {
     [meetings]
   );
 
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+    if (!q) return users;
+
+    return users.filter((item) => {
+      const name = item.displayName.toLowerCase();
+      const email = item.email.toLowerCase();
+      return name.includes(q) || email.includes(q);
+    });
+  }, [userSearch, users]);
+
+  const selectAssignee = (selectedUser: AppUser) => {
+    setAssignedToUid(selectedUser.uid);
+    setAssignedToName(selectedUser.displayName);
+    setUserSearch(selectedUser.displayName);
+    setIsUserDropdownOpen(false);
+    setErrors((current) => ({ ...current, assignedTo: undefined }));
+  };
+
+  const toggleUserDropdown = () => {
+    setIsUserDropdownOpen((current) => {
+      const next = !current;
+      if (next) {
+        setUserSearch('');
+      }
+      return next;
+    });
+  };
+
   if (loading || loadingProfile) return <LoadingState />;
 
+  if (!isAdminOrSupervisor) {
+    return (
+      <ScreenContainer scrollable={false} padded={false}>
+        <PageHeader title={mode === 'create' ? 'Nueva asignacion' : 'Editar asignacion'} showBack />
+        <View style={styles.form}>
+          <View style={styles.permissionNotice}>
+            <ThemedText style={styles.permissionText}>
+              No tienes permisos para crear o editar asignaciones.
+            </ThemedText>
+            <ThemedText style={styles.hintText}>
+              Esta accion solo esta disponible para administradores y supervisores.
+            </ThemedText>
+          </View>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   const priorities: AssignmentPriority[] = ['low', 'medium', 'high', 'critical'];
-  const canSave = isAdminOrSupervisor && meetings.length > 0;
+  const canEditForm = isAdminOrSupervisor;
+  const hasAssignableUsers = mode !== 'create' || users.length > 0;
+  const canSave = isAdminOrSupervisor && meetings.length > 0 && hasAssignableUsers;
   const noMeetings = meetings.length === 0;
+  const noAssignableUsers = mode === 'create' && isAdminOrSupervisor && users.length === 0;
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
@@ -189,16 +284,18 @@ export function AssignmentFormScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {!isAdminOrSupervisor ? (
-          <View style={styles.permissionNotice}>
-            <ThemedText style={styles.permissionText}>No tienes permisos para guardar cambios en asignaciones.</ThemedText>
-          </View>
-        ) : null}
-
         {noMeetings ? (
           <View style={styles.permissionNotice}>
             <ThemedText style={styles.permissionText}>
               Debes tener al menos una reunion en tu congregacion para crear asignaciones.
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {noAssignableUsers ? (
+          <View style={styles.permissionNotice}>
+            <ThemedText style={styles.permissionText}>
+              No hay usuarios activos en tu congregacion para asignar.
             </ThemedText>
           </View>
         ) : null}
@@ -210,7 +307,7 @@ export function AssignmentFormScreen() {
             onChangeText={setTitle}
             placeholder="Ej: Preparar informe mensual"
             placeholderTextColor={colors.textDisabled}
-            editable={canSave}
+            editable={canEditForm}
           />
         </Field>
 
@@ -223,7 +320,7 @@ export function AssignmentFormScreen() {
             placeholderTextColor={colors.textDisabled}
             multiline
             numberOfLines={4}
-            editable={canSave}
+            editable={canEditForm}
           />
         </Field>
 
@@ -235,7 +332,7 @@ export function AssignmentFormScreen() {
                 style={[styles.chip, meetingId === meeting.id && styles.chipActive]}
                 onPress={() => setMeetingId(meeting.id)}
                 activeOpacity={0.8}
-                disabled={!canSave || mode === 'edit'}
+                disabled={!canEditForm || mode === 'edit'}
               >
                 <ThemedText style={[styles.chipText, meetingId === meeting.id && styles.chipTextActive]}>
                   {meeting.title}
@@ -260,7 +357,7 @@ export function AssignmentFormScreen() {
                 ]}
                 onPress={() => setPriority(item)}
                 activeOpacity={0.8}
-                disabled={!canSave}
+                disabled={!canEditForm}
               >
                 <ThemedText style={[styles.chipText, priority === item && styles.chipTextActive]}>
                   {ASSIGNMENT_PRIORITY_LABELS[item]}
@@ -270,16 +367,76 @@ export function AssignmentFormScreen() {
           </View>
         </Field>
 
-        {mode === 'create' && (
-          <Field label="Asignar a (nombre)">
-            <TextInput
-              style={styles.input}
-              value={assignedToName}
-              onChangeText={setAssignedToName}
-              placeholder="Nombre del responsable"
-              placeholderTextColor={colors.textDisabled}
-              editable={canSave}
-            />
+        {mode === 'create' && isAdminOrSupervisor && (
+          <Field label="Asignar a (usuarios de la congregacion)" error={errors.assignedTo}>
+            <TouchableOpacity
+              style={[styles.selectTrigger, errors.assignedTo && styles.inputError]}
+              onPress={toggleUserDropdown}
+              activeOpacity={0.8}
+              disabled={!canEditForm}
+            >
+              <ThemedText style={assignedToUid ? styles.selectTriggerText : styles.selectPlaceholderText}>
+                {assignedToUid ? assignedToName : 'Seleccionar usuario'}
+              </ThemedText>
+              <Ionicons
+                name={isUserDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={colors.textMuted}
+              />
+            </TouchableOpacity>
+
+            {isUserDropdownOpen ? (
+              <View style={styles.userDropdownPanel}>
+                <TextInput
+                  style={styles.input}
+                  value={userSearch}
+                  onChangeText={setUserSearch}
+                  placeholder="Escribe nombre o correo"
+                  placeholderTextColor={colors.textDisabled}
+                  editable={canEditForm}
+                />
+
+                <ScrollView
+                  style={styles.userDropdownList}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {filteredUsers.map((item, index) => {
+                    const selected = assignedToUid === item.uid;
+                    const isLast = index === filteredUsers.length - 1;
+                    return (
+                      <TouchableOpacity
+                        key={item.uid}
+                        style={[
+                          styles.userItem,
+                          selected && styles.userItemSelected,
+                          isLast && styles.userItemLast,
+                        ]}
+                        onPress={() => selectAssignee(item)}
+                        activeOpacity={0.8}
+                        disabled={!canEditForm}
+                      >
+                        <View style={styles.userInfo}>
+                          <ThemedText style={styles.userName}>{item.displayName}</ThemedText>
+                          <ThemedText style={styles.userEmail}>{item.email}</ThemedText>
+                        </View>
+                        {selected ? (
+                          <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
+
+            {isUserDropdownOpen && users.length > 0 && filteredUsers.length === 0 ? (
+              <ThemedText style={styles.hintText}>No hay coincidencias para tu busqueda.</ThemedText>
+            ) : null}
+
+            {assignedToUid ? (
+              <ThemedText style={styles.hintText}>Seleccionado: {assignedToName}</ThemedText>
+            ) : null}
           </Field>
         )}
 
@@ -377,6 +534,77 @@ const createStyles = (colors: AppColorSet) =>
       fontWeight: '600',
     },
     hintText: {
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    userList: {
+      marginTop: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.backgroundLight,
+      overflow: 'hidden',
+    },
+    selectTrigger: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    selectTriggerText: {
+      flex: 1,
+      fontSize: 15,
+      color: colors.textPrimary,
+      fontWeight: '600',
+    },
+    selectPlaceholderText: {
+      flex: 1,
+      fontSize: 15,
+      color: colors.textDisabled,
+    },
+    userDropdownPanel: {
+      marginTop: 8,
+      gap: 8,
+    },
+    userDropdownList: {
+      maxHeight: 220,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.backgroundLight,
+    },
+    userItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    userItemLast: {
+      borderBottomWidth: 0,
+    },
+    userItemSelected: {
+      backgroundColor: colors.primary + '14',
+    },
+    userInfo: {
+      flex: 1,
+      gap: 2,
+    },
+    userName: {
+      fontSize: 14,
+      color: colors.textPrimary,
+      fontWeight: '600',
+    },
+    userEmail: {
       fontSize: 12,
       color: colors.textMuted,
     },

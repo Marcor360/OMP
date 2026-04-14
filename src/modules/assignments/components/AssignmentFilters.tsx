@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/src/components/themed-text';
 import {
@@ -13,6 +13,7 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
 interface AssignmentFiltersProps {
   filters: AssignmentFilterValues;
+  congregationName: string;
   activeTab: AssignmentCategory;
   onUpdate: <K extends keyof AssignmentFilterValues>(
     key: K,
@@ -35,6 +36,7 @@ const SUBTYPE_FILTERS = ['all', 'microphone', 'platform'] as const;
 
 export function AssignmentFilters({
   filters,
+  congregationName,
   activeTab,
   onUpdate,
   onSelectCategory,
@@ -58,36 +60,30 @@ export function AssignmentFilters({
       </View>
 
       <Field label="Fecha exacta (AAAA-MM-DD)">
-        <TextInput
-          style={styles.input}
+        <DateFieldInput
           value={filters.exactDate}
           onChangeText={(value) => onUpdate('exactDate', value)}
           placeholder="2026-04-12"
-          placeholderTextColor={colors.textDisabled}
         />
       </Field>
 
       <View style={styles.inlineFields}>
         <View style={styles.inlineItem}>
           <Field label="Desde">
-            <TextInput
-              style={styles.input}
+            <DateFieldInput
               value={filters.rangeStart}
               onChangeText={(value) => onUpdate('rangeStart', value)}
               placeholder="2026-04-01"
-              placeholderTextColor={colors.textDisabled}
             />
           </Field>
         </View>
 
         <View style={styles.inlineItem}>
           <Field label="Hasta">
-            <TextInput
-              style={styles.input}
+            <DateFieldInput
               value={filters.rangeEnd}
               onChangeText={(value) => onUpdate('rangeEnd', value)}
               placeholder="2026-04-30"
-              placeholderTextColor={colors.textDisabled}
             />
           </Field>
         </View>
@@ -151,10 +147,12 @@ export function AssignmentFilters({
 
       <Field label="Congregacion">
         <TextInput
-          style={styles.input}
-          value={filters.congregationId}
-          onChangeText={(value) => onUpdate('congregationId', value)}
-          placeholder="ID de congregacion"
+          style={[styles.input, styles.readOnlyInput]}
+          value={congregationName}
+          editable={false}
+          selectTextOnFocus={false}
+          pointerEvents="none"
+          placeholder={filters.congregationId}
           placeholderTextColor={colors.textDisabled}
           autoCapitalize="none"
         />
@@ -195,6 +193,52 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <ThemedText style={styles.label}>{label}</ThemedText>
       {children}
     </View>
+  );
+}
+
+function DateFieldInput({
+  value,
+  onChangeText,
+  placeholder,
+}: {
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.webDateWrap}>
+        <input
+          type="date"
+          value={value}
+          onChange={(event) => onChangeText(event.target.value)}
+          placeholder={placeholder}
+          style={{
+            width: '100%',
+            border: 'none',
+            outline: 'none',
+            background: 'transparent',
+            color: colors.textPrimary,
+            fontSize: 14,
+            fontFamily: 'inherit',
+            lineHeight: '20px',
+          }}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <TextInput
+      style={styles.input}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={colors.textDisabled}
+    />
   );
 }
 
@@ -250,6 +294,17 @@ const createStyles = (colors: AppColorSet) =>
       paddingVertical: 10,
       color: colors.textPrimary,
       fontSize: 14,
+    },
+    readOnlyInput: {
+      opacity: 0.95,
+    },
+    webDateWrap: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      backgroundColor: colors.backgroundLight,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
     },
     inlineFields: {
       flexDirection: 'row',

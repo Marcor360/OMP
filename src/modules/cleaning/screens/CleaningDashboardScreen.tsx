@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   RefreshControl,
   SafeAreaView,
   StyleSheet,
@@ -37,8 +39,11 @@ export function CleaningDashboardScreen() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    refresh();
-    setRefreshing(false);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   // Estadísticas calculadas localmente
@@ -82,6 +87,9 @@ export function CleaningDashboardScreen() {
     container: {
       flex: 1,
       backgroundColor: colors.backgroundDark,
+    },
+    keyboardContainer: {
+      flex: 1,
     },
     header: {
       paddingHorizontal: 20,
@@ -183,6 +191,10 @@ export function CleaningDashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       {/* Header */}
       <View style={styles.header}>
         <View>
@@ -305,7 +317,9 @@ export function CleaningDashboardScreen() {
           </View>
         }
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

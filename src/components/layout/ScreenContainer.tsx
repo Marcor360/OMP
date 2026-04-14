@@ -1,5 +1,8 @@
 import React from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
+  type KeyboardAvoidingViewProps,
   View,
   ScrollView,
   StyleSheet,
@@ -18,6 +21,8 @@ interface ScreenContainerProps {
   contentStyle?: ViewStyle;
   padded?: boolean;
   safeAreaEdges?: Edge[];
+  keyboardAware?: boolean;
+  keyboardVerticalOffset?: number;
 }
 
 /**
@@ -33,9 +38,13 @@ export function ScreenContainer({
   contentStyle,
   padded = true,
   safeAreaEdges = ['top', 'bottom'],
+  keyboardAware = true,
+  keyboardVerticalOffset = 0,
 }: ScreenContainerProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const keyboardBehavior: KeyboardAvoidingViewProps['behavior'] =
+    Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined;
 
   const inner = (
     <View style={[styles.inner, padded && styles.padded, contentStyle]}>
@@ -43,29 +52,40 @@ export function ScreenContainer({
     </View>
   );
 
+  const content = scrollable ? (
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        ) : undefined
+      }
+    >
+      {inner}
+    </ScrollView>
+  ) : (
+    inner
+  );
+
   return (
     <SafeAreaView style={[styles.safe, style]} edges={safeAreaEdges}>
-      {scrollable ? (
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            onRefresh ? (
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={colors.primary}
-                colors={[colors.primary]}
-              />
-            ) : undefined
-          }
-        >
-          {inner}
-        </ScrollView>
-      ) : (
-        inner
-      )}
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        enabled={keyboardAware}
+        behavior={keyboardBehavior}
+        keyboardVerticalOffset={keyboardVerticalOffset}
+      >
+        {content}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -81,6 +101,9 @@ const createStyles = (colors: AppColorSet) =>
     },
     scrollContent: {
       flexGrow: 1,
+    },
+    keyboardContainer: {
+      flex: 1,
     },
     inner: {
       flex: 1,

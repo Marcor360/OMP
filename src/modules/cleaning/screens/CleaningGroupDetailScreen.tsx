@@ -2,7 +2,8 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
+  KeyboardAvoidingView,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -17,6 +18,7 @@ import { useAppColors } from '@/src/styles';
 import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning-permission';
 import { useCleaningGroupDetail } from '@/src/modules/cleaning/hooks/use-cleaning-group-detail';
 import { useCleaningAssignableUsers } from '@/src/modules/cleaning/hooks/use-cleaning-assignable-users';
+import { useCleaningCache } from '@/src/modules/cleaning/context/CleaningCacheContext';
 import { CleaningMemberItem } from '@/src/modules/cleaning/components/CleaningMemberItem';
 import { AddMembersToCleaningGroupModal } from '@/src/modules/cleaning/screens/AddMembersToCleaningGroupModal';
 import {
@@ -27,20 +29,23 @@ import {
 import { CleaningServiceError } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { ErrorState } from '@/src/components/common/ErrorState';
-import { AppUser } from '@/src/types/user';
 
 interface CleaningGroupDetailScreenProps {
   groupId: string;
 }
 
-/** Pantalla de detalle y gestión de un grupo de limpieza. */
+/** Pantalla de detalle y gestion de un grupo de limpieza. */
 export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreenProps) {
   const colors = useAppColors();
   const router = useRouter();
   const { congregationId } = useCleaningPermission();
+  const { refreshAll } = useCleaningCache();
 
-  const { group, loading, error, refresh } = useCleaningGroupDetail(groupId);
-  const { users: allUsers } = useCleaningAssignableUsers(congregationId, groupId);
+  const { group, loading, error, refresh } = useCleaningGroupDetail(groupId, congregationId);
+  const { users: allUsers, refresh: refreshAssignableUsers } = useCleaningAssignableUsers(
+    congregationId,
+    groupId
+  );
 
   const [removingUid, setRemovingUid] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -48,7 +53,14 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
   const [deletingGroup, setDeletingGroup] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Busca datos de integrantes a partir de la lista enriquecida
+  const syncCaches = useCallback(async () => {
+    await refreshAssignableUsers();
+    if (congregationId) {
+      await refreshAll(congregationId).catch(() => undefined);
+    }
+    refresh();
+  }, [congregationId, refresh, refreshAll, refreshAssignableUsers]);
+
   const memberProfiles = group
     ? group.memberIds.map((uid) => {
         const found = allUsers.find((u) => u.uid === uid);
@@ -62,17 +74,9 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
 
   const handleRemoveMember = useCallback(
     async (uid: string) => {
-      if (group && group.memberCount <= 2) {
-        Alert.alert(
-          'Acción no permitida',
-          'Un grupo de limpieza debe mantener al menos 2 integrantes. Agrega otro integrante antes de remover a este.'
-        );
-        return;
-      }
-
       Alert.alert(
         'Quitar integrante',
-        '¿Estás seguro de que deseas quitar a este usuario del grupo?',
+        'Estas seguro de que deseas quitar a este usuario del grupo?',
         [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -82,8 +86,8 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
               setRemovingUid(uid);
               setActionError(null);
               try {
-                await removeUserFromCleaningGroup(groupId, uid);
-                refresh();
+                await removeUserFromCleaningGroup(groupId, uid, congregationId);
+                await syncCaches();
               } catch (err) {
                 setActionError(
                   err instanceof CleaningServiceError
@@ -98,21 +102,21 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
         ]
       );
     },
-    [groupId, refresh]
+    [congregationId, groupId, syncCaches]
   );
 
   const handleAddMembers = async (selectedIds: string[]) => {
     setAddingMembers(true);
     setActionError(null);
     try {
-      await addUsersToCleaningGroup(groupId, selectedIds, group?.name);
+      await addUsersToCleaningGroup(groupId, selectedIds, group?.name, {
+        congregationId,
+      });
       setShowAddModal(false);
-      refresh();
+      await syncCaches();
     } catch (err) {
       setActionError(
-        err instanceof CleaningServiceError
-          ? err.message
-          : 'Error al agregar integrantes.'
+        err instanceof CleaningServiceError ? err.message : 'Error al agregar integrantes.'
       );
     } finally {
       setAddingMembers(false);
@@ -122,7 +126,7 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
   const handleDeleteGroup = () => {
     Alert.alert(
       'Desactivar grupo',
-      `¿Deseas desactivar el grupo "${group?.name ?? ''}"? Los integrantes quedarán liberados.`,
+      `Deseas desactivar el grupo "${group?.name ?? ''}"? Los integrantes quedaran liberados.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -132,7 +136,10 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
             setDeletingGroup(true);
             setActionError(null);
             try {
-              await deactivateCleaningGroup(groupId);
+              await deactivateCleaningGroup(groupId, congregationId);
+              if (congregationId) {
+                await refreshAll(congregationId).catch(() => undefined);
+              }
               router.back();
             } catch (err) {
               setActionError(
@@ -290,10 +297,15 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
     bottomSpace: {
       height: 40,
     },
+    keyboardContainer: {
+      flex: 1,
+    },
   });
 
   if (loading) return <LoadingState message="Cargando grupo..." />;
-  if (error || !group) return <ErrorState message={error ?? 'Grupo no encontrado.'} onRetry={refresh} />;
+  if (error || !group) {
+    return <ErrorState message={error ?? 'Grupo no encontrado.'} onRetry={refresh} />;
+  }
 
   const isActive = group.isActive;
   const statusBg = isActive ? colors.successLight : colors.surfaceRaised;
@@ -301,8 +313,14 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView keyboardShouldPersistTaps="handled">
-        {/* Header */}
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      >
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backBtn}
@@ -325,7 +343,6 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
           </TouchableOpacity>
         </View>
 
-        {/* Info card */}
         <View style={styles.infoCard}>
           <View style={styles.nameRow}>
             <Text style={styles.groupName} numberOfLines={2}>
@@ -338,9 +355,7 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
             </View>
           </View>
 
-          {group.description.length > 0 && (
-            <Text style={styles.description}>{group.description}</Text>
-          )}
+          {group.description.length > 0 && <Text style={styles.description}>{group.description}</Text>}
 
           <View style={styles.metaRow}>
             <Ionicons name="people-outline" size={14} color={colors.textMuted} />
@@ -350,7 +365,6 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
           </View>
         </View>
 
-        {/* Error banner */}
         {actionError && (
           <View style={styles.errorBanner}>
             <Ionicons name="alert-circle-outline" size={18} color={colors.error} />
@@ -358,11 +372,8 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
           </View>
         )}
 
-        {/* Integrantes */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionLabel}>
-            Integrantes ({group.memberCount})
-          </Text>
+          <Text style={styles.sectionLabel}>Integrantes ({group.memberCount})</Text>
           <TouchableOpacity
             style={styles.addMembersBtn}
             onPress={() => setShowAddModal(true)}
@@ -376,7 +387,7 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
 
         <View style={styles.membersCard}>
           {memberProfiles.length === 0 ? (
-            <Text style={styles.noMembers}>Este grupo no tiene integrantes aún.</Text>
+            <Text style={styles.noMembers}>Este grupo no tiene integrantes aun.</Text>
           ) : (
             memberProfiles.map((m) => (
               <CleaningMemberItem
@@ -391,7 +402,6 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
           )}
         </View>
 
-        {/* Desactivar grupo */}
         <TouchableOpacity
           style={styles.deleteBtn}
           onPress={handleDeleteGroup}
@@ -411,8 +421,8 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
 
         <View style={styles.bottomSpace} />
       </ScrollView>
+      </KeyboardAvoidingView>
 
-      {/* Modal agregar integrantes */}
       <AddMembersToCleaningGroupModal
         visible={showAddModal}
         congregationId={congregationId}

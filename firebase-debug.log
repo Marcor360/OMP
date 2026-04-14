@@ -458,3 +458,15 @@
 [debug] [2026-04-12T04:09:56.681Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
 [debug] [2026-04-12T04:09:56.682Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
 [info] ormeprassig-public
+[debug] [2026-04-14T00:09:58.595Z] ----------------------------------------------------------------------
+[debug] [2026-04-14T00:09:58.597Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\bin\firebase.js use
+[debug] [2026-04-14T00:09:58.597Z] CLI Version:   15.14.0
+[debug] [2026-04-14T00:09:58.597Z] Platform:      win32
+[debug] [2026-04-14T00:09:58.597Z] Node Version:  v24.14.0
+[debug] [2026-04-14T00:09:58.597Z] Time:          Mon Apr 13 2026 18:09:58 GMT-0600 (hora estándar central)
+[debug] [2026-04-14T00:09:58.597Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-14T00:09:58.599Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-04-14T00:09:58.805Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-14T00:09:58.805Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[info] ormeprassig-public

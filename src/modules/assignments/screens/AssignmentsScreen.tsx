@@ -1,6 +1,7 @@
-import React, { useCallback } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 import { EmptyState } from '@/src/components/common/EmptyState';
 import { ErrorState } from '@/src/components/common/ErrorState';
@@ -18,14 +19,17 @@ import {
   Assignment,
   ASSIGNMENT_CATEGORY_LABELS,
 } from '@/src/modules/assignments/types/assignment.types';
+import { getCongregationDisplayName } from '@/src/services/congregations/congregations-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { useUser } from '@/src/context/user-context';
+import { RoleGuard } from '@/src/components/common/RoleGuard';
 
 export function AssignmentsScreen() {
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { congregationId, loadingProfile, profileError } = useUser();
+  const [congregationName, setCongregationName] = useState('Sin congregacion');
 
   const {
     activeTab,
@@ -47,6 +51,29 @@ export function AssignmentsScreen() {
     congregationId,
     filters,
   });
+
+  useEffect(() => {
+    if (!congregationId) {
+      setCongregationName('Sin congregacion');
+      return;
+    }
+
+    let cancelled = false;
+
+    getCongregationDisplayName(congregationId, { forceServer: true })
+      .then((name) => {
+        if (cancelled) return;
+        setCongregationName(name);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCongregationName(congregationId);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [congregationId]);
 
   const openDetail = useCallback(
     (assignment: Assignment) => {
@@ -89,7 +116,22 @@ export function AssignmentsScreen() {
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
-      <PageHeader title="Asignaciones" subtitle="Panel de solo lectura" />
+      <PageHeader
+        title="Asignaciones"
+        subtitle="Panel de solo lectura"
+        actions={
+          <RoleGuard allowedRoles={['admin', 'supervisor']}>
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={() => router.push('/(protected)/assignments/create' as never)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={16} color={colors.primary} />
+              <ThemedText style={styles.createButtonText}>Nuevo</ThemedText>
+            </TouchableOpacity>
+          </RoleGuard>
+        }
+      />
 
       <FlatList
         data={assignments}
@@ -109,6 +151,7 @@ export function AssignmentsScreen() {
 
             <AssignmentFilters
               filters={filters}
+              congregationName={congregationName}
               activeTab={activeTab}
               onUpdate={updateFilter}
               onSelectCategory={setCategory}
@@ -181,6 +224,22 @@ const createStyles = (colors: AppColorSet) =>
       fontSize: 12,
       color: colors.textMuted,
       fontWeight: '600',
+    },
+    createButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderColor: colors.primary + '66',
+      backgroundColor: colors.primary + '1A',
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+    },
+    createButtonText: {
+      color: colors.primary,
+      fontWeight: '700',
+      fontSize: 12,
     },
     emptyWrap: {
       minHeight: 260,

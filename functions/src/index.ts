@@ -20,3 +20,7 @@ export {
   notifyCongregationAssignmentUsers,
   notifyMeetingAssignmentUsers,
 } from './modules/notifications/notifyAssignmentUsers.js';
+
+export {
+  scheduledDataCleanup,
+} from "./maintenance/scheduled-data-cleanup.js";

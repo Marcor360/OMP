@@ -4,7 +4,9 @@
  */
 import {
   addDoc,
+  collection,
   deleteDoc,
+  doc,
   getDocs,
   query,
   runTransaction,
@@ -16,8 +18,6 @@ import {
 
 import { db } from '@/src/lib/firebase/app';
 import {
-  cleaningGroupDocRef,
-  cleaningGroupsCollectionRef,
   userDocRef,
   usersCollectionRef,
 } from '@/src/lib/firebase/refs';
@@ -29,6 +29,129 @@ import {
   CreateCleaningGroupDTO,
   UpdateCleaningGroupDTO,
 } from '@/src/modules/cleaning/types/cleaning-group.types';
+
+const resolveIsUserActive = (userData: Record<string, unknown>): boolean => {
+  if (typeof userData.isActive === 'boolean') return userData.isActive;
+  if (typeof userData.active === 'boolean') return userData.active;
+  if (typeof userData.status === 'string') return userData.status === 'active';
+  return false;
+};
+
+const resolveUserCongregationId = (userData: Record<string, unknown>): string | null => {
+  if (typeof userData.congregationId === 'string' && userData.congregationId.length > 0) {
+    return userData.congregationId;
+  }
+  return null;
+};
+
+const CLEANING_GROUP_COLLECTION_CANDIDATES = [
+  'cleaningGroups',
+  'cleaning_groups',
+] as const;
+
+type CleaningGroupCollectionName = (typeof CLEANING_GROUP_COLLECTION_CANDIDATES)[number];
+type CleaningGroupStorageMode = 'scoped' | 'scoped_legacy' | CleaningGroupCollectionName;
+
+const isPermissionDeniedError = (error: unknown): boolean => {
+  if (typeof error !== 'object' || error === null) return false;
+  if (!('code' in error)) return false;
+  return String((error as { code?: unknown }).code) === 'permission-denied';
+};
+
+const cleaningGroupsCollectionRefByName = (collectionName: CleaningGroupCollectionName) =>
+  collection(db, collectionName);
+
+const cleaningGroupDocRefByName = (
+  collectionName: CleaningGroupCollectionName,
+  groupId: string
+) => doc(db, collectionName, groupId);
+
+const cleaningGroupsScopedCollectionRef = (congregationId: string) =>
+  collection(db, 'congregations', congregationId, 'cleaningGroups');
+
+const cleaningGroupsScopedLegacyCollectionRef = (congregationId: string) =>
+  collection(db, 'congregations', congregationId, 'cleaning_groups');
+
+const cleaningGroupScopedDocRef = (congregationId: string, groupId: string) =>
+  doc(db, 'congregations', congregationId, 'cleaningGroups', groupId);
+
+const cleaningGroupScopedLegacyDocRef = (congregationId: string, groupId: string) =>
+  doc(db, 'congregations', congregationId, 'cleaning_groups', groupId);
+
+const resolveGroupStorageModes = (
+  congregationId?: string | null
+): CleaningGroupStorageMode[] =>
+  congregationId && congregationId.trim().length > 0
+    ? ['scoped', 'scoped_legacy', ...CLEANING_GROUP_COLLECTION_CANDIDATES]
+    : [...CLEANING_GROUP_COLLECTION_CANDIDATES];
+
+const cleaningGroupsCollectionRefByMode = (
+  mode: CleaningGroupStorageMode,
+  congregationId?: string | null
+) => {
+  if (mode === 'scoped' || mode === 'scoped_legacy') {
+    if (!congregationId) {
+      throw new CleaningServiceError(
+        'INVALID_DATA',
+        'congregationId es requerido para consultar grupos de limpieza.'
+      );
+    }
+    return mode === 'scoped'
+      ? cleaningGroupsScopedCollectionRef(congregationId)
+      : cleaningGroupsScopedLegacyCollectionRef(congregationId);
+  }
+  return cleaningGroupsCollectionRefByName(mode);
+};
+
+const cleaningGroupDocRefByMode = (
+  mode: CleaningGroupStorageMode,
+  groupId: string,
+  congregationId?: string | null
+) => {
+  if (mode === 'scoped' || mode === 'scoped_legacy') {
+    if (!congregationId) {
+      throw new CleaningServiceError(
+        'INVALID_DATA',
+        'congregationId es requerido para acceder al grupo de limpieza.'
+      );
+    }
+    return mode === 'scoped'
+      ? cleaningGroupScopedDocRef(congregationId, groupId)
+      : cleaningGroupScopedLegacyDocRef(congregationId, groupId);
+  }
+  return cleaningGroupDocRefByName(mode, groupId);
+};
+
+const resolveExistingGroupStorageMode = async (
+  groupId: string,
+  congregationId?: string | null
+): Promise<CleaningGroupStorageMode> => {
+  let permissionError: unknown = null;
+  let hadReadableCollection = false;
+  const modes = resolveGroupStorageModes(congregationId);
+
+  for (const mode of modes) {
+    try {
+      const snap = await getDoc(cleaningGroupDocRefByMode(mode, groupId, congregationId));
+      hadReadableCollection = true;
+      if (snap.exists()) {
+        return mode;
+      }
+    } catch (error) {
+      if (isPermissionDeniedError(error)) {
+        permissionError = permissionError ?? error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (!hadReadableCollection && permissionError) {
+    throw permissionError;
+  }
+
+  return modes[0];
+};
 
 // ─── Mapeador: raw Firestore doc → CleaningGroup ─────────────────────────────
 
@@ -56,7 +179,7 @@ const resolveUserMemberStatus = (
   userData: Record<string, unknown>,
   currentGroupId: string | null
 ): CleaningMemberStatus => {
-  const isActive = typeof userData.isActive === 'boolean' ? userData.isActive : false;
+  const isActive = resolveIsUserActive(userData);
   const eligible =
     typeof userData.cleaningEligible === 'boolean' ? userData.cleaningEligible : true;
   const assignedGroupId =
@@ -89,12 +212,7 @@ export const createCleaningGroup = async (
   if (!dto.name.trim()) {
     throw new CleaningServiceError('INVALID_DATA', 'El nombre del grupo es requerido.');
   }
-  if (initialMemberIds.length < 2) {
-    throw new CleaningServiceError('INVALID_DATA', 'Un grupo de limpieza debe crearse con al menos 2 integrantes.');
-  }
-
-  // Crear documento del grupo primero para obtener el ID
-  const groupRef = await addDoc(cleaningGroupsCollectionRef(), {
+  const payload = {
     name: dto.name.trim(),
     description: dto.description?.trim() ?? '',
     congregationId,
@@ -104,12 +222,57 @@ export const createCleaningGroup = async (
     createdBy,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  const storageModes = resolveGroupStorageModes(congregationId);
+  let selectedStorageMode: CleaningGroupStorageMode = storageModes[0];
+  let groupRef: Awaited<ReturnType<typeof addDoc>> | null = null;
+  let permissionError: unknown = null;
+
+  for (const mode of storageModes) {
+    try {
+      groupRef = await addDoc(cleaningGroupsCollectionRefByMode(mode, congregationId), payload);
+      selectedStorageMode = mode;
+      break;
+    } catch (error) {
+      if (isPermissionDeniedError(error)) {
+        permissionError = permissionError ?? error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (!groupRef) {
+    if (permissionError) throw permissionError;
+    throw new CleaningServiceError(
+      'TRANSACTION_FAILED',
+      'No se pudo crear el grupo de limpieza.'
+    );
+  }
 
   const groupId = groupRef.id;
 
-  // Agregar integrantes iniciales asegurando transaccionalidad
-  await addUsersToCleaningGroup(groupId, initialMemberIds, dto.name.trim());
+  if (initialMemberIds.length > 0) {
+    try {
+      // Agregar integrantes iniciales asegurando transaccionalidad
+      await addUsersToCleaningGroup(
+        groupId,
+        initialMemberIds,
+        dto.name.trim(),
+        {
+          congregationId,
+          storageMode: selectedStorageMode,
+        }
+      );
+    } catch (error) {
+      // Rollback defensivo si falla la asignacion inicial.
+      await deleteDoc(
+        cleaningGroupDocRefByMode(selectedStorageMode, groupId, congregationId)
+      );
+      throw error;
+    }
+  }
 
   return groupId;
 };
@@ -121,27 +284,86 @@ export const getCleaningGroups = async (
   congregationId: string
 ): Promise<CleaningGroup[]> => {
   if (!congregationId) return [];
+  let permissionError: unknown = null;
+  let hadReadableCollection = false;
+  const storageModes = resolveGroupStorageModes(congregationId);
 
-  const q = query(
-    cleaningGroupsCollectionRef(),
-    where('congregationId', '==', congregationId)
-  );
+  for (const mode of storageModes) {
+    try {
+      const q =
+        mode === 'scoped' || mode === 'scoped_legacy'
+          ? query(cleaningGroupsCollectionRefByMode(mode, congregationId))
+          : query(
+              cleaningGroupsCollectionRefByMode(mode, congregationId),
+              where('congregationId', '==', congregationId)
+            );
+      const snap = await getDocs(q);
 
-  const snap = await getDocs(q);
-  return snap.docs.map((d) =>
-    normalizeCleaningGroup(d.id, d.data() as Record<string, unknown>)
-  );
+      hadReadableCollection = true;
+      if (snap.size === 0) {
+        continue;
+      }
+
+      return snap.docs.map((d) => {
+        const group = normalizeCleaningGroup(d.id, d.data() as Record<string, unknown>);
+        if (!group.congregationId) {
+          return { ...group, congregationId };
+        }
+        return group;
+      });
+    } catch (error) {
+      if (isPermissionDeniedError(error)) {
+        permissionError = permissionError ?? error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (hadReadableCollection) {
+    return [];
+  }
+  if (permissionError) {
+    throw permissionError;
+  }
+
+  return [];
 };
 
 // ─── getCleaningGroupById ─────────────────────────────────────────────────────
 
 /** Obtiene un grupo por ID. Retorna null si no existe. */
 export const getCleaningGroupById = async (
-  groupId: string
+  groupId: string,
+  congregationId?: string | null
 ): Promise<CleaningGroup | null> => {
-  const snap = await getDoc(cleaningGroupDocRef(groupId));
-  if (!snap.exists()) return null;
-  return normalizeCleaningGroup(snap.id, snap.data() as Record<string, unknown>);
+  let permissionError: unknown = null;
+  const storageModes = resolveGroupStorageModes(congregationId);
+
+  for (const mode of storageModes) {
+    try {
+      const snap = await getDoc(cleaningGroupDocRefByMode(mode, groupId, congregationId));
+      if (!snap.exists()) continue;
+
+      const group = normalizeCleaningGroup(snap.id, snap.data() as Record<string, unknown>);
+      if (!group.congregationId && congregationId) {
+        return { ...group, congregationId };
+      }
+      return group;
+    } catch (error) {
+      if (isPermissionDeniedError(error)) {
+        permissionError = permissionError ?? error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (permissionError) {
+    throw permissionError;
+  }
+
+  return null;
 };
 
 // ─── updateCleaningGroup ──────────────────────────────────────────────────────
@@ -149,7 +371,8 @@ export const getCleaningGroupById = async (
 /** Actualiza nombre, descripción o estado de un grupo. */
 export const updateCleaningGroup = async (
   groupId: string,
-  dto: UpdateCleaningGroupDTO
+  dto: UpdateCleaningGroupDTO,
+  congregationId?: string | null
 ): Promise<void> => {
   const payload: Record<string, unknown> = { updatedAt: serverTimestamp() };
 
@@ -157,7 +380,8 @@ export const updateCleaningGroup = async (
   if (dto.description !== undefined) payload.description = dto.description.trim();
   if (typeof dto.isActive === 'boolean') payload.isActive = dto.isActive;
 
-  await updateDoc(cleaningGroupDocRef(groupId), payload);
+  const storageMode = await resolveExistingGroupStorageMode(groupId, congregationId);
+  await updateDoc(cleaningGroupDocRefByMode(storageMode, groupId, congregationId), payload);
 };
 
 // ─── addUsersToCleaningGroup ──────────────────────────────────────────────────
@@ -169,13 +393,26 @@ export const updateCleaningGroup = async (
 export const addUsersToCleaningGroup = async (
   groupId: string,
   userIds: string[],
-  groupName?: string
+  groupName?: string,
+  options?: {
+    congregationId?: string | null;
+    storageMode?: CleaningGroupStorageMode;
+  }
 ): Promise<void> => {
   if (userIds.length === 0) return;
+  const uniqueUserIds = Array.from(new Set(userIds));
+  const storageMode =
+    options?.storageMode ??
+    (await resolveExistingGroupStorageMode(groupId, options?.congregationId));
+  const groupRef = cleaningGroupDocRefByMode(
+    storageMode,
+    groupId,
+    options?.congregationId
+  );
 
   await runTransaction(db, async (tx) => {
     // 1. Leer el grupo dentro de la transacción
-    const groupSnap = await tx.get(cleaningGroupDocRef(groupId));
+    const groupSnap = await tx.get(groupRef);
     if (!groupSnap.exists()) {
       throw new CleaningServiceError('GROUP_NOT_FOUND', 'El grupo no existe.');
     }
@@ -184,22 +421,37 @@ export const addUsersToCleaningGroup = async (
     const currentMemberIds: string[] = Array.isArray(groupData.memberIds)
       ? (groupData.memberIds as string[])
       : [];
+    const groupCongregationId =
+      typeof groupData.congregationId === 'string' ? groupData.congregationId : '';
     const resolvedGroupName =
       groupName ?? (typeof groupData.name === 'string' ? groupData.name : '');
 
     // 2. Leer todos los usuarios candidatos
-    const userSnaps = await Promise.all(userIds.map((uid) => tx.get(userDocRef(uid))));
+    const userSnaps = await Promise.all(
+      uniqueUserIds.map((uid) => tx.get(userDocRef(uid)))
+    );
 
     const newMemberIds = [...currentMemberIds];
 
     for (let i = 0; i < userSnaps.length; i++) {
       const snap = userSnaps[i];
-      const uid = userIds[i];
+      const uid = uniqueUserIds[i];
 
       if (!snap.exists()) continue;
 
       const data = snap.data() as Record<string, unknown>;
-      const isActive = typeof data.isActive === 'boolean' ? data.isActive : false;
+      const userCongregationId = resolveUserCongregationId(data);
+      if (
+        groupCongregationId.length > 0 &&
+        (!userCongregationId || userCongregationId !== groupCongregationId)
+      ) {
+        throw new CleaningServiceError(
+          'INVALID_DATA',
+          `El usuario "${data.displayName ?? uid}" no pertenece a la congregacion del grupo.`
+        );
+      }
+
+      const isActive = resolveIsUserActive(data);
       const eligible =
         typeof data.cleaningEligible === 'boolean' ? data.cleaningEligible : true;
       const existingGroupId =
@@ -220,7 +472,7 @@ export const addUsersToCleaningGroup = async (
       }
 
       if (!isActive || !eligible) continue; // Omitir sin error
-      if (currentMemberIds.includes(uid)) continue; // Ya está en el grupo
+      if (newMemberIds.includes(uid)) continue; // Ya está en el grupo
 
       // 3. Actualizar el usuario dentro de la transacción
       tx.update(userDocRef(uid), {
@@ -233,7 +485,7 @@ export const addUsersToCleaningGroup = async (
     }
 
     // 4. Actualizar el grupo
-    tx.update(cleaningGroupDocRef(groupId), {
+    tx.update(groupRef, {
       memberIds: newMemberIds,
       memberCount: newMemberIds.length,
       updatedAt: serverTimestamp(),
@@ -249,10 +501,14 @@ export const addUsersToCleaningGroup = async (
  */
 export const removeUserFromCleaningGroup = async (
   groupId: string,
-  userId: string
+  userId: string,
+  congregationId?: string | null
 ): Promise<void> => {
+  const storageMode = await resolveExistingGroupStorageMode(groupId, congregationId);
+  const groupRef = cleaningGroupDocRefByMode(storageMode, groupId, congregationId);
+
   await runTransaction(db, async (tx) => {
-    const groupSnap = await tx.get(cleaningGroupDocRef(groupId));
+    const groupSnap = await tx.get(groupRef);
     if (!groupSnap.exists()) {
       throw new CleaningServiceError('GROUP_NOT_FOUND', 'El grupo no existe.');
     }
@@ -271,13 +527,6 @@ export const removeUserFromCleaningGroup = async (
 
     const newMemberIds = currentMemberIds.filter((id) => id !== userId);
 
-    if (newMemberIds.length < 2) {
-      throw new CleaningServiceError(
-        'INVALID_DATA',
-        'El grupo de limpieza debe mantener al menos 2 integrantes.'
-      );
-    }
-
     // Liberar el usuario
     tx.update(userDocRef(userId), {
       cleaningGroupId: null,
@@ -286,7 +535,7 @@ export const removeUserFromCleaningGroup = async (
     });
 
     // Actualizar el grupo
-    tx.update(cleaningGroupDocRef(groupId), {
+    tx.update(groupRef, {
       memberIds: newMemberIds,
       memberCount: newMemberIds.length,
       updatedAt: serverTimestamp(),
@@ -300,9 +549,15 @@ export const removeUserFromCleaningGroup = async (
  * Elimina un grupo (hard delete).
  * Primero libera a todos sus integrantes dentro de una transacción.
  */
-export const deleteCleaningGroup = async (groupId: string): Promise<void> => {
+export const deleteCleaningGroup = async (
+  groupId: string,
+  congregationId?: string | null
+): Promise<void> => {
+  const storageMode = await resolveExistingGroupStorageMode(groupId, congregationId);
+  const groupRef = cleaningGroupDocRefByMode(storageMode, groupId, congregationId);
+
   await runTransaction(db, async (tx) => {
-    const groupSnap = await tx.get(cleaningGroupDocRef(groupId));
+    const groupSnap = await tx.get(groupRef);
     if (!groupSnap.exists()) {
       throw new CleaningServiceError('GROUP_NOT_FOUND', 'El grupo no existe.');
     }
@@ -322,7 +577,7 @@ export const deleteCleaningGroup = async (groupId: string): Promise<void> => {
     }
 
     // Eliminar el grupo
-    tx.delete(cleaningGroupDocRef(groupId));
+    tx.delete(groupRef);
   });
 };
 
@@ -332,9 +587,15 @@ export const deleteCleaningGroup = async (groupId: string): Promise<void> => {
  * Desactiva un grupo (isActive = false) y libera a todos sus integrantes.
  * Alternativa no destructiva a deleteCleaningGroup.
  */
-export const deactivateCleaningGroup = async (groupId: string): Promise<void> => {
+export const deactivateCleaningGroup = async (
+  groupId: string,
+  congregationId?: string | null
+): Promise<void> => {
+  const storageMode = await resolveExistingGroupStorageMode(groupId, congregationId);
+  const groupRef = cleaningGroupDocRefByMode(storageMode, groupId, congregationId);
+
   await runTransaction(db, async (tx) => {
-    const groupSnap = await tx.get(cleaningGroupDocRef(groupId));
+    const groupSnap = await tx.get(groupRef);
     if (!groupSnap.exists()) {
       throw new CleaningServiceError('GROUP_NOT_FOUND', 'El grupo no existe.');
     }
@@ -352,7 +613,7 @@ export const deactivateCleaningGroup = async (groupId: string): Promise<void> =>
       });
     }
 
-    tx.update(cleaningGroupDocRef(groupId), {
+    tx.update(groupRef, {
       isActive: false,
       memberIds: [],
       memberCount: 0,
@@ -374,11 +635,7 @@ export const getCleaningAssignableUsers = async (
 ): Promise<CleaningAssignableUser[]> => {
   if (!congregationId) return [];
 
-  const q = query(
-    usersCollectionRef(),
-    where('congregationId', '==', congregationId),
-    where('isActive', '==', true)
-  );
+  const q = query(usersCollectionRef(), where('congregationId', '==', congregationId));
 
   const snap = await getDocs(q);
 
@@ -404,7 +661,7 @@ export const getCleaningAssignableUsers = async (
             : uid,
       email: typeof data.email === 'string' ? data.email : '',
       congregationId: typeof data.congregationId === 'string' ? data.congregationId : '',
-      isActive: typeof data.isActive === 'boolean' ? data.isActive : false,
+      isActive: resolveIsUserActive(data),
       cleaningGroupId: assignedGroupId,
       cleaningGroupName: assignedGroupName,
       cleaningEligible:

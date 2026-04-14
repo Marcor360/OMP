@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useCleaningCache } from '@/src/modules/cleaning/context/CleaningCacheContext';
 import {
   CleaningAssignableUser,
@@ -9,7 +9,7 @@ interface UseCleaningAssignableUsersResult {
   users: CleaningAssignableUser[];
   loading: boolean;
   error: string | null;
-  refresh: () => void;
+  refresh: () => Promise<void>;
   selectableUsers: CleaningAssignableUser[];
 }
 
@@ -32,19 +32,25 @@ export function useCleaningAssignableUsers(
   congregationId: string,
   currentGroupId: string | null = null
 ): UseCleaningAssignableUsersResult {
-  const { assignableUsers, loading, error, refreshUsers, lastSyncAt, refreshAll } = useCleaningCache();
+  const { assignableUsers, loading, error, refreshUsers } = useCleaningCache();
+  const initialSyncForCongregationRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Si no tenemos sincro inicial y no está cargando el general, disparamos
-    if (congregationId && !lastSyncAt && !loading && assignableUsers.length === 0) {
-      void refreshAll(congregationId);
+    if (!congregationId) {
+      initialSyncForCongregationRef.current = null;
+      return;
     }
-  }, [congregationId, lastSyncAt, loading, assignableUsers.length, refreshAll]);
+    if (initialSyncForCongregationRef.current === congregationId) return;
 
-  const refresh = useCallback(() => {
+    initialSyncForCongregationRef.current = congregationId;
+    void refreshUsers(congregationId, null);
+  }, [congregationId, refreshUsers]);
+
+  const refresh = useCallback(async () => {
     if (congregationId) {
       // Pedimos refresh de datos base (currentGroupId=null) al caché para evitar contaminar el scope global
-      void refreshUsers(congregationId, null);
+      await refreshUsers(congregationId, null);
     }
   }, [congregationId, refreshUsers]);
 

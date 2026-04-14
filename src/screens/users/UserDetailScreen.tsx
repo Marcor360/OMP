@@ -11,12 +11,13 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
+import { getCongregationDisplayName } from '@/src/services/congregations/congregations-service';
 import {
   deleteUserByAdmin,
   disableUserByAdmin,
   updateUserByAdmin,
 } from '@/src/services/users/admin-users-service';
-import { getUserById } from '@/src/services/users/users-service';
+import { subscribeToUser } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser, ROLE_LABELS, STATUS_LABELS, UserStatus } from '@/src/types/user';
 import { formatDate } from '@/src/utils/dates/dates';
@@ -30,6 +31,7 @@ export function UserDetailScreen() {
   const styles = createStyles(colors);
 
   const [user, setUser] = useState<AppUser | null>(null);
+  const [congregationName, setCongregationName] = useState<string>('--');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
@@ -39,28 +41,71 @@ export function UserDetailScreen() {
     if (loadingProfile) return;
 
     if (!id || !congregationId) {
+      setUser(null);
+      setCongregationName('--');
       setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
       setLoading(false);
       return;
     }
 
-    getUserById(id)
-      .then((loadedUser) => {
+    setLoading(true);
+    setError(null);
+
+    const unsubscribe = subscribeToUser(
+      id,
+      (loadedUser) => {
         if (!loadedUser) {
+          setUser(null);
           setError('Usuario no encontrado.');
+          setLoading(false);
           return;
         }
 
         if (loadedUser.congregationId !== congregationId) {
+          setUser(null);
           setError('No tienes permisos para ver este usuario.');
+          setLoading(false);
           return;
         }
 
         setUser(loadedUser);
-      })
-      .catch((requestError) => setError(formatFirestoreError(requestError)))
-      .finally(() => setLoading(false));
+        setError(null);
+        setLoading(false);
+      },
+      (requestError) => {
+        setUser(null);
+        setError(formatFirestoreError(requestError));
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
   }, [congregationId, id, loadingProfile, profileError]);
+
+  useEffect(() => {
+    if (!user?.congregationId) {
+      setCongregationName('--');
+      return;
+    }
+
+    let cancelled = false;
+
+    getCongregationDisplayName(user.congregationId, { forceServer: true })
+      .then((resolvedName) => {
+        if (cancelled) return;
+        setCongregationName(resolvedName);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCongregationName(user.congregationId);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.congregationId]);
 
   const handleToggleStatus = async () => {
     if (!user) return;
@@ -194,7 +239,7 @@ export function UserDetailScreen() {
         <View style={styles.card}>
           <InfoRow icon="call-outline" label="Telefono" value={user.phone ?? '--'} />
           <InfoRow icon="business-outline" label="Departamento" value={user.department ?? '--'} />
-          <InfoRow icon="home-outline" label="Congregacion" value={user.congregationId} />
+          <InfoRow icon="home-outline" label="Congregacion" value={congregationName} />
           <InfoRow icon="calendar-outline" label="Creado" value={formatDate(user.createdAt)} />
           <InfoRow icon="time-outline" label="Actualizado" value={formatDate(user.updatedAt)} />
         </View>

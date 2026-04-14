@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -12,12 +14,14 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAppColors } from '@/src/styles';
+import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning-permission';
 import { useCleaningGroupDetail } from '@/src/modules/cleaning/hooks/use-cleaning-group-detail';
 import {
   CleaningGroupForm,
   CleaningGroupFormValues,
   validateCleaningGroupForm,
 } from '@/src/modules/cleaning/components/CleaningGroupForm';
+import { useCleaningCache } from '@/src/modules/cleaning/context/CleaningCacheContext';
 import { updateCleaningGroup } from '@/src/modules/cleaning/services/cleaning-service';
 import { CleaningServiceError } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { LoadingState } from '@/src/components/common/LoadingState';
@@ -31,7 +35,12 @@ interface EditCleaningGroupScreenProps {
 export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProps) {
   const colors = useAppColors();
   const router = useRouter();
-  const { group, loading, error, refresh } = useCleaningGroupDetail(groupId);
+  const { congregationId, loading: permLoading } = useCleaningPermission();
+  const { group, loading, error, refresh } = useCleaningGroupDetail(
+    groupId,
+    congregationId
+  );
+  const { refreshAll } = useCleaningCache();
 
   const [formValues, setFormValues] = useState<CleaningGroupFormValues>({
     name: '',
@@ -71,8 +80,11 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
         name: formValues.name,
         description: formValues.description,
         isActive: formValues.isActive,
-      });
-      router.back();
+      }, congregationId);
+      if (group?.congregationId) {
+        await refreshAll(group.congregationId).catch(() => undefined);
+      }
+      router.replace(`/(protected)/cleaning/${groupId}`);
     } catch (err) {
       if (err instanceof CleaningServiceError) {
         setGlobalError(err.message);
@@ -105,6 +117,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
       color: colors.textPrimary,
     },
     scroll: { flex: 1 },
+    keyboardContainer: { flex: 1 },
     formContainer: {
       padding: 20,
       gap: 24,
@@ -152,11 +165,15 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
     },
   });
 
-  if (loading) return <LoadingState message="Cargando grupo..." />;
+  if (permLoading || loading) return <LoadingState message="Cargando grupo..." />;
   if (error || !group) return <ErrorState message={error ?? 'Grupo no encontrado.'} onRetry={refresh} />;
 
   return (
     <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
@@ -169,7 +186,11 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
         <Text style={styles.headerTitle}>Editar grupo</Text>
       </View>
 
-      <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      >
         <View style={styles.formContainer}>
           <Text style={styles.sectionTitle}>Información del grupo</Text>
           <CleaningGroupForm
@@ -201,6 +222,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
           <Text style={styles.saveText}>Guardar cambios</Text>
         )}
       </TouchableOpacity>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

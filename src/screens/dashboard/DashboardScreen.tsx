@@ -1,5 +1,5 @@
 ﻿import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -13,6 +13,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { NotificationsBadge } from '@/src/features/notifications/components/NotificationsBadge';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
+import { getCongregationDisplayName } from '@/src/services/congregations/congregations-service';
 import { getDashboardData } from '@/src/services/dashboard/dashboard-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Assignment } from '@/src/types/assignment';
@@ -23,14 +24,17 @@ import { canManageAssignments, canManageUsers } from '@/src/utils/permissions/pe
 
 export function DashboardScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { user } = useAuth();
   const { appUser, congregationId, role, loadingProfile, profileError } = useUser();
   const colors = useAppColors();
-  const styles = createStyles(colors);
+  const isCompact = width < 520;
+  const styles = createStyles(colors, isCompact);
 
   const [metrics, setMetrics] = useState<Partial<DashboardMetrics>>({});
   const [recentMeetings, setRecentMeetings] = useState<Meeting[]>([]);
   const [pendingAssignments, setPendingAssignments] = useState<Assignment[]>([]);
+  const [congregationName, setCongregationName] = useState<string>('Sin congregacion');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -96,6 +100,29 @@ export function DashboardScreen() {
     void loadData(false);
   }, [loadData, loadingProfile]);
 
+  useEffect(() => {
+    if (!congregationId) {
+      setCongregationName('Sin congregacion');
+      return;
+    }
+
+    let cancelled = false;
+
+    getCongregationDisplayName(congregationId, { forceServer: true })
+      .then((resolvedName) => {
+        if (cancelled) return;
+        setCongregationName(resolvedName);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCongregationName(congregationId);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [congregationId]);
+
   const onRefresh = () => {
     setRefreshing(true);
     void loadData(true);
@@ -107,9 +134,17 @@ export function DashboardScreen() {
   return (
     <ScreenContainer refreshing={refreshing} onRefresh={onRefresh}>
       <View style={styles.greeting}>
-        <View>
+        <View style={styles.greetingMain}>
           <ThemedText style={styles.greetingLabel}>Bienvenido,</ThemedText>
-          <ThemedText style={styles.greetingName}>{appUser?.displayName?.split(' ')[0] ?? 'Usuario'}</ThemedText>
+          <ThemedText style={styles.greetingName} numberOfLines={1}>
+            {appUser?.displayName?.split(' ')[0] ?? 'Usuario'}
+          </ThemedText>
+          <View style={styles.congregationPill}>
+            <Ionicons name="home-outline" size={14} color={colors.textMuted} />
+            <ThemedText style={styles.congregationPillText} numberOfLines={1}>
+              {congregationName}
+            </ThemedText>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -191,22 +226,48 @@ export function DashboardScreen() {
   );
 }
 
-const createStyles = (colors: AppColorSet) =>
+const createStyles = (colors: AppColorSet, isCompact: boolean) =>
   StyleSheet.create({
     greeting: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'center',
+      alignItems: 'flex-start',
+      gap: 12,
       marginBottom: 20,
     },
+    greetingMain: {
+      flex: 1,
+      minWidth: 0,
+      paddingRight: 8,
+    },
     greetingLabel: {
-      fontSize: 14,
+      fontSize: isCompact ? 13 : 14,
       color: colors.textMuted,
     },
     greetingName: {
-      fontSize: 26,
+      fontSize: isCompact ? 22 : 26,
       fontWeight: '800',
       color: colors.textPrimary,
+    },
+    congregationPill: {
+      marginTop: 8,
+      alignSelf: 'flex-start',
+      maxWidth: '100%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: isCompact ? 4 : 6,
+    },
+    congregationPillText: {
+      fontSize: isCompact ? 12 : 13,
+      color: colors.textSecondary,
+      fontWeight: '600',
+      flexShrink: 1,
     },
     notificationsButton: {
       minWidth: 42,

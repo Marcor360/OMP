@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -16,6 +18,7 @@ import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning
 import { CleaningGroupForm, CleaningGroupFormValues, validateCleaningGroupForm } from '@/src/modules/cleaning/components/CleaningGroupForm';
 import { AddMembersToCleaningGroupModal } from '@/src/modules/cleaning/screens/AddMembersToCleaningGroupModal';
 import { createCleaningGroup } from '@/src/modules/cleaning/services/cleaning-service';
+import { useCleaningCache } from '@/src/modules/cleaning/context/CleaningCacheContext';
 import { CleaningServiceError } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { LoadingState } from '@/src/components/common/LoadingState';
 
@@ -30,6 +33,7 @@ export function CreateCleaningGroupScreen() {
   const colors = useAppColors();
   const router = useRouter();
   const { congregationId, uid, loading: permLoading } = useCleaningPermission();
+  const { refreshAll } = useCleaningCache();
 
   const [formValues, setFormValues] = useState<CleaningGroupFormValues>(DEFAULT_FORM);
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof CleaningGroupFormValues, string>>>({});
@@ -50,11 +54,6 @@ export function CreateCleaningGroupScreen() {
       return;
     }
 
-    if (selectedMemberIds.length < 2) {
-      setGlobalError('Un grupo de limpieza debe crearse con al menos 2 integrantes.');
-      return;
-    }
-
     setFormErrors({});
     setGlobalError(null);
     setSubmitting(true);
@@ -71,6 +70,7 @@ export function CreateCleaningGroupScreen() {
         selectedMemberIds
       );
 
+      await refreshAll(congregationId).catch(() => undefined);
       router.replace(`/(protected)/cleaning/${groupId}`);
     } catch (err) {
       if (err instanceof CleaningServiceError) {
@@ -105,6 +105,9 @@ export function CreateCleaningGroupScreen() {
       color: colors.textPrimary,
     },
     scroll: {
+      flex: 1,
+    },
+    keyboardContainer: {
       flex: 1,
     },
     formContainer: {
@@ -186,6 +189,10 @@ export function CreateCleaningGroupScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -199,7 +206,11 @@ export function CreateCleaningGroupScreen() {
         <Text style={styles.headerTitle}>Nuevo grupo de limpieza</Text>
       </View>
 
-      <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      >
         <View style={styles.formContainer}>
           {/* Información del grupo */}
           <View>
@@ -249,9 +260,9 @@ export function CreateCleaningGroupScreen() {
 
       {/* Botón crear */}
       <TouchableOpacity
-        style={[styles.submitBtn, (submitting || selectedMemberIds.length < 2) && styles.submitBtnDisabled]}
+        style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
         onPress={handleSubmit}
-        disabled={submitting || selectedMemberIds.length < 2}
+        disabled={submitting}
         accessibilityRole="button"
         accessibilityLabel="Crear grupo de limpieza"
       >
@@ -261,6 +272,7 @@ export function CreateCleaningGroupScreen() {
           <Text style={styles.submitText}>Crear grupo</Text>
         )}
       </TouchableOpacity>
+      </KeyboardAvoidingView>
 
       {/* Modal de integrantes */}
       <AddMembersToCleaningGroupModal

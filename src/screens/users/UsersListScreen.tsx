@@ -11,7 +11,7 @@ import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { getAllUsers } from '@/src/services/users/users-service';
+import { getAllUsers, subscribeToUsers } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -60,8 +60,37 @@ export function UsersListScreen() {
   }, [congregationId, loadingProfile]);
 
   useEffect(() => {
-    void loadUsers(false);
-  }, [loadUsers]);
+    if (loadingProfile) return;
+
+    if (!congregationId || typeof congregationId !== 'string') {
+      setUsers([]);
+      setError('No se encontro la congregacion del usuario actual.');
+      setLoading(false);
+      return;
+    }
+
+    setError(null);
+
+    const unsubscribe = subscribeToUsers(
+      congregationId,
+      (nextUsers) => {
+        setUsers(nextUsers);
+        setError(null);
+        setLoading(false);
+        setRefreshing(false);
+      },
+      (subscriptionError) => {
+        console.error('UsersListScreen subscribe error:', subscriptionError);
+        setError(formatFirestoreError(subscriptionError));
+        setLoading(false);
+        setRefreshing(false);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [congregationId, loadingProfile]);
 
   const onRefresh = async () => {
     if (!congregationId) return;
