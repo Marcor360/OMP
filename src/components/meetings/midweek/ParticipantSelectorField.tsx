@@ -12,8 +12,11 @@ interface ParticipantSelectorFieldProps {
   users: ActiveCongregationUser[];
   disabled?: boolean;
   onChange: (participant: ParticipantAssignment) => void;
-  onRemove: () => void;
+  onRemove?: () => void;
   error?: string;
+  allowManual?: boolean;
+  title?: string;
+  canRemove?: boolean;
 }
 
 export function ParticipantSelectorField({
@@ -23,6 +26,9 @@ export function ParticipantSelectorField({
   onChange,
   onRemove,
   error,
+  allowManual = true,
+  title = 'Participante',
+  canRemove = true,
 }: ParticipantSelectorFieldProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -33,14 +39,17 @@ export function ParticipantSelectorField({
     [participant.userId, users]
   );
 
-  const updateMode = (mode: ParticipantAssignment['mode']) => {
-    if (mode === participant.mode) return;
+  const currentMode = participant.mode === 'user' ? 'user' : 'manual';
 
+  const updateMode = (mode: 'user' | 'manual') => {
+    if (mode === currentMode) return;
     onChange({
       ...participant,
       mode,
       userId: mode === 'user' ? participant.userId : undefined,
       displayName: mode === 'manual' ? participant.displayName : selectedUser?.displayName ?? '',
+      specialRoleKey: undefined,
+      roleLabel: undefined,
     });
   };
 
@@ -50,6 +59,8 @@ export function ParticipantSelectorField({
       mode: 'user',
       userId: user.uid,
       displayName: user.displayName,
+      specialRoleKey: undefined,
+      roleLabel: undefined,
     });
     setExpanded(false);
   };
@@ -59,55 +70,57 @@ export function ParticipantSelectorField({
   return (
     <View style={styles.container}>
       <View style={styles.rowBetween}>
-        <ThemedText style={styles.title}>Participante</ThemedText>
-        <TouchableOpacity onPress={onRemove} disabled={disabled} style={styles.removeButton}>
-          <Ionicons name="trash-outline" size={16} color={colors.error} />
-          <ThemedText style={styles.removeText}>Quitar</ThemedText>
-        </TouchableOpacity>
+        <ThemedText style={styles.title}>{title}</ThemedText>
+        {canRemove && onRemove ? (
+          <TouchableOpacity onPress={onRemove} disabled={disabled} style={styles.removeButton}>
+            <Ionicons name="trash-outline" size={16} color={colors.error} />
+            <ThemedText style={styles.removeText}>Quitar</ThemedText>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.modeRow}>
         <TouchableOpacity
-          style={[styles.modeChip, participant.mode === 'user' && styles.modeChipActive]}
+          style={[styles.modeChip, currentMode === 'user' && styles.modeChipActive]}
           onPress={() => updateMode('user')}
           activeOpacity={0.8}
           disabled={disabled}
         >
-          <ThemedText style={[styles.modeText, participant.mode === 'user' && styles.modeTextActive]}>
+          <ThemedText style={[styles.modeText, currentMode === 'user' && styles.modeTextActive]}>
             Usuario
           </ThemedText>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.modeChip, participant.mode === 'manual' && styles.modeChipActive]}
-          onPress={() => updateMode('manual')}
-          activeOpacity={0.8}
-          disabled={disabled}
-        >
-          <ThemedText style={[styles.modeText, participant.mode === 'manual' && styles.modeTextActive]}>
-            Manual
-          </ThemedText>
-        </TouchableOpacity>
+
+        {allowManual ? (
+          <TouchableOpacity
+            style={[styles.modeChip, currentMode === 'manual' && styles.modeChipActive]}
+            onPress={() => updateMode('manual')}
+            activeOpacity={0.8}
+            disabled={disabled}
+          >
+            <ThemedText style={[styles.modeText, currentMode === 'manual' && styles.modeTextActive]}>
+              Manual
+            </ThemedText>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
-      <View style={styles.fieldWrap}>
-        <ThemedText style={styles.label}>Rol</ThemedText>
-        <TextInput
-          style={styles.input}
-          value={participant.roleLabel ?? ''}
-          onChangeText={(nextRole) => onChange({ ...participant, roleLabel: nextRole })}
-          placeholder="Ej: Estudiante, Ayudante, Oracion"
-          placeholderTextColor={colors.textDisabled}
-          editable={!disabled}
-        />
-      </View>
-
-      {participant.mode === 'manual' ? (
+      {currentMode === 'manual' ? (
         <View style={styles.fieldWrap}>
           <ThemedText style={styles.label}>Nombre manual</ThemedText>
           <TextInput
             style={[styles.input, error && styles.inputError]}
             value={participant.displayName}
-            onChangeText={(nextName) => onChange({ ...participant, displayName: nextName })}
+            onChangeText={(nextName) =>
+              onChange({
+                ...participant,
+                mode: 'manual',
+                userId: undefined,
+                displayName: nextName,
+                specialRoleKey: undefined,
+                roleLabel: undefined,
+              })
+            }
             placeholder="Nombre del participante"
             placeholderTextColor={colors.textDisabled}
             editable={!disabled}
@@ -147,7 +160,9 @@ export function ParticipantSelectorField({
                       onPress={() => selectUser(user)}
                       activeOpacity={0.7}
                     >
-                      <ThemedText style={[styles.userOptionText, isSelected && styles.userOptionTextSelected]}>
+                      <ThemedText
+                        style={[styles.userOptionText, isSelected && styles.userOptionTextSelected]}
+                      >
                         {user.displayName}
                       </ThemedText>
                       {user.email ? <ThemedText style={styles.userOptionEmail}>{user.email}</ThemedText> : null}
@@ -232,7 +247,7 @@ const createStyles = (colors: AppColorSet) =>
       borderRadius: 10,
       overflow: 'hidden',
       backgroundColor: colors.surface,
-      maxHeight: 200,
+      maxHeight: 220,
     },
     userOption: {
       paddingHorizontal: 12,

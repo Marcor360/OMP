@@ -1,3 +1,6 @@
-import { MidweekMeetingFormScreen } from '@/src/screens/meetings/MidweekMeetingFormScreen';
+import React from 'react';
+import { Redirect } from 'expo-router';
 
-export default MidweekMeetingFormScreen;
+export default function MidweekCreateRedirect() {
+  return <Redirect href={'/(protected)/meetings/create?type=midweek' as never} />;
+}

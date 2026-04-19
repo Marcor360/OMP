@@ -10,6 +10,7 @@ export type CreateUserByAdminPayload = {
   firstName: string;
   middleName?: string;
   lastName: string;
+  secondLastName?: string;
   password: string;
   displayName?: string;
   email?: string;

@@ -31,6 +31,7 @@ type CreateUserPayload = {
   firstName: string;
   middleName?: string;
   lastName: string;
+  secondLastName?: string;
   displayName: string;
   role: Role;
   congregationId: string;
@@ -423,8 +424,9 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
   const firstName = normalizeText(data.firstName);
   const middleName = normalizeText(data.middleName) ?? normalizeText(data.secondName);
   const lastName = normalizeText(data.lastName);
+  const secondLastName = normalizeText(data.secondLastName);
   const displayName =
-    normalizeText(data.displayName) ?? [firstName, middleName, lastName].filter(Boolean).join(' ').trim();
+    normalizeText(data.displayName) ?? [firstName, middleName, lastName, secondLastName].filter(Boolean).join(' ').trim();
   const congregationId = normalizeText(data.congregationId);
   const password = normalizeText(data.password);
 
@@ -448,6 +450,7 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
     firstName,
     middleName,
     lastName,
+    secondLastName,
     displayName,
     role,
     congregationId,
@@ -615,6 +618,7 @@ export const createUserByAdmin = onCall(
       userDoc.firstName = payload.firstName;
       userDoc.lastName = payload.lastName;
       if (payload.middleName) userDoc.middleName = payload.middleName;
+      if (payload.secondLastName) userDoc.secondLastName = payload.secondLastName;
       if (payload.phone) userDoc.phone = payload.phone;
       if (payload.servicePosition) userDoc.servicePosition = payload.servicePosition;
       if (payload.serviceDepartment) userDoc.serviceDepartment = payload.serviceDepartment;

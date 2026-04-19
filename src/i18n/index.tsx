@@ -104,7 +104,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   const t = useCallback(
     (key: AppTranslationKey): string => {
-      const value = getNestedValue(translations[language], key);
+      let value = (translations[language] as any)[key];
+      if (value === undefined) {
+        value = getNestedValue(translations[language], key);
+      }
 
       if (typeof value === 'string') {
         return value;
@@ -112,7 +115,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
       // Fallback to Spanish if translation missing in current language
       if (language !== 'es') {
-        const fallbackValue = getNestedValue(translations.es, key);
+        let fallbackValue = (translations.es as any)[key];
+        if (fallbackValue === undefined) {
+          fallbackValue = getNestedValue(translations.es, key);
+        }
         if (typeof fallbackValue === 'string') {
           return fallbackValue;
         }

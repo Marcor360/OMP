@@ -1,9 +1,13 @@
 import { Timestamp } from 'firebase/firestore';
 
 import { MidweekMeetingSection } from '@/src/types/midweek-meeting';
+import {
+  MeetingProgramSection,
+  MeetingPublicationStatus,
+} from '@/src/types/meeting/program';
 
 export type MeetingStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
-export type MeetingCategory = 'general' | 'midweek';
+export type MeetingCategory = 'general' | 'midweek' | 'weekend';
 export type MeetingType =
   | 'internal'
   | 'external'
@@ -20,22 +24,30 @@ export interface Meeting {
   description?: string;
   type: MeetingType;
   status: MeetingStatus;
+  publicationStatus?: MeetingPublicationStatus;
   weekLabel?: string;
   bibleReading?: string;
   startDate: Timestamp;
   endDate: Timestamp;
+  meetingDate?: Timestamp;
+  publishedAt?: Timestamp;
   location?: string;
   meetingUrl?: string;
+  zoomMeetingId?: string;
+  zoomPasscode?: string;
   organizerUid: string;
   organizerName: string;
   attendees: string[];
   attendeeNames?: string[];
+  assignedUserIds?: string[];
+  searchableText?: string;
   notes?: string;
   openingSong?: string;
   openingPrayer?: string;
   closingSong?: string;
   closingPrayer?: string;
   chairman?: string;
+  sections?: MeetingProgramSection[];
   midweekSections?: MidweekMeetingSection[];
   createdBy?: string;
   updatedBy?: string;
@@ -49,20 +61,28 @@ export interface CreateMeetingDTO {
   type: MeetingType;
   meetingCategory?: MeetingCategory;
   status?: MeetingStatus;
+  publicationStatus?: MeetingPublicationStatus;
   weekLabel?: string;
   bibleReading?: string;
   startDate: Timestamp;
   endDate: Timestamp;
+  meetingDate?: Timestamp;
+  publishedAt?: Timestamp;
   location?: string;
   meetingUrl?: string;
+  zoomMeetingId?: string;
+  zoomPasscode?: string;
   attendees: string[];
   attendeeNames?: string[];
+  assignedUserIds?: string[];
+  searchableText?: string;
   notes?: string;
   openingSong?: string;
   openingPrayer?: string;
   closingSong?: string;
   closingPrayer?: string;
   chairman?: string;
+  sections?: MeetingProgramSection[];
   midweekSections?: MidweekMeetingSection[];
   createdBy?: string;
   updatedBy?: string;
@@ -74,20 +94,28 @@ export interface UpdateMeetingDTO {
   type?: MeetingType;
   meetingCategory?: MeetingCategory;
   status?: MeetingStatus;
+  publicationStatus?: MeetingPublicationStatus;
   weekLabel?: string;
   bibleReading?: string;
   startDate?: Timestamp;
   endDate?: Timestamp;
+  meetingDate?: Timestamp;
+  publishedAt?: Timestamp;
   location?: string;
   meetingUrl?: string;
+  zoomMeetingId?: string;
+  zoomPasscode?: string;
   attendees?: string[];
   attendeeNames?: string[];
+  assignedUserIds?: string[];
+  searchableText?: string;
   notes?: string;
   openingSong?: string;
   openingPrayer?: string;
   closingSong?: string;
   closingPrayer?: string;
   chairman?: string;
+  sections?: MeetingProgramSection[];
   midweekSections?: MidweekMeetingSection[];
   createdBy?: string;
   updatedBy?: string;
@@ -95,7 +123,9 @@ export interface UpdateMeetingDTO {
 
 export const resolveMeetingCategory = (meeting: Pick<Meeting, 'meetingCategory' | 'type'>): MeetingCategory => {
   if (meeting.meetingCategory) return meeting.meetingCategory;
-  return meeting.type === 'midweek' ? 'midweek' : 'general';
+  if (meeting.type === 'midweek') return 'midweek';
+  if (meeting.type === 'weekend') return 'weekend';
+  return 'general';
 };
 
 export const isMidweekMeeting = (meeting: Pick<Meeting, 'meetingCategory' | 'type'>): boolean =>
@@ -116,4 +146,9 @@ export const MEETING_TYPE_LABELS: Record<MeetingType, string> = {
   training: 'Fin de semana',
   midweek: 'Entre semana',
   weekend: 'Fin de semana',
+};
+
+export const MEETING_PUBLICATION_STATUS_LABELS: Record<MeetingPublicationStatus, string> = {
+  draft: 'Borrador',
+  published: 'Publicada',
 };

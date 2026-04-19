@@ -75,7 +75,9 @@ const mapSummaryMeetingsToCards = (summary: DashboardSummary): Meeting[] =>
     title: item.title,
     status: item.status ?? 'scheduled',
     type: item.type ?? 'weekend',
-    meetingCategory: item.meetingCategory ?? (item.type === 'midweek' ? 'midweek' : 'general'),
+    meetingCategory:
+      item.meetingCategory ??
+      (item.type === 'midweek' ? 'midweek' : item.type === 'weekend' ? 'weekend' : 'general'),
     startDate: item.startDate,
     endDate: item.endDate ?? item.startDate,
     location: item.location,

@@ -1,11 +1,20 @@
 import { Timestamp } from 'firebase/firestore';
 
+import { MeetingColorToken, MeetingSpecialRoleKey } from '@/src/types/meeting/program';
+
 export type MidweekSectionId =
   | 'treasuresOfTheBible'
   | 'applyYourselfToTheFieldMinistry'
-  | 'livingAsChristians';
+  | 'livingAsChristians'
+  | 'publicTalk'
+  | 'weekendAssignments'
+  | 'tasks'
+  | 'cleaningMaintenance'
+  | 'zoom'
+  | 'circuitOverseerVisit'
+  | `dynamic-${string}`;
 
-export type ParticipantAssignmentMode = 'user' | 'manual';
+export type ParticipantAssignmentMode = 'user' | 'manual' | 'specialRole';
 
 export type MidweekAssignmentType =
   | 'discourse'
@@ -27,6 +36,7 @@ export interface ParticipantAssignment {
   mode: ParticipantAssignmentMode;
   userId?: string;
   displayName: string;
+  specialRoleKey?: MeetingSpecialRoleKey;
   roleLabel?: string;
   gender?: string;
   isAssistant?: boolean;
@@ -40,15 +50,24 @@ export interface MidweekAssignment {
   theme?: string;
   durationMinutes?: number;
   notes?: string;
+  roomKey?: string;
+  startTime?: string;
+  endTime?: string;
+  assignmentScope?: 'internal' | 'informational';
   participants: ParticipantAssignment[];
   isOptional?: boolean;
   assignmentType?: MidweekAssignmentType;
+  allowCircuitOverseerOption?: boolean;
 }
 
 export interface MidweekMeetingSection {
   id: MidweekSectionId;
   title: string;
   order: number;
+  sectionType?: 'predefined' | 'dynamic' | 'special';
+  isRequired?: boolean;
+  isEnabled?: boolean;
+  colorToken?: MeetingColorToken;
   items: MidweekAssignment[];
 }
 
@@ -79,13 +98,26 @@ export interface MidweekMeetingDraft extends MidweekMeetingFields {
 type SectionTemplate = {
   id: MidweekSectionId;
   title: string;
-  baseAssignments: { title: string; assignmentType?: MidweekAssignmentType }[];
+  sectionType: 'predefined' | 'dynamic' | 'special';
+  isRequired?: boolean;
+  isEnabled?: boolean;
+  colorToken?: MeetingColorToken;
+  baseAssignments: {
+    title: string;
+    assignmentType?: MidweekAssignmentType;
+    assignmentScope?: 'internal' | 'informational';
+    allowCircuitOverseerOption?: boolean;
+  }[];
 };
 
 const MIDWEEK_SECTION_TEMPLATES: SectionTemplate[] = [
   {
     id: 'treasuresOfTheBible',
     title: 'Tesoros de la Biblia',
+    sectionType: 'predefined',
+    isRequired: true,
+    isEnabled: true,
+    colorToken: 'blue',
     baseAssignments: [
       { title: 'Tesoros de la Biblia', assignmentType: 'treasures' },
       { title: 'Busquemos perlas escondidas', assignmentType: 'discussion' },
@@ -95,6 +127,10 @@ const MIDWEEK_SECTION_TEMPLATES: SectionTemplate[] = [
   {
     id: 'applyYourselfToTheFieldMinistry',
     title: 'Seamos mejores maestros',
+    sectionType: 'predefined',
+    isRequired: true,
+    isEnabled: true,
+    colorToken: 'orange',
     baseAssignments: [
       { title: 'Parte 1', assignmentType: 'ministry' },
       { title: 'Parte 2', assignmentType: 'ministry' },
@@ -104,10 +140,16 @@ const MIDWEEK_SECTION_TEMPLATES: SectionTemplate[] = [
   {
     id: 'livingAsChristians',
     title: 'Nuestra vida cristiana',
+    sectionType: 'predefined',
+    isRequired: true,
+    isEnabled: true,
+    colorToken: 'red',
     baseAssignments: [
-      { title: 'Cancion', assignmentType: 'song' },
       { title: 'Parte principal', assignmentType: 'living' },
-      { title: 'Estudio biblico de la congregacion', assignmentType: 'discussion' },
+      {
+        title: 'Estudio biblico de la congregacion',
+        assignmentType: 'discussion',
+      },
     ],
   },
 ];
@@ -119,7 +161,10 @@ const createTemplateAssignment = (
   sectionId: MidweekSectionId,
   order: number,
   title: string,
-  assignmentType?: MidweekAssignmentType
+  assignmentType?: MidweekAssignmentType,
+  assignmentScope: 'internal' | 'informational' =
+    assignmentType === 'song' ? 'informational' : 'internal',
+  allowCircuitOverseerOption = false
 ): MidweekAssignment => ({
   id: localId('asg'),
   sectionId,
@@ -128,8 +173,13 @@ const createTemplateAssignment = (
   theme: '',
   durationMinutes: undefined,
   notes: '',
+  roomKey: undefined,
+  startTime: undefined,
+  endTime: undefined,
+  assignmentScope,
   participants: [],
   assignmentType,
+  allowCircuitOverseerOption,
 });
 
 export const createBaseMidweekSections = (): MidweekMeetingSection[] =>
@@ -137,16 +187,31 @@ export const createBaseMidweekSections = (): MidweekMeetingSection[] =>
     id: section.id,
     title: section.title,
     order: sectionIndex,
+    sectionType: section.sectionType,
+    isRequired: section.isRequired,
+    isEnabled: section.isEnabled,
+    colorToken: section.colorToken,
     items: section.baseAssignments.map((assignment, assignmentIndex) =>
-      createTemplateAssignment(section.id, assignmentIndex, assignment.title, assignment.assignmentType)
+      createTemplateAssignment(
+        section.id,
+        assignmentIndex,
+        assignment.title,
+        assignment.assignmentType,
+        assignment.assignmentScope,
+        assignment.allowCircuitOverseerOption
+      )
     ),
   }));
 
-export const normalizeSectionOrder = (sections: MidweekMeetingSection[]): MidweekMeetingSection[] =>
+export const normalizeSectionOrder = (
+  sections: MidweekMeetingSection[]
+): MidweekMeetingSection[] =>
   sections
     .map((section, sectionIndex) => ({
       ...section,
       order: sectionIndex,
+      sectionType: section.sectionType ?? 'dynamic',
+      isEnabled: section.isEnabled !== false,
       items: section.items.map((item, assignmentIndex) => ({
         ...item,
         sectionId: section.id,
@@ -156,7 +221,13 @@ export const normalizeSectionOrder = (sections: MidweekMeetingSection[]): Midwee
           id: participant.id || localId('participant'),
           displayName: participant.displayName?.trim() ?? '',
           roleLabel: participant.roleLabel?.trim() || undefined,
+          specialRoleKey: participant.specialRoleKey,
         })),
+        roomKey: item.roomKey?.trim() || undefined,
+        startTime: item.startTime?.trim() || undefined,
+        endTime: item.endTime?.trim() || undefined,
+        assignmentScope: item.assignmentScope ?? 'internal',
+        allowCircuitOverseerOption: item.allowCircuitOverseerOption ?? false,
       })),
     }))
     .sort((a, b) => a.order - b.order);
@@ -171,16 +242,32 @@ export const toMidweekDateLabel = (date: Timestamp | Date): string => {
   });
 };
 
-export const MIDWEEK_SECTION_IDS: MidweekSectionId[] = [
+export const MIDWEEK_REQUIRED_SECTION_IDS: MidweekSectionId[] = [
   'treasuresOfTheBible',
   'applyYourselfToTheFieldMinistry',
   'livingAsChristians',
 ];
 
-export const MIDWEEK_SECTION_TITLES: Record<MidweekSectionId, string> = {
+export const MIDWEEK_KNOWN_SECTION_IDS: MidweekSectionId[] = [
+  ...MIDWEEK_REQUIRED_SECTION_IDS,
+  'tasks',
+  'cleaningMaintenance',
+  'zoom',
+  'circuitOverseerVisit',
+];
+
+export const MIDWEEK_SECTION_IDS = MIDWEEK_REQUIRED_SECTION_IDS;
+
+export const MIDWEEK_SECTION_TITLES: Record<string, string> = {
   treasuresOfTheBible: 'Tesoros de la Biblia',
   applyYourselfToTheFieldMinistry: 'Seamos mejores maestros',
   livingAsChristians: 'Nuestra vida cristiana',
+  publicTalk: 'Discurso publico',
+  weekendAssignments: 'Asignaciones del fin de semana',
+  tasks: 'Tareas',
+  cleaningMaintenance: 'Limpieza y mantenimiento del salon',
+  zoom: 'Zoom',
+  circuitOverseerVisit: 'Visita del superintendente de circuito',
 };
 
 export const createMidweekMeetingTemplate = (
@@ -208,14 +295,18 @@ export const createMidweekMeetingTemplate = (
   };
 };
 
-export const createEmptyMidweekAssignment = (sectionId: MidweekSectionId, order: number): MidweekAssignment =>
-  createTemplateAssignment(sectionId, order, '', 'other');
+export const createEmptyMidweekAssignment = (
+  sectionId: MidweekSectionId,
+  order: number
+): MidweekAssignment =>
+  createTemplateAssignment(sectionId, order, '', 'other', 'internal');
 
 export const createEmptyParticipant = (): ParticipantAssignment => ({
   id: localId('participant'),
   mode: 'user',
   userId: undefined,
   displayName: '',
+  specialRoleKey: undefined,
   roleLabel: '',
   gender: undefined,
   isAssistant: false,

@@ -19,7 +19,7 @@ import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { useUser } from '@/src/context/user-context';
+import { useMeetingsManagementPermission } from '@/src/hooks/use-meetings-management-permission';
 import { importMidweekMeetingsFromPdf } from '@/src/services/meetings/midweek-import-service';
 import {
   MidweekMeeting,
@@ -42,7 +42,7 @@ const STATUS_FILTERS: { label: string; value: MeetingStatus | 'all' }[] = [
 
 export function MidweekMeetingsListScreen() {
   const router = useRouter();
-  const { congregationId, loadingProfile, isAdminOrSupervisor, profileError } = useUser();
+  const { congregationId, loading: permLoading, canManage } = useMeetingsManagementPermission();
   const colors = useAppColors();
   const styles = createStyles(colors);
 
@@ -57,10 +57,10 @@ export function MidweekMeetingsListScreen() {
   const weekLabel = useMemo(() => formatWeekLabel(weekStart, weekEnd), [weekEnd, weekStart]);
 
   const loadMeetings = useCallback(async (forceServer = false) => {
-    if (loadingProfile) return;
+    if (permLoading) return;
 
     if (!congregationId) {
-      setError(profileError ?? 'No se encontro congregationId en el perfil actual.');
+      setError('No se encontro congregationId en el perfil actual.');
       setLoading(false);
       return;
     }
@@ -84,7 +84,7 @@ export function MidweekMeetingsListScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [congregationId, loadingProfile, profileError, weekEnd, weekStart]);
+  }, [congregationId, permLoading, weekEnd, weekStart]);
 
   useEffect(() => {
     void loadMeetings(false);
@@ -165,7 +165,7 @@ export function MidweekMeetingsListScreen() {
     }
   };
 
-  if (loading || loadingProfile) {
+  if (loading || permLoading) {
     return <LoadingState message="Cargando reuniones entre semana..." />;
   }
 
@@ -200,7 +200,7 @@ export function MidweekMeetingsListScreen() {
 
             <TouchableOpacity
               style={styles.addButton}
-              onPress={() => router.push('/(protected)/meetings/midweek/create')}
+              onPress={() => router.push('/(protected)/meetings/create?type=midweek' as never)}
               activeOpacity={0.8}
             >
               <Ionicons name="add" size={18} color="#fff" />
@@ -271,9 +271,9 @@ export function MidweekMeetingsListScreen() {
                   ? 'Aun no hay reuniones VyMC registradas.'
                   : `No hay reuniones ${MEETING_STATUS_LABELS[filter as MeetingStatus].toLowerCase()}.`
               }
-              actionLabel={isAdminOrSupervisor ? 'Crear reunion VyMC' : undefined}
+              actionLabel={canManage ? 'Crear reunion VyMC' : undefined}
               onAction={
-                isAdminOrSupervisor ? () => router.push('/(protected)/meetings/midweek/create') : undefined
+                canManage ? () => router.push('/(protected)/meetings/create?type=midweek' as never) : undefined
               }
             />
           </View>

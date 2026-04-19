@@ -32,6 +32,19 @@ import {
   MeetingType,
   UpdateMeetingDTO,
 } from '@/src/types/meeting';
+import {
+  buildMeetingSearchableText,
+  collectAssignedUserIds,
+  createDefaultSectionsForMeetingType,
+  MeetingPublicationStatus,
+  normalizeMeetingSections,
+} from '@/src/types/meeting/program';
+import {
+  convertLegacyMidweekSectionsToProgramSections,
+  convertProgramSectionsToLegacyMidweekSections,
+  normalizeMeetingProgramPayload,
+} from '@/src/services/meetings/meeting-program-utils';
+import { sanitizeForFirestore } from '@/src/services/meetings/firestore-payload';
 
 const isMeetingStatus = (value: unknown): value is MeetingStatus =>
   value === 'pending' ||
@@ -49,7 +62,18 @@ const isMeetingType = (value: unknown): value is MeetingType =>
   value === 'weekend';
 
 const isMeetingCategory = (value: unknown): value is MeetingCategory =>
-  value === 'general' || value === 'midweek';
+  value === 'general' || value === 'midweek' || value === 'weekend';
+
+const isPublicationStatus = (value: unknown): value is MeetingPublicationStatus =>
+  value === 'draft' || value === 'published';
+
+const toStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter(
+    (item): item is string => typeof item === 'string' && item.trim().length > 0
+  );
+};
 
 const normalizeMeeting = (id: string, data: Record<string, unknown>): Meeting => {
   const rawType = isMeetingType(data.type) ? data.type : 'weekend';
@@ -57,35 +81,76 @@ const normalizeMeeting = (id: string, data: Record<string, unknown>): Meeting =>
     ? data.meetingCategory
     : rawType === 'midweek'
       ? 'midweek'
+      : rawType === 'weekend'
+        ? 'weekend'
       : 'general';
+  const inferredProgramType =
+    rawType === 'midweek' || meetingCategory === 'midweek' ? 'midweek' : 'weekend';
+  const normalizedSections = Array.isArray(data.sections)
+    ? normalizeMeetingSections(data.sections, inferredProgramType)
+    : inferredProgramType === 'midweek' && Array.isArray(data.midweekSections)
+      ? convertLegacyMidweekSectionsToProgramSections(data.midweekSections as never)
+      : createDefaultSectionsForMeetingType(inferredProgramType);
+  const title = typeof data.title === 'string' ? data.title : '';
+  const description =
+    typeof data.description === 'string' ? data.description : undefined;
 
   return {
     id,
-    title: typeof data.title === 'string' ? data.title : '',
-    description: typeof data.description === 'string' ? data.description : undefined,
+    title,
+    description,
     type: meetingCategory === 'midweek' ? 'midweek' : rawType,
     meetingCategory,
     status: isMeetingStatus(data.status) ? data.status : 'scheduled',
+    publicationStatus: isPublicationStatus(data.publicationStatus)
+      ? data.publicationStatus
+      : 'published',
     weekLabel: typeof data.weekLabel === 'string' ? data.weekLabel : undefined,
-    bibleReading: typeof data.bibleReading === 'string' ? data.bibleReading : undefined,
+    bibleReading:
+      typeof data.bibleReading === 'string' ? data.bibleReading : undefined,
     startDate: (data.startDate as Meeting['startDate']) ?? Timestamp.now(),
     endDate: (data.endDate as Meeting['endDate']) ?? Timestamp.now(),
+    meetingDate:
+      (data.meetingDate as Meeting['meetingDate']) ??
+      (data.startDate as Meeting['startDate']) ??
+      Timestamp.now(),
+    publishedAt: data.publishedAt as Meeting['publishedAt'],
     location: typeof data.location === 'string' ? data.location : undefined,
     meetingUrl: typeof data.meetingUrl === 'string' ? data.meetingUrl : undefined,
+    zoomMeetingId:
+      typeof data.zoomMeetingId === 'string' ? data.zoomMeetingId : undefined,
+    zoomPasscode:
+      typeof data.zoomPasscode === 'string' ? data.zoomPasscode : undefined,
     organizerUid: typeof data.organizerUid === 'string' ? data.organizerUid : '',
-    organizerName: typeof data.organizerName === 'string' ? data.organizerName : 'Sistema',
+    organizerName:
+      typeof data.organizerName === 'string' ? data.organizerName : 'Sistema',
     attendees: Array.isArray(data.attendees)
       ? data.attendees.filter((value): value is string => typeof value === 'string')
       : [],
     attendeeNames: Array.isArray(data.attendeeNames)
       ? data.attendeeNames.filter((value): value is string => typeof value === 'string')
       : undefined,
+    assignedUserIds:
+      toStringArray(data.assignedUserIds).length > 0
+        ? toStringArray(data.assignedUserIds)
+        : collectAssignedUserIds(normalizedSections),
+    searchableText:
+      typeof data.searchableText === 'string'
+        ? data.searchableText
+        : buildMeetingSearchableText({
+            title,
+            description,
+            sections: normalizedSections,
+          }),
     notes: typeof data.notes === 'string' ? data.notes : undefined,
     openingSong: typeof data.openingSong === 'string' ? data.openingSong : undefined,
-    openingPrayer: typeof data.openingPrayer === 'string' ? data.openingPrayer : undefined,
+    openingPrayer:
+      typeof data.openingPrayer === 'string' ? data.openingPrayer : undefined,
     closingSong: typeof data.closingSong === 'string' ? data.closingSong : undefined,
-    closingPrayer: typeof data.closingPrayer === 'string' ? data.closingPrayer : undefined,
+    closingPrayer:
+      typeof data.closingPrayer === 'string' ? data.closingPrayer : undefined,
     chairman: typeof data.chairman === 'string' ? data.chairman : undefined,
+    sections: normalizedSections,
     midweekSections: Array.isArray(data.midweekSections)
       ? (data.midweekSections as Meeting['midweekSections'])
       : undefined,
@@ -97,7 +162,7 @@ const normalizeMeeting = (id: string, data: Record<string, unknown>): Meeting =>
 };
 
 const getMeetingTime = (meeting: Meeting): number => {
-  const raw: unknown = meeting.startDate;
+  const raw: unknown = meeting.meetingDate ?? meeting.startDate;
 
   if (!raw) return 0;
 
@@ -123,7 +188,7 @@ const getMeetingTime = (meeting: Meeting): number => {
 };
 
 const sortMeetings = (items: Meeting[]): Meeting[] => {
-  return [...items].sort((a, b) => getMeetingTime(b) - getMeetingTime(a));
+  return [...items].sort((a, b) => getMeetingTime(a) - getMeetingTime(b));
 };
 
 const MEETINGS_RANGE_CACHE_TTL_MS = 60 * 1000;
@@ -135,8 +200,22 @@ const toRangeKey = (startDate: Date, endDate: Date): string =>
 const isInvalidDateRange = (startDate: Date, endDate: Date): boolean =>
   Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate > endDate;
 
+const filterByPublicationStatus = (
+  meetings: Meeting[],
+  publicationStatus?: MeetingPublicationStatus | 'all'
+): Meeting[] => {
+  if (!publicationStatus || publicationStatus === 'all') {
+    return meetings;
+  }
+
+  return meetings.filter((meeting) => meeting.publicationStatus === publicationStatus);
+};
+
 /** Obtiene una reunion por ID */
-export const getMeetingById = async (congregationId: string, id: string): Promise<Meeting | null> => {
+export const getMeetingById = async (
+  congregationId: string,
+  id: string
+): Promise<Meeting | null> => {
   if (!congregationId || typeof congregationId !== 'string' || !id) {
     return null;
   }
@@ -144,7 +223,8 @@ export const getMeetingById = async (congregationId: string, id: string): Promis
   return getDocumentCacheFirst<Meeting>({
     cacheKey: `meetings/${congregationId}/doc/${id}`,
     ref: meetingDocRef(congregationId, id),
-    mapSnapshot: (snapshot) => normalizeMeeting(snapshot.id, snapshot.data() as Record<string, unknown>),
+    mapSnapshot: (snapshot) =>
+      normalizeMeeting(snapshot.id, snapshot.data() as Record<string, unknown>),
     maxAgeMs: MEETING_DOC_CACHE_TTL_MS,
   });
 };
@@ -157,11 +237,11 @@ export const getAllMeetings = async (congregationId: string): Promise<Meeting[]>
 
   const q = query(
     congregationMeetingsCollectionRef(congregationId),
-    orderBy('startDate', 'desc'),
+    orderBy('meetingDate', 'asc'),
     limit(200)
   );
   const snap = await getDocs(q);
-  return sortMeetings(snap.docs.map((d) => normalizeMeeting(d.id, d.data())));
+  return sortMeetings(snap.docs.map((docSnap) => normalizeMeeting(docSnap.id, docSnap.data())));
 };
 
 /** Obtiene reuniones del rango visible (semana/rango) con cache-first */
@@ -173,6 +253,7 @@ export const getMeetingsByWeek = async (
     forceServer?: boolean;
     includeMidweek?: boolean;
     maxItems?: number;
+    publicationStatus?: MeetingPublicationStatus | 'all';
   }
 ): Promise<Meeting[]> => {
   if (!congregationId || typeof congregationId !== 'string') {
@@ -187,9 +268,9 @@ export const getMeetingsByWeek = async (
   const rangeKey = toRangeKey(startDate, endDate);
   const q = query(
     congregationMeetingsCollectionRef(congregationId),
-    where('startDate', '>=', Timestamp.fromDate(startDate)),
-    where('startDate', '<=', Timestamp.fromDate(endDate)),
-    orderBy('startDate', 'desc'),
+    where('meetingDate', '>=', Timestamp.fromDate(startDate)),
+    where('meetingDate', '<=', Timestamp.fromDate(endDate)),
+    orderBy('meetingDate', 'asc'),
     limit(maxItems)
   );
 
@@ -199,14 +280,22 @@ export const getMeetingsByWeek = async (
     maxAgeMs: MEETINGS_RANGE_CACHE_TTL_MS,
     forceServer: options?.forceServer,
     mapSnapshot: (snapshot) =>
-      sortMeetings(snapshot.docs.map((docSnapshot) => normalizeMeeting(docSnapshot.id, docSnapshot.data()))),
+      sortMeetings(
+        snapshot.docs.map((docSnapshot) =>
+          normalizeMeeting(docSnapshot.id, docSnapshot.data())
+        )
+      ),
   });
 
+  const byStatus = filterByPublicationStatus(meetings, options?.publicationStatus);
+
   if (options?.includeMidweek) {
-    return meetings;
+    return byStatus;
   }
 
-  return meetings.filter((meeting) => meeting.meetingCategory !== 'midweek' && meeting.type !== 'midweek');
+  return byStatus.filter(
+    (meeting) => meeting.meetingCategory !== 'midweek' && meeting.type !== 'midweek'
+  );
 };
 
 /** Obtiene reuniones por estado */
@@ -217,27 +306,38 @@ export const getMeetingsByStatus = async (
   const q = query(
     congregationMeetingsCollectionRef(congregationId),
     where('status', '==', status),
-    orderBy('startDate', 'desc')
+    orderBy('meetingDate', 'asc')
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => normalizeMeeting(d.id, d.data()));
+  return sortMeetings(snap.docs.map((docSnap) => normalizeMeeting(docSnap.id, docSnap.data())));
 };
 
 /** Obtiene reuniones donde el usuario es organizador o asistente */
-export const getMeetingsByUser = async (congregationId: string, uid: string): Promise<Meeting[]> => {
+export const getMeetingsByUser = async (
+  congregationId: string,
+  uid: string
+): Promise<Meeting[]> => {
   const meetingsRef = congregationMeetingsCollectionRef(congregationId);
 
   const [organizerSnap, attendeeSnap] = await Promise.all([
-    getDocs(query(meetingsRef, where('organizerUid', '==', uid), orderBy('startDate', 'desc'))),
-    getDocs(query(meetingsRef, where('attendees', 'array-contains', uid), orderBy('startDate', 'desc'))),
+    getDocs(
+      query(meetingsRef, where('organizerUid', '==', uid), orderBy('meetingDate', 'asc'))
+    ),
+    getDocs(
+      query(
+        meetingsRef,
+        where('attendees', 'array-contains', uid),
+        orderBy('meetingDate', 'asc')
+      )
+    ),
   ]);
 
   const byId = new Map<string, Meeting>();
-  [...organizerSnap.docs, ...attendeeSnap.docs].forEach((d) => {
-    byId.set(d.id, normalizeMeeting(d.id, d.data()));
+  [...organizerSnap.docs, ...attendeeSnap.docs].forEach((docSnap) => {
+    byId.set(docSnap.id, normalizeMeeting(docSnap.id, docSnap.data()));
   });
 
-  return Array.from(byId.values()).sort((a, b) => b.startDate.seconds - a.startDate.seconds);
+  return sortMeetings(Array.from(byId.values()));
 };
 
 /** Crea una reunion */
@@ -247,13 +347,57 @@ export const createMeeting = async (
   organizerUid: string,
   organizerName: string
 ): Promise<string> => {
-  const meetingCategory: MeetingCategory = data.meetingCategory ?? (data.type === 'midweek' ? 'midweek' : 'general');
-  const normalizedType: MeetingType = meetingCategory === 'midweek' ? 'midweek' : data.type;
+  const meetingCategory: MeetingCategory =
+    data.meetingCategory ??
+    (data.type === 'midweek' ? 'midweek' : data.type === 'weekend' ? 'weekend' : 'general');
+  const normalizedType: MeetingType =
+    meetingCategory === 'midweek' ? 'midweek' : data.type;
+  const inferredType = normalizedType === 'midweek' ? 'midweek' : 'weekend';
 
-  const ref = await addDoc(congregationMeetingsCollectionRef(congregationId), {
-    ...data,
+  const normalizedProgram = normalizeMeetingProgramPayload({
+    meetingType: inferredType,
+    title: data.title,
+    description: data.description,
+    startDate: data.startDate,
+    meetingDate: data.meetingDate,
+    sections: data.sections,
+    publicationStatus: data.publicationStatus,
+    legacyMidweekSections: data.midweekSections,
+  });
+
+  const legacyMidweekSections =
+    inferredType === 'midweek'
+      ? convertProgramSectionsToLegacyMidweekSections(normalizedProgram.sections)
+      : undefined;
+
+  const rawPayload: Record<string, unknown> = {
+    title: data.title,
+    description: data.description,
     type: normalizedType,
     meetingCategory,
+    weekLabel: data.weekLabel,
+    bibleReading: data.bibleReading,
+    startDate: data.startDate,
+    endDate: data.endDate,
+    meetingDate: normalizedProgram.meetingDate,
+    publishedAt: data.publishedAt,
+    location: data.location,
+    meetingUrl: data.meetingUrl,
+    zoomMeetingId: data.zoomMeetingId,
+    zoomPasscode: data.zoomPasscode,
+    attendees: data.attendees,
+    attendeeNames: data.attendeeNames,
+    notes: data.notes,
+    openingSong: data.openingSong,
+    openingPrayer: data.openingPrayer,
+    closingSong: data.closingSong,
+    closingPrayer: data.closingPrayer,
+    chairman: data.chairman,
+    publicationStatus: normalizedProgram.publicationStatus,
+    sections: normalizedProgram.sections,
+    assignedUserIds: normalizedProgram.assignedUserIds,
+    searchableText: normalizedProgram.searchableText,
+    midweekSections: legacyMidweekSections ?? data.midweekSections ?? null,
     organizerUid,
     organizerName,
     status: data.status ?? ('scheduled' as MeetingStatus),
@@ -261,7 +405,12 @@ export const createMeeting = async (
     updatedBy: data.updatedBy ?? organizerUid,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  const ref = await addDoc(
+    congregationMeetingsCollectionRef(congregationId),
+    sanitizeForFirestore(rawPayload)
+  );
 
   clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
   return ref.id;
@@ -273,14 +422,63 @@ export const updateMeeting = async (
   id: string,
   data: UpdateMeetingDTO
 ): Promise<void> => {
-  const payload: Record<string, unknown> = {
-    ...data,
+  const inferredType =
+    data.type === 'midweek' || data.meetingCategory === 'midweek' ? 'midweek' : 'weekend';
+  const fallbackStartDate = data.startDate ?? Timestamp.now();
+
+  const normalizedProgram = normalizeMeetingProgramPayload({
+    meetingType: inferredType,
+    title: data.title ?? 'Reunion',
+    description: data.description,
+    startDate: fallbackStartDate,
+    meetingDate: data.meetingDate,
+    sections: data.sections,
+    publicationStatus: data.publicationStatus,
+    legacyMidweekSections: data.midweekSections,
+  });
+
+  const rawPayload: Record<string, unknown> = {
+    title: data.title,
+    description: data.description,
+    type: data.type,
+    meetingCategory: data.meetingCategory,
+    status: data.status,
+    weekLabel: data.weekLabel,
+    bibleReading: data.bibleReading,
+    startDate: data.startDate,
+    endDate: data.endDate,
+    meetingDate: normalizedProgram.meetingDate,
+    publishedAt: data.publishedAt,
+    location: data.location,
+    meetingUrl: data.meetingUrl,
+    zoomMeetingId: data.zoomMeetingId,
+    zoomPasscode: data.zoomPasscode,
+    attendees: data.attendees,
+    attendeeNames: data.attendeeNames,
+    notes: data.notes,
+    openingSong: data.openingSong,
+    openingPrayer: data.openingPrayer,
+    closingSong: data.closingSong,
+    closingPrayer: data.closingPrayer,
+    chairman: data.chairman,
+    publicationStatus: normalizedProgram.publicationStatus,
+    sections: normalizedProgram.sections,
+    assignedUserIds: normalizedProgram.assignedUserIds,
+    searchableText: normalizedProgram.searchableText,
     updatedAt: serverTimestamp(),
   };
 
-  if (typeof data.updatedBy === 'string' && data.updatedBy.trim().length > 0) {
-    payload.updatedBy = data.updatedBy;
+  if (inferredType === 'midweek') {
+    rawPayload.midweekSections = convertProgramSectionsToLegacyMidweekSections(
+      normalizedProgram.sections
+    );
   }
+
+  if (typeof data.updatedBy === 'string' && data.updatedBy.trim().length > 0) {
+    rawPayload.updatedBy = data.updatedBy;
+  }
+
+  const payload = sanitizeForFirestore(rawPayload);
 
   await updateDoc(meetingDocRef(congregationId, id), payload);
   invalidateCacheEntry(`meetings/${congregationId}/doc/${id}`);
@@ -288,7 +486,10 @@ export const updateMeeting = async (
 };
 
 /** Elimina una reunion */
-export const deleteMeeting = async (congregationId: string, id: string): Promise<void> => {
+export const deleteMeeting = async (
+  congregationId: string,
+  id: string
+): Promise<void> => {
   await deleteDoc(meetingDocRef(congregationId, id));
   invalidateCacheEntry(`meetings/${congregationId}/doc/${id}`);
   clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
@@ -323,7 +524,9 @@ export const subscribeToMeetings = (
   const unsubscribe = onSnapshot(
     q,
     (snap) => {
-      const meetings = sortMeetings(snap.docs.map((d) => normalizeMeeting(d.id, d.data())));
+      const meetings = sortMeetings(
+        snap.docs.map((docSnap) => normalizeMeeting(docSnap.id, docSnap.data()))
+      );
       callback(meetings);
     },
     (error) => {

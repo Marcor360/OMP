@@ -21,7 +21,8 @@ import {
 import { getQueryCacheFirst } from '@/src/services/repositories/firestore-cache-first';
 import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
 import {
-  MIDWEEK_SECTION_IDS,
+  MIDWEEK_KNOWN_SECTION_IDS,
+  MIDWEEK_REQUIRED_SECTION_IDS,
   MIDWEEK_SECTION_TITLES,
   createBaseMidweekSections,
   normalizeSectionOrder,
@@ -30,6 +31,13 @@ import {
   type ParticipantAssignment,
 } from '@/src/types/midweek-meeting';
 import { MeetingStatus } from '@/src/types/meeting';
+import { MeetingProgramSection, MeetingPublicationStatus } from '@/src/types/meeting/program';
+
+import {
+  convertProgramSectionsToLegacyMidweekSections,
+  normalizeMeetingProgramPayload,
+} from '@/src/services/meetings/meeting-program-utils';
+import { sanitizeForFirestore } from '@/src/services/meetings/firestore-payload';
 
 type MidweekMeetingCategory = 'midweek';
 type MidweekMeetingType = 'midweek';
@@ -45,16 +53,25 @@ export interface MidweekMeeting {
   bibleReading: string;
   startDate: Timestamp;
   endDate: Timestamp;
+  meetingDate?: Timestamp;
   status: MeetingStatus;
+  publicationStatus?: MeetingPublicationStatus;
+  publishedAt?: Timestamp;
   location?: string;
   meetingUrl?: string;
+  zoomMeetingId?: string;
+  zoomPasscode?: string;
   notes?: string;
   openingSong?: string;
   openingPrayer?: string;
+  middleSong?: string;
   closingSong?: string;
   closingPrayer?: string;
   chairman?: string;
   midweekSections: MidweekMeetingSection[];
+  sections?: MeetingProgramSection[];
+  assignedUserIds?: string[];
+  searchableText?: string;
   organizerUid: string;
   organizerName: string;
   attendees: string[];
@@ -72,16 +89,25 @@ export interface MidweekMeetingPayload {
   bibleReading: string;
   startDate: Timestamp;
   endDate: Timestamp;
+  meetingDate?: Timestamp;
   status?: MeetingStatus;
+  publicationStatus?: MeetingPublicationStatus;
+  publishedAt?: Timestamp;
   location?: string;
   meetingUrl?: string;
+  zoomMeetingId?: string;
+  zoomPasscode?: string;
   notes?: string;
   openingSong?: string;
   openingPrayer?: string;
+  middleSong?: string;
   closingSong?: string;
   closingPrayer?: string;
   chairman?: string;
   midweekSections: MidweekMeetingSection[];
+  sections?: MeetingProgramSection[];
+  assignedUserIds?: string[];
+  searchableText?: string;
   attendeeNames?: string[];
 }
 
@@ -125,7 +151,8 @@ const normalizeTimestamp = (value: unknown, fallback: Timestamp): Timestamp => {
 const normalizeParticipant = (value: unknown, index: number): ParticipantAssignment => {
   const base = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 
-  const mode = base.mode === 'manual' ? 'manual' : 'user';
+  const mode =
+    base.mode === 'manual' || base.mode === 'specialRole' ? base.mode : 'user';
   const userId = normalizeText(base.userId);
   const displayName = normalizeText(base.displayName) ?? '';
 
@@ -134,6 +161,10 @@ const normalizeParticipant = (value: unknown, index: number): ParticipantAssignm
     mode,
     userId: mode === 'user' ? userId : undefined,
     displayName,
+    specialRoleKey:
+      mode === 'specialRole' && base.specialRoleKey === 'circuitOverseer'
+        ? 'circuitOverseer'
+        : undefined,
     roleLabel: normalizeText(base.roleLabel),
     gender: normalizeText(base.gender),
     isAssistant: typeof base.isAssistant === 'boolean' ? base.isAssistant : undefined,
@@ -160,11 +191,19 @@ const normalizeAssignment = (
     theme: normalizeText(base.theme),
     durationMinutes,
     notes: normalizeText(base.notes),
+    roomKey: normalizeText(base.roomKey),
+    startTime: normalizeText(base.startTime),
+    endTime: normalizeText(base.endTime),
+    assignmentScope:
+      base.assignmentScope === 'internal' || base.assignmentScope === 'informational'
+        ? base.assignmentScope
+        : 'internal',
     participants: rawParticipants.map((participant, participantIndex) =>
       normalizeParticipant(participant, participantIndex)
     ),
     isOptional: typeof base.isOptional === 'boolean' ? base.isOptional : undefined,
     assignmentType: normalizeText(base.assignmentType) as MidweekAssignment['assignmentType'],
+    allowCircuitOverseerOption: base.allowCircuitOverseerOption === true,
   };
 };
 
@@ -178,9 +217,15 @@ const normalizeSections = (value: unknown): MidweekMeetingSection[] => {
     const base =
       typeof section === 'object' && section !== null ? (section as Record<string, unknown>) : {};
 
-    const sectionId = normalizeText(base.id) as MidweekMeetingSection['id'];
+    const sectionIdRaw = normalizeText(base.id);
+    if (!sectionIdRaw) {
+      return;
+    }
+    const sectionId = sectionIdRaw as MidweekMeetingSection['id'];
+    const isKnown = MIDWEEK_KNOWN_SECTION_IDS.includes(sectionId);
+    const isDynamic = sectionId.startsWith('dynamic-');
 
-    if (!MIDWEEK_SECTION_IDS.includes(sectionId)) {
+    if (!isKnown && !isDynamic) {
       return;
     }
 
@@ -188,17 +233,47 @@ const normalizeSections = (value: unknown): MidweekMeetingSection[] => {
 
     byId.set(sectionId, {
       id: sectionId,
-      title: normalizeText(base.title) ?? MIDWEEK_SECTION_TITLES[sectionId],
+      title:
+        normalizeText(base.title) ??
+        MIDWEEK_SECTION_TITLES[sectionId] ??
+        `Seccion ${index + 1}`,
       order: typeof base.order === 'number' ? base.order : index,
+      sectionType:
+        base.sectionType === 'predefined' ||
+        base.sectionType === 'dynamic' ||
+        base.sectionType === 'special'
+          ? base.sectionType
+          : isDynamic
+            ? 'dynamic'
+            : 'predefined',
+      isRequired: MIDWEEK_REQUIRED_SECTION_IDS.includes(sectionId),
+      isEnabled: base.isEnabled !== false,
+      colorToken:
+        base.colorToken === 'blue' ||
+        base.colorToken === 'indigo' ||
+        base.colorToken === 'orange' ||
+        base.colorToken === 'red' ||
+        base.colorToken === 'green' ||
+        base.colorToken === 'teal' ||
+        base.colorToken === 'dark'
+          ? base.colorToken
+          : undefined,
       items: rawItems.map((item, itemIndex) => normalizeAssignment(sectionId, item, itemIndex)),
     });
   });
 
-  const completed = MIDWEEK_SECTION_IDS.map((id, index) => {
+  const completed = MIDWEEK_KNOWN_SECTION_IDS.map((id, index) => {
     const current = byId.get(id);
     const fallbackSection = fallback[index];
 
     return current ?? fallbackSection;
+  });
+
+  byId.forEach((section, sectionId) => {
+    const isKnown = MIDWEEK_KNOWN_SECTION_IDS.includes(sectionId);
+    if (!isKnown) {
+      completed.push(section);
+    }
   });
 
   return normalizeSectionOrder(completed);
@@ -210,6 +285,20 @@ const toMidweekMeeting = (
   data: Record<string, unknown>
 ): MidweekMeeting => {
   const now = Timestamp.now();
+  const midweekSections = normalizeSections(data.midweekSections);
+  const normalizedProgram = normalizeMeetingProgramPayload({
+    meetingType: 'midweek',
+    title: normalizeText(data.title) ?? 'Reunion de entre semana',
+    description: normalizeText(data.description),
+    startDate: normalizeTimestamp(data.startDate, now),
+    meetingDate: normalizeTimestamp(data.meetingDate, normalizeTimestamp(data.startDate, now)),
+    sections: data.sections,
+    publicationStatus:
+      data.publicationStatus === 'draft' || data.publicationStatus === 'published'
+        ? data.publicationStatus
+        : undefined,
+    legacyMidweekSections: midweekSections,
+  });
 
   return {
     id,
@@ -222,16 +311,28 @@ const toMidweekMeeting = (
     bibleReading: normalizeText(data.bibleReading) ?? '',
     startDate: normalizeTimestamp(data.startDate, now),
     endDate: normalizeTimestamp(data.endDate, now),
+    meetingDate: normalizedProgram.meetingDate,
     status: isMeetingStatus(data.status) ? data.status : 'scheduled',
+    publicationStatus: normalizedProgram.publicationStatus,
+    publishedAt:
+      data.publishedAt instanceof Timestamp
+        ? data.publishedAt
+        : undefined,
     location: normalizeText(data.location),
     meetingUrl: normalizeText(data.meetingUrl),
+    zoomMeetingId: normalizeText(data.zoomMeetingId),
+    zoomPasscode: normalizeText(data.zoomPasscode),
     notes: normalizeText(data.notes),
     openingSong: normalizeText(data.openingSong),
     openingPrayer: normalizeText(data.openingPrayer),
+    middleSong: normalizeText(data.middleSong),
     closingSong: normalizeText(data.closingSong),
     closingPrayer: normalizeText(data.closingPrayer),
     chairman: normalizeText(data.chairman),
-    midweekSections: normalizeSections(data.midweekSections),
+    midweekSections,
+    sections: normalizedProgram.sections,
+    assignedUserIds: normalizedProgram.assignedUserIds,
+    searchableText: normalizedProgram.searchableText,
     organizerUid: normalizeText(data.organizerUid) ?? '',
     organizerName: normalizeText(data.organizerName) ?? 'Sistema',
     attendees: Array.isArray(data.attendees)
@@ -363,9 +464,21 @@ export const createMidweekMeeting = async (
   payload: MidweekMeetingPayload,
   actor: MidweekMeetingActor
 ): Promise<string> => {
-  const normalizedSections = normalizeSections(payload.midweekSections);
+  const normalizedProgram = normalizeMeetingProgramPayload({
+    meetingType: 'midweek',
+    title: payload.title,
+    description: payload.description,
+    startDate: payload.startDate,
+    meetingDate: payload.meetingDate,
+    sections: payload.sections,
+    publicationStatus: payload.publicationStatus,
+    legacyMidweekSections: payload.midweekSections,
+  });
+  const normalizedSections = convertProgramSectionsToLegacyMidweekSections(
+    normalizedProgram.sections
+  );
 
-  const ref = await addDoc(congregationMeetingsCollectionRef(congregationId), {
+  const rawPayload: Record<string, unknown> = {
     meetingCategory: 'midweek',
     type: 'midweek',
     title: payload.title.trim(),
@@ -374,16 +487,25 @@ export const createMidweekMeeting = async (
     bibleReading: payload.bibleReading.trim(),
     startDate: payload.startDate,
     endDate: payload.endDate,
+    meetingDate: normalizedProgram.meetingDate,
     status: payload.status ?? ('scheduled' as MeetingStatus),
+    publicationStatus: normalizedProgram.publicationStatus,
+    publishedAt: payload.publishedAt ?? null,
     location: payload.location?.trim() || null,
     meetingUrl: payload.meetingUrl?.trim() || null,
+    zoomMeetingId: payload.zoomMeetingId?.trim() || null,
+    zoomPasscode: payload.zoomPasscode?.trim() || null,
     notes: payload.notes?.trim() || null,
     openingSong: payload.openingSong?.trim() || null,
     openingPrayer: payload.openingPrayer?.trim() || null,
+    middleSong: payload.middleSong?.trim() || null,
     closingSong: payload.closingSong?.trim() || null,
     closingPrayer: payload.closingPrayer?.trim() || null,
     chairman: payload.chairman?.trim() || null,
+    sections: normalizedProgram.sections,
     midweekSections: normalizedSections,
+    assignedUserIds: normalizedProgram.assignedUserIds,
+    searchableText: normalizedProgram.searchableText,
     organizerUid: actor.uid,
     organizerName: actor.displayName,
     attendees: actor.uid ? [actor.uid] : [],
@@ -392,7 +514,12 @@ export const createMidweekMeeting = async (
     updatedBy: actor.uid,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  const ref = await addDoc(
+    congregationMeetingsCollectionRef(congregationId),
+    sanitizeForFirestore(rawPayload)
+  );
 
   clearSessionCacheByPrefix(`query:midweek/${congregationId}/`);
   clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
@@ -405,9 +532,21 @@ export const updateMidweekMeeting = async (
   payload: MidweekMeetingPayload,
   actorUid?: string
 ): Promise<void> => {
-  const normalizedSections = normalizeSections(payload.midweekSections);
+  const normalizedProgram = normalizeMeetingProgramPayload({
+    meetingType: 'midweek',
+    title: payload.title,
+    description: payload.description,
+    startDate: payload.startDate,
+    meetingDate: payload.meetingDate,
+    sections: payload.sections,
+    publicationStatus: payload.publicationStatus,
+    legacyMidweekSections: payload.midweekSections,
+  });
+  const normalizedSections = convertProgramSectionsToLegacyMidweekSections(
+    normalizedProgram.sections
+  );
 
-  const updatePayload: Record<string, unknown> = {
+  const rawUpdatePayload: Record<string, unknown> = {
     meetingCategory: 'midweek',
     type: 'midweek',
     title: payload.title.trim(),
@@ -416,22 +555,33 @@ export const updateMidweekMeeting = async (
     bibleReading: payload.bibleReading.trim(),
     startDate: payload.startDate,
     endDate: payload.endDate,
+    meetingDate: normalizedProgram.meetingDate,
     status: payload.status ?? ('scheduled' as MeetingStatus),
+    publicationStatus: normalizedProgram.publicationStatus,
+    publishedAt: payload.publishedAt ?? null,
     location: payload.location?.trim() || null,
     meetingUrl: payload.meetingUrl?.trim() || null,
+    zoomMeetingId: payload.zoomMeetingId?.trim() || null,
+    zoomPasscode: payload.zoomPasscode?.trim() || null,
     notes: payload.notes?.trim() || null,
     openingSong: payload.openingSong?.trim() || null,
     openingPrayer: payload.openingPrayer?.trim() || null,
+    middleSong: payload.middleSong?.trim() || null,
     closingSong: payload.closingSong?.trim() || null,
     closingPrayer: payload.closingPrayer?.trim() || null,
     chairman: payload.chairman?.trim() || null,
+    sections: normalizedProgram.sections,
     midweekSections: normalizedSections,
+    assignedUserIds: normalizedProgram.assignedUserIds,
+    searchableText: normalizedProgram.searchableText,
     updatedAt: serverTimestamp(),
   };
 
   if (actorUid && actorUid.trim().length > 0) {
-    updatePayload.updatedBy = actorUid;
+    rawUpdatePayload.updatedBy = actorUid;
   }
+
+  const updatePayload = sanitizeForFirestore(rawUpdatePayload);
 
   await updateDoc(meetingDocRef(congregationId, meetingId), updatePayload);
   clearSessionCacheByPrefix(`query:midweek/${congregationId}/`);
@@ -475,3 +625,4 @@ export const subscribeToMidweekMeetings = (
     unsubscribe();
   };
 };
+

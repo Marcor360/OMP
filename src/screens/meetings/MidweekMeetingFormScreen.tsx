@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +21,7 @@ import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
+import { useMeetingsManagementPermission } from '@/src/hooks/use-meetings-management-permission';
 import {
   MidweekMeeting,
   MidweekMeetingPayload,
@@ -35,7 +36,7 @@ import {
 } from '@/src/services/users/active-users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
-  MIDWEEK_SECTION_IDS,
+  MIDWEEK_REQUIRED_SECTION_IDS,
   MidweekMeetingSection,
   createMidweekMeetingTemplate,
   normalizeSectionOrder,
@@ -60,9 +61,13 @@ interface MidweekMeetingFormState {
   notes: string;
   openingSong: string;
   openingPrayer: string;
+  openingPrayerUserId: string;
+  middleSong: string;
   closingSong: string;
   closingPrayer: string;
-  chairman: string;
+  closingPrayerUserId: string;
+  chairmanUserId: string;
+  chairmanName: string;
   sections: MidweekMeetingSection[];
 }
 
@@ -73,6 +78,7 @@ interface MidweekMeetingFormErrors {
   startDateInput?: string;
   endDateInput?: string;
   sections?: string;
+  chairmanUserId?: string;
   assignments: Record<string, AssignmentCardEditorErrors>;
 }
 
@@ -134,9 +140,13 @@ const initialFormState = (): MidweekMeetingFormState => {
     notes: '',
     openingSong: template.openingSong ?? '',
     openingPrayer: template.openingPrayer ?? '',
+    openingPrayerUserId: '',
+    middleSong: '',
     closingSong: template.closingSong ?? '',
     closingPrayer: template.closingPrayer ?? '',
-    chairman: template.chairman ?? '',
+    closingPrayerUserId: '',
+    chairmanUserId: '',
+    chairmanName: '',
     sections: normalizeSectionOrder(template.sections),
   };
 };
@@ -154,9 +164,13 @@ const mapMeetingToFormState = (meeting: MidweekMeeting): MidweekMeetingFormState
   notes: meeting.notes ?? '',
   openingSong: meeting.openingSong ?? '',
   openingPrayer: meeting.openingPrayer ?? '',
+  openingPrayerUserId: '',
+  middleSong: (meeting as any).middleSong ?? '',
   closingSong: meeting.closingSong ?? '',
   closingPrayer: meeting.closingPrayer ?? '',
-  chairman: meeting.chairman ?? '',
+  closingPrayerUserId: '',
+  chairmanUserId: '',
+  chairmanName: meeting.chairman ?? '',
   sections: normalizeSectionOrder(meeting.midweekSections),
 });
 
@@ -164,13 +178,12 @@ export function MidweekMeetingFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  const { appUser, profileError } = useUser();
   const {
-    appUser,
+    canManage: isAdminOrSupervisor,
     congregationId,
-    isAdminOrSupervisor,
-    loadingProfile,
-    profileError,
-  } = useUser();
+    loading: loadingProfile,
+  } = useMeetingsManagementPermission();
   const colors = useAppColors();
   const styles = createStyles(colors);
 
@@ -241,6 +254,9 @@ export function MidweekMeetingFormScreen() {
       title: validateRequired(form.title, 'El titulo general'),
       weekLabel: validateRequired(form.weekLabel, 'La semana'),
       bibleReading: validateRequired(form.bibleReading, 'La lectura biblica'),
+      chairmanUserId: form.chairmanUserId.trim().length === 0
+        ? 'El presidente es obligatorio.'
+        : undefined,
       startDateInput: undefined,
       endDateInput: undefined,
       sections: undefined,
@@ -262,12 +278,12 @@ export function MidweekMeetingFormScreen() {
       topLevelErrors.endDateInput = 'La fecha final debe ser posterior a la inicial.';
     }
 
-    const hasAllSections = MIDWEEK_SECTION_IDS.every((sectionId) =>
+    const hasAllSections = MIDWEEK_REQUIRED_SECTION_IDS.every((sectionId) =>
       form.sections.some((section) => section.id === sectionId)
     );
 
-    if (!hasAllSections || form.sections.length !== MIDWEEK_SECTION_IDS.length) {
-      topLevelErrors.sections = 'La estructura requiere las 3 secciones fijas de VyMC.';
+    if (!hasAllSections) {
+      topLevelErrors.sections = 'La estructura requiere las 3 secciones base de VyMC.';
     }
 
     form.sections.forEach((section) => {
@@ -288,14 +304,36 @@ export function MidweekMeetingFormScreen() {
         const participantErrors: Record<string, string> = {};
 
         assignment.participants.forEach((participant) => {
+          const scope = assignment.assignmentScope ?? 'internal';
+
           if (participant.mode === 'manual') {
             if (!participant.displayName || participant.displayName.trim().length === 0) {
               participantErrors[participant.id] = 'El nombre manual no puede estar vacio.';
             }
-          } else {
-            if (!participant.userId || participant.userId.trim().length === 0) {
+            if (scope === 'internal' && participant.displayName.trim().length > 0) {
+              participantErrors[participant.id] =
+                'Las asignaciones internas no permiten nombre manual.';
+            }
+            return;
+          }
+
+          if (participant.mode === 'specialRole') {
+            if (scope !== 'internal') {
+              participantErrors[participant.id] =
+                'El rol especial solo se permite en asignaciones internas.';
+            } else if (!participant.specialRoleKey) {
+              participantErrors[participant.id] = 'Selecciona un rol especial valido.';
+            }
+            return;
+          }
+
+          if (!participant.userId || participant.userId.trim().length === 0) {
+            if (scope === 'internal') {
               participantErrors[participant.id] = 'Selecciona un usuario valido.';
             }
+          } else if (scope !== 'internal') {
+            participantErrors[participant.id] =
+              'Las asignaciones informativas no deben usar usuario interno.';
           }
         });
 
@@ -319,6 +357,7 @@ export function MidweekMeetingFormScreen() {
       title: topLevelErrors.title,
       weekLabel: topLevelErrors.weekLabel,
       bibleReading: topLevelErrors.bibleReading,
+      chairmanUserId: topLevelErrors.chairmanUserId,
       startDateInput: topLevelErrors.startDateInput,
       endDateInput: topLevelErrors.endDateInput,
       sections: topLevelErrors.sections,
@@ -439,10 +478,15 @@ export function MidweekMeetingFormScreen() {
         meetingUrl: form.meetingUrl,
         notes: form.notes,
         openingSong: form.openingSong,
-        openingPrayer: form.openingPrayer,
+        openingPrayer: form.openingPrayerUserId
+          ? availableUsers.find((u) => u.uid === form.openingPrayerUserId)?.displayName ?? form.openingPrayer
+          : form.openingPrayer,
+        middleSong: form.middleSong,
         closingSong: form.closingSong,
-        closingPrayer: form.closingPrayer,
-        chairman: form.chairman,
+        closingPrayer: form.closingPrayerUserId
+          ? availableUsers.find((u) => u.uid === form.closingPrayerUserId)?.displayName ?? form.closingPrayer
+          : form.closingPrayer,
+        chairman: form.chairmanName,
         midweekSections: normalizeSectionOrder(form.sections),
         attendeeNames,
       };
@@ -649,20 +693,25 @@ export function MidweekMeetingFormScreen() {
         <View style={styles.sectionBlock}>
           <ThemedText style={styles.sectionTitle}>Apertura y cierre</ThemedText>
 
-          <View style={styles.inlineRow}>
-            <View style={styles.inlineField}>
-              <Field label="Presidente">
-                <TextInput
-                  style={styles.input}
-                  value={form.chairman}
-                  onChangeText={(value) => setForm((current) => ({ ...current, chairman: value }))}
-                  placeholder="Nombre del presidente"
-                  placeholderTextColor={colors.textDisabled}
-                  editable={canEdit}
-                />
-              </Field>
-            </View>
+          {/* Presidente - selector obligatorio de usuario */}
+          <Field label="Presidente *" error={errors.chairmanUserId}>
+            <UserPickerField
+              label="Seleccionar presidente"
+              users={availableUsers}
+              selectedUserId={form.chairmanUserId}
+              disabled={!canEdit}
+              hasError={Boolean(errors.chairmanUserId)}
+              onSelect={(user) =>
+                setForm((current) => ({
+                  ...current,
+                  chairmanUserId: user.uid,
+                  chairmanName: user.displayName,
+                }))
+              }
+            />
+          </Field>
 
+          <View style={styles.inlineRow}>
             <View style={styles.inlineField}>
               <Field label="Cancion inicial">
                 <TextInput
@@ -675,16 +724,34 @@ export function MidweekMeetingFormScreen() {
                 />
               </Field>
             </View>
+
+            <View style={styles.inlineField}>
+              <Field label="Oracion inicial">
+                <UserPickerField
+                  label="Seleccionar hermano"
+                  users={availableUsers}
+                  selectedUserId={form.openingPrayerUserId}
+                  disabled={!canEdit}
+                  onSelect={(user) =>
+                    setForm((current) => ({
+                      ...current,
+                      openingPrayerUserId: user.uid,
+                      openingPrayer: user.displayName,
+                    }))
+                  }
+                />
+              </Field>
+            </View>
           </View>
 
           <View style={styles.inlineRow}>
             <View style={styles.inlineField}>
-              <Field label="Oracion inicial">
+              <Field label="Cancion intermedia">
                 <TextInput
                   style={styles.input}
-                  value={form.openingPrayer}
-                  onChangeText={(value) => setForm((current) => ({ ...current, openingPrayer: value }))}
-                  placeholder="Asignado"
+                  value={form.middleSong}
+                  onChangeText={(value) => setForm((current) => ({ ...current, middleSong: value }))}
+                  placeholder="Ej: Cancion 65"
                   placeholderTextColor={colors.textDisabled}
                   editable={canEdit}
                 />
@@ -706,13 +773,18 @@ export function MidweekMeetingFormScreen() {
           </View>
 
           <Field label="Oracion final">
-            <TextInput
-              style={styles.input}
-              value={form.closingPrayer}
-              onChangeText={(value) => setForm((current) => ({ ...current, closingPrayer: value }))}
-              placeholder="Asignado"
-              placeholderTextColor={colors.textDisabled}
-              editable={canEdit}
+            <UserPickerField
+              label="Seleccionar hermano"
+              users={availableUsers}
+              selectedUserId={form.closingPrayerUserId}
+              disabled={!canEdit}
+              onSelect={(user) =>
+                setForm((current) => ({
+                  ...current,
+                  closingPrayerUserId: user.uid,
+                  closingPrayer: user.displayName,
+                }))
+              }
             />
           </Field>
         </View>
@@ -721,21 +793,16 @@ export function MidweekMeetingFormScreen() {
           <ThemedText style={styles.sectionTitle}>Secciones VyMC</ThemedText>
           {errors.sections ? <ThemedText style={styles.errorText}>{errors.sections}</ThemedText> : null}
 
-          {MIDWEEK_SECTION_IDS.map((sectionId) => {
-            const section = form.sections.find((item) => item.id === sectionId);
-            if (!section) return null;
-
-            return (
-              <MidweekSectionEditor
-                key={section.id}
-                section={section}
-                users={availableUsers}
-                disabled={!canEdit}
-                errors={errors.assignments}
-                onChange={(nextSection) => updateSection(section.id, nextSection)}
-              />
-            );
-          })}
+          {form.sections.map((section) => (
+            <MidweekSectionEditor
+              key={section.id}
+              section={section}
+              users={availableUsers}
+              disabled={!canEdit}
+              errors={errors.assignments}
+              onChange={(nextSection) => updateSection(section.id, nextSection)}
+            />
+          ))}
         </View>
 
         <Field label="Notas generales">
@@ -769,6 +836,63 @@ export function MidweekMeetingFormScreen() {
   );
 }
 
+
+function UserPickerField({
+  label,
+  users,
+  selectedUserId,
+  disabled,
+  hasError,
+  onSelect,
+}: {
+  label: string;
+  users: ActiveCongregationUser[];
+  selectedUserId: string;
+  disabled?: boolean;
+  hasError?: boolean;
+  onSelect: (user: ActiveCongregationUser) => void;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+  const [upeExpanded, setUpeExpanded] = React.useState(false);
+  const selectedUser = users.find((u) => u.uid === selectedUserId);
+  return (
+    <View>
+      <TouchableOpacity
+        style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderColor: hasError ? colors.error : colors.border }]}
+        onPress={() => !disabled && setUpeExpanded((e) => !e)}
+        activeOpacity={0.8}
+        disabled={disabled}
+      >
+        <ThemedText style={{ flex: 1, fontSize: 14, color: selectedUser ? colors.textPrimary : colors.textDisabled }} numberOfLines={1}>
+          {selectedUser?.displayName ?? label}
+        </ThemedText>
+        <Ionicons name={upeExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.textMuted} />
+      </TouchableOpacity>
+      {upeExpanded ? (
+        <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, overflow: 'hidden', backgroundColor: colors.surface, maxHeight: 220, marginTop: 4 }}>
+          {users.length === 0 ? (
+            <ThemedText style={{ padding: 12, color: colors.textMuted, fontSize: 13 }}>No hay usuarios activos.</ThemedText>
+          ) : users.map((user) => {
+            const isSelected = user.uid === selectedUserId;
+            return (
+              <TouchableOpacity
+                key={user.uid}
+                onPress={() => { onSelect(user); setUpeExpanded(false); }}
+                style={{ paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: isSelected ? (colors.primary + '22') : undefined }}
+                activeOpacity={0.7}
+              >
+                <ThemedText style={{ fontSize: 14, color: isSelected ? colors.primary : colors.textPrimary, fontWeight: isSelected ? '700' : '500' }}>
+                  {user.displayName}
+                </ThemedText>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 function Field({
   label,
   error,

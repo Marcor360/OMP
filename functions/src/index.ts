@@ -21,6 +21,13 @@ export {
   notifyMeetingAssignmentUsers,
 } from './modules/notifications/notifyAssignmentUsers.js';
 
+export { setMeetingPublicationStatus } from './meetings-publication.js';
+
+export {
+  notifyMeetingPublicationAndChanges,
+  sendMeetingReminderThreeDaysBefore,
+} from './meetings-notifications.js';
+
 export {
   scheduledDataCleanup,
 } from "./maintenance/scheduled-data-cleanup.js";

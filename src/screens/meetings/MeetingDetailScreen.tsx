@@ -1,223 +1,302 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, ScrollView, Share, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { AssignmentCard } from '@/src/components/cards/AssignmentCard';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
-import { RoleGuard } from '@/src/components/common/RoleGuard';
-import { StatusBadge, meetingStatusColor } from '@/src/components/common/StatusBadge';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { getAssignmentsByMeeting } from '@/src/services/assignments/assignments-service';
+import {
+  buildMeetingProgramFromMeeting,
+  getZoomFieldsFromSections,
+} from '@/src/services/meetings/meeting-program-utils';
+import {
+  extractWeekendSessionsFromSections,
+  getWeekendRegisteredDisplayName,
+  getWeekendSpeakerDisplayName,
+} from '@/src/services/meetings/weekend-meeting-adapter';
 import { deleteMeeting, getMeetingById } from '@/src/services/meetings/meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { Assignment } from '@/src/types/assignment';
-import { Meeting, MEETING_STATUS_LABELS, MEETING_TYPE_LABELS } from '@/src/types/meeting';
-import { formatDate, formatTime } from '@/src/utils/dates/dates';
+import { Meeting } from '@/src/types/meeting';
+import { MeetingColorToken } from '@/src/types/meeting/program';
+import { formatDate } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+
+const SECTION_COLOR_MAP: Record<MeetingColorToken, string> = {
+  blue: '#3E7FA3',
+  indigo: '#5A70B7',
+  orange: '#D29A00',
+  red: '#C52D11',
+  green: '#2B7F00',
+  teal: '#3E9C86',
+  dark: '#3C3E41',
+};
+
+const normalizeText = (value: string | undefined): string | undefined => {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
 
 export function MeetingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { congregationId, loadingProfile, profileError } = useUser();
+  const { congregationId, loadingProfile, profileError, isAdminOrSupervisor } = useUser();
   const colors = useAppColors();
   const styles = createStyles(colors);
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (loadingProfile) return;
 
-    if (!id || !congregationId) {
+    if (!congregationId || !id) {
       setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
       setLoading(false);
       return;
     }
 
-    Promise.all([getMeetingById(congregationId, id), getAssignmentsByMeeting(congregationId, id)])
-      .then(([meetingDoc, assignmentDocs]) => {
-        setMeeting(meetingDoc);
-        setAssignments(assignmentDocs);
-
-        if (!meetingDoc) {
+    getMeetingById(congregationId, id)
+      .then((doc) => {
+        if (!doc) {
           setError('Reunion no encontrada.');
+          return;
         }
+
+        if (!isAdminOrSupervisor && doc.publicationStatus === 'draft') {
+          setError('No tienes acceso a esta reunion.');
+          return;
+        }
+
+        setMeeting(doc);
       })
-      .catch((requestError) => {
-        setError(formatFirestoreError(requestError));
-      })
+      .catch((requestError) => setError(formatFirestoreError(requestError)))
       .finally(() => setLoading(false));
-  }, [congregationId, id, loadingProfile, profileError]);
+  }, [congregationId, id, isAdminOrSupervisor, loadingProfile, profileError]);
 
-  const handleDelete = async () => {
-    if (!meeting || !congregationId) return;
+  const sections = useMemo(() => (meeting ? buildMeetingProgramFromMeeting(meeting) : []), [meeting]);
+  const weekendSessions = useMemo(
+    () => extractWeekendSessionsFromSections(sections),
+    [sections]
+  );
 
-    const confirmed =
-      Platform.OS === 'web'
-        ? window.confirm('Eliminar esta reunion?')
-        : await new Promise<boolean>((resolve) =>
-            Alert.alert('Eliminar reunion', 'Estas seguro?', [
-              { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
-              { text: 'Eliminar', style: 'destructive', onPress: () => resolve(true) },
-            ])
-          );
+  const zoomFields = useMemo(() => getZoomFieldsFromSections(sections), [sections]);
 
-    if (!confirmed) return;
+  const zoomSummary = useMemo(() => {
+    const values = [
+      zoomFields.zoomMeetingId ? `ID: ${zoomFields.zoomMeetingId}` : undefined,
+      zoomFields.zoomPasscode ? `Codigo: ${zoomFields.zoomPasscode}` : undefined,
+      zoomFields.zoomLink ? `Enlace: ${zoomFields.zoomLink}` : undefined,
+    ].filter((item): item is string => Boolean(item));
+
+    return values.join('\n');
+  }, [zoomFields.zoomLink, zoomFields.zoomMeetingId, zoomFields.zoomPasscode]);
+
+  const copyZoomData = async () => {
+    if (!zoomSummary) {
+      Alert.alert('Zoom', 'No hay datos de Zoom para copiar.');
+      return;
+    }
 
     try {
-      await deleteMeeting(congregationId, meeting.id);
-      router.back();
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(zoomSummary);
+        Alert.alert('Zoom', 'Datos de Zoom copiados al portapapeles.');
+        return;
+      }
+
+      await Share.share({ message: zoomSummary });
     } catch (requestError) {
       Alert.alert('Error', formatFirestoreError(requestError));
     }
   };
 
-  if (loading || loadingProfile) return <LoadingState />;
+  const requestDeleteMeeting = () => {
+    if (!meeting || !congregationId || deleting) return;
+
+    Alert.alert(
+      'Eliminar reunion',
+      'Esta accion eliminara la reunion de forma permanente. No se puede deshacer.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            void executeDeleteMeeting();
+          },
+        },
+      ]
+    );
+  };
+
+  const executeDeleteMeeting = async () => {
+    if (!meeting || !congregationId) return;
+
+    setDeleting(true);
+
+    try {
+      await deleteMeeting(congregationId, meeting.id);
+      router.replace('/(protected)/meetings/manage' as never);
+    } catch (requestError) {
+      Alert.alert('Error', formatFirestoreError(requestError));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (loading || loadingProfile) return <LoadingState message="Cargando reunion..." />;
   if (error || !meeting) return <ErrorState message={error ?? 'Reunion no encontrada.'} />;
 
   return (
-    <ScreenContainer scrollable={false}>
+    <ScreenContainer scrollable={false} padded={false}>
       <PageHeader
-        title="Detalle de reunion"
+        title={meeting.type === 'midweek' ? 'Reunion Vida y Ministerio Cristianos' : 'Reunion del fin de semana'}
         showBack
         actions={
-          <RoleGuard allowedRoles={['admin', 'supervisor']}>
-            <TouchableOpacity
-              style={styles.editBtn}
-              onPress={() => router.push(`/(protected)/meetings/edit/${meeting.id}` as any)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="pencil-outline" size={18} color={colors.primary} />
-            </TouchableOpacity>
-          </RoleGuard>
+          isAdminOrSupervisor ? (
+            <View style={styles.headerActions}>
+              <TouchableOpacity style={styles.editBtn} onPress={() => router.push(`/(protected)/meetings/edit/${meeting.id}` as never)}>
+                <Ionicons name="pencil-outline" size={18} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.deleteBtn, deleting && styles.dim]}
+                onPress={requestDeleteMeeting}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator size="small" color={colors.error} />
+                ) : (
+                  <Ionicons name="trash-outline" size={18} color={colors.error} />
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : undefined
         }
       />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.titleSection}>
-          <StatusBadge label={MEETING_STATUS_LABELS[meeting.status]} color={meetingStatusColor[meeting.status]} />
-          <ThemedText style={styles.title}>{meeting.title}</ThemedText>
-          <ThemedText style={styles.type}>{MEETING_TYPE_LABELS[meeting.type]}</ThemedText>
+        <View style={styles.headerWrap}>
+          <ThemedText style={styles.headerDate}>{formatDate(meeting.meetingDate ?? meeting.startDate)}</ThemedText>
+          <ThemedText style={styles.headerType}>{meeting.type === 'midweek' ? 'Entre semana' : 'Fin de semana'}</ThemedText>
         </View>
 
-        <View style={styles.card}>
-          <InfoRow icon="calendar-outline" label="Fecha" value={formatDate(meeting.startDate)} />
-          <InfoRow icon="time-outline" label="Horario" value={`${formatTime(meeting.startDate)} - ${formatTime(meeting.endDate)}`} />
-          {meeting.location ? <InfoRow icon="location-outline" label="Lugar" value={meeting.location} /> : null}
-          {meeting.meetingUrl ? <InfoRow icon="link-outline" label="Enlace" value={meeting.meetingUrl} /> : null}
-          <InfoRow icon="person-outline" label="Organizador" value={meeting.organizerName} />
-          <InfoRow
-            icon="people-outline"
-            label="Asistentes"
-            value={`${meeting.attendees.length} persona${meeting.attendees.length !== 1 ? 's' : ''}`}
-          />
-        </View>
+        {(meeting.type === 'midweek' || meeting.meetingCategory === 'midweek') ? (
+          sections.filter((section) => section.isEnabled !== false).map((section) => {
+            const sectionColor = section.colorToken ? SECTION_COLOR_MAP[section.colorToken] : colors.secondary;
 
-        {meeting.description ? (
-          <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Descripcion</ThemedText>
-            <ThemedText style={styles.description}>{meeting.description}</ThemedText>
-          </View>
-        ) : null}
+            return (
+              <View key={section.sectionKey} style={styles.sectionCard}>
+                <View style={[styles.sectionBanner, { backgroundColor: sectionColor }]}>
+                  <ThemedText style={styles.sectionBannerText}>{section.title}</ThemedText>
+                </View>
 
-        {meeting.notes ? (
-          <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Notas</ThemedText>
-            <ThemedText style={styles.description}>{meeting.notes}</ThemedText>
-          </View>
-        ) : null}
+                <View style={styles.sectionBody}>
+                  {section.assignments.length === 0 ? (
+                    <ThemedText style={styles.emptyLine}>No disponible</ThemedText>
+                  ) : (
+                    section.assignments.map((assignment) => {
+                      const names = assignment.assignees
+                        .map((assignee) => normalizeText(assignee.assigneeNameSnapshot))
+                        .filter((name): name is string => Boolean(name));
 
-        {assignments.length > 0 ? (
-          <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Asignaciones vinculadas ({assignments.length})</ThemedText>
-            <View style={styles.assignmentList}>
-              {assignments.map((assignment) => (
-                <AssignmentCard key={assignment.id} assignment={assignment} />
-              ))}
+                      const themeLabel = normalizeText(assignment.roleLabel);
+                      const durationLabel =
+                        typeof assignment.durationMinutes === 'number' && Number.isFinite(assignment.durationMinutes)
+                          ? `${assignment.durationMinutes} min.`
+                          : undefined;
+
+                      return (
+                        <View key={assignment.assignmentKey} style={styles.assignmentWrap}>
+                          <ThemedText style={styles.assignmentTitle}>{assignment.title}</ThemedText>
+                          {themeLabel ? <ThemedText style={styles.assignmentMeta}>Tema: {themeLabel}</ThemedText> : null}
+                          {durationLabel ? <ThemedText style={styles.assignmentMeta}>Duracion: {durationLabel}</ThemedText> : null}
+                          <ThemedText style={styles.assignmentName}>
+                            {names.length > 0
+                              ? names.join(', ')
+                              : assignment.assignmentScope === 'internal'
+                                ? 'Ninguno'
+                                : 'No disponible'}
+                          </ThemedText>
+                        </View>
+                      );
+                    })
+                  )}
+                </View>
+              </View>
+            );
+          })
+        ) : (
+          weekendSessions.map((session, index) => (
+            <View key={session.id} style={styles.sectionCard}>
+              <View style={[styles.sectionBanner, { backgroundColor: colors.primary }]}>
+                <ThemedText style={styles.sectionBannerText}>Sesion {index + 1}</ThemedText>
+              </View>
+
+              <View style={styles.sectionBody}>
+                <View style={styles.assignmentWrap}>
+                  <ThemedText style={styles.assignmentTitle}>Discurso Publico</ThemedText>
+                  <ThemedText style={styles.assignmentName}>
+                    {normalizeText(session.publicTalk.discourseTitle) ?? 'Sin tema'}
+                  </ThemedText>
+                  <ThemedText style={styles.assignmentMeta}>
+                    Asignado: {getWeekendSpeakerDisplayName(session.publicTalk.speaker)}
+                  </ThemedText>
+                </View>
+
+                <View style={styles.assignmentWrap}>
+                  <ThemedText style={styles.assignmentTitle}>Estudio de La Atalaya</ThemedText>
+                  <ThemedText style={styles.assignmentName}>
+                    {normalizeText(session.watchtowerStudy.theme) ?? 'Sin tema'}
+                  </ThemedText>
+                  <ThemedText style={styles.assignmentMeta}>
+                    Conductor: {getWeekendRegisteredDisplayName(session.watchtowerStudy.conductor)}
+                  </ThemedText>
+                  <ThemedText style={styles.assignmentMeta}>
+                    Lector: {getWeekendRegisteredDisplayName(session.watchtowerStudy.reader)}
+                  </ThemedText>
+                </View>
+              </View>
             </View>
-          </View>
-        ) : null}
+          ))
+        )}
 
-        <RoleGuard allowedRoles={['admin', 'supervisor']}>
-          <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} activeOpacity={0.8}>
-            <Ionicons name="trash-outline" size={18} color={colors.error} />
-            <ThemedText style={styles.deleteBtnText}>Eliminar reunion</ThemedText>
+        {(zoomFields.zoomLink || zoomFields.zoomMeetingId || zoomFields.zoomPasscode) ? (
+          <TouchableOpacity style={styles.zoomCopyBtn} onPress={copyZoomData} activeOpacity={0.8}>
+            <Ionicons name="copy-outline" size={16} color={colors.infoDark} />
+            <ThemedText style={styles.zoomCopyText}>Copiar datos de Zoom</ThemedText>
           </TouchableOpacity>
-        </RoleGuard>
+        ) : null}
       </ScrollView>
     </ScreenContainer>
   );
 }
 
-function InfoRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-}) {
-  const colors = useAppColors();
-  const styles = createStyles(colors);
-
-  return (
-    <View style={styles.infoRow}>
-      <Ionicons name={icon} size={16} color={colors.textMuted} />
-      <ThemedText style={styles.infoLabel}>{label}</ThemedText>
-      <ThemedText style={styles.infoValue} numberOfLines={2}>
-        {value}
-      </ThemedText>
-    </View>
-  );
-}
-
 const createStyles = (colors: AppColorSet) =>
   StyleSheet.create({
-    content: { padding: 16, gap: 16, paddingBottom: 32 },
-    titleSection: { gap: 6 },
-    title: { fontSize: 22, fontWeight: '800', color: colors.textPrimary, lineHeight: 28 },
-    type: { fontSize: 13, color: colors.textMuted },
-    card: {
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-      overflow: 'hidden',
-    },
-    infoRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    infoLabel: { fontSize: 13, color: colors.textMuted, width: 100 },
-    infoValue: { flex: 1, fontSize: 14, color: colors.textPrimary, fontWeight: '500' },
-    section: { gap: 10 },
-    sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.textSecondary },
-    description: { fontSize: 14, color: colors.textMuted, lineHeight: 22 },
-    assignmentList: { gap: 10 },
-    editBtn: { padding: 8, backgroundColor: colors.primary + '22', borderRadius: 8 },
-    deleteBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      padding: 14,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.error + '44',
-      backgroundColor: colors.error + '11',
-      marginTop: 8,
-    },
-    deleteBtnText: { color: colors.error, fontWeight: '600' },
+    content: { padding: 14, paddingBottom: 28, gap: 12 },
+    headerWrap: { paddingHorizontal: 4, gap: 2, alignItems: 'center' },
+    headerDate: { fontSize: 20, fontWeight: '800', color: colors.textPrimary, textTransform: 'capitalize' },
+    headerType: { fontSize: 13, color: colors.textMuted, fontWeight: '600' },
+    sectionCard: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, overflow: 'hidden' },
+    sectionBanner: { paddingVertical: 8, paddingHorizontal: 10, alignItems: 'center' },
+    sectionBannerText: { color: '#fff', fontSize: 13, fontWeight: '800', textTransform: 'uppercase' },
+    sectionBody: { padding: 12, gap: 10 },
+    assignmentWrap: { gap: 2 },
+    assignmentTitle: { fontSize: 15, fontWeight: '800', color: colors.textPrimary },
+    assignmentMeta: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
+    assignmentName: { fontSize: 14, color: colors.textPrimary },
+    emptyLine: { fontSize: 14, color: colors.textMuted },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    editBtn: { padding: 8, borderRadius: 8, backgroundColor: colors.primary + '18' },
+    deleteBtn: { padding: 8, borderRadius: 8, backgroundColor: colors.error + '16' },
+    zoomCopyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: colors.info + '66', borderRadius: 10, backgroundColor: colors.infoLight, paddingVertical: 10, marginTop: 4 },
+    zoomCopyText: { color: colors.infoDark, fontWeight: '700', fontSize: 13 },
+    dim: { opacity: 0.55 },
   });

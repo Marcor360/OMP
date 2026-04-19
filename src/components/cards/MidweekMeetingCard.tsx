@@ -31,7 +31,7 @@ export function MidweekMeetingCard({ meeting, onPress }: MidweekMeetingCardProps
       return;
     }
 
-    router.push(`/(protected)/meetings/midweek/${meeting.id}` as never);
+    router.push(`/(protected)/meetings/edit/${meeting.id}` as never);
   };
 
   return (
@@ -65,7 +65,7 @@ export function MidweekMeetingCard({ meeting, onPress }: MidweekMeetingCardProps
       <View style={styles.metaRow}>
         <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
         <ThemedText style={styles.metaText}>
-          {formatDate(meeting.startDate)} · {formatTime(meeting.startDate)}
+          {formatDate(meeting.startDate)} Â· {formatTime(meeting.startDate)}
         </ThemedText>
       </View>
 
@@ -150,3 +150,4 @@ const createStyles = (colors: AppColorSet) =>
       fontWeight: '600',
     },
   });
+

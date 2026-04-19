@@ -22,9 +22,10 @@ import {
   updateUserByAdmin,
   updateUserPasswordByAdmin,
 } from '@/src/services/users/admin-users-service';
-import { getUserById } from '@/src/services/users/users-service';
+import { getAllUsers, getUserById } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
+  type AppUser,
   ROLE_LABELS,
   USER_SERVICE_DEPARTMENTS,
   USER_SERVICE_DEPARTMENT_LABELS,
@@ -109,6 +110,30 @@ const buildDepartmentLabel = (
   return undefined;
 };
 
+const resolveServiceAssignmentFromUser = (
+  user: Pick<AppUser, 'servicePosition' | 'serviceDepartment' | 'department'>
+): { position: ServiceSelection; department: UserServiceDepartment | '' } => {
+  if (user.servicePosition) {
+    if (
+      (user.servicePosition === 'encargado' || user.servicePosition === 'auxiliar') &&
+      !user.serviceDepartment
+    ) {
+      const legacy = parseLegacyAssignment(user.department);
+      return {
+        position: user.servicePosition,
+        department: legacy.department,
+      };
+    }
+
+    return {
+      position: user.servicePosition,
+      department: user.serviceDepartment ?? '',
+    };
+  }
+
+  return parseLegacyAssignment(user.department);
+};
+
 export function UserFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
@@ -122,12 +147,14 @@ export function UserFormScreen() {
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [secondLastName, setSecondLastName] = useState('');
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [role, setRole] = useState<UserRole>('user');
   const [phone, setPhone] = useState('');
+  const [activeUsers, setActiveUsers] = useState<AppUser[]>([]);
   const [servicePosition, setServicePosition] = useState<ServiceSelection>('none');
   const [serviceDepartment, setServiceDepartment] = useState<UserServiceDepartment | ''>('');
   const [allowedEmailDomain, setAllowedEmailDomain] = useState('congregacion.com');
@@ -141,6 +168,29 @@ export function UserFormScreen() {
     getCongregationEmailDomain(congregationId)
       .then((domain) => setAllowedEmailDomain(domain))
       .catch(() => setAllowedEmailDomain('congregacion.com'));
+  }, [congregationId]);
+
+  useEffect(() => {
+    if (!congregationId) {
+      setActiveUsers([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    getAllUsers(congregationId)
+      .then((users) => {
+        if (cancelled) return;
+        setActiveUsers(users.filter((user) => user.isActive));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setActiveUsers([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [congregationId]);
 
   useEffect(() => {
@@ -198,6 +248,54 @@ export function UserFormScreen() {
     [role]
   );
 
+  const occupiedAssignments = useMemo(() => {
+    const occupiedUniquePositions = new Set<UserServicePosition>();
+    const occupiedEncargadoDepartments = new Set<UserServiceDepartment>();
+
+    activeUsers.forEach((user) => {
+      if (id && user.uid === id) return;
+
+      const assignment = resolveServiceAssignmentFromUser(user);
+
+      if (
+        assignment.position === 'coordinador' ||
+        assignment.position === 'secretario'
+      ) {
+        occupiedUniquePositions.add(assignment.position);
+      }
+
+      if (assignment.position === 'encargado' && assignment.department) {
+        occupiedEncargadoDepartments.add(assignment.department);
+      }
+    });
+
+    return {
+      occupiedUniquePositions,
+      occupiedEncargadoDepartments,
+    };
+  }, [activeUsers, id]);
+
+  const isPositionOccupied = (position: ServiceSelection): boolean => {
+    if (position === 'none' || position === 'auxiliar') return false;
+
+    if (position === 'coordinador' || position === 'secretario') {
+      return occupiedAssignments.occupiedUniquePositions.has(position);
+    }
+
+    if (position === 'encargado') {
+      return USER_SERVICE_DEPARTMENTS.every((department) =>
+        occupiedAssignments.occupiedEncargadoDepartments.has(department)
+      );
+    }
+
+    return false;
+  };
+
+  const isDepartmentOccupied = (department: UserServiceDepartment): boolean => {
+    if (servicePosition !== 'encargado') return false;
+    return occupiedAssignments.occupiedEncargadoDepartments.has(department);
+  };
+
   useEffect(() => {
     if (!positionOptions.includes(servicePosition)) {
       setServicePosition('none');
@@ -210,6 +308,27 @@ export function UserFormScreen() {
     }
   }, [positionOptions, serviceDepartment, servicePosition]);
 
+  useEffect(() => {
+    if (
+      (servicePosition === 'coordinador' || servicePosition === 'secretario') &&
+      occupiedAssignments.occupiedUniquePositions.has(servicePosition)
+    ) {
+      setServicePosition('none');
+    }
+  }, [occupiedAssignments.occupiedUniquePositions, servicePosition]);
+
+  useEffect(() => {
+    if (servicePosition !== 'encargado' || !serviceDepartment) return;
+
+    if (occupiedAssignments.occupiedEncargadoDepartments.has(serviceDepartment)) {
+      setServiceDepartment('');
+    }
+  }, [
+    occupiedAssignments.occupiedEncargadoDepartments,
+    serviceDepartment,
+    servicePosition,
+  ]);
+
   const validate = (): boolean => {
     const assignmentError = needsDepartment(servicePosition)
       ? validateRequired(serviceDepartment, 'El departamento')
@@ -219,7 +338,7 @@ export function UserFormScreen() {
       mode === 'create'
         ? {
             firstName: validateRequired(firstName, 'El primer nombre'),
-            lastName: validateRequired(lastName, 'El apellido'),
+            lastName: validateRequired(lastName, 'El apellido paterno'),
             password:
               validateRequired(password, 'La contrasena') ??
               validateMinLength(password, 6, 'La contrasena'),
@@ -267,8 +386,9 @@ export function UserFormScreen() {
           firstName,
           middleName: normalizedMiddle,
           lastName,
+          secondLastName: secondLastName.trim() || undefined,
           password,
-          displayName: [firstName, normalizedMiddle, lastName].filter(Boolean).join(' ').trim(),
+          displayName: [firstName, normalizedMiddle, lastName, secondLastName.trim()].filter(Boolean).join(' ').trim(),
           email: generatedEmailPreview,
           role,
           congregationId,
@@ -357,12 +477,23 @@ export function UserFormScreen() {
               />
             </Field>
 
-            <Field label="Apellido *" error={errors.lastName}>
+            <Field label="Apellido paterno *" error={errors.lastName}>
               <TextInput
                 style={[styles.input, errors.lastName && styles.inputError]}
                 value={lastName}
                 onChangeText={setLastName}
                 placeholder="Ej: Perez"
+                placeholderTextColor={colors.textDisabled}
+                editable={isAdmin}
+              />
+            </Field>
+
+            <Field label="Apellido materno">
+              <TextInput
+                style={styles.input}
+                value={secondLastName}
+                onChangeText={setSecondLastName}
+                placeholder="Ej: Silva"
                 placeholderTextColor={colors.textDisabled}
                 editable={isAdmin}
               />
@@ -446,51 +577,74 @@ export function UserFormScreen() {
 
         <Field label="Asignacion de servicio" error={errors.assignment}>
           <View style={styles.departmentRow}>
-            {positionOptions.map((item) => (
-              <TouchableOpacity
-                key={item}
-                style={[styles.departmentChip, servicePosition === item && styles.departmentChipActive]}
-                onPress={() => setServicePosition(item)}
-                activeOpacity={0.8}
-                disabled={!isAdmin}
-              >
+            {positionOptions.map((item) => {
+              const disabledByAssignment = isPositionOccupied(item);
+              const disabled = !isAdmin || disabledByAssignment;
+
+              return (
+                <TouchableOpacity
+                  key={item}
+                  style={[
+                    styles.departmentChip,
+                    servicePosition === item && styles.departmentChipActive,
+                    disabledByAssignment && styles.departmentChipDisabled,
+                  ]}
+                  onPress={() => {
+                    if (disabled) return;
+                    setServicePosition(item);
+                  }}
+                  activeOpacity={0.8}
+                  disabled={disabled}
+                >
                 <ThemedText
                   style={[
                     styles.departmentChipText,
                     servicePosition === item && styles.departmentChipTextActive,
+                    disabledByAssignment && styles.departmentChipTextDisabled,
                   ]}
                 >
                   {item === 'none' ? 'Sin asignacion' : USER_SERVICE_POSITION_LABELS[item]}
                 </ThemedText>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </Field>
 
         {needsDepartment(servicePosition) ? (
           <Field label="Departamento" error={errors.assignment}>
             <View style={styles.departmentRow}>
-              {USER_SERVICE_DEPARTMENTS.map((item) => (
-                <TouchableOpacity
-                  key={item}
-                  style={[
-                    styles.departmentChip,
-                    serviceDepartment === item && styles.departmentChipActive,
-                  ]}
-                  onPress={() => setServiceDepartment(item)}
-                  activeOpacity={0.8}
-                  disabled={!isAdmin}
-                >
+              {USER_SERVICE_DEPARTMENTS.map((item) => {
+                const disabledByAssignment = isDepartmentOccupied(item);
+                const disabled = !isAdmin || disabledByAssignment;
+
+                return (
+                  <TouchableOpacity
+                    key={item}
+                    style={[
+                      styles.departmentChip,
+                      serviceDepartment === item && styles.departmentChipActive,
+                      disabledByAssignment && styles.departmentChipDisabled,
+                    ]}
+                    onPress={() => {
+                      if (disabled) return;
+                      setServiceDepartment(item);
+                    }}
+                    activeOpacity={0.8}
+                    disabled={disabled}
+                  >
                   <ThemedText
                     style={[
                       styles.departmentChipText,
                       serviceDepartment === item && styles.departmentChipTextActive,
+                      disabledByAssignment && styles.departmentChipTextDisabled,
                     ]}
                   >
                     {USER_SERVICE_DEPARTMENT_LABELS[item]}
                   </ThemedText>
-                </TouchableOpacity>
-              ))}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </Field>
         ) : null}
@@ -662,6 +816,10 @@ const createStyles = (colors: AppColorSet) =>
       backgroundColor: colors.primary,
       borderColor: colors.primary,
     },
+    departmentChipDisabled: {
+      opacity: 0.45,
+      backgroundColor: colors.surfaceRaised,
+    },
     departmentChipText: {
       fontSize: 12,
       fontWeight: '600',
@@ -669,6 +827,9 @@ const createStyles = (colors: AppColorSet) =>
     },
     departmentChipTextActive: {
       color: '#fff',
+    },
+    departmentChipTextDisabled: {
+      color: colors.textDisabled,
     },
     roleChip: {
       flex: 1,

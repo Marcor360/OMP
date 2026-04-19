@@ -52,6 +52,7 @@ export interface AppUser {
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
   avatarUrl?: string;
+  secondLastName?: string;
   // Campos de modulo de limpieza
   cleaningEligible?: boolean;
   cleaningGroupId?: string | null;
@@ -77,6 +78,7 @@ export interface CreateUserDTO {
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
+  secondLastName?: string;
 }
 
 export interface UpdateUserDTO {

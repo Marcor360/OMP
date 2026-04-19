@@ -13,7 +13,7 @@ export function AboutScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
 
-  const appVersion = Application.nativeApplicationVersion ?? '1.3.5';
+  const appVersion = Application.nativeApplicationVersion ?? '1.4.1';
   const buildVersion = Application.nativeBuildVersion ?? '1';
 
   return (

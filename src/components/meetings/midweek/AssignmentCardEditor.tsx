@@ -6,10 +6,7 @@ import { ParticipantSelectorField } from '@/src/components/meetings/midweek/Part
 import { ThemedText } from '@/src/components/themed-text';
 import { ActiveCongregationUser } from '@/src/services/users/active-users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import {
-  MidweekAssignment,
-  createEmptyParticipant,
-} from '@/src/types/midweek-meeting';
+import { MidweekAssignment, createEmptyParticipant } from '@/src/types/midweek-meeting';
 
 export interface AssignmentCardEditorErrors {
   title?: string;
@@ -30,6 +27,17 @@ interface AssignmentCardEditorProps {
   errors?: AssignmentCardEditorErrors;
 }
 
+const normalizeParticipants = (
+  assignment: MidweekAssignment,
+  participants: MidweekAssignment['participants']
+): MidweekAssignment['participants'] => {
+  if (assignment.sectionId !== 'livingAsChristians') {
+    return participants;
+  }
+
+  return participants.slice(0, 2);
+};
+
 export function AssignmentCardEditor({
   assignment,
   users,
@@ -45,10 +53,24 @@ export function AssignmentCardEditor({
   const colors = useAppColors();
   const styles = createStyles(colors);
 
-  const updateField = <K extends keyof MidweekAssignment>(key: K, value: MidweekAssignment[K]) => {
+  const isLivingAsChristians = assignment.sectionId === 'livingAsChristians';
+  const visibleParticipants = normalizeParticipants(assignment, assignment.participants);
+
+  const updateField = <K extends keyof MidweekAssignment>(
+    key: K,
+    value: MidweekAssignment[K]
+  ) => {
     onChange({
       ...assignment,
       [key]: value,
+      participants: normalizeParticipants(assignment, assignment.participants),
+    });
+  };
+
+  const updateParticipants = (nextParticipants: MidweekAssignment['participants']) => {
+    onChange({
+      ...assignment,
+      participants: normalizeParticipants(assignment, nextParticipants),
     });
   };
 
@@ -56,6 +78,19 @@ export function AssignmentCardEditor({
     typeof assignment.durationMinutes === 'number' && Number.isFinite(assignment.durationMinutes)
       ? String(assignment.durationMinutes)
       : '';
+
+  const addParticipant = () => {
+    if (isLivingAsChristians && visibleParticipants.length >= 2) return;
+    updateParticipants([...visibleParticipants, createEmptyParticipant()]);
+  };
+
+  const participantLabel = (index: number): string => {
+    if (!isLivingAsChristians) {
+      return `Participante ${index + 1}`;
+    }
+
+    return index === 0 ? 'Participante 1' : 'Participante 2 (opcional)';
+  };
 
   return (
     <View style={styles.card}>
@@ -82,33 +117,33 @@ export function AssignmentCardEditor({
         </View>
       </View>
 
-      <View style={styles.fieldWrap}>
-        <ThemedText style={styles.label}>Titulo de la parte *</ThemedText>
-        <TextInput
-          style={[styles.input, errors?.title && styles.inputError]}
-          value={assignment.title}
-          onChangeText={(next) => updateField('title', next)}
-          placeholder="Ej: Discurso, lectura, video"
-          placeholderTextColor={colors.textDisabled}
-          editable={!disabled}
-        />
-        {errors?.title ? <ThemedText style={styles.errorText}>{errors.title}</ThemedText> : null}
-      </View>
+      <View style={styles.contentBlock}>
+        <View style={styles.fieldWrap}>
+          <ThemedText style={styles.label}>Titulo de la parte *</ThemedText>
+          <TextInput
+            style={[styles.input, errors?.title && styles.inputError]}
+            value={assignment.title}
+            onChangeText={(next) => updateField('title', next)}
+            placeholder="Ej: Discurso, lectura, video"
+            placeholderTextColor={colors.textDisabled}
+            editable={!disabled}
+          />
+          {errors?.title ? <ThemedText style={styles.errorText}>{errors.title}</ThemedText> : null}
+        </View>
 
-      <View style={styles.fieldWrap}>
-        <ThemedText style={styles.label}>Tema / subtitulo</ThemedText>
-        <TextInput
-          style={styles.input}
-          value={assignment.theme ?? ''}
-          onChangeText={(next) => updateField('theme', next)}
-          placeholder="Ej: Jer 13:1-11"
-          placeholderTextColor={colors.textDisabled}
-          editable={!disabled}
-        />
-      </View>
+        <View style={styles.fieldWrap}>
+          <ThemedText style={styles.label}>Tema / subtitulo</ThemedText>
+          <TextInput
+            style={styles.input}
+            value={assignment.theme ?? ''}
+            onChangeText={(next) => updateField('theme', next)}
+            placeholder="Ej: Jer 13:1-11"
+            placeholderTextColor={colors.textDisabled}
+            editable={!disabled}
+          />
+        </View>
 
-      <View style={styles.inlineRow}>
-        <View style={[styles.fieldWrap, styles.inlineField]}>
+        <View style={styles.fieldWrap}>
           <ThemedText style={styles.label}>Duracion (min)</ThemedText>
           <TextInput
             style={[styles.input, errors?.durationMinutes && styles.inputError]}
@@ -136,52 +171,32 @@ export function AssignmentCardEditor({
             <ThemedText style={styles.errorText}>{errors.durationMinutes}</ThemedText>
           ) : null}
         </View>
-
-        <View style={[styles.fieldWrap, styles.inlineField]}>
-          <ThemedText style={styles.label}>Tipo de asignacion</ThemedText>
-          <TextInput
-            style={styles.input}
-            value={assignment.assignmentType ?? ''}
-            onChangeText={(next) => updateField('assignmentType', next as MidweekAssignment['assignmentType'])}
-            placeholder="Ej: discourse, reading"
-            placeholderTextColor={colors.textDisabled}
-            editable={!disabled}
-            autoCapitalize="none"
-          />
-        </View>
       </View>
 
-      <View style={styles.fieldWrap}>
-        <ThemedText style={styles.label}>Notas</ThemedText>
-        <TextInput
-          style={[styles.input, styles.notesInput]}
-          value={assignment.notes ?? ''}
-          onChangeText={(next) => updateField('notes', next)}
-          placeholder="Indicaciones internas"
-          placeholderTextColor={colors.textDisabled}
-          editable={!disabled}
-          multiline
-        />
-      </View>
-
-      <View style={styles.fieldWrap}>
+      <View style={styles.participantsBlock}>
         <View style={styles.participantsHeader}>
           <ThemedText style={styles.participantTitle}>Participantes</ThemedText>
-          <TouchableOpacity
-            style={styles.addParticipantBtn}
-            onPress={() => updateField('participants', [...assignment.participants, createEmptyParticipant()])}
-            disabled={disabled}
-          >
-            <Ionicons name="add" size={16} color="#fff" />
-            <ThemedText style={styles.addParticipantText}>Agregar</ThemedText>
-          </TouchableOpacity>
+          {(!isLivingAsChristians || visibleParticipants.length < 2) ? (
+            <TouchableOpacity
+              style={styles.addParticipantBtn}
+              onPress={addParticipant}
+              disabled={disabled}
+            >
+              <Ionicons name="add" size={16} color="#fff" />
+              <ThemedText style={styles.addParticipantText}>
+                {isLivingAsChristians && visibleParticipants.length === 1
+                  ? 'Agregar participante 2'
+                  : 'Agregar'}
+              </ThemedText>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
-        {assignment.participants.length === 0 ? (
+        {visibleParticipants.length === 0 ? (
           <ThemedText style={styles.emptyText}>Sin participantes todavia.</ThemedText>
         ) : (
           <View style={styles.participantsList}>
-            {assignment.participants.map((participant, participantIndex) => {
+            {visibleParticipants.map((participant, participantIndex) => {
               const participantError = errors?.participants?.[participant.id];
 
               return (
@@ -191,17 +206,20 @@ export function AssignmentCardEditor({
                   users={users}
                   disabled={disabled}
                   error={participantError}
+                  allowManual
+                  title={participantLabel(participantIndex)}
+                  canRemove={visibleParticipants.length > 1}
                   onChange={(nextParticipant) => {
-                    const nextParticipants = assignment.participants.map((current, currentIndex) =>
+                    const nextParticipants = visibleParticipants.map((current, currentIndex) =>
                       currentIndex === participantIndex ? nextParticipant : current
                     );
-                    updateField('participants', nextParticipants);
+                    updateParticipants(nextParticipants);
                   }}
                   onRemove={() => {
-                    const nextParticipants = assignment.participants.filter(
+                    const nextParticipants = visibleParticipants.filter(
                       (_, currentIndex) => currentIndex !== participantIndex
                     );
-                    updateField('participants', nextParticipants);
+                    updateParticipants(nextParticipants);
                   }}
                 />
               );
@@ -250,6 +268,22 @@ const createStyles = (colors: AppColorSet) =>
     disabled: {
       opacity: 0.45,
     },
+    contentBlock: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      backgroundColor: colors.backgroundLight,
+      padding: 10,
+      gap: 10,
+    },
+    participantsBlock: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      backgroundColor: colors.backgroundLight,
+      padding: 10,
+      gap: 10,
+    },
     fieldWrap: {
       gap: 6,
     },
@@ -262,7 +296,7 @@ const createStyles = (colors: AppColorSet) =>
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 10,
-      backgroundColor: colors.backgroundLight,
+      backgroundColor: colors.surface,
       color: colors.textPrimary,
       fontSize: 14,
       paddingHorizontal: 12,
@@ -271,20 +305,9 @@ const createStyles = (colors: AppColorSet) =>
     inputError: {
       borderColor: colors.error,
     },
-    notesInput: {
-      minHeight: 80,
-      textAlignVertical: 'top',
-    },
     errorText: {
       color: colors.error,
       fontSize: 12,
-    },
-    inlineRow: {
-      flexDirection: 'row',
-      gap: 10,
-    },
-    inlineField: {
-      flex: 1,
     },
     participantsHeader: {
       flexDirection: 'row',
