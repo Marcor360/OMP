@@ -362,12 +362,7 @@ export const getAllMeetings = async (congregationId: string): Promise<Meeting[]>
     return [];
   }
 
-  const q = query(
-    congregationMeetingsCollectionRef(congregationId),
-    orderBy('meetingDate', 'asc'),
-    limit(200)
-  );
-  const snap = await getDocs(q);
+  const snap = await getDocs(congregationMeetingsCollectionRef(congregationId));
   return sortMeetings(snap.docs.map((docSnap) => normalizeMeeting(docSnap.id, docSnap.data())));
 };
 
@@ -491,12 +486,24 @@ export const createMeeting = async (
     throw new AppError('No se pueden crear reuniones con fechas que ya pasaron.');
   }
 
-  const duplicatedMeeting = await findMeetingConflictByRange({
-    congregationId,
-    meetingType: inferredType,
-    rangeStart: meetingRangeStart,
-    rangeEnd: meetingRangeEnd,
-  });
+  let shouldUseManagerFunction = false;
+  let duplicatedMeeting: Meeting | null = null;
+
+  try {
+    duplicatedMeeting = await findMeetingConflictByRange({
+      congregationId,
+      meetingType: inferredType,
+      rangeStart: meetingRangeStart,
+      rangeEnd: meetingRangeEnd,
+    });
+  } catch (error) {
+    if (!isFirebaseErrorCode(error, 'permission-denied')) {
+      throw error;
+    }
+
+    // Si no se puede leer reuniones desde el cliente, delegamos validacion y escritura al backend.
+    shouldUseManagerFunction = true;
+  }
 
   if (duplicatedMeeting) {
     throw new AppError(
@@ -561,6 +568,24 @@ export const createMeeting = async (
     updatedAt: serverTimestamp(),
   };
 
+  const createViaFunction = async (): Promise<string> => {
+    const managerPayload = { ...rawPayload };
+    delete managerPayload.createdAt;
+    delete managerPayload.updatedAt;
+
+    const meetingId = await createMeetingByManager({
+      congregationId,
+      meetingData: managerPayload,
+    });
+
+    clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
+    return meetingId;
+  };
+
+  if (shouldUseManagerFunction) {
+    return createViaFunction();
+  }
+
   try {
     const ref = await addDoc(
       congregationMeetingsCollectionRef(congregationId),
@@ -574,17 +599,7 @@ export const createMeeting = async (
       throw error;
     }
 
-    const managerPayload = { ...rawPayload };
-    delete managerPayload.createdAt;
-    delete managerPayload.updatedAt;
-
-    const meetingId = await createMeetingByManager({
-      congregationId,
-      meetingData: managerPayload,
-    });
-
-    clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
-    return meetingId;
+    return createViaFunction();
   }
 };
 
@@ -655,35 +670,39 @@ export const updateMeeting = async (
     timestampToDate(normalizedProgram.meetingDate);
   const updateRangeEnd = timestampToDate(data.endDate) ?? updateRangeStart;
 
-  if (updateRangeStart && updateRangeEnd) {
-    const conflict = await findMeetingConflictByRange({
-      congregationId,
-      meetingType: inferredType,
-      rangeStart: updateRangeStart,
-      rangeEnd: updateRangeEnd,
-      excludeMeetingId: id,
-    });
+  let shouldUseManagerFunction = false;
 
-    if (conflict) {
-      throw new AppError(
-        `Ya existe otra reunion de ${
-          inferredType === 'midweek' ? 'entre semana' : 'fin de semana'
-        } para ese rango (${formatShortDate(updateRangeStart)} al ${formatShortDate(
-          updateRangeEnd
-        )}).`
-      );
+  if (updateRangeStart && updateRangeEnd) {
+    try {
+      const conflict = await findMeetingConflictByRange({
+        congregationId,
+        meetingType: inferredType,
+        rangeStart: updateRangeStart,
+        rangeEnd: updateRangeEnd,
+        excludeMeetingId: id,
+      });
+
+      if (conflict) {
+        throw new AppError(
+          `Ya existe otra reunion de ${
+            inferredType === 'midweek' ? 'entre semana' : 'fin de semana'
+          } para ese rango (${formatShortDate(updateRangeStart)} al ${formatShortDate(
+            updateRangeEnd
+          )}).`
+        );
+      }
+    } catch (error) {
+      if (error instanceof AppError || !isFirebaseErrorCode(error, 'permission-denied')) {
+        throw error;
+      }
+
+      // Sin permiso de lectura en cliente, delegamos la validacion de conflicto al backend.
+      shouldUseManagerFunction = true;
     }
   }
 
   const payload = sanitizeForFirestore(rawPayload);
-
-  try {
-    await updateDoc(meetingDocRef(congregationId, id), payload);
-  } catch (error) {
-    if (!isFirebaseErrorCode(error, 'permission-denied')) {
-      throw error;
-    }
-
+  const updateViaFunction = async (): Promise<void> => {
     const managerPayload = { ...rawPayload };
     delete managerPayload.updatedAt;
 
@@ -692,6 +711,23 @@ export const updateMeeting = async (
       meetingId: id,
       meetingData: managerPayload,
     });
+  };
+
+  if (shouldUseManagerFunction) {
+    await updateViaFunction();
+    invalidateCacheEntry(`meetings/${congregationId}/doc/${id}`);
+    clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
+    return;
+  }
+
+  try {
+    await updateDoc(meetingDocRef(congregationId, id), payload);
+  } catch (error) {
+    if (!isFirebaseErrorCode(error, 'permission-denied')) {
+      throw error;
+    }
+
+    await updateViaFunction();
   }
 
   invalidateCacheEntry(`meetings/${congregationId}/doc/${id}`);

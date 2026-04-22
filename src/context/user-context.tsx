@@ -9,7 +9,6 @@ import React, {
 } from 'react';
 
 import { useAuth } from '@/src/context/auth-context';
-import { registerPushTokenForCurrentUser } from '@/src/services/notifications/registerPushToken';
 import { getCurrentUserProfile } from '@/src/services/users/users-service';
 import { AppUser, UserRole } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -41,7 +40,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const forceServerNextLoadRef = useRef(false);
-  const pushRegisteredUidRef = useRef<string | null>(null);
 
   const refreshProfile = useCallback(() => {
     forceServerNextLoadRef.current = true;
@@ -53,7 +51,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       setAppUser(null);
       setProfileError(null);
       setLoadingProfile(false);
-      pushRegisteredUidRef.current = null;
       return;
     }
 
@@ -104,24 +101,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [user, refreshKey]);
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    if (!appUser?.isActive) return;
-
-    if (pushRegisteredUidRef.current === user.uid) {
-      return;
-    }
-
-    pushRegisteredUidRef.current = user.uid;
-
-    registerPushTokenForCurrentUser(user.uid).catch((error) => {
-      if (__DEV__) {
-        console.warn('No se pudo registrar token push:', error);
-      }
-      pushRegisteredUidRef.current = null;
-    });
-  }, [appUser?.isActive, user?.uid]);
 
   const value = useMemo<UserContextType>(() => {
     const uid = user?.uid ?? null;

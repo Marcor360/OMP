@@ -500,6 +500,37 @@ export const clearMeetingNotificationMarkers = (
 export const toFirestoreSectionsPayload = (
   sections: NormalizedMeetingSection[]
 ): Record<string, unknown>[] => {
+  const toFirestoreAssigneePayload = (
+    assignee: NormalizedMeetingAssignee
+  ): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      id: assignee.id,
+      assigneeType: assignee.assigneeType,
+    };
+
+    if (assignee.assigneeUserId !== undefined) {
+      payload.assigneeUserId = assignee.assigneeUserId;
+    }
+
+    if (assignee.assigneeNameSnapshot !== undefined) {
+      payload.assigneeNameSnapshot = assignee.assigneeNameSnapshot;
+    }
+
+    if (assignee.specialRoleKey !== undefined) {
+      payload.specialRoleKey = assignee.specialRoleKey;
+    }
+
+    if (assignee.publishNotificationSentAt !== undefined) {
+      payload.publishNotificationSentAt = assignee.publishNotificationSentAt;
+    }
+
+    if (assignee.reminderSentAt !== undefined) {
+      payload.reminderSentAt = assignee.reminderSentAt;
+    }
+
+    return payload;
+  };
+
   return sections.map((section) => ({
     sectionKey: section.sectionKey,
     title: section.title,
@@ -510,15 +541,9 @@ export const toFirestoreSectionsPayload = (
       sectionKey: assignment.sectionKey,
       title: assignment.title,
       assignmentScope: assignment.assignmentScope,
-      assignees: assignment.assignees.map((assignee) => ({
-        id: assignee.id,
-        assigneeType: assignee.assigneeType,
-        assigneeUserId: assignee.assigneeUserId,
-        assigneeNameSnapshot: assignee.assigneeNameSnapshot,
-        specialRoleKey: assignee.specialRoleKey,
-        publishNotificationSentAt: assignee.publishNotificationSentAt,
-        reminderSentAt: assignee.reminderSentAt,
-      })),
+      assignees: assignment.assignees.map((assignee) =>
+        toFirestoreAssigneePayload(assignee)
+      ),
     })),
   }));
 };

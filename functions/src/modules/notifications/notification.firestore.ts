@@ -26,6 +26,60 @@ const dedupeStrings = (items: string[]): string[] => {
   return Array.from(new Set(items.filter((item) => item.trim().length > 0)));
 };
 
+const normalizeStatus = (value: unknown): 'active' | 'inactive' | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === 'active' || normalized === 'activo') {
+    return 'active';
+  }
+
+  if (
+    normalized === 'inactive' ||
+    normalized === 'inactivo' ||
+    normalized === 'suspended' ||
+    normalized === 'suspendido'
+  ) {
+    return 'inactive';
+  }
+
+  return null;
+};
+
+const resolveUserIsActive = (data: Record<string, unknown>): boolean => {
+  if (typeof data.isActive === 'boolean') {
+    return data.isActive;
+  }
+
+  if (typeof data.active === 'boolean') {
+    return data.active;
+  }
+
+  return normalizeStatus(data.status) === 'active';
+};
+
+const resolveNotificationTokens = (data: Record<string, unknown>): string[] => {
+  const aggregate = [
+    ...asStringArray(data.notificationTokens),
+    ...asStringArray(data.expoPushTokens),
+    ...asStringArray(data.pushTokens),
+  ];
+
+  if (isNonEmptyString(data.expoPushToken)) {
+    aggregate.push(data.expoPushToken.trim());
+  }
+
+  if (isNonEmptyString(data.pushToken)) {
+    aggregate.push(data.pushToken.trim());
+  }
+
+  if (isNonEmptyString(data.notificationToken)) {
+    aggregate.push(data.notificationToken.trim());
+  }
+
+  return dedupeStrings(aggregate);
+};
+
 export const getCleaningGroupMemberIds = async (
   groupId: string | null | undefined
 ): Promise<string[]> => {
@@ -55,12 +109,12 @@ export const getUserNotificationSettings = async (
 
   const data = snap.data() as Record<string, unknown>;
 
-  const tokens = dedupeStrings(asStringArray(data.notificationTokens));
+  const tokens = resolveNotificationTokens(data);
 
   return {
     uid,
     congregationId: isNonEmptyString(data.congregationId) ? data.congregationId : null,
-    isActive: data.isActive === true,
+    isActive: resolveUserIsActive(data),
     notificationTokens: tokens,
     notificationsEnabled: data.notificationsEnabled !== false,
     platformNotifications: data.platformNotifications !== false,

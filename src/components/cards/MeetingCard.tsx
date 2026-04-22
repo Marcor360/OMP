@@ -5,9 +5,10 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
 import { StatusBadge, meetingStatusColor } from '@/src/components/common/StatusBadge';
+import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { Meeting, MEETING_STATUS_LABELS, MEETING_TYPE_LABELS } from '@/src/types/meeting';
-import { formatDate, formatTime } from '@/src/utils/dates/dates';
+import { Meeting } from '@/src/types/meeting';
+import { formatDate } from '@/src/utils/dates/dates';
 
 interface MeetingCardProps {
   meeting: Meeting;
@@ -25,12 +26,30 @@ const meetingTypeIcon: Record<string, keyof typeof Ionicons.glyphMap> = {
 
 export function MeetingCard({ meeting, onPress }: MeetingCardProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
 
   const handlePress = () => {
     if (onPress) onPress();
     else router.push(`/(protected)/meetings/${meeting.id}` as any);
+  };
+
+  const meetingTypeLabelByType: Record<Meeting['type'], string> = {
+    internal: t('meeting.type.internal'),
+    external: t('meeting.type.external'),
+    review: t('meeting.type.review'),
+    training: t('meeting.type.training'),
+    midweek: t('meeting.type.midweek'),
+    weekend: t('meeting.type.weekend'),
+  };
+
+  const meetingStatusLabelByStatus: Record<Meeting['status'], string> = {
+    pending: t('meeting.status.pending'),
+    scheduled: t('meeting.status.scheduled'),
+    in_progress: t('meeting.status.in_progress'),
+    completed: t('meeting.status.completed'),
+    cancelled: t('meeting.status.cancelled'),
   };
 
   return (
@@ -43,21 +62,19 @@ export function MeetingCard({ meeting, onPress }: MeetingCardProps) {
           <ThemedText style={styles.title} numberOfLines={2}>
             {meeting.title}
           </ThemedText>
-          <ThemedText style={styles.type}>{MEETING_TYPE_LABELS[meeting.type]}</ThemedText>
+          <ThemedText style={styles.type}>{meetingTypeLabelByType[meeting.type]}</ThemedText>
         </View>
-        <StatusBadge label={MEETING_STATUS_LABELS[meeting.status]} color={meetingStatusColor[meeting.status]} size="sm" />
+        <StatusBadge
+          label={meetingStatusLabelByStatus[meeting.status]}
+          color={meetingStatusColor[meeting.status]}
+          size="sm"
+        />
       </View>
 
       <View style={styles.footer}>
         <View style={styles.metaRow}>
           <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
-          <ThemedText style={styles.meta}>{formatDate(meeting.startDate)}</ThemedText>
-        </View>
-        <View style={styles.metaRow}>
-          <Ionicons name="time-outline" size={13} color={colors.textMuted} />
-          <ThemedText style={styles.meta}>
-            {formatTime(meeting.startDate)} - {formatTime(meeting.endDate)}
-          </ThemedText>
+          <ThemedText style={styles.meta}>{formatDate(meeting.meetingDate ?? meeting.startDate)}</ThemedText>
         </View>
         {meeting.location ? (
           <View style={styles.metaRow}>

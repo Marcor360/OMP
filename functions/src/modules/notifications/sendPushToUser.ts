@@ -23,12 +23,26 @@ export const sendPushToUser = async (params: {
   meetingType: string | null;
   date: string | null;
 }): Promise<void> => {
-  if (params.tokens.length === 0) {
+  const normalizedTokens = Array.from(
+    new Set(
+      params.tokens
+        .map((token) => token.trim())
+        .filter((token) => token.length > 0)
+    )
+  );
+
+  if (normalizedTokens.length === 0) {
+    logger.info('Skipping push notification: user has no valid tokens', {
+      uid: params.uid,
+      assignmentId: params.assignmentId,
+      category: params.category,
+      meetingType: params.meetingType,
+    });
     return;
   }
 
   const response = await adminMessaging.sendEachForMulticast({
-    tokens: params.tokens,
+    tokens: normalizedTokens,
     notification: {
       title: params.title,
       body: params.body,
@@ -60,7 +74,7 @@ export const sendPushToUser = async (params: {
   response.responses.forEach((result, index) => {
     if (result.success) return;
 
-    const token = params.tokens[index];
+    const token = normalizedTokens[index];
     const code = result.error?.code;
 
     if (isInvalidTokenError(code)) {

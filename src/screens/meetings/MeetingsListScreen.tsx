@@ -10,10 +10,12 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
+import { SupportedLanguage, useI18n } from '@/src/i18n/index';
 import { getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Meeting } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 
 interface MeetingDayGroup {
   id: string;
@@ -45,8 +47,17 @@ const toGroupKey = (meeting: Meeting): string => {
   ).padStart(2, '0')}`;
 };
 
-const toGroupLabel = (meeting: Meeting): string => {
-  return toDateValue(meeting).toLocaleDateString('es-MX', {
+const LOCALE_BY_LANGUAGE: Record<SupportedLanguage, string> = {
+  es: 'es-MX',
+  en: 'en-US',
+  fr: 'fr-FR',
+  ar: 'ar',
+  hi: 'hi-IN',
+  zh: 'zh-CN',
+};
+
+const toGroupLabel = (meeting: Meeting, locale: string): string => {
+  return toDateValue(meeting).toLocaleDateString(locale, {
     weekday: 'long',
     day: '2-digit',
     month: 'long',
@@ -57,8 +68,10 @@ const toGroupLabel = (meeting: Meeting): string => {
 export function MeetingsListScreen() {
   const router = useRouter();
   const { congregationId, loadingProfile, isAdminOrSupervisor } = useUser();
+  const { t, language } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const locale = LOCALE_BY_LANGUAGE[language];
 
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -70,7 +83,7 @@ export function MeetingsListScreen() {
     async (forceServer = false) => {
       if (!congregationId) {
         setMeetings([]);
-        setError('No se encontro la congregacion del perfil actual.');
+        setError(t('meetings.list.noCongregation'));
         setLoading(false);
         setRefreshing(false);
         return;
@@ -98,12 +111,19 @@ export function MeetingsListScreen() {
         setRefreshing(false);
       }
     },
-    [congregationId]
+    [congregationId, t]
   );
 
   useEffect(() => {
     void loadMeetings(false);
   }, [loadMeetings]);
+
+  // Refresca cuando el usuario regresa a esta tab o la app vuelve al primer plano.
+  const handleFocusRefresh = useCallback(() => {
+    void loadMeetings(false);
+  }, [loadMeetings]);
+
+  useRefreshOnFocus(handleFocusRefresh, !loading);
 
   const groupedMeetings = useMemo<MeetingDayGroup[]>(() => {
     const byDate = new Map<string, MeetingDayGroup>();
@@ -115,7 +135,7 @@ export function MeetingsListScreen() {
       if (!current) {
         byDate.set(key, {
           id: key,
-          label: toGroupLabel(meeting),
+          label: toGroupLabel(meeting, locale),
           meetings: [meeting],
         });
         return;
@@ -125,14 +145,14 @@ export function MeetingsListScreen() {
     });
 
     return Array.from(byDate.values()).sort((left, right) => left.id.localeCompare(right.id));
-  }, [meetings]);
+  }, [locale, meetings]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await loadMeetings(true);
   };
 
-  if (loading || loadingProfile) return <LoadingState message="Cargando reuniones..." />;
+  if (loading || loadingProfile) return <LoadingState message={t('meetings.list.loading')} />;
   if (error) return <ErrorState message={error} onRetry={onRefresh} />;
 
   return (
@@ -147,12 +167,16 @@ export function MeetingsListScreen() {
         ListHeaderComponent={
           <>
             <View style={styles.headerRow}>
-              <ThemedText style={styles.headerCount}>{meetings.length} reuniones publicadas</ThemedText>
+              <ThemedText style={styles.headerCount}>
+                {meetings.length} {t('meetings.list.publishedCount')}
+              </ThemedText>
               <View style={styles.headerActions}>
                 {isAdminOrSupervisor ? (
                   <TouchableOpacity style={styles.manageButton} onPress={() => router.push('/(protected)/meetings/manage')}>
                     <Ionicons name="shield-checkmark-outline" size={16} color={colors.primary} />
-                    <ThemedText style={styles.manageButtonText}>Gestion</ThemedText>
+                    <ThemedText style={styles.manageButtonText}>
+                      {t('meetings.list.manage')}
+                    </ThemedText>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -199,8 +223,8 @@ export function MeetingsListScreen() {
           <View style={styles.emptyWrap}>
             <EmptyState
               icon="calendar-outline"
-              title="Sin reuniones publicadas"
-              description="No hay reuniones publicadas creadas a partir de hoy."
+              title={t('meetings.list.empty.title')}
+              description={t('meetings.list.empty.description')}
             />
           </View>
         }

@@ -1209,21 +1209,38 @@ export const importMidweekMeetingsFromPdf = onCall(
       }
     });
 
+    const importDescription = `Importada desde ${String(payload.fileName ?? "PDF")}`;
+    const organizerName = requester.displayName ?? requester.email ?? "Usuario";
+
     let createdCount = 0;
     let updatedCount = 0;
+    let pendingWrites = 0;
+    let writeBatch = db.batch();
+
+    const commitBatchIfNeeded = async (force = false): Promise<void> => {
+      if (!force && pendingWrites < 400) {
+        return;
+      }
+
+      if (pendingWrites === 0) {
+        return;
+      }
+
+      await writeBatch.commit();
+      writeBatch = db.batch();
+      pendingWrites = 0;
+    };
 
     for (const week of parsedWeeks) {
       const existing = existingByWeek.get(week.weekKey);
-      const organizerName =
-        requester.displayName ?? requester.email ?? "Usuario";
 
       if (existing) {
         const existingSections = getExistingSections(existing.get("midweekSections"));
         const mergedSections = mergeParticipants(existingSections, week.sections);
 
-        await existing.ref.update({
+        writeBatch.update(existing.ref, {
           title: week.title,
-          description: `Importada desde ${String(payload.fileName ?? "PDF")}`,
+          description: importDescription,
           weekLabel: week.weekLabel,
           bibleReading: week.bibleReading,
           startDate: Timestamp.fromDate(week.startDate),
@@ -1237,16 +1254,18 @@ export const importMidweekMeetingsFromPdf = onCall(
           // Marcar como recién importada para facilitar edición
           lastImportedAt: FieldValue.serverTimestamp(),
         });
+        pendingWrites += 1;
+        await commitBatchIfNeeded();
 
         updatedCount += 1;
         continue;
       }
 
-      await meetingsRef.add({
+      writeBatch.set(meetingsRef.doc(), {
         meetingCategory: "midweek",
         type: "midweek",
         title: week.title,
-        description: `Importada desde ${String(payload.fileName ?? "PDF")}`,
+        description: importDescription,
         weekLabel: week.weekLabel,
         bibleReading: week.bibleReading,
         startDate: Timestamp.fromDate(week.startDate),
@@ -1271,9 +1290,13 @@ export const importMidweekMeetingsFromPdf = onCall(
         updatedAt: FieldValue.serverTimestamp(),
         lastImportedAt: FieldValue.serverTimestamp(),
       });
+      pendingWrites += 1;
+      await commitBatchIfNeeded();
 
       createdCount += 1;
     }
+
+    await commitBatchIfNeeded(true);
 
     return {
       ok: true,

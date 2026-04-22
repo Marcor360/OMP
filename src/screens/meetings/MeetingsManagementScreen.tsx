@@ -11,22 +11,23 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useMeetingsManagementPermission } from '@/src/hooks/use-meetings-management-permission';
+import { useI18n } from '@/src/i18n/index';
 import { setMeetingPublicationStatus } from '@/src/services/meetings/meeting-publish-service';
-import { deleteMeeting, getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
+import { deleteMeeting, getAllMeetings } from '@/src/services/meetings/meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Meeting } from '@/src/types/meeting';
 import { MeetingPublicationStatus } from '@/src/types/meeting/program';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { formatWeekLabel, getWeekEnd, getWeekStart, moveWeek } from '@/src/utils/dates/week-range';
 
-const PUBLICATION_FILTERS: { label: string; value: MeetingPublicationStatus | 'all' }[] = [
-  { label: 'Todas', value: 'all' },
-  { label: 'Borrador', value: 'draft' },
-  { label: 'Publicada', value: 'published' },
+const PUBLICATION_FILTERS: (MeetingPublicationStatus | 'all')[] = [
+  'all',
+  'draft',
+  'published',
 ];
 
 export function MeetingsManagementScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const { canManage, congregationId, loading: loadingPermission } = useMeetingsManagementPermission();
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -37,15 +38,12 @@ export function MeetingsManagementScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [deletingMeetingId, setDeletingMeetingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()));
-  const weekEnd = useMemo(() => getWeekEnd(weekStart), [weekStart]);
-  const weekLabel = useMemo(() => formatWeekLabel(weekStart, weekEnd), [weekStart, weekEnd]);
 
   const loadMeetings = useCallback(
     async (forceServer = false) => {
       if (!congregationId) {
         setMeetings([]);
-        setError('No se encontro la congregacion del perfil actual.');
+        setError(t('meetings.management.noCongregation'));
         setLoading(false);
         setRefreshing(false);
         return;
@@ -55,12 +53,7 @@ export function MeetingsManagementScreen() {
       setError(null);
 
       try {
-        const docs = await getMeetingsByWeek(congregationId, weekStart, weekEnd, {
-          forceServer,
-          includeMidweek: true,
-          publicationStatus: publicationFilter,
-          maxItems: 160,
-        });
+        const docs = await getAllMeetings(congregationId);
         setMeetings(docs);
       } catch (requestError) {
         setMeetings([]);
@@ -70,8 +63,16 @@ export function MeetingsManagementScreen() {
         setRefreshing(false);
       }
     },
-    [congregationId, publicationFilter, weekEnd, weekStart]
+    [congregationId, t]
   );
+
+  const filteredMeetings = useMemo(() => {
+    if (publicationFilter === 'all') {
+      return meetings;
+    }
+
+    return meetings.filter((meeting) => meeting.publicationStatus === publicationFilter);
+  }, [meetings, publicationFilter]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -97,14 +98,19 @@ export function MeetingsManagementScreen() {
       });
 
       if (!result.ok) {
-        Alert.alert('Validacion', result.errors.join('\n'));
+        Alert.alert(t('meetings.management.alert.validation'), result.errors.join('\n'));
         return;
       }
 
-      Alert.alert('Exito', nextStatus === 'published' ? 'Reunion publicada.' : 'Reunion enviada a borrador.');
+      Alert.alert(
+        t('meetings.management.alert.success'),
+        nextStatus === 'published'
+          ? t('meetings.management.alert.published')
+          : t('meetings.management.alert.sentToDraft')
+      );
       await onRefresh();
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      Alert.alert(t('common.error'), formatFirestoreError(requestError));
     }
   };
 
@@ -112,12 +118,12 @@ export function MeetingsManagementScreen() {
     if (!congregationId || deletingMeetingId) return;
 
     Alert.alert(
-      'Eliminar reunion',
-      'Esta accion eliminara la reunion de forma permanente. No se puede deshacer.',
+      t('meetings.management.alert.deleteTitle'),
+      t('meetings.management.alert.deleteMessage'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: () => {
             void executeDeleteMeeting(meeting);
@@ -135,21 +141,21 @@ export function MeetingsManagementScreen() {
     try {
       await deleteMeeting(congregationId, meeting.id);
       setMeetings((current) => current.filter((item) => item.id !== meeting.id));
-      Alert.alert('Exito', 'Reunion eliminada correctamente.');
+      Alert.alert(t('meetings.management.alert.success'), t('meetings.management.alert.deleted'));
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      Alert.alert(t('common.error'), formatFirestoreError(requestError));
     } finally {
       setDeletingMeetingId(null);
     }
   };
 
-  if (loading || loadingPermission) return <LoadingState message="Cargando gestion de reuniones..." />;
+  if (loading || loadingPermission) return <LoadingState message={t('meetings.management.loading')} />;
   if (error) return <ErrorState message={error} onRetry={onRefresh} />;
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
       <FlatList
-        data={meetings}
+        data={filteredMeetings}
         keyExtractor={(meeting) => meeting.id}
         contentContainerStyle={styles.listContent}
         refreshing={refreshing}
@@ -157,48 +163,46 @@ export function MeetingsManagementScreen() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <>
-            <PageHeader title="Gestion de reuniones" subtitle="Admin y Supervisor" showBack />
+            <PageHeader
+              title={t('meetings.management.title')}
+              subtitle={t('meetings.management.subtitle')}
+              showBack
+            />
 
             <View style={styles.actionBar}>
               <TouchableOpacity style={styles.createButton} onPress={() => router.push('/(protected)/meetings/create?type=weekend' as never)}>
                 <Ionicons name="add-outline" size={16} color="#fff" />
-                <ThemedText style={styles.createButtonText}>Nueva fin de semana</ThemedText>
+                <ThemedText style={styles.createButtonText}>
+                  {t('meetings.management.action.newWeekend')}
+                </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity style={styles.createButton} onPress={() => router.push('/(protected)/meetings/create?type=midweek' as never)}>
                 <Ionicons name="add-outline" size={16} color="#fff" />
-                <ThemedText style={styles.createButtonText}>Nueva VyMC</ThemedText>
+                <ThemedText style={styles.createButtonText}>
+                  {t('meetings.management.action.newMidweek')}
+                </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push('/(protected)/meetings/midweek' as never)}>
                 <Ionicons name="document-attach-outline" size={16} color={colors.infoDark} />
-                <ThemedText style={styles.secondaryButtonText}>Importar PDF VyMC</ThemedText>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.weekRow}>
-              <TouchableOpacity style={styles.navButton} onPress={() => setWeekStart((current) => moveWeek(current, -1))}>
-                <Ionicons name="chevron-back-outline" size={16} color={colors.textMuted} />
-                <ThemedText style={styles.navText}>Anterior</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.weekLabelButton} onPress={() => setWeekStart(getWeekStart(new Date()))}>
-                <ThemedText style={styles.weekLabel}>{weekLabel}</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.navButton} onPress={() => setWeekStart((current) => moveWeek(current, 1))}>
-                <ThemedText style={styles.navText}>Siguiente</ThemedText>
-                <Ionicons name="chevron-forward-outline" size={16} color={colors.textMuted} />
+                <ThemedText style={styles.secondaryButtonText}>
+                  {t('meetings.management.action.importMidweekPdf')}
+                </ThemedText>
               </TouchableOpacity>
             </View>
 
             <View style={styles.filtersRow}>
               {PUBLICATION_FILTERS.map((filterOption) => (
                 <TouchableOpacity
-                  key={filterOption.value}
-                  style={[styles.filterChip, publicationFilter === filterOption.value && styles.filterChipActive]}
-                  onPress={() => setPublicationFilter(filterOption.value)}
+                  key={filterOption}
+                  style={[styles.filterChip, publicationFilter === filterOption && styles.filterChipActive]}
+                  onPress={() => setPublicationFilter(filterOption)}
                 >
-                  <ThemedText style={[styles.filterChipText, publicationFilter === filterOption.value && styles.filterChipTextActive]}>
-                    {filterOption.label}
+                  <ThemedText style={[styles.filterChipText, publicationFilter === filterOption && styles.filterChipTextActive]}>
+                    {filterOption === 'all'
+                      ? t('meetings.management.filter.all')
+                      : filterOption === 'draft'
+                        ? t('meetings.management.filter.draft')
+                        : t('meetings.management.filter.published')}
                   </ThemedText>
                 </TouchableOpacity>
               ))}
@@ -211,16 +215,22 @@ export function MeetingsManagementScreen() {
             <View style={styles.meetingActions}>
               <TouchableOpacity style={styles.smallAction} onPress={() => router.push(`/(protected)/meetings/${item.id}` as never)}>
                 <Ionicons name="eye-outline" size={15} color={colors.textPrimary} />
-                <ThemedText style={styles.smallActionText}>Ver</ThemedText>
+                <ThemedText style={styles.smallActionText}>
+                  {t('meetings.management.row.view')}
+                </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity style={styles.smallAction} onPress={() => router.push(`/(protected)/meetings/edit/${item.id}` as never)}>
                 <Ionicons name="pencil-outline" size={15} color={colors.textPrimary} />
-                <ThemedText style={styles.smallActionText}>Editar</ThemedText>
+                <ThemedText style={styles.smallActionText}>
+                  {t('meetings.management.row.edit')}
+                </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity style={styles.publishAction} onPress={() => void togglePublication(item)}>
                 <Ionicons name={item.publicationStatus === 'published' ? 'close-circle-outline' : 'send-outline'} size={15} color={item.publicationStatus === 'published' ? colors.error : colors.successDark} />
                 <ThemedText style={[styles.publishActionText, { color: item.publicationStatus === 'published' ? colors.error : colors.successDark }]}>
-                  {item.publicationStatus === 'published' ? 'Despublicar' : 'Publicar'}
+                  {item.publicationStatus === 'published'
+                    ? t('meetings.management.row.unpublish')
+                    : t('meetings.management.row.publish')}
                 </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
@@ -233,14 +243,20 @@ export function MeetingsManagementScreen() {
                   size={15}
                   color={colors.error}
                 />
-                <ThemedText style={styles.deleteActionText}>Eliminar</ThemedText>
+                <ThemedText style={styles.deleteActionText}>
+                  {t('meetings.management.row.delete')}
+                </ThemedText>
               </TouchableOpacity>
             </View>
           </View>
         )}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
-            <EmptyState icon="calendar-outline" title="Sin reuniones" description="No hay reuniones para los filtros actuales." />
+            <EmptyState
+              icon="calendar-outline"
+              title={t('meetings.management.empty.title')}
+              description={t('meetings.management.empty.description')}
+            />
           </View>
         }
       />
@@ -256,11 +272,6 @@ const createStyles = (colors: AppColorSet) =>
     createButtonText: { color: '#fff', fontWeight: '800', fontSize: 13 },
     secondaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.info + '66', backgroundColor: colors.infoLight, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12 },
     secondaryButtonText: { color: colors.infoDark, fontWeight: '700', fontSize: 13 },
-    weekRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 },
-    navButton: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, backgroundColor: colors.surface },
-    navText: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
-    weekLabelButton: { flex: 1, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.primary + '55', borderRadius: 8, backgroundColor: colors.primary + '10', paddingVertical: 7, paddingHorizontal: 8 },
-    weekLabel: { color: colors.primary, fontWeight: '700', fontSize: 12 },
     filtersRow: { flexDirection: 'row', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
     filterChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.surface },
     filterChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },

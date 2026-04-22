@@ -14,12 +14,17 @@ import {
 } from 'firebase/firestore';
 
 import { congregationMeetingsCollectionRef, meetingDocRef } from '@/src/lib/firebase/refs';
+import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import {
   logFirestoreListenerCreated,
   logFirestoreListenerDestroyed,
 } from '@/src/services/firebase/firestore-debug';
 import { getQueryCacheFirst } from '@/src/services/repositories/firestore-cache-first';
 import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
+import {
+  createMeetingByManager,
+  updateMeetingByManager,
+} from '@/src/services/meetings/manager-meetings-service';
 import {
   MIDWEEK_KNOWN_SECTION_IDS,
   MIDWEEK_REQUIRED_SECTION_IDS,
@@ -516,14 +521,35 @@ export const createMidweekMeeting = async (
     updatedAt: serverTimestamp(),
   };
 
-  const ref = await addDoc(
-    congregationMeetingsCollectionRef(congregationId),
-    sanitizeForFirestore(rawPayload)
-  );
+  const createViaFunction = async (): Promise<string> => {
+    const managerPayload = { ...rawPayload };
+    delete managerPayload.createdAt;
+    delete managerPayload.updatedAt;
+
+    return createMeetingByManager({
+      congregationId,
+      meetingData: managerPayload,
+    });
+  };
+
+  let meetingId: string;
+  try {
+    const ref = await addDoc(
+      congregationMeetingsCollectionRef(congregationId),
+      sanitizeForFirestore(rawPayload)
+    );
+    meetingId = ref.id;
+  } catch (error) {
+    if (!isFirebaseErrorCode(error, 'permission-denied')) {
+      throw error;
+    }
+
+    meetingId = await createViaFunction();
+  }
 
   clearSessionCacheByPrefix(`query:midweek/${congregationId}/`);
   clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
-  return ref.id;
+  return meetingId;
 };
 
 export const updateMidweekMeeting = async (
@@ -583,7 +609,26 @@ export const updateMidweekMeeting = async (
 
   const updatePayload = sanitizeForFirestore(rawUpdatePayload);
 
-  await updateDoc(meetingDocRef(congregationId, meetingId), updatePayload);
+  const updateViaFunction = async (): Promise<void> => {
+    const managerPayload = { ...rawUpdatePayload };
+    delete managerPayload.updatedAt;
+
+    await updateMeetingByManager({
+      congregationId,
+      meetingId,
+      meetingData: managerPayload,
+    });
+  };
+
+  try {
+    await updateDoc(meetingDocRef(congregationId, meetingId), updatePayload);
+  } catch (error) {
+    if (!isFirebaseErrorCode(error, 'permission-denied')) {
+      throw error;
+    }
+
+    await updateViaFunction();
+  }
   clearSessionCacheByPrefix(`query:midweek/${congregationId}/`);
   clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
 };

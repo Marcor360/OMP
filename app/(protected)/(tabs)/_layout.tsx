@@ -3,11 +3,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useUser } from '@/src/context/user-context';
+import { useI18n } from '@/src/i18n/index';
 import { useAppColors } from '@/src/styles';
 import { getVisibleTabs } from '@/src/utils/permissions/permissions';
 
 export default function TabsLayout() {
   const { role } = useUser();
+  const { t } = useI18n();
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const visible = getVisibleTabs(role);
@@ -40,7 +42,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Inicio',
+          title: t('tabs.home'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
@@ -49,7 +51,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="meetings"
         options={{
-          title: 'Reuniones',
+          title: t('tabs.meetings'),
           href: hide('meetings') ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-outline" size={size} color={color} />
@@ -59,7 +61,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="assignments"
         options={{
-          title: 'Asignaciones',
+          title: t('tabs.assignments'),
           href: hide('assignments') ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="checkmark-done-outline" size={size} color={color} />
@@ -69,7 +71,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="users"
         options={{
-          title: 'Usuarios',
+          title: t('tabs.users'),
           href: hide('users') ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="people-outline" size={size} color={color} />
@@ -79,7 +81,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="cleaning"
         options={{
-          title: 'Limpieza',
+          title: t('tabs.cleaning'),
           href: hide('cleaning') ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="sparkles-outline" size={size} color={color} />
@@ -89,7 +91,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Perfil',
+          title: t('tabs.profile'),
           href: hide('profile') ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
@@ -99,7 +101,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Config.',
+          title: t('tabs.settings'),
           href: hide('settings') ? null : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="settings-outline" size={size} color={color} />

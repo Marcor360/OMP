@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
@@ -10,23 +10,19 @@ import { PermissionRow } from '@/src/components/common/PermissionRow';
 import { useAppTheme } from '@/src/context/theme-context';
 import { useUser } from '@/src/context/user-context';
 import { useI18n } from '@/src/i18n/index';
+import { LANGUAGE_DISPLAY_NAME } from '@/src/i18n/language-options';
 import { usePermissions } from '@/src/hooks/use-permissions';
 import { ROLE_LABELS } from '@/src/types/user';
 import { type AppColors, useAppColors } from '@/src/styles';
-import { canManageUsers, canManageMeetings, canManageAssignments, canManageCleaning } from '@/src/utils/permissions/permissions';
 
 export function SettingsScreen() {
   const router = useRouter();
   const { appUser } = useUser();
-  const { isDarkMode, toggleThemeMode } = useAppTheme();
-  const { t, language, setLanguage } = useI18n();
+  const { isDarkMode } = useAppTheme();
+  const { t, language } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const permissions = usePermissions();
-
-  const handleToggleTheme = async () => {
-    await toggleThemeMode();
-  };
 
   const handleNavigateToTheme = () => {
     router.push('/(protected)/settings/theme' as any);
@@ -38,11 +34,6 @@ export function SettingsScreen() {
 
   const handleNavigateToAbout = () => {
     router.push('/(protected)/settings/about' as any);
-  };
-
-  const handleToggleLanguage = async () => {
-    const nextLanguage = language === 'es' ? 'en' : 'es';
-    await setLanguage(nextLanguage);
   };
 
   function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -96,8 +87,6 @@ export function SettingsScreen() {
   return (
     <ScreenContainer scrollable={false}>
       <ScrollView contentContainerStyle={styles.content}>
-
-        {/* ── Cuenta ── */}
         <Section title={t('settings.section.account')}>
           <SettingRow
             icon="person-circle-outline"
@@ -116,7 +105,6 @@ export function SettingsScreen() {
           />
         </Section>
 
-        {/* ── Administración (solo admin) ── */}
         <RoleGuard requiredRole="admin">
           <Section title={t('settings.section.administration')}>
             <SettingRow
@@ -148,13 +136,12 @@ export function SettingsScreen() {
               label={t('settings.admin.notifications')}
               showArrow
               onPress={() => {
-                // Scroll to permissions section or open notifications settings
+                // Placeholder: open notifications screen if needed.
               }}
             />
           </Section>
         </RoleGuard>
 
-        {/* ── Organización (todos los roles) ── */}
         <Section title={t('settings.section.organization')}>
           <SettingRow
             icon="calendar-outline"
@@ -186,9 +173,8 @@ export function SettingsScreen() {
           />
         </Section>
 
-        {/* ── Permisos del dispositivo (solo móvil) ── */}
-        {Platform.OS !== 'web' && (
-          <Section title="Permisos del dispositivo">
+        {Platform.OS !== 'web' ? (
+          <Section title={t('settings.section.devicePermissions')}>
             <PermissionRow
               icon="notifications-outline"
               title={t('permission.notifications.title')}
@@ -199,9 +185,8 @@ export function SettingsScreen() {
               loading={permissions.loading}
             />
           </Section>
-        )}
+        ) : null}
 
-        {/* ── Aplicación ── */}
         <Section title={t('settings.section.application')}>
           <SettingRow
             icon="color-palette-outline"
@@ -213,7 +198,7 @@ export function SettingsScreen() {
           <SettingRow
             icon="language-outline"
             label={t('settings.app.language')}
-            value={language === 'es' ? 'Español' : 'English'}
+            value={LANGUAGE_DISPLAY_NAME[language]}
             showArrow
             onPress={handleNavigateToLanguage}
           />
@@ -226,14 +211,13 @@ export function SettingsScreen() {
           />
         </Section>
 
-        {/* ── Legal ── */}
         <Section title={t('settings.section.legal')}>
           <SettingRow
             icon="document-text-outline"
             label={t('settings.legal.terms')}
             showArrow
             onPress={() => {
-              // Placeholder para términos de uso
+              // Placeholder for terms screen.
             }}
           />
           <SettingRow
@@ -241,7 +225,7 @@ export function SettingsScreen() {
             label={t('settings.legal.privacy')}
             showArrow
             onPress={() => {
-              // Placeholder para política de privacidad
+              // Placeholder for privacy screen.
             }}
           />
           <SettingRow

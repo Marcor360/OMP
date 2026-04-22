@@ -1,9 +1,8 @@
 /**
- * Hook que inicializa el sistema de notificaciones push cuando el usuario
- * está autenticado. Registra el token en Firestore de forma silenciosa.
+ * Initializes push notification behavior when user is authenticated.
+ * It configures the foreground handler once and periodically retries token registration.
  */
-import { useEffect, useRef } from 'react';
-import * as Notifications from 'expo-notifications';
+import { useEffect } from 'react';
 
 import {
   configureNotificationHandler,
@@ -15,33 +14,30 @@ interface UseNotificationSetupOptions {
   isAuthenticated: boolean;
 }
 
-/**
- * Configura el handler de notificaciones y registra el push token del usuario.
- * Devuelve una función para remover los listeners al desmontar.
- */
-export function useNotificationSetup({
-  uid,
-  isAuthenticated,
-}: UseNotificationSetupOptions): void {
-  const initialized = useRef(false);
+const RETRY_INTERVAL_MS = 5 * 60 * 1000;
 
+export function useNotificationSetup({ uid, isAuthenticated }: UseNotificationSetupOptions): void {
   useEffect(() => {
-    // Configurar cómo se muestran las notificaciones (solo una vez)
     configureNotificationHandler();
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || !uid || initialized.current) return;
-
-    initialized.current = true;
-
-    // Registrar token de forma silenciosa — no bloquea la UI si falla
-    void registerPushTokenForUser(uid);
-  }, [isAuthenticated, uid]);
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      initialized.current = false;
+    if (!isAuthenticated || !uid) {
+      return;
     }
-  }, [isAuthenticated]);
+
+    const runRegistration = () => {
+      void registerPushTokenForUser(uid);
+    };
+
+    // Immediate attempt on auth.
+    runRegistration();
+
+    // Periodic retries in case permission was granted later.
+    const timer = setInterval(runRegistration, RETRY_INTERVAL_MS);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [isAuthenticated, uid]);
 }

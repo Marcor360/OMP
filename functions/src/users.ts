@@ -555,6 +555,19 @@ const parseUpdatePasswordPayload = (raw: unknown): UpdatePasswordPayload => {
   return { uid, newPassword };
 };
 
+const parseUidFromPayload = (raw: unknown): string => {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new HttpsError('invalid-argument', 'Payload invalido.');
+  }
+
+  const uid = normalizeText((raw as Record<string, unknown>).uid);
+  if (!uid) {
+    throw new HttpsError('invalid-argument', 'UID invalido.');
+  }
+
+  return uid;
+};
+
 export const createUserByAdmin = onCall(
   { region: 'us-central1' },
   async (request) => {
@@ -825,10 +838,7 @@ export const disableUserByAdmin = onCall(
     const requester = await getRequesterProfile(request.auth.uid);
     assertAdmin(requester);
 
-    const { uid } = request.data ?? {};
-    if (typeof uid !== 'string') {
-      throw new HttpsError('invalid-argument', 'UID invalido.');
-    }
+    const uid = parseUidFromPayload(request.data ?? {});
 
     if (uid === request.auth.uid) {
       throw new HttpsError('failed-precondition', 'No puedes desactivar tu propio usuario.');
@@ -869,10 +879,7 @@ export const deleteUserByAdmin = onCall(
     const requester = await getRequesterProfile(request.auth.uid);
     assertAdmin(requester);
 
-    const { uid } = request.data ?? {};
-    if (typeof uid !== 'string') {
-      throw new HttpsError('invalid-argument', 'UID invalido.');
-    }
+    const uid = parseUidFromPayload(request.data ?? {});
 
     if (uid === request.auth.uid) {
       throw new HttpsError('failed-precondition', 'No puedes eliminar tu propio usuario.');

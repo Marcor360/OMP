@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, useWindowDimensions, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -21,6 +21,9 @@ import { DashboardMetrics } from '@/src/types/dashboard';
 import { Meeting } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { canManageAssignments, canManageUsers } from '@/src/utils/permissions/permissions';
+// Módulo local: Contador de Horas de Predicación (sin Firebase)
+import { FieldServiceDashboardCard } from '@/src/modules/field-service/components/FieldServiceDashboardCard';
+import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 
 export function DashboardScreen() {
   const router = useRouter();
@@ -99,6 +102,14 @@ export function DashboardScreen() {
 
     void loadData(false);
   }, [loadData, loadingProfile]);
+
+  // Refresca datos cuando el usuario regresa a esta tab o la app vuelve al primer plano.
+  // Usa forceServer=false para aprovechar el caché local del SDK de Firebase si es reciente.
+  const handleFocusRefresh = useCallback(() => {
+    if (!loadingProfile) void loadData(false);
+  }, [loadData, loadingProfile]);
+
+  useRefreshOnFocus(handleFocusRefresh, !loading && !loadingProfile);
 
   useEffect(() => {
     if (!congregationId) {
@@ -186,6 +197,9 @@ export function DashboardScreen() {
           </ThemedText>
         </View>
       ) : null}
+
+      {/* ── Contador de Horas de Predicación (solo dispositivo móvil) ── */}
+      {Platform.OS !== 'web' && <FieldServiceDashboardCard />}
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>

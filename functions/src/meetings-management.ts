@@ -1,4 +1,5 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { adminDb } from './config/firebaseAdmin.js';
@@ -334,6 +335,14 @@ const formatShortDate = (value: Timestamp): string =>
     year: 'numeric',
   });
 
+const resolveErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+};
+
 const assertNoMeetingConflict = async (params: {
   congregationId: string;
   range: { meetingType: MeetingProgramKind; startDate: Timestamp; endDate: Timestamp };
@@ -344,21 +353,44 @@ const assertNoMeetingConflict = async (params: {
     .doc(params.congregationId)
     .collection('meetings');
 
-  const [byMeetingDate, byStartDate] = await Promise.all([
+  const fallbackQueryPromise = Promise.all([
     meetingsRef
       .where('meetingDate', '>=', params.range.startDate)
       .where('meetingDate', '<=', params.range.endDate)
-      .limit(60)
+      .limit(120)
       .get(),
     meetingsRef
       .where('startDate', '>=', params.range.startDate)
       .where('startDate', '<=', params.range.endDate)
-      .limit(60)
+      .limit(120)
       .get(),
   ]);
 
+  let overlapSnapshot: FirebaseFirestore.QuerySnapshot | null = null;
+
+  try {
+    overlapSnapshot = await meetingsRef
+      .where('startDate', '<=', params.range.endDate)
+      .where('endDate', '>=', params.range.startDate)
+      .limit(120)
+      .get();
+  } catch (error) {
+    logger.warn(
+      'No se pudo ejecutar consulta de traslape por rango; usando validacion de compatibilidad.',
+      {
+        congregationId: params.congregationId,
+        error: resolveErrorMessage(error),
+      }
+    );
+  }
+
+  const [byMeetingDate, byStartDate] = await fallbackQueryPromise;
+
   const byId = new Map<string, Record<string, unknown>>();
-  [...byMeetingDate.docs, ...byStartDate.docs].forEach((docSnap) => {
+  const candidateDocs = overlapSnapshot
+    ? [...overlapSnapshot.docs, ...byMeetingDate.docs, ...byStartDate.docs]
+    : [...byMeetingDate.docs, ...byStartDate.docs];
+  candidateDocs.forEach((docSnap) => {
     byId.set(docSnap.id, docSnap.data() as Record<string, unknown>);
   });
 

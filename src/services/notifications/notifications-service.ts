@@ -1,19 +1,15 @@
 /**
- * Servicio de notificaciones push.
- * Gestiona permisos, registro de token Expo en Firestore y envío de notificaciones locales.
- * Funciona con expo-notifications (ya instalado).
+ * Push notification service.
+ * Handles permission checks, token registration in Firestore,
+ * and local notifications for in-app reminders.
  */
-import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { updateDoc } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, serverTimestamp, setDoc } from 'firebase/firestore';
 
 import { userDocRef } from '@/src/lib/firebase/refs';
 import { PermissionStatus } from '@/src/types/permissions.types';
 
-// ─── Configuración del handler de notificaciones ──────────────────────────────
-
-/** Configura cómo se comportan las notificaciones mientras la app está en primer plano. */
 export function configureNotificationHandler(): void {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -25,8 +21,6 @@ export function configureNotificationHandler(): void {
   });
 }
 
-// ─── Verificar estado del permiso ─────────────────────────────────────────────
-
 export async function getNotificationPermissionStatus(): Promise<PermissionStatus> {
   if (Platform.OS === 'web') return 'unavailable';
 
@@ -37,8 +31,6 @@ export async function getNotificationPermissionStatus(): Promise<PermissionStatu
     return 'unavailable';
   }
 }
-
-// ─── Solicitar permiso ────────────────────────────────────────────────────────
 
 export async function requestNotificationPermission(): Promise<PermissionStatus> {
   if (Platform.OS === 'web') return 'unavailable';
@@ -57,31 +49,14 @@ export async function requestNotificationPermission(): Promise<PermissionStatus>
   }
 }
 
-// ─── Obtener token push y guardarlo en Firestore ──────────────────────────────
-
-/**
- * Obtiene el Expo Push Token y lo almacena en el documento del usuario en Firestore.
- * Solo funciona en dispositivos físicos (no en simulador sin configuración adicional).
- */
 export async function registerPushTokenForUser(uid: string): Promise<string | null> {
+  if (!uid || uid.trim().length === 0) return null;
   if (Platform.OS === 'web') return null;
 
   const status = await getNotificationPermissionStatus();
   if (status !== 'granted') return null;
 
   try {
-    // projectId es obligatorio para Expo Go y builds de producción
-    const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ??
-      Constants.easConfig?.projectId;
-
-    const tokenData = projectId
-      ? await Notifications.getExpoPushTokenAsync({ projectId })
-      : await Notifications.getExpoPushTokenAsync();
-
-    const token = tokenData.data;
-
-    // Canales Android (obligatorio para Android 8+)
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'General',
@@ -93,7 +68,7 @@ export async function registerPushTokenForUser(uid: string): Promise<string | nu
 
       await Notifications.setNotificationChannelAsync('cleaning', {
         name: 'Limpieza',
-        description: 'Notificaciones del módulo de grupos de limpieza',
+        description: 'Notificaciones del modulo de grupos de limpieza',
         importance: Notifications.AndroidImportance.DEFAULT,
         vibrationPattern: [0, 200, 100, 200],
         lightColor: '#16A34A',
@@ -101,11 +76,26 @@ export async function registerPushTokenForUser(uid: string): Promise<string | nu
       });
     }
 
-    // Guardar token en Firestore
-    await updateDoc(userDocRef(uid), {
-      expoPushToken: token,
-      pushTokenUpdatedAt: new Date().toISOString(),
-    });
+    const tokenData = await Notifications.getDevicePushTokenAsync();
+    const token =
+      typeof tokenData.data === 'string' && tokenData.data.trim().length > 0
+        ? tokenData.data.trim()
+        : null;
+
+    if (!token) {
+      return null;
+    }
+
+    await setDoc(
+      userDocRef(uid),
+      {
+        uid,
+        notificationTokens: arrayUnion(token),
+        pushTokenUpdatedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
 
     return token;
   } catch (err) {
@@ -114,21 +104,31 @@ export async function registerPushTokenForUser(uid: string): Promise<string | nu
   }
 }
 
-// ─── Eliminar token (al cerrar sesión) ───────────────────────────────────────
-
-/** Elimina el push token de Firestore cuando el usuario cierra sesión. */
 export async function unregisterPushToken(uid: string): Promise<void> {
+  if (!uid || uid.trim().length === 0) return;
+  if (Platform.OS === 'web') return;
+
   try {
-    await updateDoc(userDocRef(uid), {
-      expoPushToken: null,
-      pushTokenUpdatedAt: null,
-    });
+    const tokenData = await Notifications.getDevicePushTokenAsync();
+    const token =
+      typeof tokenData.data === 'string' && tokenData.data.trim().length > 0
+        ? tokenData.data.trim()
+        : null;
+
+    const payload: Record<string, unknown> = {
+      pushTokenUpdatedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+
+    if (token) {
+      payload.notificationTokens = arrayRemove(token);
+    }
+
+    await setDoc(userDocRef(uid), payload, { merge: true });
   } catch {
-    // Silencioso: el usuario puede haberse eliminado
+    // Silent fallback: user could be deleted or permissions unavailable.
   }
 }
-
-// ─── Notificación local (para pruebas y alertas in-app) ──────────────────────
 
 export interface LocalNotificationOptions {
   title: string;
@@ -138,7 +138,6 @@ export interface LocalNotificationOptions {
   delaySeconds?: number;
 }
 
-/** Programa una notificación local inmediata o con delay. */
 export async function scheduleLocalNotification({
   title,
   body,
@@ -161,24 +160,37 @@ export async function scheduleLocalNotification({
       },
       trigger:
         delaySeconds > 0
-          ? { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: delaySeconds }
+          ? {
+              type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+              seconds: delaySeconds,
+            }
           : null,
     });
+
+    // Preserve channel on Android even if default trigger is immediate.
+    if (Platform.OS === 'android' && channelId !== 'default') {
+      await Notifications.setNotificationChannelAsync(channelId, {
+        name: channelId,
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
+
     return id;
   } catch (err) {
-    console.warn('[Notifications] Error al programar notificación:', err);
+    console.warn('[Notifications] Error al programar notificacion:', err);
     return null;
   }
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function mapExpoStatus(
   raw: Notifications.PermissionStatus | 'granted' | 'denied' | 'undetermined'
 ): PermissionStatus {
   switch (raw) {
-    case 'granted': return 'granted';
-    case 'denied': return 'denied';
-    default: return 'undetermined';
+    case 'granted':
+      return 'granted';
+    case 'denied':
+      return 'denied';
+    default:
+      return 'undetermined';
   }
 }

@@ -69,6 +69,8 @@ import { formatFirestoreError } from '@/src/utils/errors/errors';
 
 type Mode = 'create' | 'edit';
 type SaveIntent = 'draft' | 'published';
+type WeekendMeetingDay = 'saturday' | 'sunday';
+type MidweekMeetingDay = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday';
 
 interface MeetingFormErrors {
   title?: string;
@@ -86,6 +88,27 @@ const DEFAULT_TITLE_BY_TYPE: Record<MeetingProgramType, string> = {
   midweek: 'Reunion Vida y Ministerio Cristianos',
   weekend: 'Reunion del fin de semana',
 };
+
+const WEEKEND_MEETING_DAY_LABELS: Record<WeekendMeetingDay, string> = {
+  saturday: 'Sabado',
+  sunday: 'Domingo',
+};
+
+const MIDWEEK_MEETING_DAY_LABELS: Record<MidweekMeetingDay, string> = {
+  monday: 'Lunes',
+  tuesday: 'Martes',
+  wednesday: 'Miercoles',
+  thursday: 'Jueves',
+  friday: 'Viernes',
+};
+
+const MIDWEEK_MEETING_DAY_OPTIONS: { value: MidweekMeetingDay; offset: number }[] = [
+  { value: 'monday', offset: 0 },
+  { value: 'tuesday', offset: 1 },
+  { value: 'wednesday', offset: 2 },
+  { value: 'thursday', offset: 3 },
+  { value: 'friday', offset: 4 },
+];
 
 const pad = (value: number): string => String(value).padStart(2, '0');
 
@@ -117,6 +140,48 @@ const getTodayStart = (): Date => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return today;
+};
+
+const toDateFromDateLike = (value?: Timestamp | Date): Date => {
+  if (!value) {
+    return new Date();
+  }
+
+  return value instanceof Date ? value : value.toDate();
+};
+
+const isSameCalendarDay = (left: Date, right: Date): boolean =>
+  left.getFullYear() === right.getFullYear() &&
+  left.getMonth() === right.getMonth() &&
+  left.getDate() === right.getDate();
+
+const inferWeekendMeetingDay = (
+  meetingDate: Date,
+  range: { startDate: Date; endDate: Date }
+): WeekendMeetingDay => {
+  if (isSameCalendarDay(meetingDate, range.endDate) || meetingDate.getDay() === 0) {
+    return 'sunday';
+  }
+
+  return 'saturday';
+};
+
+const inferMidweekMeetingDay = (
+  meetingDate: Date,
+  range: { startDate: Date }
+): MidweekMeetingDay => {
+  const meetingDateStart = new Date(meetingDate);
+  meetingDateStart.setHours(0, 0, 0, 0);
+
+  const rangeStart = new Date(range.startDate);
+  rangeStart.setHours(0, 0, 0, 0);
+
+  const millisPerDay = 24 * 60 * 60 * 1000;
+  const diffDays = Math.round((meetingDateStart.getTime() - rangeStart.getTime()) / millisPerDay);
+  const normalizedOffset = Math.min(4, Math.max(0, diffDays));
+
+  const option = MIDWEEK_MEETING_DAY_OPTIONS.find((item) => item.offset === normalizedOffset);
+  return option?.value ?? 'monday';
 };
 
 const sectionMarkerMap = (section: MeetingProgramSection): Map<string, MarkerState> => {
@@ -276,6 +341,12 @@ export function MeetingFormScreen() {
   const [title, setTitle] = useState(DEFAULT_TITLE_BY_TYPE[initialType]);
   const [description, setDescription] = useState('');
   const [meetingType, setMeetingType] = useState<MeetingProgramType>(initialType);
+  const [weekendMeetingDay, setWeekendMeetingDay] = useState<WeekendMeetingDay>(
+    'sunday'
+  );
+  const [midweekMeetingDay, setMidweekMeetingDay] = useState<MidweekMeetingDay>(
+    'monday'
+  );
   const [status, setStatus] = useState<MeetingStatus>('scheduled');
   const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(initialWeekStart);
   const [location, setLocation] = useState('');
@@ -322,8 +393,20 @@ export function MeetingFormScreen() {
           const inferredMeetingType = inferProgramTypeFromMeeting(meeting);
           setMeetingType(inferredMeetingType);
           setStatus(meeting.status);
-          const parsedStart = meeting.startDate.toDate();
-          setSelectedWeekStart(getWeekStart(parsedStart));
+          const parsedStart = toDateFromDateLike(meeting.startDate);
+          const parsedWeekStart = getWeekStart(parsedStart);
+          setSelectedWeekStart(parsedWeekStart);
+
+          if (inferredMeetingType === 'weekend') {
+            const weekendRange = resolveMeetingTemplate('weekend').getMeetingDateRange(parsedWeekStart);
+            const parsedMeetingDate = toDateFromDateLike(meeting.meetingDate ?? meeting.startDate);
+            setWeekendMeetingDay(inferWeekendMeetingDay(parsedMeetingDate, weekendRange));
+          } else {
+            const midweekRange = resolveMeetingTemplate('midweek').getMeetingDateRange(parsedWeekStart);
+            const parsedMeetingDate = toDateFromDateLike(meeting.meetingDate ?? meeting.startDate);
+            setMidweekMeetingDay(inferMidweekMeetingDay(parsedMeetingDate, midweekRange));
+          }
+
           setLocation(meeting.location ?? '');
           setMeetingUrl(meeting.meetingUrl ?? '');
           setNotes(meeting.notes ?? '');
@@ -385,6 +468,37 @@ export function MeetingFormScreen() {
     [activeMeetingTemplate, selectedWeekStart]
   );
 
+  const selectedWeekendMeetingDate = useMemo(() => {
+    const selectedDate = new Date(resolvedMeetingDateRange.startDate);
+
+    if (weekendMeetingDay === 'sunday') {
+      selectedDate.setDate(selectedDate.getDate() + 1);
+    }
+
+    selectedDate.setHours(0, 0, 0, 0);
+    return selectedDate;
+  }, [resolvedMeetingDateRange.startDate, weekendMeetingDay]);
+
+  const selectedMidweekMeetingDate = useMemo(() => {
+    const selectedDate = new Date(resolvedMeetingDateRange.startDate);
+    const option = MIDWEEK_MEETING_DAY_OPTIONS.find((item) => item.value === midweekMeetingDay);
+
+    if (option) {
+      selectedDate.setDate(selectedDate.getDate() + option.offset);
+    }
+
+    selectedDate.setHours(0, 0, 0, 0);
+    return selectedDate;
+  }, [midweekMeetingDay, resolvedMeetingDateRange.startDate]);
+
+  const resolvedMeetingDate = useMemo(() => {
+    if (meetingType === 'weekend') {
+      return selectedWeekendMeetingDate;
+    }
+
+    return selectedMidweekMeetingDate;
+  }, [meetingType, selectedMidweekMeetingDate, selectedWeekendMeetingDate]);
+
   const selectedWeekLabel = useMemo(
     () => formatWeekLabel(selectedWeekStart, selectedWeekEnd),
     [selectedWeekEnd, selectedWeekStart]
@@ -439,6 +553,8 @@ export function MeetingFormScreen() {
     if (mode === 'edit') return;
     const defaults = createDefaultSectionsForMeetingType(nextType);
     setMeetingType(nextType);
+    setWeekendMeetingDay('sunday');
+    setMidweekMeetingDay('monday');
     setTitle(DEFAULT_TITLE_BY_TYPE[nextType]);
     setSections(defaults);
     setWeekendSessions(
@@ -519,6 +635,7 @@ export function MeetingFormScreen() {
   const buildPayload = (startDate: Date, endDate: Date, actorUid: string): CreateMeetingDTO => {
     const startTimestamp = Timestamp.fromDate(startDate);
     const endTimestamp = Timestamp.fromDate(endDate);
+    const meetingDateTimestamp = Timestamp.fromDate(resolvedMeetingDate);
 
     return {
       title: normalizeText(title) ?? DEFAULT_TITLE_BY_TYPE[meetingType],
@@ -530,7 +647,7 @@ export function MeetingFormScreen() {
       publicationStatus: 'draft',
       startDate: startTimestamp,
       endDate: endTimestamp,
-      meetingDate: startTimestamp,
+      meetingDate: meetingDateTimestamp,
       location: normalizeText(location),
       meetingUrl: normalizeUrl(meetingUrl),
       notes: normalizeText(notes),
@@ -759,6 +876,78 @@ export function MeetingFormScreen() {
               </ThemedText>
             </View>
           </Field>
+
+          {meetingType === 'weekend' ? (
+            <Field label="Dia de reunion (fin de semana)">
+              <View style={styles.chips}>
+                {(['saturday', 'sunday'] as const).map((dayOption) => {
+                  const optionDate =
+                    dayOption === 'saturday'
+                      ? resolvedMeetingDateRange.startDate
+                      : resolvedMeetingDateRange.endDate;
+
+                  return (
+                    <TouchableOpacity
+                      key={dayOption}
+                      style={[
+                        styles.chip,
+                        weekendMeetingDay === dayOption && styles.chipActive,
+                      ]}
+                      onPress={() => setWeekendMeetingDay(dayOption)}
+                      disabled={!canManage}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.chipText,
+                          weekendMeetingDay === dayOption && styles.chipTextActive,
+                        ]}
+                      >
+                        {WEEKEND_MEETING_DAY_LABELS[dayOption]} {formatDateInput(optionDate)}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <ThemedText style={styles.weekHint}>
+                Fecha seleccionada: {WEEKEND_MEETING_DAY_LABELS[weekendMeetingDay]} {formatDateInput(selectedWeekendMeetingDate)}
+              </ThemedText>
+            </Field>
+          ) : null}
+
+          {meetingType === 'midweek' ? (
+            <Field label="Dia de reunion (entre semana)">
+              <View style={styles.chips}>
+                {MIDWEEK_MEETING_DAY_OPTIONS.map((dayOption) => {
+                  const optionDate = new Date(resolvedMeetingDateRange.startDate);
+                  optionDate.setDate(optionDate.getDate() + dayOption.offset);
+
+                  return (
+                    <TouchableOpacity
+                      key={dayOption.value}
+                      style={[
+                        styles.chip,
+                        midweekMeetingDay === dayOption.value && styles.chipActive,
+                      ]}
+                      onPress={() => setMidweekMeetingDay(dayOption.value)}
+                      disabled={!canManage}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.chipText,
+                          midweekMeetingDay === dayOption.value && styles.chipTextActive,
+                        ]}
+                      >
+                        {MIDWEEK_MEETING_DAY_LABELS[dayOption.value]} {formatDateInput(optionDate)}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <ThemedText style={styles.weekHint}>
+                Fecha seleccionada: {MIDWEEK_MEETING_DAY_LABELS[midweekMeetingDay]} {formatDateInput(selectedMidweekMeetingDate)}
+              </ThemedText>
+            </Field>
+          ) : null}
 
           <View style={styles.row}>
             <View style={styles.col}>

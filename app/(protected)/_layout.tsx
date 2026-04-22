@@ -1,7 +1,10 @@
 import { Stack } from 'expo-router';
 import { UserProvider } from '@/src/context/user-context';
+import { useI18n } from '@/src/i18n/index';
 
 export default function ProtectedLayout() {
+  const { t } = useI18n();
+
   return (
     <UserProvider>
       <Stack screenOptions={{ headerShown: false }}>
@@ -24,12 +27,23 @@ export default function ProtectedLayout() {
         <Stack.Screen name="cleaning/create" options={{ headerShown: false }} />
         <Stack.Screen name="cleaning/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="cleaning/edit/[id]" options={{ headerShown: false }} />
+        {/* Módulo: Contador de Horas de Predicación (100% local, sin Firebase) */}
+        <Stack.Screen name="field-service/index" options={{ headerShown: false }} />
         <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
         <Stack.Screen name="unauthorized" options={{ headerShown: false }} />
         {/* Settings */}
-        <Stack.Screen name="settings/theme" options={{ title: 'Tema', headerShown: true }} />
-        <Stack.Screen name="settings/language" options={{ title: 'Idioma', headerShown: true }} />
-        <Stack.Screen name="settings/about" options={{ title: 'Acerca de', headerShown: true }} />
+        <Stack.Screen
+          name="settings/theme"
+          options={{ title: t('settings.screen.theme'), headerShown: true }}
+        />
+        <Stack.Screen
+          name="settings/language"
+          options={{ title: t('settings.screen.language'), headerShown: true }}
+        />
+        <Stack.Screen
+          name="settings/about"
+          options={{ title: t('settings.screen.about'), headerShown: true }}
+        />
       </Stack>
     </UserProvider>
   );

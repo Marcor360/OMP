@@ -11,6 +11,7 @@ import {
   summarizeAssignments,
 } from '@/src/modules/assignments/utils/assignment-filters';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 
 interface UseAssignmentsParams {
   congregationId: string | null;
@@ -89,6 +90,13 @@ export const useAssignments = ({
   useEffect(() => {
     void loadAssignments(false);
   }, [loadAssignments]);
+
+  // Refresca asignaciones cuando el usuario regresa a esta tab o la app vuelve al primer plano.
+  const handleFocusRefresh = useCallback(() => {
+    void loadAssignments(false);
+  }, [loadAssignments]);
+
+  useRefreshOnFocus(handleFocusRefresh, !loading);
 
   const summaryFilters = useMemo(
     () => ({
