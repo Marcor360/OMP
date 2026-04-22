@@ -113,6 +113,12 @@ const normalizeUrl = (value: string): string | undefined => {
   }
 };
 
+const getTodayStart = (): Date => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+};
+
 const sectionMarkerMap = (section: MeetingProgramSection): Map<string, MarkerState> => {
   const map = new Map<string, MarkerState>();
   section.assignments.forEach((assignment) => {
@@ -384,9 +390,28 @@ export function MeetingFormScreen() {
     [selectedWeekEnd, selectedWeekStart]
   );
 
+  const canGoToPreviousWeek = useMemo(() => {
+    if (mode === 'edit') return true;
+
+    const previousWeekStart = moveWeek(selectedWeekStart, -1);
+    const previousRange = activeMeetingTemplate.getMeetingDateRange(previousWeekStart);
+    return previousRange.endDate >= getTodayStart();
+  }, [activeMeetingTemplate, mode, selectedWeekStart]);
+
   const shiftWeek = (offset: number) => {
     if (!canManage) return;
-    setSelectedWeekStart((current) => moveWeek(current, offset));
+    setSelectedWeekStart((current) => {
+      const next = moveWeek(current, offset);
+
+      if (mode === 'create') {
+        const nextRange = activeMeetingTemplate.getMeetingDateRange(next);
+        if (nextRange.endDate < getTodayStart()) {
+          return current;
+        }
+      }
+
+      return next;
+    });
   };
 
   const goToCurrentWeek = () => {
@@ -700,7 +725,7 @@ export function MeetingFormScreen() {
                   <TouchableOpacity
                     style={styles.weekNavButton}
                     onPress={() => shiftWeek(-1)}
-                    disabled={!canManage}
+                    disabled={!canManage || !canGoToPreviousWeek}
                   >
                     <Ionicons name="chevron-back-outline" size={16} color={colors.textMuted} />
                   </TouchableOpacity>

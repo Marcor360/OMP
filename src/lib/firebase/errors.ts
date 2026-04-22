@@ -16,6 +16,31 @@ type FirebaseLikeError = {
   message?: string;
 };
 
+const normalizeErrorMessage = (message?: string): string | undefined => {
+  if (!message || typeof message !== 'string') return undefined;
+
+  const trimmed = message.trim();
+  if (!trimmed) return undefined;
+
+  // firebase-js usually wraps callable errors as:
+  // "Firebase: <message> (functions/code)."
+  const withoutPrefix = trimmed.replace(/^Firebase:\s*/i, '');
+  const withoutCodeSuffix = withoutPrefix.replace(/\s*\((?:auth|firestore|functions)\/[a-z-]+\)\.?$/i, '');
+  const normalized = withoutCodeSuffix.trim();
+
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const isGenericSdkMessage = (message: string): boolean => {
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes('missing or insufficient permissions') ||
+    normalized.includes('permission denied') ||
+    normalized.includes('insufficient permissions')
+  );
+};
+
 const normalizeCode = (code: string): string => {
   if (code.includes('/')) {
     return code.split('/').pop() ?? code;
@@ -31,13 +56,17 @@ export const mapFirebaseErrorCode = (code?: string): string | undefined => {
 
 export const getFirebaseErrorMessage = (error: unknown): string => {
   const fb = error as FirebaseLikeError;
+  const normalizedCode = fb?.code ? normalizeCode(fb.code) : undefined;
+  const normalizedMessage = normalizeErrorMessage(fb?.message);
 
-  const fromCode = mapFirebaseErrorCode(fb?.code);
+  if (normalizedMessage && !isGenericSdkMessage(normalizedMessage)) {
+    return normalizedMessage;
+  }
+
+  const fromCode = mapFirebaseErrorCode(normalizedCode);
   if (fromCode) return fromCode;
 
-  if (fb?.message && fb.message.trim().length > 0) {
-    return fb.message;
-  }
+  if (normalizedMessage) return normalizedMessage;
 
   return 'Ocurrio un error inesperado. Intenta nuevamente.';
 };

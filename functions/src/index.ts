@@ -22,6 +22,11 @@ export {
 } from './modules/notifications/notifyAssignmentUsers.js';
 
 export { setMeetingPublicationStatus } from './meetings-publication.js';
+export {
+  createMeetingByManager,
+  updateMeetingByManager,
+  deleteMeetingByManager,
+} from './meetings-management.js';
 
 export {
   notifyMeetingPublicationAndChanges,

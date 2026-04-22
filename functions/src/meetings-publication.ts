@@ -39,6 +39,54 @@ const normalizeText = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const normalizeRole = (value: unknown): UserRole | undefined => {
+  if (value === 'admin' || value === 'supervisor' || value === 'user') {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'admin' || normalized === 'administrador') {
+    return 'admin';
+  }
+  if (normalized === 'supervisor') {
+    return 'supervisor';
+  }
+  if (normalized === 'user' || normalized === 'usuario') {
+    return 'user';
+  }
+
+  return undefined;
+};
+
+const normalizeIsActive = (data: Record<string, unknown>): boolean => {
+  if (typeof data.isActive === 'boolean') {
+    return data.isActive;
+  }
+
+  if (typeof data.active === 'boolean') {
+    return data.active;
+  }
+
+  const status = normalizeText(data.status)?.toLowerCase();
+  if (status === 'active' || status === 'activo') {
+    return true;
+  }
+  if (
+    status === 'inactive' ||
+    status === 'inactivo' ||
+    status === 'suspended' ||
+    status === 'suspendido'
+  ) {
+    return false;
+  }
+
+  return false;
+};
+
 const comparableText = (value: unknown): string => {
   const normalized = normalizeText(value) ?? '';
   return normalized
@@ -159,11 +207,11 @@ const getRequesterProfile = async (uid: string): Promise<RequesterProfile> => {
 
   const data = snap.data() as Record<string, unknown>;
 
-  const role = data.role;
+  const role = normalizeRole(data.role);
   const congregationId = normalizeText(data.congregationId);
-  const isActive = data.isActive === true;
+  const isActive = normalizeIsActive(data);
 
-  if ((role !== 'admin' && role !== 'supervisor' && role !== 'user') || !congregationId) {
+  if (!role || !congregationId) {
     throw new HttpsError(
       'permission-denied',
       'Perfil de usuario invalido.'

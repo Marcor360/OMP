@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 
 import { congregationMeetingsCollectionRef, meetingDocRef } from '@/src/lib/firebase/refs';
+import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import {
   logFirestoreListenerCreated,
   logFirestoreListenerDestroyed,
@@ -45,6 +46,12 @@ import {
   normalizeMeetingProgramPayload,
 } from '@/src/services/meetings/meeting-program-utils';
 import { sanitizeForFirestore } from '@/src/services/meetings/firestore-payload';
+import {
+  createMeetingByManager,
+  deleteMeetingByManager,
+  updateMeetingByManager,
+} from '@/src/services/meetings/manager-meetings-service';
+import { AppError } from '@/src/utils/errors/errors';
 
 const isMeetingStatus = (value: unknown): value is MeetingStatus =>
   value === 'pending' ||
@@ -211,6 +218,126 @@ const filterByPublicationStatus = (
   return meetings.filter((meeting) => meeting.publicationStatus === publicationStatus);
 };
 
+type MeetingProgramKind = 'midweek' | 'weekend';
+
+const resolveProgramKindFromMeeting = (meeting: Pick<Meeting, 'type' | 'meetingCategory'>): MeetingProgramKind =>
+  meeting.type === 'midweek' || meeting.meetingCategory === 'midweek' ? 'midweek' : 'weekend';
+
+const resolveProgramKindFromPayload = (params: {
+  type?: MeetingType;
+  meetingCategory?: MeetingCategory;
+}): MeetingProgramKind =>
+  params.type === 'midweek' || params.meetingCategory === 'midweek' ? 'midweek' : 'weekend';
+
+const timestampToDate = (value: unknown): Date | null => {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toDate' in value &&
+    typeof (value as { toDate?: unknown }).toDate === 'function'
+  ) {
+    const converted = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(converted.getTime()) ? null : converted;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const converted = new Date(value);
+    return Number.isNaN(converted.getTime()) ? null : converted;
+  }
+
+  return null;
+};
+
+const startOfToday = (): Date => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+};
+
+const rangesOverlap = (
+  leftStart: Date,
+  leftEnd: Date,
+  rightStart: Date,
+  rightEnd: Date
+): boolean => leftStart <= rightEnd && rightStart <= leftEnd;
+
+const formatShortDate = (value: Date): string =>
+  value.toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+
+const findMeetingConflictByRange = async (params: {
+  congregationId: string;
+  meetingType: MeetingProgramKind;
+  rangeStart: Date;
+  rangeEnd: Date;
+  excludeMeetingId?: string;
+}): Promise<Meeting | null> => {
+  if (isInvalidDateRange(params.rangeStart, params.rangeEnd)) {
+    return null;
+  }
+
+  const byMeetingDateQuery = query(
+    congregationMeetingsCollectionRef(params.congregationId),
+    where('meetingDate', '>=', Timestamp.fromDate(params.rangeStart)),
+    where('meetingDate', '<=', Timestamp.fromDate(params.rangeEnd)),
+    limit(60)
+  );
+
+  const byStartDateQuery = query(
+    congregationMeetingsCollectionRef(params.congregationId),
+    where('startDate', '>=', Timestamp.fromDate(params.rangeStart)),
+    where('startDate', '<=', Timestamp.fromDate(params.rangeEnd)),
+    limit(60)
+  );
+
+  const [meetingDateSnap, startDateSnap] = await Promise.all([
+    getDocs(byMeetingDateQuery),
+    getDocs(byStartDateQuery),
+  ]);
+
+  const byId = new Map<string, Meeting>();
+  [...meetingDateSnap.docs, ...startDateSnap.docs].forEach((docSnap) => {
+    byId.set(docSnap.id, normalizeMeeting(docSnap.id, docSnap.data()));
+  });
+
+  const conflict = Array.from(byId.values()).find((meeting) => {
+    if (params.excludeMeetingId && meeting.id === params.excludeMeetingId) {
+      return false;
+    }
+
+    if (resolveProgramKindFromMeeting(meeting) !== params.meetingType) {
+      return false;
+    }
+
+    const meetingStart =
+      timestampToDate(meeting.startDate) ?? timestampToDate(meeting.meetingDate);
+    const meetingEnd =
+      timestampToDate(meeting.endDate) ?? meetingStart;
+
+    if (!meetingStart || !meetingEnd) {
+      return false;
+    }
+
+    return rangesOverlap(
+      params.rangeStart,
+      params.rangeEnd,
+      meetingStart,
+      meetingEnd
+    );
+  });
+
+  return conflict ?? null;
+};
+
 /** Obtiene una reunion por ID */
 export const getMeetingById = async (
   congregationId: string,
@@ -353,6 +480,33 @@ export const createMeeting = async (
   const normalizedType: MeetingType =
     meetingCategory === 'midweek' ? 'midweek' : data.type;
   const inferredType = normalizedType === 'midweek' ? 'midweek' : 'weekend';
+  const meetingRangeStart = timestampToDate(data.startDate);
+  const meetingRangeEnd = timestampToDate(data.endDate) ?? meetingRangeStart;
+
+  if (!meetingRangeStart || !meetingRangeEnd) {
+    throw new AppError('La reunion debe tener un rango de fechas valido.');
+  }
+
+  if (meetingRangeEnd < startOfToday()) {
+    throw new AppError('No se pueden crear reuniones con fechas que ya pasaron.');
+  }
+
+  const duplicatedMeeting = await findMeetingConflictByRange({
+    congregationId,
+    meetingType: inferredType,
+    rangeStart: meetingRangeStart,
+    rangeEnd: meetingRangeEnd,
+  });
+
+  if (duplicatedMeeting) {
+    throw new AppError(
+      `Ya existe una reunion de ${
+        inferredType === 'midweek' ? 'entre semana' : 'fin de semana'
+      } para ese rango (${formatShortDate(meetingRangeStart)} al ${formatShortDate(
+        meetingRangeEnd
+      )}).`
+    );
+  }
 
   const normalizedProgram = normalizeMeetingProgramPayload({
     meetingType: inferredType,
@@ -407,13 +561,31 @@ export const createMeeting = async (
     updatedAt: serverTimestamp(),
   };
 
-  const ref = await addDoc(
-    congregationMeetingsCollectionRef(congregationId),
-    sanitizeForFirestore(rawPayload)
-  );
+  try {
+    const ref = await addDoc(
+      congregationMeetingsCollectionRef(congregationId),
+      sanitizeForFirestore(rawPayload)
+    );
 
-  clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
-  return ref.id;
+    clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
+    return ref.id;
+  } catch (error) {
+    if (!isFirebaseErrorCode(error, 'permission-denied')) {
+      throw error;
+    }
+
+    const managerPayload = { ...rawPayload };
+    delete managerPayload.createdAt;
+    delete managerPayload.updatedAt;
+
+    const meetingId = await createMeetingByManager({
+      congregationId,
+      meetingData: managerPayload,
+    });
+
+    clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
+    return meetingId;
+  }
 };
 
 /** Actualiza una reunion */
@@ -478,9 +650,50 @@ export const updateMeeting = async (
     rawPayload.updatedBy = data.updatedBy;
   }
 
+  const updateRangeStart =
+    timestampToDate(data.startDate) ??
+    timestampToDate(normalizedProgram.meetingDate);
+  const updateRangeEnd = timestampToDate(data.endDate) ?? updateRangeStart;
+
+  if (updateRangeStart && updateRangeEnd) {
+    const conflict = await findMeetingConflictByRange({
+      congregationId,
+      meetingType: inferredType,
+      rangeStart: updateRangeStart,
+      rangeEnd: updateRangeEnd,
+      excludeMeetingId: id,
+    });
+
+    if (conflict) {
+      throw new AppError(
+        `Ya existe otra reunion de ${
+          inferredType === 'midweek' ? 'entre semana' : 'fin de semana'
+        } para ese rango (${formatShortDate(updateRangeStart)} al ${formatShortDate(
+          updateRangeEnd
+        )}).`
+      );
+    }
+  }
+
   const payload = sanitizeForFirestore(rawPayload);
 
-  await updateDoc(meetingDocRef(congregationId, id), payload);
+  try {
+    await updateDoc(meetingDocRef(congregationId, id), payload);
+  } catch (error) {
+    if (!isFirebaseErrorCode(error, 'permission-denied')) {
+      throw error;
+    }
+
+    const managerPayload = { ...rawPayload };
+    delete managerPayload.updatedAt;
+
+    await updateMeetingByManager({
+      congregationId,
+      meetingId: id,
+      meetingData: managerPayload,
+    });
+  }
+
   invalidateCacheEntry(`meetings/${congregationId}/doc/${id}`);
   clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
 };
@@ -490,7 +703,19 @@ export const deleteMeeting = async (
   congregationId: string,
   id: string
 ): Promise<void> => {
-  await deleteDoc(meetingDocRef(congregationId, id));
+  try {
+    await deleteDoc(meetingDocRef(congregationId, id));
+  } catch (error) {
+    if (!isFirebaseErrorCode(error, 'permission-denied')) {
+      throw error;
+    }
+
+    await deleteMeetingByManager({
+      congregationId,
+      meetingId: id,
+    });
+  }
+
   invalidateCacheEntry(`meetings/${congregationId}/doc/${id}`);
   clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
 };

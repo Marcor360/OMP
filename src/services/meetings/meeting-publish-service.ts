@@ -18,6 +18,26 @@ export interface SetMeetingPublicationStatusResult {
   errors: string[];
 }
 
+const hasNotFoundSignal = (error: unknown): boolean => {
+  const rawMessage = (error as { message?: unknown })?.message;
+  if (typeof rawMessage !== 'string') {
+    return false;
+  }
+
+  const normalized = rawMessage.toLowerCase();
+  return (
+    normalized.includes('404') ||
+    normalized.includes('not found') ||
+    normalized.includes('functions/not-found') ||
+    normalized.includes('requested entity was not found')
+  );
+};
+
+const isPublicationFunctionUnavailable = (error: unknown): boolean =>
+  isFirebaseErrorCode(error, 'unimplemented') ||
+  isFirebaseErrorCode(error, 'not-found') ||
+  (isFirebaseErrorCode(error, 'internal') && hasNotFoundSignal(error));
+
 export const setMeetingPublicationStatus = async (
   payload: SetMeetingPublicationStatusPayload
 ): Promise<SetMeetingPublicationStatusResult> => {
@@ -30,10 +50,7 @@ export const setMeetingPublicationStatus = async (
     const response = await callable(payload);
     return response.data;
   } catch (error) {
-    if (
-      isFirebaseErrorCode(error, 'unimplemented') ||
-      isFirebaseErrorCode(error, 'not-found')
-    ) {
+    if (isPublicationFunctionUnavailable(error)) {
       throw new AppError(
         'Publicar reuniones requiere Cloud Functions desplegadas (setMeetingPublicationStatus).'
       );
