@@ -26,7 +26,62 @@ export interface FieldServiceMeta {
    * Si es null, nunca se ha ejecutado una purga (primera ejecución).
    */
   lastAutoPurgeAt: string | null;
+  /**
+   * Historial de informes mensuales enviados.
+   * Key: YYYY-MM (mes informado), value: metadata del envío.
+   */
+  monthlyReports: Record<string, MonthlyReportRecord>;
 }
+
+/**
+ * Registro de informe mensual enviado.
+ * Ejemplo: monthKey = "2026-04" representa el informe de abril 2026.
+ */
+export interface MonthlyReportRecord {
+  monthKey: string; // YYYY-MM del mes reportado
+  sentAt: string; // ISO 8601 del envío
+  totalMinutes: number; // minutos totales del mes reportado
+  periodStart: string; // YYYY-MM-DD
+  periodEnd: string; // YYYY-MM-DD
+  deadlineDate: string; // YYYY-MM-DD
+  graceDays: 2 | 3; // 30 días -> 2, 31 días -> 3
+}
+
+/**
+ * Ventana activa para envío del informe mensual.
+ * Se basa en el mes previo al actual.
+ */
+export interface MonthlyReportWindow {
+  targetYear: number;
+  targetMonth: number; // 1-12
+  targetMonthKey: string; // YYYY-MM
+  periodStart: string; // YYYY-MM-DD
+  periodEnd: string; // YYYY-MM-DD
+  windowStart: string; // YYYY-MM-DD (siempre día 1 del mes actual)
+  windowEnd: string; // YYYY-MM-DD (día 2 o 3 del mes actual)
+  graceDays: 2 | 3;
+  isWithinWindow: boolean;
+}
+
+export interface MonthlyReportStatus {
+  window: MonthlyReportWindow;
+  alreadySent: boolean;
+  sentReport: MonthlyReportRecord | null;
+  canSubmit: boolean;
+  reason: 'READY' | 'ALREADY_SENT' | 'OUTSIDE_WINDOW';
+}
+
+export type SubmitMonthlyReportResult =
+  | {
+      ok: true;
+      report: MonthlyReportRecord;
+    }
+  | {
+      ok: false;
+      reason: 'ALREADY_SENT' | 'OUTSIDE_WINDOW';
+      message: string;
+      status: MonthlyReportStatus;
+    };
 
 /**
  * Estructura raíz almacenada en AsyncStorage.
@@ -122,4 +177,10 @@ export interface SaveDayInput {
   date: string; // YYYY-MM-DD
   hours: number; // ≥ 0, entero o decimal
   minutes: number; // 0-59, entero
+  /**
+   * Modo de guardado:
+   * - replace: reemplaza el total del día con el valor enviado.
+   * - add: suma el valor enviado al total existente del día.
+   */
+  mode?: 'replace' | 'add';
 }

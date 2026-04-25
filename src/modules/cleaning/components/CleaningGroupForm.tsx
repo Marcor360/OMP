@@ -4,14 +4,17 @@ import {
   Switch,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 
 import { useAppColors } from '@/src/styles';
+import { CleaningGroupType } from '@/src/modules/cleaning/types/cleaning-group.types';
 
 export interface CleaningGroupFormValues {
   name: string;
   description: string;
+  groupType: CleaningGroupType;
   isActive: boolean;
 }
 
@@ -96,18 +99,75 @@ export function CleaningGroupForm({
       color: colors.textMuted,
       marginTop: 2,
     },
+    typeOptionRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    typeOption: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      borderWidth: 1,
+    },
+    typeOptionText: {
+      fontSize: 14,
+      fontWeight: '700',
+    },
   });
 
   return (
     <View style={styles.container}>
+      <View style={styles.field}>
+        <Text style={styles.label}>Tipo de grupo</Text>
+        <View style={styles.typeOptionRow}>
+          {([
+            { value: 'standard' as const, label: 'Normal' },
+            { value: 'family' as const, label: 'Familiar' },
+          ]).map((option) => {
+            const selected = values.groupType === option.value;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                onPress={() => {
+                  if (!disabled) set('groupType', option.value);
+                }}
+                disabled={disabled}
+                style={[
+                  styles.typeOption,
+                  {
+                    backgroundColor: selected ? `${colors.primary}18` : colors.surfaceRaised,
+                    borderColor: selected ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.typeOptionText,
+                    { color: selected ? colors.primary : colors.textSecondary },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
       {/* Nombre */}
       <View style={styles.field}>
-        <Text style={styles.label}>Nombre del grupo *</Text>
+        <Text style={styles.label}>
+          {values.groupType === 'family' ? 'Nombre de la familia *' : 'Nombre del grupo *'}
+        </Text>
         <TextInput
           style={[styles.input, errors.name ? styles.inputError : undefined]}
           value={values.name}
           onChangeText={(text) => set('name', text)}
-          placeholder="Ej. Grupo Martes"
+          placeholder={values.groupType === 'family' ? 'Ej. Familia Garcia' : 'Ej. Grupo Martes'}
           placeholderTextColor={colors.textDisabled}
           editable={!disabled}
           maxLength={60}

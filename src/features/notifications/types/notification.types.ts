@@ -15,7 +15,8 @@ export interface AppNotification {
   title: string;
   body: string;
   assignmentId: string;
-  read: boolean;
+  /** Campo canónico alineado con Firestore Security Rules y Cloud Functions. */
+  isRead: boolean;
   createdAt: Timestamp;
   sentBy?: string | null;
   metadata?: {

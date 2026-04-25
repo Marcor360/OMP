@@ -24,6 +24,7 @@ import {
 import {
   CleaningAssignableUser,
   CleaningGroup,
+  CleaningGroupType,
   CleaningMemberStatus,
   CleaningServiceError,
   CreateCleaningGroupDTO,
@@ -43,6 +44,9 @@ const resolveUserCongregationId = (userData: Record<string, unknown>): string | 
   }
   return null;
 };
+
+const resolveCleaningGroupType = (value: unknown): CleaningGroupType =>
+  value === 'family' ? 'family' : 'standard';
 
 const CLEANING_GROUP_COLLECTION_CANDIDATES = [
   'cleaningGroups',
@@ -163,6 +167,7 @@ const normalizeCleaningGroup = (
   name: typeof data.name === 'string' ? data.name : '',
   description: typeof data.description === 'string' ? data.description : '',
   congregationId: typeof data.congregationId === 'string' ? data.congregationId : '',
+  groupType: resolveCleaningGroupType(data.groupType),
   memberIds: Array.isArray(data.memberIds)
     ? (data.memberIds as string[]).filter((v) => typeof v === 'string')
     : [],
@@ -216,6 +221,7 @@ export const createCleaningGroup = async (
     name: dto.name.trim(),
     description: dto.description?.trim() ?? '',
     congregationId,
+    groupType: dto.groupType ?? 'standard',
     memberIds: [],
     memberCount: 0,
     isActive: dto.isActive ?? true,
@@ -378,6 +384,7 @@ export const updateCleaningGroup = async (
 
   if (dto.name !== undefined) payload.name = dto.name.trim();
   if (dto.description !== undefined) payload.description = dto.description.trim();
+  if (dto.groupType !== undefined) payload.groupType = dto.groupType;
   if (typeof dto.isActive === 'boolean') payload.isActive = dto.isActive;
 
   const storageMode = await resolveExistingGroupStorageMode(groupId, congregationId);

@@ -79,13 +79,20 @@ export function MeetingsListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const loadingRef = React.useRef(false);
+
   const loadMeetings = useCallback(
     async (forceServer = false) => {
+      // Evitar llamadas concurrentes (protecciÃ³n contra re-entrancia)
+      if (loadingRef.current) return;
+      loadingRef.current = true;
+
       if (!congregationId) {
         setMeetings([]);
         setError(t('meetings.list.noCongregation'));
         setLoading(false);
         setRefreshing(false);
+        loadingRef.current = false;
         return;
       }
 
@@ -109,21 +116,25 @@ export function MeetingsListScreen() {
       } finally {
         setLoading(false);
         setRefreshing(false);
+        loadingRef.current = false;
       }
     },
     [congregationId, t]
   );
 
   useEffect(() => {
-    void loadMeetings(false);
+    void loadMeetings(true);
   }, [loadMeetings]);
 
   // Refresca cuando el usuario regresa a esta tab o la app vuelve al primer plano.
   const handleFocusRefresh = useCallback(() => {
-    void loadMeetings(false);
+    void loadMeetings(true);
   }, [loadMeetings]);
 
-  useRefreshOnFocus(handleFocusRefresh, !loading);
+  useRefreshOnFocus(handleFocusRefresh, true, {
+    refreshOnAppActive: false,
+    skipInitialFocus: false,
+  });
 
   const groupedMeetings = useMemo<MeetingDayGroup[]>(() => {
     const byDate = new Map<string, MeetingDayGroup>();
@@ -249,3 +260,4 @@ const createStyles = (colors: AppColorSet) =>
     cardsWrap: { padding: 10, gap: 8 },
     emptyWrap: { paddingTop: 18 },
   });
+

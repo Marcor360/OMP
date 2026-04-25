@@ -21,7 +21,7 @@ import { DashboardMetrics } from '@/src/types/dashboard';
 import { Meeting } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { canManageAssignments, canManageUsers } from '@/src/utils/permissions/permissions';
-// Módulo local: Contador de Horas de Predicación (sin Firebase)
+// MÃ³dulo local: Contador de Horas de PredicaciÃ³n (sin Firebase)
 import { FieldServiceDashboardCard } from '@/src/modules/field-service/components/FieldServiceDashboardCard';
 import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 
@@ -46,7 +46,13 @@ export function DashboardScreen() {
   const isAdmin = canManageUsers(role);
   const canManage = canManageAssignments(role);
 
+  const loadingRef = React.useRef(false);
+
   const loadData = useCallback(async (forceServer = false) => {
+    // Evitar llamadas concurrentes
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+
     const uid = user?.uid;
 
     if (!uid) {
@@ -56,6 +62,7 @@ export function DashboardScreen() {
       setError('No hay una sesion activa.');
       setLoading(false);
       setRefreshing(false);
+      loadingRef.current = false;
       return;
     }
 
@@ -66,6 +73,7 @@ export function DashboardScreen() {
       setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
       setLoading(false);
       setRefreshing(false);
+      loadingRef.current = false;
       return;
     }
 
@@ -92,6 +100,7 @@ export function DashboardScreen() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      loadingRef.current = false;
     }
   }, [canManage, congregationId, isAdmin, profileError, user?.uid]);
 
@@ -100,16 +109,19 @@ export function DashboardScreen() {
       return;
     }
 
-    void loadData(false);
+    void loadData(true);
   }, [loadData, loadingProfile]);
 
   // Refresca datos cuando el usuario regresa a esta tab o la app vuelve al primer plano.
-  // Usa forceServer=false para aprovechar el caché local del SDK de Firebase si es reciente.
+  // Regla: al cambiar de ventana/tab, intentar lectura desde servidor.
   const handleFocusRefresh = useCallback(() => {
-    if (!loadingProfile) void loadData(false);
+    if (!loadingProfile) void loadData(true);
   }, [loadData, loadingProfile]);
 
-  useRefreshOnFocus(handleFocusRefresh, !loading && !loadingProfile);
+  useRefreshOnFocus(handleFocusRefresh, true, {
+    refreshOnAppActive: false,
+    skipInitialFocus: false,
+  });
 
   useEffect(() => {
     if (!congregationId) {
@@ -198,7 +210,7 @@ export function DashboardScreen() {
         </View>
       ) : null}
 
-      {/* ── Contador de Horas de Predicación (solo dispositivo móvil) ── */}
+      {/* â”€â”€ Contador de Horas de PredicaciÃ³n (solo dispositivo mÃ³vil) â”€â”€ */}
       {Platform.OS !== 'web' && <FieldServiceDashboardCard />}
 
       <View style={styles.section}>
@@ -364,3 +376,4 @@ const createStyles = (colors: AppColorSet, isCompact: boolean) =>
       paddingVertical: 16,
     },
   });
+

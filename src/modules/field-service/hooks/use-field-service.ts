@@ -1,16 +1,17 @@
 /**
- * Hook principal del Módulo: Contador de Horas de Predicación.
+ * Hook principal del modulo: Contador de Horas de Predicacion.
  *
  * Provee acceso memoizado a:
- * - totales del día, semana y mes actual
+ * - totales del dia, semana y mes actual
  * - estructura del calendario mensual
- * - acciones de guardado y eliminación
- * - estado de carga y purga automática
+ * - estado del informe mensual
+ * - acciones de guardado y eliminacion
  */
 
 import { useMemo } from 'react';
 
 import { useFieldServiceContext } from '@/src/modules/field-service/context/FieldServiceContext';
+import { getMonthlyReportStatus } from '@/src/modules/field-service/services/field-service-storage';
 import {
   buildCalendarMonth,
   getCurrentMonthSummary,
@@ -21,42 +22,32 @@ import {
 } from '@/src/modules/field-service/utils/field-service-dates';
 import type {
   CalendarMonth,
+  FieldServiceStore,
   MonthSummary,
+  MonthlyReportStatus,
   SaveDayInput,
+  SubmitMonthlyReportResult,
   WeekSummary,
 } from '@/src/modules/field-service/types/field-service.types';
-import type { FieldServiceStore } from '@/src/modules/field-service/types/field-service.types';
-
-// ─── Interfaz del hook ────────────────────────────────────────────────────────
 
 export interface UseFieldServiceResult {
-  // ── Estado general ─────────────────────────────────────────────────────────
   loading: boolean;
   error: string | null;
   purgeExecutedThisSession: boolean;
   store: FieldServiceStore | null;
 
-  // ── Resumen del mes actual (para dashboard y pantalla) ─────────────────────
   currentMonthSummary: MonthSummary;
-
-  // ── Resumen de semana que contiene la fecha seleccionada ───────────────────
   getWeekSummaryForDate: (date: Date) => WeekSummary;
-
-  // ── Resumen de un mes específico ───────────────────────────────────────────
   getMonthSummaryFor: (year: number, month: number) => MonthSummary;
-
-  // ── Calendario de un mes específico ───────────────────────────────────────
   buildCalendar: (year: number, month: number) => CalendarMonth;
-
-  // ── Total del día ──────────────────────────────────────────────────────────
   getDayMinutes: (date: string) => number;
+  monthlyReportStatus: MonthlyReportStatus | null;
 
-  // ── Acciones ───────────────────────────────────────────────────────────────
   saveDay: (input: SaveDayInput) => Promise<void>;
   removeDay: (date: string) => Promise<void>;
+  submitMonthlyReport: () => Promise<SubmitMonthlyReportResult>;
   reload: () => Promise<void>;
 
-  // ── Navegación de mes (helper puro) ───────────────────────────────────────
   navigateMonth: (
     year: number,
     month: number,
@@ -64,13 +55,18 @@ export interface UseFieldServiceResult {
   ) => { year: number; month: number };
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
-
 export function useFieldService(): UseFieldServiceResult {
-  const { store, loading, error, purgeExecutedThisSession, saveDay, removeDay, reload } =
-    useFieldServiceContext();
+  const {
+    store,
+    loading,
+    error,
+    purgeExecutedThisSession,
+    saveDay,
+    removeDay,
+    submitMonthlyReport,
+    reload,
+  } = useFieldServiceContext();
 
-  // Resumen del mes actual — memoizado, se recalcula solo si cambia el store
   const currentMonthSummary = useMemo<MonthSummary>(() => {
     if (!store) {
       const now = new Date();
@@ -89,7 +85,6 @@ export function useFieldService(): UseFieldServiceResult {
     () =>
       (date: Date): WeekSummary => {
         if (!store) {
-          const now = new Date();
           return {
             weekStart: '',
             weekEnd: '',
@@ -133,6 +128,11 @@ export function useFieldService(): UseFieldServiceResult {
     [store]
   );
 
+  const monthlyReportStatus = useMemo(() => {
+    if (!store) return null;
+    return getMonthlyReportStatus(store);
+  }, [store]);
+
   return {
     loading,
     error,
@@ -143,8 +143,10 @@ export function useFieldService(): UseFieldServiceResult {
     getMonthSummaryFor,
     buildCalendar,
     getDayMinutes,
+    monthlyReportStatus,
     saveDay,
     removeDay,
+    submitMonthlyReport,
     reload,
     navigateMonth,
   };

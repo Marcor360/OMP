@@ -129,18 +129,23 @@ export function FieldServiceScreen() {
 
   // Modal de captura
   const [modalVisible, setModalVisible] = useState(false);
+  const [reportFeedback, setReportFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const {
     loading,
     error,
     purgeExecutedThisSession,
-    currentMonthSummary,
     getWeekSummaryForDate,
     getMonthSummaryFor,
     buildCalendar,
     getDayMinutes,
+    monthlyReportStatus,
     saveDay,
     removeDay,
+    submitMonthlyReport,
     reload,
     navigateMonth,
   } = useFieldService();
@@ -168,6 +173,30 @@ export function FieldServiceScreen() {
     () => (selectedDate ? getDayMinutes(selectedDate) : 0),
     [getDayMinutes, selectedDate]
   );
+
+  const reportMonthLabel = useMemo(() => {
+    if (!monthlyReportStatus) return '';
+    return formatMonthHeader(
+      monthlyReportStatus.window.targetYear,
+      monthlyReportStatus.window.targetMonth
+    );
+  }, [monthlyReportStatus]);
+
+  const reportMonthSummary = useMemo(() => {
+    if (!monthlyReportStatus) return null;
+    return getMonthSummaryFor(
+      monthlyReportStatus.window.targetYear,
+      monthlyReportStatus.window.targetMonth
+    );
+  }, [monthlyReportStatus, getMonthSummaryFor]);
+
+  const reportDeadlineLabel = useMemo(() => {
+    if (!monthlyReportStatus) return '';
+    return parseLocalDate(monthlyReportStatus.window.windowEnd).toLocaleDateString('es-MX', {
+      day: 'numeric',
+      month: 'long',
+    });
+  }, [monthlyReportStatus]);
 
   // Navegar entre meses
   const handlePrevMonth = useCallback(() => {
@@ -207,6 +236,32 @@ export function FieldServiceScreen() {
     await removeDay(selectedDate);
   }, [removeDay, selectedDate]);
 
+  const handleSubmitMonthlyReport = useCallback(async () => {
+    setReportFeedback(null);
+    const result = await submitMonthlyReport();
+
+    if (result.ok) {
+      setReportFeedback({
+        type: 'success',
+        message: `Informe de ${reportMonthLabel} enviado correctamente.`,
+      });
+      return;
+    }
+
+    if (result.reason === 'ALREADY_SENT') {
+      setReportFeedback({
+        type: 'error',
+        message: 'Este informe mensual ya fue enviado.',
+      });
+      return;
+    }
+
+    setReportFeedback({
+      type: 'error',
+      message: `Fuera de ventana. Solo se puede enviar durante los primeros ${result.status.window.graceDays} dias del mes.`,
+    });
+  }, [submitMonthlyReport, reportMonthLabel]);
+
   // ── Renderizado ──────────────────────────────────────────────────────────────
 
   // Funcionalidad solo disponible en iOS/Android (usa almacenamiento local del dispositivo)
@@ -218,6 +273,13 @@ export function FieldServiceScreen() {
   const visibleMonthLabel = formatMonthHeader(calYear, calMonth);
   const isCurrentMonth =
     calYear === now.getFullYear() && calMonth === now.getMonth() + 1;
+  const sentAtLabel = monthlyReportStatus?.sentReport?.sentAt
+    ? new Date(monthlyReportStatus.sentReport.sentAt).toLocaleDateString('es-MX', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -331,6 +393,109 @@ export function FieldServiceScreen() {
         )}
 
         {/* ── Nota informativa ── */}
+        {monthlyReportStatus && reportMonthSummary && (
+          <View style={styles.reportCard}>
+            <View style={styles.reportHeader}>
+              <View style={[styles.reportIconWrap, { backgroundColor: colors.accent + '20' }]}>
+                <Ionicons name="send-outline" size={18} color={colors.accent} />
+              </View>
+              <View style={styles.reportHeaderText}>
+                <Text style={styles.reportTitle}>Informe mensual</Text>
+                <Text style={styles.reportMonthText}>{reportMonthLabel}</Text>
+              </View>
+            </View>
+
+            <Text style={styles.reportHoursText}>
+              Horas registradas: {formatMinutes(reportMonthSummary.totalMinutes)}
+            </Text>
+
+            {monthlyReportStatus.alreadySent ? (
+              <Text style={[styles.reportStatusText, { color: colors.success }]}>
+                Informe enviado {sentAtLabel ? `el ${sentAtLabel}` : ''}.
+              </Text>
+            ) : monthlyReportStatus.canSubmit ? (
+              <Text style={[styles.reportStatusText, { color: colors.primary }]}>
+                Disponible para enviar hasta el {reportDeadlineLabel}.
+              </Text>
+            ) : (
+              <Text style={[styles.reportStatusText, { color: colors.warning }]}>
+                Ventana cerrada. Se habilita del 1 al {monthlyReportStatus.window.graceDays} de cada mes.
+              </Text>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.reportSubmitBtn,
+                {
+                  backgroundColor: monthlyReportStatus.canSubmit
+                    ? colors.primary
+                    : colors.surfaceRaised,
+                  borderColor: monthlyReportStatus.canSubmit
+                    ? colors.primary
+                    : colors.border,
+                },
+              ]}
+              onPress={handleSubmitMonthlyReport}
+              disabled={!monthlyReportStatus.canSubmit}
+              activeOpacity={0.85}
+              accessibilityLabel="Enviar informe mensual de predicacion"
+            >
+              <Ionicons
+                name="paper-plane-outline"
+                size={16}
+                color={monthlyReportStatus.canSubmit ? '#fff' : colors.textDisabled}
+              />
+              <Text
+                style={[
+                  styles.reportSubmitText,
+                  { color: monthlyReportStatus.canSubmit ? '#fff' : colors.textDisabled },
+                ]}
+              >
+                {monthlyReportStatus.alreadySent ? 'Enviado' : 'Enviar informe'}
+              </Text>
+            </TouchableOpacity>
+
+            {reportFeedback && (
+              <View
+                style={[
+                  styles.reportFeedbackBox,
+                  {
+                    backgroundColor:
+                      reportFeedback.type === 'success'
+                        ? colors.success + '20'
+                        : colors.error + '20',
+                    borderColor:
+                      reportFeedback.type === 'success'
+                        ? colors.success + '44'
+                        : colors.error + '44',
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={
+                    reportFeedback.type === 'success'
+                      ? 'checkmark-circle-outline'
+                      : 'alert-circle-outline'
+                  }
+                  size={14}
+                  color={reportFeedback.type === 'success' ? colors.success : colors.error}
+                />
+                <Text
+                  style={[
+                    styles.reportFeedbackText,
+                    {
+                      color:
+                        reportFeedback.type === 'success' ? colors.success : colors.error,
+                    },
+                  ]}
+                >
+                  {reportFeedback.message}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
         <View style={styles.infoNote}>
           <Ionicons name="information-circle-outline" size={14} color={colors.textDisabled} />
           <Text style={styles.infoNoteText}>
@@ -489,6 +654,77 @@ const createStyles = (colors: ReturnType<typeof useAppColors>) =>
       fontSize: 13,
       marginTop: 2,
       fontWeight: '500',
+    },
+    reportCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 14,
+      gap: 10,
+    },
+    reportHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    reportIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    reportHeaderText: {
+      flex: 1,
+    },
+    reportTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    reportMonthText: {
+      fontSize: 12,
+      color: colors.textMuted,
+      textTransform: 'capitalize',
+    },
+    reportHoursText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    reportStatusText: {
+      fontSize: 12,
+      fontWeight: '600',
+      lineHeight: 18,
+    },
+    reportSubmitBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingVertical: 12,
+    },
+    reportSubmitText: {
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    reportFeedbackBox: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    reportFeedbackText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: '600',
+      lineHeight: 17,
     },
     infoNote: {
       flexDirection: 'row',

@@ -28,7 +28,7 @@ export default function ProtectedLayout() {
         <Stack.Screen name="cleaning/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="cleaning/edit/[id]" options={{ headerShown: false }} />
         {/* Módulo: Contador de Horas de Predicación (100% local, sin Firebase) */}
-        <Stack.Screen name="field-service/index" options={{ headerShown: false }} />
+        <Stack.Screen name="field-service" options={{ headerShown: false }} />
         <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
         <Stack.Screen name="unauthorized" options={{ headerShown: false }} />
         {/* Settings */}

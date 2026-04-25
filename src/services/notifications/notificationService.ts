@@ -36,9 +36,16 @@ const normalizeNotification = (
 
   const createdAt = raw.createdAt;
 
-  if (!createdAt || typeof createdAt !== 'object' || !("seconds" in (createdAt as object))) {
+  if (!createdAt || typeof createdAt !== 'object' || !('seconds' in (createdAt as object))) {
     return null;
   }
+
+  // Soporte de lectura retrocompatible: acepta tanto `isRead` (esquema canónico)
+  // como el campo legacy `read` para documentos creados antes de la migración.
+  const isRead =
+    typeof raw.isRead === 'boolean'
+      ? raw.isRead
+      : raw.read === true;
 
   return {
     id,
@@ -52,7 +59,7 @@ const normalizeNotification = (
     title: raw.title,
     body: raw.body,
     assignmentId: raw.assignmentId,
-    read: raw.read === true,
+    isRead,
     createdAt: createdAt as AppNotification['createdAt'],
     sentBy: typeof raw.sentBy === 'string' ? raw.sentBy : null,
     metadata:
@@ -140,7 +147,7 @@ export const subscribeToUnreadNotificationsCount = (
   const q = query(
     notificationsCollectionRef(),
     where('userId', '==', uid),
-    where('read', '==', false),
+    where('isRead', '==', false),
     limit(PAGE_LIMIT)
   );
 
@@ -161,7 +168,7 @@ export const markNotificationAsRead = async (
   }
 
   await updateDoc(notificationDocRef(notificationId), {
-    read: true,
+    isRead: true,
   });
 };
 
@@ -175,7 +182,7 @@ export const markAllNotificationsAsRead = async (
   const unreadQuery = query(
     notificationsCollectionRef(),
     where('userId', '==', uid),
-    where('read', '==', false),
+    where('isRead', '==', false),
     limit(PAGE_LIMIT)
   );
 
@@ -189,7 +196,7 @@ export const markAllNotificationsAsRead = async (
 
   snap.docs.forEach((docSnap) => {
     batch.update(docSnap.ref, {
-      read: true,
+      isRead: true,
     });
   });
 

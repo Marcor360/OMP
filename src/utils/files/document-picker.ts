@@ -6,6 +6,77 @@ type WebDocumentPickerAsset = DocumentPicker.DocumentPickerAsset & {
   file?: File;
 };
 
+interface ReadDocumentPickerAssetOptions {
+  processKey?: string;
+}
+
+const DEFAULT_PROCESS_KEY = 'general';
+
+const sanitizePathSegment = (value: string): string => {
+  const cleaned = value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return cleaned.length > 0 ? cleaned : 'archivo';
+};
+
+const getFileExtension = (fileName?: string | null): string => {
+  if (!fileName) return '';
+
+  const lastDot = fileName.lastIndexOf('.');
+  if (lastDot < 0 || lastDot === fileName.length - 1) return '';
+
+  return sanitizePathSegment(fileName.slice(lastDot + 1)).toLowerCase();
+};
+
+const buildInternalDocumentUri = async (
+  asset: DocumentPicker.DocumentPickerAsset,
+  processKey = DEFAULT_PROCESS_KEY
+): Promise<string> => {
+  const documentDirectory = FileSystem.documentDirectory;
+
+  if (!documentDirectory) {
+    throw new Error('No esta disponible el almacenamiento interno de la app.');
+  }
+
+  const safeProcessKey = sanitizePathSegment(processKey);
+  const targetDirectory = `${documentDirectory}imports/${safeProcessKey}/`;
+  const fileExtension = getFileExtension(asset.name);
+  const baseName = sanitizePathSegment(
+    fileExtension ? asset.name.slice(0, -(fileExtension.length + 1)) : asset.name || 'documento'
+  );
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const targetFileName = fileExtension
+    ? `${baseName}-${suffix}.${fileExtension}`
+    : `${baseName}-${suffix}`;
+
+  const directoryInfo = await FileSystem.getInfoAsync(targetDirectory);
+  if (!directoryInfo.exists) {
+    await FileSystem.makeDirectoryAsync(targetDirectory, { intermediates: true });
+  }
+
+  return `${targetDirectory}${targetFileName}`;
+};
+
+export const copyDocumentPickerAssetToInternalStorage = async (
+  asset: DocumentPicker.DocumentPickerAsset,
+  options?: ReadDocumentPickerAssetOptions
+): Promise<string> => {
+  if (Platform.OS === 'web') {
+    return asset.uri;
+  }
+
+  const targetUri = await buildInternalDocumentUri(asset, options?.processKey);
+  await FileSystem.copyAsync({
+    from: asset.uri,
+    to: targetUri,
+  });
+
+  return targetUri;
+};
+
 const readBlobAsDataUrl = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -59,13 +130,16 @@ const readWebDocumentAsBase64 = async (asset: DocumentPicker.DocumentPickerAsset
 };
 
 export const readDocumentPickerAssetAsBase64 = async (
-  asset: DocumentPicker.DocumentPickerAsset
+  asset: DocumentPicker.DocumentPickerAsset,
+  options?: ReadDocumentPickerAssetOptions
 ): Promise<string> => {
   if (Platform.OS === 'web') {
     return readWebDocumentAsBase64(asset);
   }
 
-  return FileSystem.readAsStringAsync(asset.uri, {
+  const internalUri = await copyDocumentPickerAssetToInternalStorage(asset, options);
+
+  return FileSystem.readAsStringAsync(internalUri, {
     encoding: FileSystem.EncodingType.Base64,
   });
 };

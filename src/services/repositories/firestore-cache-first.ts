@@ -60,6 +60,7 @@ export const getDocumentCacheFirst = async <T>(
   } = options;
   const memoryCacheKey = `doc:${cacheKey}`;
   const requestKey = `request:${memoryCacheKey}`;
+  const fallbackMemoryValue = getSessionCachedValue<T | null>(memoryCacheKey);
 
   if (!forceServer) {
     const memoryValue = getSessionCachedValue<T | null>(memoryCacheKey, maxAgeMs);
@@ -74,9 +75,12 @@ export const getDocumentCacheFirst = async <T>(
   }
 
   return runSingleFlight<T | null>(requestKey, async () => {
-    let cachedValue: T | null | CacheMiss = CACHE_MISS;
+    let cachedValue: T | null | CacheMiss =
+      fallbackMemoryValue !== undefined ? fallbackMemoryValue : CACHE_MISS;
 
-    if (!forceServer) {
+    // Siempre intentamos cache local como posible respaldo.
+    // Si forceServer=true, NO retornamos desde cache; solo lo guardamos para fallback.
+    if (!forceServer || cachedValue === CACHE_MISS) {
       try {
         const cacheSnapshot = await getDocFromCache(ref);
 
@@ -89,11 +93,14 @@ export const getDocumentCacheFirst = async <T>(
         setSessionCachedValue(memoryCacheKey, cachedValue);
         logFirestoreRead(cacheKey, 'cache');
 
-        if (!(cachedValue !== null && isValueIncomplete(cachedValue, isIncomplete))) {
+        if (
+          !forceServer &&
+          !(cachedValue !== null && isValueIncomplete(cachedValue, isIncomplete))
+        ) {
           return cachedValue;
         }
       } catch {
-        cachedValue = CACHE_MISS;
+        // Mantener fallback previo (memoria) si existía.
       }
     }
 
@@ -134,6 +141,7 @@ export const getQueryCacheFirst = async <T>(
   } = options;
   const memoryCacheKey = `query:${cacheKey}`;
   const requestKey = `request:${memoryCacheKey}`;
+  const fallbackMemoryValue = getSessionCachedValue<T>(memoryCacheKey);
 
   if (!forceServer) {
     const memoryValue = getSessionCachedValue<T>(memoryCacheKey, maxAgeMs);
@@ -145,20 +153,23 @@ export const getQueryCacheFirst = async <T>(
   }
 
   return runSingleFlight<T>(requestKey, async () => {
-    let cachedValue: T | CacheMiss = CACHE_MISS;
+    let cachedValue: T | CacheMiss =
+      fallbackMemoryValue !== undefined ? fallbackMemoryValue : CACHE_MISS;
 
-    if (!forceServer) {
+    // Siempre intentamos cache local como posible respaldo.
+    // Si forceServer=true, NO retornamos desde cache; solo lo guardamos para fallback.
+    if (!forceServer || cachedValue === CACHE_MISS) {
       try {
         const cacheSnapshot = await getDocsFromCache(query);
         cachedValue = mapSnapshot(cacheSnapshot);
         setSessionCachedValue(memoryCacheKey, cachedValue);
         logFirestoreRead(cacheKey, 'cache');
 
-        if (!isValueIncomplete(cachedValue, isIncomplete)) {
+        if (!forceServer && !isValueIncomplete(cachedValue, isIncomplete)) {
           return cachedValue;
         }
       } catch {
-        cachedValue = CACHE_MISS;
+        // Mantener fallback previo (memoria) si existía.
       }
     }
 

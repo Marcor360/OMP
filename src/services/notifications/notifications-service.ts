@@ -3,26 +3,232 @@
  * Handles permission checks, token registration in Firestore,
  * and local notifications for in-app reminders.
  */
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { arrayRemove, arrayUnion, serverTimestamp, setDoc } from 'firebase/firestore';
+import {
+  arrayRemove,
+  arrayUnion,
+  serverTimestamp,
+  setDoc,
+} from 'firebase/firestore';
 
 import { userDocRef } from '@/src/lib/firebase/refs';
 import { PermissionStatus } from '@/src/types/permissions.types';
+import {
+  canUseRemotePushNotifications,
+  isExpoGo,
+  isPhysicalDevice,
+} from '@/src/utils/runtime';
 
-export function configureNotificationHandler(): void {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
-  });
+type NotificationsModule = typeof import('expo-notifications');
+
+type PushRegistrationFailureReason =
+  | 'EXPO_GO_UNSUPPORTED'
+  | 'WEB_UNSUPPORTED'
+  | 'PHYSICAL_DEVICE_REQUIRED'
+  | 'PERMISSION_DENIED'
+  | 'MISSING_PROJECT_ID'
+  | 'UNKNOWN_ERROR';
+
+export type PushRegistrationResult =
+  | {
+      ok: true;
+      token: string;
+    }
+  | {
+      ok: false;
+      reason: PushRegistrationFailureReason;
+      message: string;
+    };
+
+export interface LocalNotificationOptions {
+  title: string;
+  body: string;
+  channelId?: string;
+  data?: Record<string, unknown>;
+  delaySeconds?: number;
 }
 
+type PushTokenSubscription = { remove: () => void };
+
+const NOOP = () => {};
+const EXPO_GO_UNSUPPORTED_MESSAGE =
+  'Las notificaciones push remotas no estan disponibles en Expo Go. Usa una development build.';
+const WEB_UNSUPPORTED_MESSAGE =
+  'Las notificaciones push remotas no estan disponibles en web.';
+const PHYSICAL_DEVICE_REQUIRED_MESSAGE =
+  'Las notificaciones push remotas requieren un dispositivo fisico.';
+
+let notificationsModulePromise: Promise<NotificationsModule | null> | null =
+  null;
+let notificationHandlerConfigured = false;
+
+const loadNotificationsModule = async (): Promise<NotificationsModule | null> => {
+  if (!canUseRemotePushNotifications) {
+    return null;
+  }
+
+  if (!notificationsModulePromise) {
+    notificationsModulePromise = import('expo-notifications')
+      .then((module) => module)
+      .catch(() => null);
+  }
+
+  return notificationsModulePromise;
+};
+
+const resolveProjectId = (): string | null => {
+  const easProjectId =
+    ((Constants as { easConfig?: { projectId?: unknown } }).easConfig
+      ?.projectId as unknown) ?? null;
+  if (typeof easProjectId === 'string' && easProjectId.trim().length > 0) {
+    return easProjectId.trim();
+  }
+
+  const expoExtraProjectId =
+    (
+      (Constants as { expoConfig?: { extra?: { eas?: { projectId?: unknown } } } })
+        .expoConfig?.extra?.eas?.projectId as unknown
+    ) ?? null;
+  if (
+    typeof expoExtraProjectId === 'string' &&
+    expoExtraProjectId.trim().length > 0
+  ) {
+    return expoExtraProjectId.trim();
+  }
+
+  return null;
+};
+
+const mapExpoStatus = (
+  raw: 'granted' | 'denied' | 'undetermined' | string
+): PermissionStatus => {
+  switch (raw) {
+    case 'granted':
+      return 'granted';
+    case 'denied':
+      return 'denied';
+    case 'undetermined':
+      return 'undetermined';
+    default:
+      return 'unavailable';
+  }
+};
+
+const ensureAndroidChannels = async (
+  Notifications: NotificationsModule
+): Promise<void> => {
+  if (Platform.OS !== 'android') return;
+
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'General',
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#2563EB',
+    sound: 'default',
+  });
+
+  await Notifications.setNotificationChannelAsync('cleaning', {
+    name: 'Limpieza',
+    description: 'Notificaciones del modulo de grupos de limpieza',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    vibrationPattern: [0, 200, 100, 200],
+    lightColor: '#16A34A',
+    sound: 'default',
+  });
+};
+
+const getNativeDevicePushToken = async (
+  Notifications: NotificationsModule
+): Promise<string | null> => {
+  try {
+    const tokenData = await Notifications.getDevicePushTokenAsync();
+    return typeof tokenData.data === 'string' && tokenData.data.trim().length > 0
+      ? tokenData.data.trim()
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+export function configureNotificationHandler(): void {
+  if (!canUseRemotePushNotifications || notificationHandlerConfigured) {
+    return;
+  }
+
+  void (async () => {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications || notificationHandlerConfigured) {
+      return;
+    }
+
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+
+    notificationHandlerConfigured = true;
+  })();
+}
+
+export const startPushTokenListener = (
+  callback: (token: string) => void
+): (() => void) => {
+  if (!canUseRemotePushNotifications) {
+    return NOOP;
+  }
+
+  let disposed = false;
+  let unsubscribe: () => void = NOOP;
+
+  void (async () => {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications || disposed) {
+      return;
+    }
+
+    const addListener = (
+      Notifications as unknown as {
+        addPushTokenListener?: (
+          cb: (event: { data?: unknown }) => void
+        ) => PushTokenSubscription;
+      }
+    ).addPushTokenListener;
+
+    if (typeof addListener !== 'function') {
+      return;
+    }
+
+    const subscription = addListener((event) => {
+      if (typeof event?.data === 'string' && event.data.trim().length > 0) {
+        callback(event.data.trim());
+      }
+    });
+
+    unsubscribe = () => {
+      subscription.remove();
+    };
+  })();
+
+  return () => {
+    disposed = true;
+    unsubscribe();
+  };
+};
+
 export async function getNotificationPermissionStatus(): Promise<PermissionStatus> {
-  if (Platform.OS === 'web') return 'unavailable';
+  if (!canUseRemotePushNotifications) {
+    return 'unavailable';
+  }
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    return 'unavailable';
+  }
 
   try {
     const { status } = await Notifications.getPermissionsAsync();
@@ -33,7 +239,14 @@ export async function getNotificationPermissionStatus(): Promise<PermissionStatu
 }
 
 export async function requestNotificationPermission(): Promise<PermissionStatus> {
-  if (Platform.OS === 'web') return 'unavailable';
+  if (!canUseRemotePushNotifications) {
+    return 'unavailable';
+  }
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    return 'unavailable';
+  }
 
   try {
     const { status } = await Notifications.requestPermissionsAsync({
@@ -43,45 +256,128 @@ export async function requestNotificationPermission(): Promise<PermissionStatus>
         allowSound: true,
       },
     });
+
     return mapExpoStatus(status);
   } catch {
     return 'denied';
   }
 }
 
-export async function registerPushTokenForUser(uid: string): Promise<string | null> {
+export async function registerForPushNotificationsAsync(): Promise<PushRegistrationResult> {
+  if (Platform.OS === 'web') {
+    return {
+      ok: false,
+      reason: 'WEB_UNSUPPORTED',
+      message: WEB_UNSUPPORTED_MESSAGE,
+    };
+  }
+
+  if (isExpoGo) {
+    return {
+      ok: false,
+      reason: 'EXPO_GO_UNSUPPORTED',
+      message: EXPO_GO_UNSUPPORTED_MESSAGE,
+    };
+  }
+
+  if (!isPhysicalDevice) {
+    return {
+      ok: false,
+      reason: 'PHYSICAL_DEVICE_REQUIRED',
+      message: PHYSICAL_DEVICE_REQUIRED_MESSAGE,
+    };
+  }
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    return {
+      ok: false,
+      reason: 'UNKNOWN_ERROR',
+      message: 'No se pudo cargar expo-notifications.',
+    };
+  }
+
+  try {
+    const current = await Notifications.getPermissionsAsync();
+    let status = current.status;
+
+    if (status !== 'granted') {
+      const requested = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+        },
+      });
+      status = requested.status;
+    }
+
+    if (status !== 'granted') {
+      return {
+        ok: false,
+        reason: 'PERMISSION_DENIED',
+        message: 'No se otorgo permiso para notificaciones push.',
+      };
+    }
+
+    await ensureAndroidChannels(Notifications);
+
+    const projectId = resolveProjectId();
+    if (!projectId) {
+      return {
+        ok: false,
+        reason: 'MISSING_PROJECT_ID',
+        message:
+          'No se encontro projectId de EAS para registrar Expo Push Token.',
+      };
+    }
+
+    const tokenResponse = await Notifications.getExpoPushTokenAsync({
+      projectId,
+    });
+    const token =
+      typeof tokenResponse.data === 'string' &&
+      tokenResponse.data.trim().length > 0
+        ? tokenResponse.data.trim()
+        : null;
+
+    if (!token) {
+      return {
+        ok: false,
+        reason: 'UNKNOWN_ERROR',
+        message: 'No se pudo obtener Expo Push Token.',
+      };
+    }
+
+    return {
+      ok: true,
+      token,
+    };
+  } catch {
+    return {
+      ok: false,
+      reason: 'UNKNOWN_ERROR',
+      message: 'Error inesperado al registrar notificaciones push.',
+    };
+  }
+}
+
+export async function registerPushTokenForUser(
+  uid: string
+): Promise<string | null> {
   if (!uid || uid.trim().length === 0) return null;
-  if (Platform.OS === 'web') return null;
+  if (!canUseRemotePushNotifications) return null;
 
   const status = await getNotificationPermissionStatus();
   if (status !== 'granted') return null;
 
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) return null;
+
   try {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'General',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#2563EB',
-        sound: 'default',
-      });
+    await ensureAndroidChannels(Notifications);
 
-      await Notifications.setNotificationChannelAsync('cleaning', {
-        name: 'Limpieza',
-        description: 'Notificaciones del modulo de grupos de limpieza',
-        importance: Notifications.AndroidImportance.DEFAULT,
-        vibrationPattern: [0, 200, 100, 200],
-        lightColor: '#16A34A',
-        sound: 'default',
-      });
-    }
-
-    const tokenData = await Notifications.getDevicePushTokenAsync();
-    const token =
-      typeof tokenData.data === 'string' && tokenData.data.trim().length > 0
-        ? tokenData.data.trim()
-        : null;
-
+    const token = await getNativeDevicePushToken(Notifications);
     if (!token) {
       return null;
     }
@@ -98,23 +394,20 @@ export async function registerPushTokenForUser(uid: string): Promise<string | nu
     );
 
     return token;
-  } catch (err) {
-    console.warn('[Notifications] No se pudo registrar push token:', err);
+  } catch {
     return null;
   }
 }
 
 export async function unregisterPushToken(uid: string): Promise<void> {
   if (!uid || uid.trim().length === 0) return;
-  if (Platform.OS === 'web') return;
+  if (!canUseRemotePushNotifications) return;
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) return;
 
   try {
-    const tokenData = await Notifications.getDevicePushTokenAsync();
-    const token =
-      typeof tokenData.data === 'string' && tokenData.data.trim().length > 0
-        ? tokenData.data.trim()
-        : null;
-
+    const token = await getNativeDevicePushToken(Notifications);
     const payload: Record<string, unknown> = {
       pushTokenUpdatedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -130,14 +423,6 @@ export async function unregisterPushToken(uid: string): Promise<void> {
   }
 }
 
-export interface LocalNotificationOptions {
-  title: string;
-  body: string;
-  channelId?: string;
-  data?: Record<string, unknown>;
-  delaySeconds?: number;
-}
-
 export async function scheduleLocalNotification({
   title,
   body,
@@ -145,10 +430,13 @@ export async function scheduleLocalNotification({
   data = {},
   delaySeconds = 0,
 }: LocalNotificationOptions): Promise<string | null> {
-  if (Platform.OS === 'web') return null;
+  if (!canUseRemotePushNotifications) return null;
 
   const status = await getNotificationPermissionStatus();
   if (status !== 'granted') return null;
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) return null;
 
   try {
     const id = await Notifications.scheduleNotificationAsync({
@@ -167,7 +455,6 @@ export async function scheduleLocalNotification({
           : null,
     });
 
-    // Preserve channel on Android even if default trigger is immediate.
     if (Platform.OS === 'android' && channelId !== 'default') {
       await Notifications.setNotificationChannelAsync(channelId, {
         name: channelId,
@@ -176,21 +463,7 @@ export async function scheduleLocalNotification({
     }
 
     return id;
-  } catch (err) {
-    console.warn('[Notifications] Error al programar notificacion:', err);
+  } catch {
     return null;
-  }
-}
-
-function mapExpoStatus(
-  raw: Notifications.PermissionStatus | 'granted' | 'denied' | 'undetermined'
-): PermissionStatus {
-  switch (raw) {
-    case 'granted':
-      return 'granted';
-    case 'denied':
-      return 'denied';
-    default:
-      return 'undetermined';
   }
 }

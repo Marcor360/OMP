@@ -35,6 +35,17 @@ const toWeekRange = (baseDate = new Date()): { start: Date; end: Date } => {
   return { start, end };
 };
 
+const toUpcomingRange = (baseDate = new Date(), daysAhead = 30): { start: Date; end: Date } => {
+  const start = new Date(baseDate);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + daysAhead);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
+};
+
 const fallbackMeeting = (id: string): Meeting => {
   const now = Timestamp.now();
 
@@ -186,11 +197,11 @@ export const getDashboardData = async (params: {
     };
   }
 
-  const { start, end } = toWeekRange();
+  const { start, end } = toUpcomingRange();
 
   const [meetings, assignments] = await Promise.all([
     getMeetingsByWeek(congregationId, start, end, {
-      includeMidweek: false,
+      includeMidweek: true,
       maxItems: 40,
       forceServer,
     }),

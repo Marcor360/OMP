@@ -17,7 +17,8 @@ export interface NotificationDocument {
   title: string;
   body: string;
   assignmentId: string;
-  read: boolean;
+  /** Nombre canónico alineado con Firestore Security Rules (`isRead`). */
+  isRead: boolean;
   createdAt: FieldValue;
   sentBy?: string | null;
   metadata?: NotificationMetadata;

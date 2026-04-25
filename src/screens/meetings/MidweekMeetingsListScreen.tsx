@@ -129,7 +129,9 @@ export function MidweekMeetingsListScreen() {
       }
 
       const pickedAsset = selection.assets[0];
-      const base64Content = await readDocumentPickerAssetAsBase64(pickedAsset);
+      const base64Content = await readDocumentPickerAssetAsBase64(pickedAsset, {
+        processKey: 'midweek-meetings',
+      });
 
       if (!base64Content || base64Content.trim().length === 0) {
         Alert.alert('Error', 'No se pudo leer el contenido del PDF seleccionado.');

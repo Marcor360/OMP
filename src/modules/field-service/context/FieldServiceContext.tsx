@@ -23,14 +23,17 @@ import React, {
 } from 'react';
 
 import {
+  getCurrentMonthlyReportWindow,
   loadStore,
   saveDay as storageSaveDay,
   removeDay as storageRemoveDay,
+  submitMonthlyReport as storageSubmitMonthlyReport,
 } from '@/src/modules/field-service/services/field-service-storage';
 import type {
   FieldServiceState,
   FieldServiceStore,
   SaveDayInput,
+  SubmitMonthlyReportResult,
 } from '@/src/modules/field-service/types/field-service.types';
 
 // ─── Tipos del contexto ───────────────────────────────────────────────────────
@@ -40,6 +43,8 @@ interface FieldServiceContextValue extends FieldServiceState {
   saveDay: (input: SaveDayInput) => Promise<void>;
   /** Elimina el registro de un día */
   removeDay: (date: string) => Promise<void>;
+  /** Envía el informe mensual (una sola vez por mes dentro de ventana) */
+  submitMonthlyReport: () => Promise<SubmitMonthlyReportResult>;
   /** Fuerza recarga desde AsyncStorage */
   reload: () => Promise<void>;
 }
@@ -137,10 +142,50 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
+  /** Envía informe mensual y persiste el estado */
+  const handleSubmitMonthlyReport = useCallback(async (): Promise<SubmitMonthlyReportResult> => {
+    const fallbackWindow = getCurrentMonthlyReportWindow();
+    const fallbackStatus = {
+      window: fallbackWindow,
+      alreadySent: false,
+      sentReport: null,
+      canSubmit: false,
+      reason: 'OUTSIDE_WINDOW' as const,
+    };
+
+    const currentStore = storeRef.current;
+    if (!currentStore) {
+      return {
+        ok: false,
+        reason: 'OUTSIDE_WINDOW',
+        message: 'El módulo aún no está listo. Intenta nuevamente.',
+        status: fallbackStatus,
+      };
+    }
+
+    try {
+      const { store: updated, result } = await storageSubmitMonthlyReport(currentStore);
+      if (result.ok) {
+        storeRef.current = updated;
+        setState((prev) => ({ ...prev, store: updated }));
+      }
+      return result;
+    } catch (err) {
+      console.error('[FieldServiceContext] Error enviando informe mensual:', err);
+      return {
+        ok: false,
+        reason: 'OUTSIDE_WINDOW',
+        message: 'No se pudo enviar el informe mensual. Intenta nuevamente.',
+        status: fallbackStatus,
+      };
+    }
+  }, []);
+
   const value: FieldServiceContextValue = {
     ...state,
     saveDay: handleSaveDay,
     removeDay: handleRemoveDay,
+    submitMonthlyReport: handleSubmitMonthlyReport,
     reload: hydrate,
   };
 

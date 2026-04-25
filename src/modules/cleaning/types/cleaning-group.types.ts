@@ -7,6 +7,7 @@ export interface CleaningGroup {
   name: string;
   description: string;
   congregationId: string;
+  groupType: CleaningGroupType;
   memberIds: string[];
   memberCount: number;
   isActive: boolean;
@@ -15,17 +16,26 @@ export interface CleaningGroup {
   updatedAt: Timestamp;
 }
 
+export type CleaningGroupType = 'standard' | 'family';
+
+export const CLEANING_GROUP_TYPE_LABELS: Record<CleaningGroupType, string> = {
+  standard: 'Grupo',
+  family: 'Familia',
+};
+
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
 export interface CreateCleaningGroupDTO {
   name: string;
   description: string;
+  groupType?: CleaningGroupType;
   isActive?: boolean;
 }
 
 export interface UpdateCleaningGroupDTO {
   name?: string;
   description?: string;
+  groupType?: CleaningGroupType;
   isActive?: boolean;
 }
 

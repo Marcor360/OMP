@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "types": ["jest", "node"],
+    "noUnusedLocals": false,
+    "strict": true,
+    "allowArbitraryExtensions": true
+  },
+  "include": [
+    "src/__tests__"
+  ],
+  "exclude": []
+}

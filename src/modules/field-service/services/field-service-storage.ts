@@ -12,7 +12,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   DayEntry,
   FieldServiceStore,
+  MonthlyReportRecord,
+  MonthlyReportStatus,
+  MonthlyReportWindow,
   SaveDayInput,
+  SubmitMonthlyReportResult,
 } from '@/src/modules/field-service/types/field-service.types';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -40,6 +44,24 @@ function createEmptyStore(): FieldServiceStore {
     entries: {},
     meta: {
       lastAutoPurgeAt: new Date().toISOString(),
+      monthlyReports: {},
+    },
+  };
+}
+
+/** Garantiza compatibilidad con stores antiguos sin monthlyReports */
+function normalizeStore(store: FieldServiceStore): FieldServiceStore {
+  const monthlyReports =
+    store.meta.monthlyReports &&
+    typeof store.meta.monthlyReports === 'object' &&
+    !Array.isArray(store.meta.monthlyReports)
+      ? store.meta.monthlyReports
+      : {};
+  return {
+    ...store,
+    meta: {
+      ...store.meta,
+      monthlyReports,
     },
   };
 }
@@ -56,6 +78,61 @@ function shouldAutoPurge(lastAutoPurgeAt: string | null): boolean {
   threshold.setMonth(threshold.getMonth() + AUTO_PURGE_MONTHS);
 
   return new Date() >= threshold;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function toMonthKey(year: number, month: number): string {
+  return `${year}-${pad2(month)}`;
+}
+
+function getDaysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+function toStartOfDay(date: Date): Date {
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+}
+
+/**
+ * Calcula la ventana de envío para el informe del mes anterior.
+ * - Si el mes reportado tiene 30 días: ventana de 2 días (1-2 del mes actual).
+ * - Si el mes reportado tiene 31 días: ventana de 3 días (1-3 del mes actual).
+ * - Otros casos (febrero): 2 días.
+ */
+export function getCurrentMonthlyReportWindow(
+  referenceDate: Date = new Date()
+): MonthlyReportWindow {
+  const now = toStartOfDay(referenceDate);
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  const targetMonthDate = new Date(currentYear, currentMonth - 2, 1);
+  const targetYear = targetMonthDate.getFullYear();
+  const targetMonth = targetMonthDate.getMonth() + 1;
+  const targetMonthKey = toMonthKey(targetYear, targetMonth);
+  const targetMonthDays = getDaysInMonth(targetYear, targetMonth);
+  const graceDays: 2 | 3 = targetMonthDays === 31 ? 3 : 2;
+
+  const windowStartDate = new Date(currentYear, currentMonth - 1, 1);
+  const windowEndDate = new Date(currentYear, currentMonth - 1, graceDays);
+  windowEndDate.setHours(23, 59, 59, 999);
+
+  return {
+    targetYear,
+    targetMonth,
+    targetMonthKey,
+    periodStart: `${targetMonthKey}-01`,
+    periodEnd: `${targetMonthKey}-${pad2(targetMonthDays)}`,
+    windowStart: toLocalDateString(windowStartDate),
+    windowEnd: toLocalDateString(windowEndDate),
+    graceDays,
+    isWithinWindow: now >= windowStartDate && now <= windowEndDate,
+  };
 }
 
 // ─── API pública ──────────────────────────────────────────────────────────────
@@ -101,24 +178,34 @@ export async function loadStore(): Promise<{
       return { store: fresh, purgeExecuted: false };
     }
 
+    const normalized = normalizeStore(parsed);
+    const requiresMigrationSave =
+      !parsed.meta.monthlyReports ||
+      parsed.meta.monthlyReports !== normalized.meta.monthlyReports;
+
     // ─── Política de limpieza automática semestral ────────────────────────────
     // Documentación: Esta purga es SEMESTRAL y LOCAL.
     // Se ejecuta en la primera inicialización del módulo posterior al umbral de 6 meses.
     // No depende de red, Firebase, cron ni procesos en servidor.
-    if (shouldAutoPurge(parsed.meta.lastAutoPurgeAt)) {
+    if (shouldAutoPurge(normalized.meta.lastAutoPurgeAt)) {
       console.info('[FieldService] Auto-purge semestral ejecutada.');
       const purged: FieldServiceStore = {
         version: 1,
         entries: {},
         meta: {
           lastAutoPurgeAt: new Date().toISOString(),
+          monthlyReports: normalized.meta.monthlyReports ?? {},
         },
       };
       await saveStoreRaw(purged);
       return { store: purged, purgeExecuted: true };
     }
 
-    return { store: parsed, purgeExecuted: false };
+    if (requiresMigrationSave) {
+      await saveStoreRaw(normalized);
+    }
+
+    return { store: normalized, purgeExecuted: false };
   } catch (err) {
     console.error('[FieldService] Error inesperado al cargar store:', err);
     const fresh = createEmptyStore();
@@ -137,22 +224,29 @@ async function saveStoreRaw(store: FieldServiceStore): Promise<void> {
 
 /**
  * Guarda o actualiza la entrada de un día específico.
- * Garantiza upsert: si ya existe ese día, lo sobreescribe (no duplica).
+ * Garantiza upsert: si ya existe ese día, puede reemplazar o sumar sin duplicar registros.
  *
  * @param store - Store actual en memoria
- * @param input - Fecha y tiempo a guardar
+ * @param input - Fecha, tiempo y modo de guardado (replace/add)
  * @returns Nuevo store actualizado (inmutable)
  */
 export async function saveDay(
   store: FieldServiceStore,
   input: SaveDayInput
 ): Promise<FieldServiceStore> {
-  const totalMinutes = clampMinutes(
+  const inputMinutes = clampMinutes(
     Math.floor(input.hours) * 60 + Math.floor(input.minutes)
   );
 
   const now = new Date().toISOString();
   const existing = store.entries[input.date];
+  const mode = input.mode ?? 'replace';
+
+  const totalMinutes = clampMinutes(
+    mode === 'add'
+      ? (existing?.totalMinutes ?? 0) + inputMinutes
+      : inputMinutes
+  );
 
   const newEntry: DayEntry = {
     date: input.date,
@@ -171,6 +265,113 @@ export async function saveDay(
 
   await saveStoreRaw(updated);
   return updated;
+}
+
+/**
+ * Obtiene el estado actual del informe mensual para el mes reportable.
+ */
+export function getMonthlyReportStatus(
+  store: FieldServiceStore,
+  referenceDate: Date = new Date()
+): MonthlyReportStatus {
+  const normalizedStore = normalizeStore(store);
+  const window = getCurrentMonthlyReportWindow(referenceDate);
+  const sentReport =
+    normalizedStore.meta.monthlyReports[window.targetMonthKey] ?? null;
+  const alreadySent = !!sentReport;
+  const canSubmit = window.isWithinWindow && !alreadySent;
+
+  return {
+    window,
+    alreadySent,
+    sentReport,
+    canSubmit,
+    reason: alreadySent
+      ? 'ALREADY_SENT'
+      : window.isWithinWindow
+        ? 'READY'
+        : 'OUTSIDE_WINDOW',
+  };
+}
+
+/**
+ * Marca como enviado el informe mensual del mes reportable actual.
+ * Reglas:
+ * - Solo se permite dentro de ventana.
+ * - Solo un envío por mes (monthKey).
+ */
+export async function submitMonthlyReport(
+  store: FieldServiceStore,
+  referenceDate: Date = new Date()
+): Promise<{
+  store: FieldServiceStore;
+  result: SubmitMonthlyReportResult;
+}> {
+  const normalizedStore = normalizeStore(store);
+  const status = getMonthlyReportStatus(normalizedStore, referenceDate);
+
+  if (status.alreadySent) {
+    return {
+      store: normalizedStore,
+      result: {
+        ok: false,
+        reason: 'ALREADY_SENT',
+        message: 'El informe de este mes ya fue enviado.',
+        status,
+      },
+    };
+  }
+
+  if (!status.window.isWithinWindow) {
+    return {
+      store: normalizedStore,
+      result: {
+        ok: false,
+        reason: 'OUTSIDE_WINDOW',
+        message:
+          'La ventana de envío no está disponible. Solo puedes enviar durante los primeros días del mes.',
+        status,
+      },
+    };
+  }
+
+  const monthEntries = getEntriesForMonth(
+    normalizedStore,
+    status.window.targetYear,
+    status.window.targetMonth
+  );
+
+  const totalMinutes = monthEntries.reduce((sum, entry) => sum + entry.totalMinutes, 0);
+  const report: MonthlyReportRecord = {
+    monthKey: status.window.targetMonthKey,
+    sentAt: new Date().toISOString(),
+    totalMinutes,
+    periodStart: status.window.periodStart,
+    periodEnd: status.window.periodEnd,
+    deadlineDate: status.window.windowEnd,
+    graceDays: status.window.graceDays,
+  };
+
+  const updated: FieldServiceStore = {
+    ...normalizedStore,
+    meta: {
+      ...normalizedStore.meta,
+      monthlyReports: {
+        ...normalizedStore.meta.monthlyReports,
+        [report.monthKey]: report,
+      },
+    },
+  };
+
+  await saveStoreRaw(updated);
+
+  return {
+    store: updated,
+    result: {
+      ok: true,
+      report,
+    },
+  };
 }
 
 /**

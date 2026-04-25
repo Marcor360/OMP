@@ -6,6 +6,9 @@ export type {
   DayEntry,
   FieldServiceMeta,
   FieldServiceStore,
+  MonthlyReportRecord,
+  MonthlyReportStatus,
+  MonthlyReportWindow,
   WeekSummary,
   MonthSummary,
   CalendarCell,
@@ -13,12 +16,16 @@ export type {
   CalendarMonth,
   FieldServiceState,
   SaveDayInput,
+  SubmitMonthlyReportResult,
 } from './types/field-service.types';
 
 // ─── Servicios ────────────────────────────────────────────────────────────────
 export {
   loadStore,
   saveDay,
+  submitMonthlyReport,
+  getMonthlyReportStatus,
+  getCurrentMonthlyReportWindow,
   removeDay,
   getEntryByDate,
   getEntriesForMonth,

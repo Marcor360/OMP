@@ -1,33 +1,29 @@
 /**
- * Hook centralizado para gestión de permisos del dispositivo.
- * Unifica notificaciones + cámara + galería en una sola interfaz reactiva.
+ * Hook centralizado para gestion de permisos del dispositivo.
+ * No dispara registro remoto en Expo Go y no entra en bucles de re-render.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus, Linking } from 'react-native';
 
+import { useUser } from '@/src/context/user-context';
 import {
   getNotificationPermissionStatus,
+  registerPushTokenForUser,
   requestNotificationPermission,
 } from '@/src/services/notifications/notifications-service';
-
 import { PermissionState, PermissionStatus } from '@/src/types/permissions.types';
+import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 
 interface UsePermissionsResult {
   state: PermissionState;
   loading: boolean;
-  /** Solicita permiso de notificaciones push */
   requestNotifications: () => Promise<PermissionStatus>;
-  /** Abre la configuración del sistema para conceder permisos manualmente */
   openSettings: () => Promise<void>;
-  /** Re-verifica todos los permisos (útil al volver de Settings) */
   refresh: () => Promise<void>;
 }
 
-/**
- * Hook que gestiona todos los permisos del dispositivo necesarios en la app.
- * Re-verifica automáticamente cuando la app vuelve al frente (útil después de Settings).
- */
 export function usePermissions(): UsePermissionsResult {
+  const { uid } = useUser();
   const [state, setState] = useState<PermissionState>({
     notifications: 'undetermined',
   });
@@ -35,25 +31,27 @@ export function usePermissions(): UsePermissionsResult {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const fetchAll = useCallback(async () => {
+    if (!canUseRemotePushNotifications) {
+      setState({ notifications: 'unavailable' });
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const [notifications] = await Promise.all([
-        getNotificationPermissionStatus(),
-      ]);
+      const notifications = await getNotificationPermissionStatus();
       setState({ notifications });
     } catch {
-      // Si falla alguna verificación, dejamos el estado previo
+      setState({ notifications: 'unavailable' });
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Verificar permisos al montar
   useEffect(() => {
     void fetchAll();
   }, [fetchAll]);
 
-  // Re-verificar cuando la app vuelve al frente (el usuario puede haber cambiado permisos en Settings)
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
       if (
@@ -68,16 +66,26 @@ export function usePermissions(): UsePermissionsResult {
   }, [fetchAll]);
 
   const requestNotifications = useCallback(async (): Promise<PermissionStatus> => {
+    if (!canUseRemotePushNotifications) {
+      setState((prev) => ({ ...prev, notifications: 'unavailable' }));
+      return 'unavailable';
+    }
+
     const result = await requestNotificationPermission();
     setState((prev) => ({ ...prev, notifications: result }));
+
+    if (result === 'granted' && uid) {
+      void registerPushTokenForUser(uid);
+    }
+
     return result;
-  }, []);
+  }, [uid]);
 
   const openSettings = useCallback(async () => {
     try {
       await Linking.openSettings();
     } catch {
-      // Silencioso
+      // Silent fallback
     }
   }, []);
 

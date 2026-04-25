@@ -142,7 +142,7 @@ export const createInternalNotification = async (params: {
     title: params.title,
     body: params.body,
     assignmentId: params.assignmentId,
-    read: false,
+    isRead: false,
     createdAt: FieldValue.serverTimestamp(),
     sentBy: params.sentBy,
     metadata: params.metadata,

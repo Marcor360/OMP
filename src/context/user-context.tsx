@@ -48,12 +48,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) {
+      console.log('[UserContext] Sin usuario autenticado, limpiando perfil');
       setAppUser(null);
       setProfileError(null);
       setLoadingProfile(false);
       return;
     }
 
+    console.log('[UserContext] Iniciando carga de perfil para:', user.uid);
     setLoadingProfile(true);
     setProfileError(null);
     setAppUser(null);
@@ -71,26 +73,34 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
         if (cancelled) return;
 
+        console.log('[UserContext] Perfil cargado:', profile ? 'existe' : 'null');
         setAppUser(profile);
 
         if (!profile) {
-          setProfileError('No se encontro el perfil del usuario autenticado.');
+          const errorMsg = 'No se encontro el perfil del usuario autenticado.';
+          console.warn('[UserContext]', errorMsg);
+          setProfileError(errorMsg);
           setLoadingProfile(false);
           return;
         }
 
         if (!profile.isActive) {
-          setProfileError('Tu cuenta esta inactiva. Contacta a un administrador.');
+          const errorMsg = 'Tu cuenta esta inactiva. Contacta a un administrador.';
+          console.warn('[UserContext]', errorMsg);
+          setProfileError(errorMsg);
         } else {
           setProfileError(null);
         }
       } catch (error) {
         if (cancelled) return;
+        const formattedError = formatFirestoreError(error);
+        console.error('[UserContext] Error cargando perfil:', formattedError);
         setAppUser(null);
-        setProfileError(formatFirestoreError(error));
+        setProfileError(formattedError);
       } finally {
         if (!cancelled) {
           setLoadingProfile(false);
+          console.log('[UserContext] loadingProfile cambiado a false');
         }
       }
     };

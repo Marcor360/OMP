@@ -1,11 +1,35 @@
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
+import { canUseRemotePushNotifications } from '@/src/utils/runtime';
+
+type NotificationsModule = typeof import('expo-notifications');
 
 let notificationHandlerConfigured = false;
+let notificationsModulePromise: Promise<NotificationsModule | null> | null =
+  null;
 
-const configureNotificationHandler = (): void => {
+const loadNotificationsModule = async (): Promise<NotificationsModule | null> => {
+  if (!canUseRemotePushNotifications) {
+    return null;
+  }
+
+  if (!notificationsModulePromise) {
+    notificationsModulePromise = import('expo-notifications')
+      .then((module) => module)
+      .catch(() => null);
+  }
+
+  return notificationsModulePromise;
+};
+
+const configureNotificationHandler = async (): Promise<void> => {
   if (notificationHandlerConfigured) return;
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications || notificationHandlerConfigured) {
+    return;
+  }
 
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -23,6 +47,9 @@ const configureNotificationHandler = (): void => {
 const ensureAndroidChannel = async (): Promise<void> => {
   if (Platform.OS !== 'android') return;
 
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) return;
+
   await Notifications.setNotificationChannelAsync('default', {
     name: 'Notificaciones',
     importance: Notifications.AndroidImportance.HIGH,
@@ -33,7 +60,8 @@ const ensureAndroidChannel = async (): Promise<void> => {
 };
 
 const ensureNotificationPermission = async (): Promise<boolean> => {
-  if (Platform.OS === 'web') {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
     return false;
   }
 
@@ -49,13 +77,20 @@ const ensureNotificationPermission = async (): Promise<boolean> => {
 };
 
 export const configureMessaging = async (): Promise<void> => {
-  configureNotificationHandler();
+  if (!canUseRemotePushNotifications) {
+    return;
+  }
+
+  await configureNotificationHandler();
   await ensureAndroidChannel();
 };
 
 export const getNativePushToken = async (): Promise<string | null> => {
+  if (!canUseRemotePushNotifications) {
+    return null;
+  }
+
   if (Platform.OS === 'android' && Constants.appOwnership === 'expo') {
-    // Expo Go en Android (SDK 53+) ya no soporta push notifications.
     return null;
   }
 
@@ -66,9 +101,13 @@ export const getNativePushToken = async (): Promise<string | null> => {
     return null;
   }
 
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    return null;
+  }
+
   try {
     const token = await Notifications.getDevicePushTokenAsync();
-
     if (typeof token.data === 'string' && token.data.trim().length > 0) {
       return token.data.trim();
     }

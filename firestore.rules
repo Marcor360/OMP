@@ -116,18 +116,38 @@ service cloud.firestore {
         'uid',
         'email',
         'firstName',
+        'middleName',
         'lastName',
+        'secondLastName',
         'displayName',
         'phone',
         'photoURL',
         'role',
         'isActive',
+        // 'status' es gestionado exclusivamente por Cloud Functions (createUserByAdmin / updateUserByAdmin).
+        // Se incluye aquí para que validUserData no rechace documentos que ya lo contienen
+        // cuando el cliente realiza actualizaciones parciales.
+        'status',
         'congregationId',
+        'congregationDomain',
+        // Campos de asignación de servicio — escritura por Cloud Functions.
+        'servicePosition',
+        'serviceDepartment',
+        'department',
         'createdAt',
         'updatedAt',
         // Campos de notificaciones push — escritura controlada por validPushTokenUpdate()
         'notificationTokens',
-        'pushTokenUpdatedAt'
+        'pushTokenUpdatedAt',
+        // Campos de preferencias de notificación
+        'notificationsEnabled',
+        'platformNotifications',
+        'cleaningNotifications',
+        'hospitalityNotifications',
+        // Campos de módulo de limpieza
+        'cleaningEligible',
+        'cleaningGroupId',
+        'cleaningGroupName'
       ];
     }
 
@@ -453,7 +473,11 @@ service cloud.firestore {
       allow get: if isSameUser(userId)
         || (isAdminOrSupervisor() && storedDocInMyCongregation());
 
-      allow list: if isAdminOrSupervisor();
+      // list sólo dentro de la propia congregación.
+      // Firestore Security Rules no permiten inspeccionar filtros de query,
+      // por lo que la restricción real se aplica en la app (siempre filtra por congregationId).
+      // myCongregationId() != null garantiza que el solicitante tiene perfil activo con congregación.
+      allow list: if isAdminOrSupervisor() && myCongregationId() != null;
 
       allow create: if isAdmin()
         && validUserCreate(userId)
@@ -622,7 +646,9 @@ service cloud.firestore {
         && resource.data.congregationId is string
         && sameCongregation(resource.data.congregationId);
 
-      allow list: if isActive();
+      // list restringido a usuarios activos de la misma congregación que el documento.
+      // myCongregationId() != null garantiza que el solicitante tiene congregación asignada.
+      allow list: if isActive() && myCongregationId() != null;
 
       allow create: if isAdminOrSupervisor()
         && targetDocInMyCongregation();

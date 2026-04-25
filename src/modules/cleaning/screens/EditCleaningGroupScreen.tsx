@@ -45,6 +45,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
   const [formValues, setFormValues] = useState<CleaningGroupFormValues>({
     name: '',
     description: '',
+    groupType: 'standard',
     isActive: true,
   });
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof CleaningGroupFormValues, string>>>({});
@@ -58,6 +59,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
       setFormValues({
         name: group.name,
         description: group.description,
+        groupType: group.groupType,
         isActive: group.isActive,
       });
       setInitialized(true);
@@ -79,6 +81,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
       await updateCleaningGroup(groupId, {
         name: formValues.name,
         description: formValues.description,
+        groupType: formValues.groupType,
         isActive: formValues.isActive,
       }, congregationId);
       if (group?.congregationId) {

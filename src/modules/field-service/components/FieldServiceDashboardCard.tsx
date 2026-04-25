@@ -16,10 +16,13 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAppColors } from '@/src/styles';
-import { formatMinutes, formatMonthHeader } from '@/src/modules/field-service/utils/field-service-dates';
+import {
+  formatMinutes,
+  formatMonthHeader,
+  getCurrentMonthSummary,
+} from '@/src/modules/field-service/utils/field-service-dates';
 import { loadStore } from '@/src/modules/field-service/services/field-service-storage';
 import type { MonthSummary } from '@/src/modules/field-service/types/field-service.types';
-import { getCurrentMonthSummary } from '@/src/modules/field-service/utils/field-service-dates';
 
 /**
  * Tarjeta wrapper: en web devuelve null, en iOS/Android monta la tarjeta nativa.
@@ -76,7 +79,7 @@ function FieldServiceDashboardCardNative() {
   const monthLabel = formatMonthHeader(monthSummary.year, monthSummary.month);
 
   const handlePress = () => {
-    router.push('/(protected)/field-service/index' as any);
+    router.push('/(protected)/field-service' as any);
   };
 
   return (

@@ -11,10 +11,11 @@ import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { getAllUsers, subscribeToUsers } from '@/src/services/users/users-service';
+import { getAllUsers } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 
 export function UsersListScreen() {
   const router = useRouter();
@@ -26,15 +27,20 @@ export function UsersListScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const loadingRef = React.useRef(false);
 
   const loadUsers = useCallback(async (forceServer = false) => {
     if (loadingProfile) return;
+
+    if (loadingRef.current) return;
+    loadingRef.current = true;
 
     if (!congregationId || typeof congregationId !== 'string') {
       setUsers([]);
       setError('No se encontro la congregacion del usuario actual.');
       setLoading(false);
       setRefreshing(false);
+      loadingRef.current = false;
       return;
     }
 
@@ -56,41 +62,22 @@ export function UsersListScreen() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      loadingRef.current = false;
     }
   }, [congregationId, loadingProfile]);
 
   useEffect(() => {
-    if (loadingProfile) return;
+    void loadUsers(true);
+  }, [loadUsers]);
 
-    if (!congregationId || typeof congregationId !== 'string') {
-      setUsers([]);
-      setError('No se encontro la congregacion del usuario actual.');
-      setLoading(false);
-      return;
-    }
+  const handleFocusRefresh = useCallback(() => {
+    void loadUsers(true);
+  }, [loadUsers]);
 
-    setError(null);
-
-    const unsubscribe = subscribeToUsers(
-      congregationId,
-      (nextUsers) => {
-        setUsers(nextUsers);
-        setError(null);
-        setLoading(false);
-        setRefreshing(false);
-      },
-      (subscriptionError) => {
-        console.error('UsersListScreen subscribe error:', subscriptionError);
-        setError(formatFirestoreError(subscriptionError));
-        setLoading(false);
-        setRefreshing(false);
-      }
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, [congregationId, loadingProfile]);
+  useRefreshOnFocus(handleFocusRefresh, !loadingProfile, {
+    refreshOnAppActive: false,
+    skipInitialFocus: false,
+  });
 
   const onRefresh = async () => {
     if (!congregationId) return;

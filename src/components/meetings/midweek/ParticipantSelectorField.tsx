@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
@@ -146,29 +146,35 @@ export function ParticipantSelectorField({
           </TouchableOpacity>
 
           {expanded ? (
-            <View style={styles.userList}>
+            <View style={styles.userListWrap}>
               {users.length === 0 ? (
                 <ThemedText style={styles.emptyUsers}>No hay usuarios activos.</ThemedText>
               ) : (
-                users.map((user) => {
-                  const isSelected = participant.userId === user.uid;
+                <ScrollView
+                  style={styles.userList}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {users.map((user) => {
+                    const isSelected = participant.userId === user.uid;
 
-                  return (
-                    <TouchableOpacity
-                      key={user.uid}
-                      style={[styles.userOption, isSelected && styles.userOptionSelected]}
-                      onPress={() => selectUser(user)}
-                      activeOpacity={0.7}
-                    >
-                      <ThemedText
-                        style={[styles.userOptionText, isSelected && styles.userOptionTextSelected]}
+                    return (
+                      <TouchableOpacity
+                        key={user.uid}
+                        style={[styles.userOption, isSelected && styles.userOptionSelected]}
+                        onPress={() => selectUser(user)}
+                        activeOpacity={0.7}
                       >
-                        {user.displayName}
-                      </ThemedText>
-                      {user.email ? <ThemedText style={styles.userOptionEmail}>{user.email}</ThemedText> : null}
-                    </TouchableOpacity>
-                  );
-                })
+                        <ThemedText
+                          style={[styles.userOptionText, isSelected && styles.userOptionTextSelected]}
+                        >
+                          {user.displayName}
+                        </ThemedText>
+                        {user.email ? <ThemedText style={styles.userOptionEmail}>{user.email}</ThemedText> : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
               )}
             </View>
           ) : null}
@@ -241,12 +247,14 @@ const createStyles = (colors: AppColorSet) =>
       gap: 8,
     },
     userSelectText: { flex: 1, fontSize: 14, color: colors.textPrimary },
-    userList: {
+    userListWrap: {
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 10,
       overflow: 'hidden',
       backgroundColor: colors.surface,
+    },
+    userList: {
       maxHeight: 220,
     },
     userOption: {

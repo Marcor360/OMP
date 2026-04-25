@@ -1,20 +1,20 @@
 /**
  * Initializes push notification behavior when user is authenticated.
- * It configures the foreground handler once and periodically retries token registration.
+ * It configures the foreground handler and only registers token if permission was granted.
  */
 import { useEffect } from 'react';
 
 import {
   configureNotificationHandler,
+  getNotificationPermissionStatus,
   registerPushTokenForUser,
 } from '@/src/services/notifications/notifications-service';
+import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 
 interface UseNotificationSetupOptions {
   uid: string | null;
   isAuthenticated: boolean;
 }
-
-const RETRY_INTERVAL_MS = 5 * 60 * 1000;
 
 export function useNotificationSetup({ uid, isAuthenticated }: UseNotificationSetupOptions): void {
   useEffect(() => {
@@ -22,22 +22,29 @@ export function useNotificationSetup({ uid, isAuthenticated }: UseNotificationSe
   }, []);
 
   useEffect(() => {
+    if (!canUseRemotePushNotifications) {
+      return;
+    }
+
     if (!isAuthenticated || !uid) {
       return;
     }
 
-    const runRegistration = () => {
-      void registerPushTokenForUser(uid);
+    let cancelled = false;
+
+    const tryRegisterIfPermissionGranted = async () => {
+      const status = await getNotificationPermissionStatus();
+      if (status !== 'granted' || cancelled) {
+        return;
+      }
+
+      await registerPushTokenForUser(uid);
     };
 
-    // Immediate attempt on auth.
-    runRegistration();
-
-    // Periodic retries in case permission was granted later.
-    const timer = setInterval(runRegistration, RETRY_INTERVAL_MS);
+    void tryRegisterIfPermissionGranted();
 
     return () => {
-      clearInterval(timer);
+      cancelled = true;
     };
   }, [isAuthenticated, uid]);
 }

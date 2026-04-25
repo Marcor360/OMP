@@ -24,10 +24,32 @@ const WEB_ACTIVITY_EVENTS = [
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   // Referencia a usuario para poder accederla desde event listeners sin closures stale
   const userRef = useRef<User | null>(null);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Timeout de seguridad: si auth tarda más de 5s, forzamos loading=false
+  useEffect(() => {
+    loadingTimeoutRef.current = setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) {
+          console.warn('[AuthProvider] Timeout de auth alcanzado (5s). Forzando loading=false');
+          setAuthError('Tiempo de espera agotado. Verifica tu conexión.');
+          return false;
+        }
+        return prev;
+      });
+    }, 5000);
+
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Mantener userRef sincronizado con el state
   useEffect(() => {
@@ -58,20 +80,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Escuchar cambios en el estado de autenticación
   useEffect(() => {
+    console.log('[AuthProvider] Iniciando onAuthStateChanged listener');
+
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      console.log('[AuthProvider] onAuthStateChanged fired:', firebaseUser?.uid ?? 'null');
+
       setUser(firebaseUser);
       userRef.current = firebaseUser;
       setLoading(false);
+      setAuthError(null);
+
+      // Cancelar timeout de seguridad si auth respondió
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
 
       if (firebaseUser) {
+        console.log('[AuthProvider] Usuario autenticado:', firebaseUser.uid);
         resetInactivityTimer();
       } else {
+        console.log('[AuthProvider] Sin sesión activa');
         clearInactivityTimer();
         clearAllSessionCache();
       }
     });
 
-    return unsubscribe;
+    return () => {
+      console.log('[AuthProvider] Limpiando onAuthStateChanged listener');
+      unsubscribe();
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Web: registrar eventos de actividad del usuario automáticamente
@@ -147,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout: handleLogout, onUserActivity }}>
+    <AuthContext.Provider value={{ user, loading, authError, login, logout: handleLogout, onUserActivity }}>
       {children}
     </AuthContext.Provider>
   );

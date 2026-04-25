@@ -23,8 +23,9 @@ import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { EmptyState } from '@/src/components/common/EmptyState';
+import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 
-type FilterType = 'all' | 'active' | 'inactive';
+type FilterType = 'all' | 'active' | 'family' | 'inactive';
 
 /** Pantalla principal del módulo de limpieza. */
 export function CleaningDashboardScreen() {
@@ -46,6 +47,15 @@ export function CleaningDashboardScreen() {
     }
   };
 
+  const handleFocusRefresh = React.useCallback(() => {
+    void refresh();
+  }, [refresh]);
+
+  useRefreshOnFocus(handleFocusRefresh, Boolean(congregationId) && !permLoading, {
+    refreshOnAppActive: false,
+    skipInitialFocus: false,
+  });
+
   // Estadísticas calculadas localmente
   const stats = useMemo(() => {
     const activeGroups = groups.filter((g) => g.isActive);
@@ -61,6 +71,7 @@ export function CleaningDashboardScreen() {
   const filtered = useMemo(() => {
     let result = groups;
     if (filter === 'active') result = result.filter((g) => g.isActive);
+    if (filter === 'family') result = result.filter((g) => g.groupType === 'family');
     if (filter === 'inactive') result = result.filter((g) => !g.isActive);
 
     const q = search.toLowerCase().trim();
@@ -183,6 +194,7 @@ export function CleaningDashboardScreen() {
   const filterOptions: { label: string; value: FilterType }[] = [
     { label: 'Todos', value: 'all' },
     { label: 'Activos', value: 'active' },
+    { label: 'Familias', value: 'family' },
     { label: 'Inactivos', value: 'inactive' },
   ];
 

@@ -26,7 +26,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppColors } from '@/src/styles';
 import {
   formatMinutes,
-  getDayName,
   isSunday,
   parseLocalDate,
   validateTimeInput,
@@ -44,6 +43,8 @@ interface FieldServiceDayModalProps {
   onClose: () => void;
 }
 
+type SaveMode = NonNullable<SaveDayInput['mode']>;
+
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export function FieldServiceDayModal({
@@ -59,6 +60,7 @@ export function FieldServiceDayModal({
 
   const [hoursText, setHoursText] = useState('');
   const [minutesText, setMinutesText] = useState('');
+  const [saveMode, setSaveMode] = useState<SaveMode>('replace');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -69,16 +71,32 @@ export function FieldServiceDayModal({
     setValidationError(null);
     setShowDeleteConfirm(false);
 
-    if (existingMinutes > 0) {
-      const h = Math.floor(existingMinutes / 60);
-      const m = existingMinutes % 60;
-      setHoursText(String(h));
-      setMinutesText(String(m));
-    } else {
+    const hasExisting = existingMinutes > 0;
+    // Al editar un día con registro, iniciamos en modo "sumar" y campos vacíos
+    // para capturar incrementos sin duplicar accidentalmente el valor existente.
+    setSaveMode(hasExisting ? 'add' : 'replace');
+    setHoursText('');
+    setMinutesText('');
+  }, [visible, date, existingMinutes]);
+
+  const handleModeChange = useCallback(
+    (mode: SaveMode) => {
+      setSaveMode(mode);
+      setValidationError(null);
+
+      if (mode === 'replace' && existingMinutes > 0) {
+        const h = Math.floor(existingMinutes / 60);
+        const m = existingMinutes % 60;
+        setHoursText(String(h));
+        setMinutesText(String(m));
+        return;
+      }
+
       setHoursText('');
       setMinutesText('');
-    }
-  }, [visible, date, existingMinutes]);
+    },
+    [existingMinutes]
+  );
 
   const handleSave = useCallback(() => {
     const hours = parseInt(hoursText || '0', 10);
@@ -95,11 +113,22 @@ export function FieldServiceDayModal({
       return;
     }
 
+    const inputTotal = hours * 60 + mins;
+    if (existingMinutes > 0 && saveMode === 'add' && existingMinutes + inputTotal > 1440) {
+      setValidationError('La suma supera el máximo de 24 horas por día');
+      return;
+    }
+
     if (!date) return;
 
-    onSave({ date, hours, minutes: mins });
+    onSave({
+      date,
+      hours,
+      minutes: mins,
+      mode: existingMinutes > 0 ? saveMode : 'replace',
+    });
     onClose();
-  }, [hoursText, minutesText, date, onSave, onClose]);
+  }, [hoursText, minutesText, existingMinutes, saveMode, date, onSave, onClose]);
 
   const handleDelete = useCallback(() => {
     if (!showDeleteConfirm) {
@@ -156,7 +185,11 @@ export function FieldServiceDayModal({
             </View>
             <View style={styles.headerText}>
               <Text style={styles.modalTitle}>
-                {hasExisting ? 'Editar horas' : 'Registrar horas'}
+                {hasExisting
+                  ? saveMode === 'add'
+                    ? 'Sumar horas'
+                    : 'Editar horas'
+                  : 'Registrar horas'}
               </Text>
               <Text style={styles.modalDateLabel}>{dayLabel}</Text>
             </View>
@@ -187,6 +220,56 @@ export function FieldServiceDayModal({
                   <Text style={[styles.existingText, { color: colors.success }]}>
                     Registrado: {formatMinutes(existingMinutes)}
                   </Text>
+                </View>
+              )}
+
+              {/* Selector de modo: sumar o reemplazar */}
+              {hasExisting && (
+                <View style={styles.modeSection}>
+                  <Text style={styles.modeLabel}>¿Qué deseas hacer?</Text>
+                  <View style={styles.modeRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.modeBtn,
+                        saveMode === 'add'
+                          ? { backgroundColor: colors.primary + '20', borderColor: colors.primary }
+                          : null,
+                      ]}
+                      onPress={() => handleModeChange('add')}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: saveMode === 'add' }}
+                    >
+                      <Text
+                        style={[
+                          styles.modeBtnText,
+                          saveMode === 'add' ? { color: colors.primary } : null,
+                        ]}
+                      >
+                        Sumar
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.modeBtn,
+                        saveMode === 'replace'
+                          ? { backgroundColor: colors.primary + '20', borderColor: colors.primary }
+                          : null,
+                      ]}
+                      onPress={() => handleModeChange('replace')}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: saveMode === 'replace' }}
+                    >
+                      <Text
+                        style={[
+                          styles.modeBtnText,
+                          saveMode === 'replace' ? { color: colors.primary } : null,
+                        ]}
+                      >
+                        Reemplazar
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
 
@@ -248,6 +331,16 @@ export function FieldServiceDayModal({
                 const m = parseInt(minutesText || '0', 10);
                 const total = (!isNaN(h) ? h : 0) * 60 + (!isNaN(m) ? m : 0);
                 if (total <= 0) return null;
+
+                if (hasExisting && saveMode === 'add') {
+                  const resultingTotal = Math.min(1440, existingMinutes + total);
+                  return (
+                    <Text style={styles.previewText}>
+                      Se sumará: {formatMinutes(total)} (nuevo total: {formatMinutes(resultingTotal)})
+                    </Text>
+                  );
+                }
+
                 return (
                   <Text style={styles.previewText}>
                     Total: {formatMinutes(total)}
@@ -298,7 +391,11 @@ export function FieldServiceDayModal({
                 >
                   <Ionicons name="checkmark" size={18} color="#fff" />
                   <Text style={styles.saveBtnText}>
-                    {hasExisting ? 'Actualizar' : 'Guardar'}
+                    {!hasExisting
+                      ? 'Guardar'
+                      : saveMode === 'add'
+                        ? 'Sumar'
+                        : 'Reemplazar'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -397,6 +494,34 @@ const createStyles = (colors: ReturnType<typeof useAppColors>) =>
     existingText: {
       fontSize: 13,
       fontWeight: '600',
+    },
+    modeSection: {
+      marginBottom: 14,
+      gap: 8,
+    },
+    modeLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textMuted,
+    },
+    modeRow: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    modeBtn: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingVertical: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surfaceRaised,
+    },
+    modeBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textSecondary,
     },
     inputsRow: {
       flexDirection: 'row',

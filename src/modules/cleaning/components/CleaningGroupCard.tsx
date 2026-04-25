@@ -74,6 +74,22 @@ export function CleaningGroupCard({ group, onPress }: CleaningGroupCardProps) {
       lineHeight: 18,
       marginBottom: 12,
     },
+    typeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 8,
+      backgroundColor: `${colors.primary}12`,
+      marginBottom: 10,
+    },
+    typeText: {
+      fontSize: 11,
+      color: colors.primary,
+      fontWeight: '700',
+    },
     footer: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -95,6 +111,7 @@ export function CleaningGroupCard({ group, onPress }: CleaningGroupCardProps) {
   });
 
   const isActive = group.isActive;
+  const isFamilyGroup = group.groupType === 'family';
   const statusBg = isActive ? colors.successLight : colors.surfaceRaised;
   const statusColor = isActive ? colors.success : colors.textMuted;
   const statusLabel = isActive ? 'Activo' : 'Inactivo';
@@ -110,7 +127,11 @@ export function CleaningGroupCard({ group, onPress }: CleaningGroupCardProps) {
       <View style={styles.header}>
         <View style={styles.nameRow}>
           <View style={styles.iconWrapper}>
-            <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+            <Ionicons
+              name={isFamilyGroup ? 'home-outline' : 'sparkles-outline'}
+              size={18}
+              color={colors.primary}
+            />
           </View>
           <Text style={styles.name} numberOfLines={1}>
             {group.name}
@@ -126,6 +147,13 @@ export function CleaningGroupCard({ group, onPress }: CleaningGroupCardProps) {
           {group.description}
         </Text>
       )}
+
+      {isFamilyGroup ? (
+        <View style={styles.typeBadge}>
+          <Ionicons name="home-outline" size={12} color={colors.primary} />
+          <Text style={styles.typeText}>Grupo familiar</Text>
+        </View>
+      ) : null}
 
       <View style={styles.footer}>
         <View style={styles.memberRow}>

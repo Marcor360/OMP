@@ -217,6 +217,9 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
       alignItems: 'center',
       gap: 4,
     },
+    metaWrap: {
+      gap: 6,
+    },
     metaText: {
       fontSize: 12,
       color: colors.textMuted,
@@ -308,6 +311,7 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
   }
 
   const isActive = group.isActive;
+  const isFamilyGroup = group.groupType === 'family';
   const statusBg = isActive ? colors.successLight : colors.surfaceRaised;
   const statusColor = isActive ? colors.success : colors.textMuted;
 
@@ -357,11 +361,23 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
 
           {group.description.length > 0 && <Text style={styles.description}>{group.description}</Text>}
 
-          <View style={styles.metaRow}>
-            <Ionicons name="people-outline" size={14} color={colors.textMuted} />
-            <Text style={styles.metaText}>
-              {group.memberCount} {group.memberCount === 1 ? 'integrante' : 'integrantes'}
-            </Text>
+          <View style={styles.metaWrap}>
+            <View style={styles.metaRow}>
+              <Ionicons
+                name={isFamilyGroup ? 'home-outline' : 'sparkles-outline'}
+                size={14}
+                color={colors.textMuted}
+              />
+              <Text style={styles.metaText}>
+                {isFamilyGroup ? 'Grupo familiar' : 'Grupo de limpieza'}
+              </Text>
+            </View>
+            <View style={styles.metaRow}>
+              <Ionicons name="people-outline" size={14} color={colors.textMuted} />
+              <Text style={styles.metaText}>
+                {group.memberCount} {group.memberCount === 1 ? 'integrante' : 'integrantes'}
+              </Text>
+            </View>
           </View>
         </View>
 

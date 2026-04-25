@@ -25,6 +25,7 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 const DEFAULT_FORM: CleaningGroupFormValues = {
   name: '',
   description: '',
+  groupType: 'standard',
   isActive: true,
 };
 
@@ -64,6 +65,7 @@ export function CreateCleaningGroupScreen() {
         {
           name: formValues.name,
           description: formValues.description,
+          groupType: formValues.groupType,
           isActive: formValues.isActive,
         },
         uid,

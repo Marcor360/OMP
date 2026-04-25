@@ -400,7 +400,9 @@ export function MidweekMeetingFormScreen() {
       }
 
       const pickedAsset = selection.assets[0];
-      const base64Content = await readDocumentPickerAssetAsBase64(pickedAsset);
+      const base64Content = await readDocumentPickerAssetAsBase64(pickedAsset, {
+        processKey: 'midweek-meetings',
+      });
 
       if (!base64Content || base64Content.trim().length === 0) {
         Alert.alert('Error', 'No se pudo leer el contenido del PDF seleccionado.');
@@ -870,24 +872,32 @@ function UserPickerField({
         <Ionicons name={upeExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.textMuted} />
       </TouchableOpacity>
       {upeExpanded ? (
-        <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, overflow: 'hidden', backgroundColor: colors.surface, maxHeight: 220, marginTop: 4 }}>
+        <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, overflow: 'hidden', backgroundColor: colors.surface, marginTop: 4 }}>
           {users.length === 0 ? (
             <ThemedText style={{ padding: 12, color: colors.textMuted, fontSize: 13 }}>No hay usuarios activos.</ThemedText>
-          ) : users.map((user) => {
-            const isSelected = user.uid === selectedUserId;
-            return (
-              <TouchableOpacity
-                key={user.uid}
-                onPress={() => { onSelect(user); setUpeExpanded(false); }}
-                style={{ paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: isSelected ? (colors.primary + '22') : undefined }}
-                activeOpacity={0.7}
-              >
-                <ThemedText style={{ fontSize: 14, color: isSelected ? colors.primary : colors.textPrimary, fontWeight: isSelected ? '700' : '500' }}>
-                  {user.displayName}
-                </ThemedText>
-              </TouchableOpacity>
-            );
-          })}
+          ) : (
+            <ScrollView
+              style={{ maxHeight: 220 }}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
+              {users.map((user) => {
+                const isSelected = user.uid === selectedUserId;
+                return (
+                  <TouchableOpacity
+                    key={user.uid}
+                    onPress={() => { onSelect(user); setUpeExpanded(false); }}
+                    style={{ paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: isSelected ? (colors.primary + '22') : undefined }}
+                    activeOpacity={0.7}
+                  >
+                    <ThemedText style={{ fontSize: 14, color: isSelected ? colors.primary : colors.textPrimary, fontWeight: isSelected ? '700' : '500' }}>
+                      {user.displayName}
+                    </ThemedText>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
       ) : null}
     </View>

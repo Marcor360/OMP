@@ -12,17 +12,28 @@ import { useUser } from '@/src/context/user-context';
 import { useI18n } from '@/src/i18n/index';
 import { LANGUAGE_DISPLAY_NAME } from '@/src/i18n/language-options';
 import { usePermissions } from '@/src/hooks/use-permissions';
+import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 import { ROLE_LABELS } from '@/src/types/user';
 import { type AppColors, useAppColors } from '@/src/styles';
+import { isExpoGo } from '@/src/utils/runtime';
 
 export function SettingsScreen() {
   const router = useRouter();
-  const { appUser } = useUser();
+  const { appUser, refreshProfile, loadingProfile } = useUser();
   const { isDarkMode } = useAppTheme();
   const { t, language } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const permissions = usePermissions();
+
+  const handleFocusRefresh = React.useCallback(() => {
+    refreshProfile();
+  }, [refreshProfile]);
+
+  useRefreshOnFocus(handleFocusRefresh, !loadingProfile, {
+    refreshOnAppActive: false,
+    skipInitialFocus: false,
+  });
 
   const handleNavigateToTheme = () => {
     router.push('/(protected)/settings/theme' as any);
@@ -175,6 +186,13 @@ export function SettingsScreen() {
 
         {Platform.OS !== 'web' ? (
           <Section title={t('settings.section.devicePermissions')}>
+            {isExpoGo ? (
+              <View style={styles.infoBox}>
+                <ThemedText style={styles.infoText}>
+                  Las notificaciones push remotas no estan disponibles en Expo Go. Para probarlas usa una development build.
+                </ThemedText>
+              </View>
+            ) : null}
             <PermissionRow
               icon="notifications-outline"
               title={t('permission.notifications.title')}
@@ -284,5 +302,21 @@ const createStyles = (colors: AppColors) =>
       fontSize: 13,
       color: colors.textMuted,
       textAlign: 'right',
+    },
+    infoBox: {
+      marginHorizontal: 14,
+      marginTop: 14,
+      marginBottom: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.backgroundLight,
+    },
+    infoText: {
+      fontSize: 12,
+      lineHeight: 18,
+      color: colors.textMuted,
     },
   });

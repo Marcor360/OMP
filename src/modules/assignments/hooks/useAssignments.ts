@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { getAssignments } from '@/src/modules/assignments/services/assignments.service';
 import {
@@ -53,13 +53,20 @@ export const useAssignments = ({
     ]
   );
 
+  const loadingRef = useRef(false);
+
   const loadAssignments = useCallback(
     async (forceServer = false) => {
+      // Evitar llamadas concurrentes
+      if (loadingRef.current) return;
+      loadingRef.current = true;
+
       if (!congregationId) {
         setAllAssignments([]);
         setError('No se encontro congregacion para cargar asignaciones.');
         setLoading(false);
         setRefreshing(false);
+        loadingRef.current = false;
         return;
       }
 
@@ -82,21 +89,25 @@ export const useAssignments = ({
       } finally {
         setLoading(false);
         setRefreshing(false);
+        loadingRef.current = false;
       }
     },
     [boundsFilters, congregationId]
   );
 
   useEffect(() => {
-    void loadAssignments(false);
+    void loadAssignments(true);
   }, [loadAssignments]);
 
   // Refresca asignaciones cuando el usuario regresa a esta tab o la app vuelve al primer plano.
   const handleFocusRefresh = useCallback(() => {
-    void loadAssignments(false);
+    void loadAssignments(true);
   }, [loadAssignments]);
 
-  useRefreshOnFocus(handleFocusRefresh, !loading);
+  useRefreshOnFocus(handleFocusRefresh, true, {
+    refreshOnAppActive: false,
+    skipInitialFocus: false,
+  });
 
   const summaryFilters = useMemo(
     () => ({
@@ -133,3 +144,4 @@ export const useAssignments = ({
     reload: loadAssignments,
   };
 };
+

@@ -1,73 +1,79 @@
 /**
  * Hook: useRefreshOnFocus
  *
- * Dispara un callback de refresco en dos situaciones:
- * 1. Cuando la pantalla recibe el foco (navegación entre tabs/pantallas).
- * 2. Cuando la app vuelve al primer plano (AppState 'active'), con un
- *    mínimo de FOREGROUND_COOLDOWN_MS entre refresco automáticos para
- *    no hacer lecturas excesivas a Firebase.
- *
- * Uso:
- *   useRefreshOnFocus(() => loadData(false));
- *
- * El refresco por foco usa forceServer=false (caché local de Firebase SDK primero).
- * El pull-to-refresh manual sigue usando forceServer=true para forzar la red.
+ * Calls a refresh callback when:
+ * 1) The screen gets focus (tab/screen navigation).
+ * 2) The app returns to foreground, if enabled.
  */
 
 import { useCallback, useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
-/** Tiempo mínimo entre refrescos automáticos por foreground (2 minutos) */
+/** Minimum time between automatic foreground refreshes (2 minutes). */
 const FOREGROUND_COOLDOWN_MS = 2 * 60 * 1000;
 
+interface UseRefreshOnFocusOptions {
+  /** When false, do not refresh on app foreground. */
+  refreshOnAppActive?: boolean;
+  /** When false, refreshes on first focus too. */
+  skipInitialFocus?: boolean;
+}
+
 /**
- * @param onRefresh - Función a llamar al enfocar o volver a primer plano.
- *                    Debe ser estable (useCallback) para evitar bucles.
- * @param enabled   - Si es false, no se dispara ningún refresco (por ejemplo
- *                    mientras hay una carga inicial en curso). Default: true.
+ * @param onRefresh Callback to execute on focus or foreground.
+ * @param enabled When false, no automatic refresh is executed.
+ * @param options Additional behavior flags.
  */
 export function useRefreshOnFocus(
   onRefresh: () => void,
-  enabled = true
+  enabled = true,
+  options?: UseRefreshOnFocusOptions
 ): void {
   const lastRefreshAt = useRef<number>(0);
   const mountedRef = useRef(false);
 
-  // ── Refresco por foco de pantalla ──────────────────────────────────────────
-  // useFocusEffect se llama cada vez que esta pantalla recibe el foco.
-  // No se llama en el primer render (se omite el montaje inicial para no
-  // duplicar la carga que ya hace el useEffect de cada pantalla).
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+
+  const onRefreshRef = useRef(onRefresh);
+  onRefreshRef.current = onRefresh;
+
+  const refreshOnAppActiveRef = useRef(options?.refreshOnAppActive ?? true);
+  refreshOnAppActiveRef.current = options?.refreshOnAppActive ?? true;
+  const skipInitialFocusRef = useRef(options?.skipInitialFocus ?? true);
+  skipInitialFocusRef.current = options?.skipInitialFocus ?? true;
+
+  // Refresh on focus. By default skips first focus, configurable via options.
   useFocusEffect(
     useCallback(() => {
-      if (!enabled) return;
-
-      // Saltar el primer foco (montaje inicial — ya carga por su propio useEffect)
       if (!mountedRef.current) {
         mountedRef.current = true;
-        return;
+        if (skipInitialFocusRef.current) return;
       }
 
-      onRefresh();
+      if (!enabledRef.current) return;
+
+      onRefreshRef.current();
       lastRefreshAt.current = Date.now();
-    }, [enabled, onRefresh])
+    }, [])
   );
 
-  // ── Refresco por foreground (app vuelve de background) ────────────────────
+  // Optional refresh when app returns to foreground.
   useEffect(() => {
-    if (!enabled) return;
-
     const handleAppState = (next: AppStateStatus) => {
       if (next !== 'active') return;
+      if (!enabledRef.current) return;
+      if (!refreshOnAppActiveRef.current) return;
 
       const now = Date.now();
       if (now - lastRefreshAt.current < FOREGROUND_COOLDOWN_MS) return;
 
-      onRefresh();
+      onRefreshRef.current();
       lastRefreshAt.current = now;
     };
 
     const sub = AppState.addEventListener('change', handleAppState);
     return () => sub.remove();
-  }, [enabled, onRefresh]);
+  }, []);
 }
