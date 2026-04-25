@@ -16,11 +16,11 @@ interface CleaningPermission {
  * Solo retorna valores cuando el permiso está confirmado.
  */
 export function useCleaningPermission(): CleaningPermission & { loading: boolean } {
-  const { role, servicePosition, congregationId, uid, loadingProfile } = useUser();
+  const { role, servicePosition, serviceDepartment, congregationId, uid, loadingProfile } = useUser();
   const router = useRouter();
   const redirectedRef = useRef(false);
 
-  const canManage = canManageCleaning(role, servicePosition);
+  const canManage = canManageCleaning(role, servicePosition, serviceDepartment);
 
   useEffect(() => {
     if (loadingProfile) return;

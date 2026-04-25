@@ -20,16 +20,26 @@ import { Assignment } from '@/src/types/assignment';
 import { DashboardMetrics } from '@/src/types/dashboard';
 import { Meeting } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { canManageAssignments, canManageUsers } from '@/src/utils/permissions/permissions';
+import { canManageAssignments, canManageCleaning, canManageUsers } from '@/src/utils/permissions/permissions';
 // MÃ³dulo local: Contador de Horas de PredicaciÃ³n (sin Firebase)
 import { FieldServiceDashboardCard } from '@/src/modules/field-service/components/FieldServiceDashboardCard';
 import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
+import { MyCleaningDashboardCard } from '@/src/modules/cleaning/components/MyCleaningDashboardCard';
+import { useMyCleaningDashboard } from '@/src/modules/cleaning/hooks/use-my-cleaning-dashboard';
 
 export function DashboardScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { user } = useAuth();
-  const { appUser, congregationId, role, loadingProfile, profileError } = useUser();
+  const {
+    appUser,
+    congregationId,
+    role,
+    servicePosition,
+    serviceDepartment,
+    loadingProfile,
+    profileError,
+  } = useUser();
   const colors = useAppColors();
   const isCompact = width < 520;
   const styles = createStyles(colors, isCompact);
@@ -43,8 +53,22 @@ export function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [usingSummary, setUsingSummary] = useState(true);
 
+  const {
+    summary: cleaningSummary,
+    loading: cleaningLoading,
+    error: cleaningError,
+    refresh: refreshCleaningSummary,
+  } = useMyCleaningDashboard({
+    uid: user?.uid ?? null,
+    congregationId,
+    cleaningGroupId: appUser?.cleaningGroupId,
+    cleaningGroupName: appUser?.cleaningGroupName,
+    enabled: !loadingProfile,
+  });
+
   const isAdmin = canManageUsers(role);
   const canManage = canManageAssignments(role);
+  const canManageCleaningGroups = canManageCleaning(role, servicePosition, serviceDepartment);
 
   const loadingRef = React.useRef(false);
 
@@ -115,8 +139,11 @@ export function DashboardScreen() {
   // Refresca datos cuando el usuario regresa a esta tab o la app vuelve al primer plano.
   // Regla: al cambiar de ventana/tab, intentar lectura desde servidor.
   const handleFocusRefresh = useCallback(() => {
-    if (!loadingProfile) void loadData(true);
-  }, [loadData, loadingProfile]);
+    if (!loadingProfile) {
+      void loadData(true);
+      void refreshCleaningSummary();
+    }
+  }, [loadData, loadingProfile, refreshCleaningSummary]);
 
   useRefreshOnFocus(handleFocusRefresh, true, {
     refreshOnAppActive: false,
@@ -149,6 +176,7 @@ export function DashboardScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     void loadData(true);
+    void refreshCleaningSummary();
   };
 
   if (loading || loadingProfile) return <LoadingState message="Cargando dashboard..." />;
@@ -212,6 +240,13 @@ export function DashboardScreen() {
 
       {/* â”€â”€ Contador de Horas de PredicaciÃ³n (solo dispositivo mÃ³vil) â”€â”€ */}
       {Platform.OS !== 'web' && <FieldServiceDashboardCard />}
+
+      <MyCleaningDashboardCard
+        summary={cleaningSummary}
+        loading={cleaningLoading}
+        error={cleaningError}
+        canOpenDetails={canManageCleaningGroups}
+      />
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>

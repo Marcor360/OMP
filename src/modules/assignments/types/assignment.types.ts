@@ -23,6 +23,8 @@ export interface Assignment {
   source: 'meeting' | 'congregation';
   congregationId: string;
   meetingId?: string;
+  cleaningGroupId?: string;
+  cleaningGroupName?: string;
   category: AssignmentCategory;
   subType: AssignmentSubType;
   meetingType: AssignmentMeetingType;

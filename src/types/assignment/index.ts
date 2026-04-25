@@ -13,6 +13,9 @@ export interface Assignment {
   assignedToName: string;
   assignedByUid: string;
   assignedByName: string;
+  category?: 'platform' | 'cleaning' | 'hospitality';
+  cleaningGroupId?: string;
+  cleaningGroupName?: string;
   dueDate: Timestamp;
   completedAt?: Timestamp;
   meetingId?: string;
@@ -27,9 +30,21 @@ export interface CreateAssignmentDTO {
   priority: AssignmentPriority;
   assignedToUid: string;
   assignedToName: string;
+  category?: 'platform' | 'cleaning' | 'hospitality';
+  cleaningGroupId?: string;
+  cleaningGroupName?: string;
   dueDate: Timestamp;
   meetingId?: string;
   tags?: string[];
+}
+
+export interface CreateCleaningAssignmentDTO {
+  title: string;
+  description?: string;
+  priority: AssignmentPriority;
+  cleaningGroupId: string;
+  cleaningGroupName: string;
+  dueDate: Timestamp;
 }
 
 export interface UpdateAssignmentDTO {

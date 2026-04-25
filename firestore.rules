@@ -83,6 +83,18 @@ service cloud.firestore {
       return isAdmin() || isSupervisor();
     }
 
+    function isCleaningManager() {
+      return isAdminOrSupervisor()
+        || (
+          isActive()
+          && currentUserData().servicePosition == 'encargado'
+          && (
+            !('serviceDepartment' in currentUserData())
+            || currentUserData().serviceDepartment == 'limpieza'
+          )
+        );
+    }
+
     function isSameUser(userId) {
       return isAuthenticated() && currentUid() == userId;
     }
@@ -194,6 +206,20 @@ service cloud.firestore {
         && (
           !('pushTokenUpdatedAt' in data)
           || data.pushTokenUpdatedAt is timestamp
+        )
+        && (
+          !('cleaningEligible' in data)
+          || data.cleaningEligible is bool
+        )
+        && (
+          !('cleaningGroupId' in data)
+          || data.cleaningGroupId == null
+          || data.cleaningGroupId is string
+        )
+        && (
+          !('cleaningGroupName' in data)
+          || data.cleaningGroupName == null
+          || data.cleaningGroupName is string
         );
     }
 
@@ -233,6 +259,32 @@ service cloud.firestore {
       return isSameUser(userId)
         && isActive()
         && sameKeysOnUpdate(['notificationTokens', 'pushTokenUpdatedAt', 'updatedAt', 'uid']);
+    }
+
+    function validCleaningMembershipUserUpdate() {
+      return isCleaningManager()
+        && storedDocInMyCongregation()
+        && targetDocInMyCongregation()
+        && preservesCreatedAt()
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.isActive == resource.data.isActive
+        && request.resource.data.congregationId == resource.data.congregationId
+        && (
+          !('cleaningGroupId' in request.resource.data)
+          || request.resource.data.cleaningGroupId == null
+          || request.resource.data.cleaningGroupId is string
+        )
+        && (
+          !('cleaningGroupName' in request.resource.data)
+          || request.resource.data.cleaningGroupName == null
+          || request.resource.data.cleaningGroupName is string
+        )
+        && sameKeysOnUpdate([
+          'cleaningGroupId',
+          'cleaningGroupName',
+          'updatedAt'
+        ]);
     }
 
     // =========================================================================
@@ -350,10 +402,22 @@ service cloud.firestore {
       return [
         'congregationId',
         'meetingId',
+        'category',
         'type',
         'section',
         'title',
         'description',
+        'priority',
+        'assignedToUid',
+        'assignedByUid',
+        'assignedByName',
+        'createdBy',
+        'updatedBy',
+        'cleaningGroupId',
+        'cleaningGroupName',
+        'assignedUsers',
+        'date',
+        'dueDate',
         'assignedToUserId',
         'assignedToPersonId',
         'assignedToName',
@@ -377,8 +441,18 @@ service cloud.firestore {
         && data.meetingId == meetingId
         && isNonEmptyString(data.type)
         && isNonEmptyString(data.title)
+        && (!('category' in data) || data.category is string)
         && (!('section' in data) || data.section is string)
         && (!('description' in data) || data.description is string)
+        && (!('priority' in data) || data.priority is string)
+        && (!('assignedToUid' in data) || data.assignedToUid is string)
+        && (!('assignedByUid' in data) || data.assignedByUid is string)
+        && (!('assignedByName' in data) || data.assignedByName is string)
+        && (!('createdBy' in data) || data.createdBy is string)
+        && (!('updatedBy' in data) || data.updatedBy is string)
+        && (!('cleaningGroupId' in data) || data.cleaningGroupId is string)
+        && (!('cleaningGroupName' in data) || data.cleaningGroupName is string)
+        && (!('assignedUsers' in data) || data.assignedUsers is list)
         && (!('assignedToUserId' in data) || data.assignedToUserId is string)
         && (!('assignedToPersonId' in data) || data.assignedToPersonId is string)
         && (!('assignedToName' in data) || data.assignedToName is string)
@@ -390,6 +464,87 @@ service cloud.firestore {
         && (!('durationMinutes' in data) || data.durationMinutes is int)
         && (!('status' in data) || data.status is string)
         && (!('notes' in data) || data.notes is string);
+    }
+
+    function validStandaloneAssignmentData(data, congregationId) {
+      return hasOnlyKeys(data, allowedAssignmentKeys())
+        && hasAllKeys(data, ['congregationId', 'category', 'type', 'title'])
+        && data.congregationId == congregationId
+        && isNonEmptyString(data.category)
+        && isNonEmptyString(data.type)
+        && isNonEmptyString(data.title)
+        && (!('meetingId' in data) || data.meetingId is string)
+        && (!('section' in data) || data.section is string)
+        && (!('description' in data) || data.description is string)
+        && (!('priority' in data) || data.priority is string)
+        && (!('assignedToUid' in data) || data.assignedToUid is string)
+        && (!('assignedByUid' in data) || data.assignedByUid is string)
+        && (!('assignedByName' in data) || data.assignedByName is string)
+        && (!('createdBy' in data) || data.createdBy is string)
+        && (!('updatedBy' in data) || data.updatedBy is string)
+        && (!('cleaningGroupId' in data) || data.cleaningGroupId is string)
+        && (!('cleaningGroupName' in data) || data.cleaningGroupName is string)
+        && (!('assignedUsers' in data) || data.assignedUsers is list)
+        && (!('assignedToUserId' in data) || data.assignedToUserId is string)
+        && (!('assignedToPersonId' in data) || data.assignedToPersonId is string)
+        && (!('assignedToName' in data) || data.assignedToName is string)
+        && (!('assistantUserId' in data) || data.assistantUserId is string)
+        && (!('assistantPersonId' in data) || data.assistantPersonId is string)
+        && (!('assistantName' in data) || data.assistantName is string)
+        && (!('startTime' in data) || data.startTime is string)
+        && (!('endTime' in data) || data.endTime is string)
+        && (!('durationMinutes' in data) || data.durationMinutes is int)
+        && (!('status' in data) || data.status is string)
+        && (!('notes' in data) || data.notes is string);
+    }
+
+    // =========================================================================
+    // CLEANING GROUPS
+    // =========================================================================
+
+    function allowedCleaningGroupKeys() {
+      return [
+        'name',
+        'description',
+        'congregationId',
+        'groupType',
+        'memberIds',
+        'memberCount',
+        'isActive',
+        'createdBy',
+        'createdAt',
+        'updatedAt'
+      ];
+    }
+
+    function validCleaningGroupData(data, congregationId) {
+      return hasOnlyKeys(data, allowedCleaningGroupKeys())
+        && hasAllKeys(data, [
+          'name',
+          'congregationId',
+          'groupType',
+          'memberIds',
+          'memberCount',
+          'isActive',
+          'createdBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && isNonEmptyString(data.name)
+        && data.name.size() <= 80
+        && data.groupType in ['standard', 'family']
+        && data.memberIds is list
+        && data.memberIds.size() <= 200
+        && data.memberCount is int
+        && data.memberCount >= 0
+        && data.memberCount <= 200
+        && data.memberCount == data.memberIds.size()
+        && data.isActive is bool
+        && data.createdBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('description' in data) || (data.description is string && data.description.size() <= 300));
     }
 
     // =========================================================================
@@ -471,13 +626,13 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isSameUser(userId)
-        || (isAdminOrSupervisor() && storedDocInMyCongregation());
+        || (isCleaningManager() && storedDocInMyCongregation());
 
       // list sólo dentro de la propia congregación.
       // Firestore Security Rules no permiten inspeccionar filtros de query,
       // por lo que la restricción real se aplica en la app (siempre filtra por congregationId).
       // myCongregationId() != null garantiza que el solicitante tiene perfil activo con congregación.
-      allow list: if isAdminOrSupervisor() && myCongregationId() != null;
+      allow list: if isCleaningManager() && myCongregationId() != null;
 
       allow create: if isAdmin()
         && validUserCreate(userId)
@@ -494,6 +649,9 @@ service cloud.firestore {
           // Registro de token push: el propio usuario actualiza SOLO su token.
           // Llamado desde registerPushTokenForUser() en notifications-service.ts.
           validPushTokenUpdate(userId)
+        ) || (
+          // Gestion de grupos de limpieza: solo campos de membresia de limpieza.
+          validCleaningMembershipUserUpdate()
         );
 
       allow delete: if isAdmin() && storedDocInMyCongregation();
@@ -570,6 +728,64 @@ service cloud.firestore {
 
           allow delete: if isAdmin();
         }
+      }
+
+      // -----------------------------------------------------------------------
+      // ASSIGNMENTS (congregation scoped: limpieza, hospitalidad u otras tareas)
+      // -----------------------------------------------------------------------
+      match /assignments/{assignmentId} {
+        allow get, list: if sameCongregation(congregationId);
+
+        allow create: if isAdminOrSupervisor()
+          && sameCongregation(congregationId)
+          && validStandaloneAssignmentData(request.resource.data, congregationId);
+
+        allow update: if isAdminOrSupervisor()
+          && sameCongregation(congregationId)
+          && validStandaloneAssignmentData(request.resource.data, congregationId)
+          && preservesCreatedAt();
+
+        allow delete: if isAdmin();
+      }
+
+      // -----------------------------------------------------------------------
+      // CLEANING GROUPS
+      // -----------------------------------------------------------------------
+      match /cleaningGroups/{groupId} {
+        allow get, list: if sameCongregation(congregationId);
+
+        allow create: if isCleaningManager()
+          && sameCongregation(congregationId)
+          && validCleaningGroupData(request.resource.data, congregationId);
+
+        allow update: if isCleaningManager()
+          && sameCongregation(congregationId)
+          && resource.data.congregationId == congregationId
+          && validCleaningGroupData(request.resource.data, congregationId)
+          && preservesCreatedAt();
+
+        allow delete: if isAdmin()
+          && sameCongregation(congregationId)
+          && resource.data.congregationId == congregationId;
+      }
+
+      // Compatibilidad con el nombre legacy usado por versiones anteriores.
+      match /cleaning_groups/{groupId} {
+        allow get, list: if sameCongregation(congregationId);
+
+        allow create: if isCleaningManager()
+          && sameCongregation(congregationId)
+          && validCleaningGroupData(request.resource.data, congregationId);
+
+        allow update: if isCleaningManager()
+          && sameCongregation(congregationId)
+          && resource.data.congregationId == congregationId
+          && validCleaningGroupData(request.resource.data, congregationId)
+          && preservesCreatedAt();
+
+        allow delete: if isAdmin()
+          && sameCongregation(congregationId)
+          && resource.data.congregationId == congregationId;
       }
 
       // -----------------------------------------------------------------------
@@ -650,12 +866,15 @@ service cloud.firestore {
       // myCongregationId() != null garantiza que el solicitante tiene congregación asignada.
       allow list: if isActive() && myCongregationId() != null;
 
-      allow create: if isAdminOrSupervisor()
-        && targetDocInMyCongregation();
+      allow create: if isCleaningManager()
+        && targetDocInMyCongregation()
+        && validCleaningGroupData(request.resource.data, request.resource.data.congregationId);
 
-      allow update: if isAdminOrSupervisor()
+      allow update: if isCleaningManager()
         && storedDocInMyCongregation()
-        && targetDocInMyCongregation();
+        && targetDocInMyCongregation()
+        && validCleaningGroupData(request.resource.data, request.resource.data.congregationId)
+        && preservesCreatedAt();
 
       allow delete: if isAdmin() && storedDocInMyCongregation();
     }

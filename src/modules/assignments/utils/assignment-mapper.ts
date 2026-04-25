@@ -101,12 +101,13 @@ const normalizeAssignedUsers = (data: RawDocData): AssignmentPerson[] => {
   }
 
   const assignedToName = coerceString(data.assignedToName);
-  if (!assignedToName) return [];
+  const cleaningGroupName = coerceString(data.cleaningGroupName);
+  if (!assignedToName && !cleaningGroupName) return [];
 
   return [
     {
       userId: coerceString(data.assignedToUid),
-      name: assignedToName,
+      name: assignedToName ?? cleaningGroupName ?? 'Grupo de limpieza',
     },
   ];
 };
@@ -226,6 +227,8 @@ const mapBaseAssignment = (
     sourceKey: buildAssignmentSourceKey(source, id, meetingId),
     congregationId,
     meetingId,
+    cleaningGroupId: coerceString(data.cleaningGroupId),
+    cleaningGroupName: coerceString(data.cleaningGroupName),
     category,
     subType,
     meetingType,

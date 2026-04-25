@@ -19,9 +19,16 @@ import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
-import { createAssignment, getAssignmentById, updateAssignment } from '@/src/services/assignments/assignments-service';
+import {
+  createAssignment,
+  createCleaningGroupAssignment,
+  getAssignmentById,
+  updateAssignment,
+} from '@/src/services/assignments/assignments-service';
 import { getAllMeetings } from '@/src/services/meetings/meetings-service';
 import { getAllUsers } from '@/src/services/users/users-service';
+import { getCleaningGroups } from '@/src/modules/cleaning/services/cleaning-service';
+import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AssignmentPriority, ASSIGNMENT_PRIORITY_LABELS, UpdateAssignmentDTO } from '@/src/types/assignment';
 import { Meeting } from '@/src/types/meeting';
@@ -30,11 +37,13 @@ import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
 type Mode = 'create' | 'edit';
+type AssignmentTargetMode = 'person' | 'cleaningGroup';
 
 type FormErrors = {
   title?: string;
   meetingId?: string;
   assignedTo?: string;
+  cleaningGroupId?: string;
 };
 
 export function AssignmentFormScreen() {
@@ -51,6 +60,7 @@ export function AssignmentFormScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<AssignmentPriority>('medium');
+  const [targetMode, setTargetMode] = useState<AssignmentTargetMode>('person');
   const [assignedToName, setAssignedToName] = useState('');
   const [assignedToUid, setAssignedToUid] = useState('');
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -58,6 +68,8 @@ export function AssignmentFormScreen() {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [meetingId, setMeetingId] = useState('');
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [cleaningGroupId, setCleaningGroupId] = useState('');
+  const [cleaningGroups, setCleaningGroups] = useState<CleaningGroup[]>([]);
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(true);
@@ -74,6 +86,10 @@ export function AssignmentFormScreen() {
     const loadData = async () => {
       try {
         const meetingsPromise = getAllMeetings(congregationId);
+        const cleaningGroupsPromise =
+          isAdminOrSupervisor
+            ? getCleaningGroups(congregationId)
+            : Promise.resolve<CleaningGroup[]>([]);
         const usersPromise =
           isAdminOrSupervisor
             ? getAllUsers(congregationId, { forceServer: true })
@@ -87,19 +103,24 @@ export function AssignmentFormScreen() {
               )
             : Promise.resolve(null);
 
-        const [meetingDocs, usersDocs, assignmentDoc] = await Promise.all([
+        const [meetingDocs, cleaningGroupDocs, usersDocs, assignmentDoc] = await Promise.all([
           meetingsPromise,
+          cleaningGroupsPromise,
           usersPromise,
           assignmentPromise,
         ]);
 
         setMeetings(meetingDocs);
+        setCleaningGroups(cleaningGroupDocs.filter((group) => group.isActive));
         const activeUsers = usersDocs.filter((item) => item.isActive);
         setUsers(activeUsers);
 
         if (mode === 'create') {
           if (meetingDocs[0]) {
             setMeetingId(meetingDocs[0].id);
+          }
+          if (cleaningGroupDocs[0]) {
+            setCleaningGroupId(cleaningGroupDocs[0].id);
           }
 
           const defaultAssignee =
@@ -154,10 +175,17 @@ export function AssignmentFormScreen() {
   const validate = (): boolean => {
     const nextErrors: FormErrors = {
       title: validateRequired(title, 'El titulo'),
-      meetingId: validateRequired(meetingId, 'La reunion'),
+      meetingId:
+        targetMode === 'person'
+          ? validateRequired(meetingId, 'La reunion')
+          : undefined,
       assignedTo:
-        mode === 'create'
+        mode === 'create' && targetMode === 'person'
           ? validateRequired(assignedToUid, 'La persona asignada')
+          : undefined,
+      cleaningGroupId:
+        mode === 'create' && targetMode === 'cleaningGroup'
+          ? validateRequired(cleaningGroupId, 'El grupo o familia de aseo')
           : undefined,
     };
 
@@ -184,21 +212,45 @@ export function AssignmentFormScreen() {
       const dueDate = Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       if (mode === 'create') {
-        await createAssignment(
-          congregationId,
-          meetingId,
-          {
-            title,
-            description,
-            priority,
-            assignedToUid: assignedToUid || (user?.uid ?? ''),
-            assignedToName: assignedToName || (appUser?.displayName ?? 'Sin asignar'),
-            dueDate,
+        if (targetMode === 'cleaningGroup') {
+          const selectedGroup = cleaningGroups.find((group) => group.id === cleaningGroupId);
+
+          if (!selectedGroup) {
+            Alert.alert('Error', 'Selecciona un grupo o familia de aseo.');
+            setSaving(false);
+            return;
+          }
+
+          await createCleaningGroupAssignment(
+            congregationId,
+            {
+              title,
+              description,
+              priority,
+              cleaningGroupId: selectedGroup.id,
+              cleaningGroupName: selectedGroup.name,
+              dueDate,
+            },
+            user?.uid ?? '',
+            appUser?.displayName ?? user?.email ?? 'Sistema'
+          );
+        } else {
+          await createAssignment(
+            congregationId,
             meetingId,
-          },
-          user?.uid ?? '',
-          appUser?.displayName ?? user?.email ?? 'Sistema'
-        );
+            {
+              title,
+              description,
+              priority,
+              assignedToUid: assignedToUid || (user?.uid ?? ''),
+              assignedToName: assignedToName || (appUser?.displayName ?? 'Sin asignar'),
+              dueDate,
+              meetingId,
+            },
+            user?.uid ?? '',
+            appUser?.displayName ?? user?.email ?? 'Sistema'
+          );
+        }
 
         Alert.alert('Exito', 'Asignacion creada correctamente.');
       } else if (id) {
@@ -272,9 +324,19 @@ export function AssignmentFormScreen() {
   const priorities: AssignmentPriority[] = ['low', 'medium', 'high', 'critical'];
   const canEditForm = isAdminOrSupervisor;
   const hasAssignableUsers = mode !== 'create' || users.length > 0;
-  const canSave = isAdminOrSupervisor && meetings.length > 0 && hasAssignableUsers;
+  const hasCleaningGroups = mode !== 'create' || cleaningGroups.length > 0;
+  const canSave =
+    isAdminOrSupervisor &&
+    (targetMode === 'cleaningGroup'
+      ? hasCleaningGroups
+      : meetings.length > 0 && hasAssignableUsers);
   const noMeetings = meetings.length === 0;
   const noAssignableUsers = mode === 'create' && isAdminOrSupervisor && users.length === 0;
+  const noCleaningGroups =
+    mode === 'create' &&
+    isAdminOrSupervisor &&
+    targetMode === 'cleaningGroup' &&
+    cleaningGroups.length === 0;
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
@@ -284,7 +346,7 @@ export function AssignmentFormScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {noMeetings ? (
+        {targetMode === 'person' && noMeetings ? (
           <View style={styles.permissionNotice}>
             <ThemedText style={styles.permissionText}>
               Debes tener al menos una reunion en tu congregacion para crear asignaciones.
@@ -298,6 +360,49 @@ export function AssignmentFormScreen() {
               No hay usuarios activos en tu congregacion para asignar.
             </ThemedText>
           </View>
+        ) : null}
+
+        {noCleaningGroups ? (
+          <View style={styles.permissionNotice}>
+            <ThemedText style={styles.permissionText}>
+              Crea primero un grupo o familia de aseo para asignarle esta tarea.
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {mode === 'create' ? (
+          <Field label="Tipo de asignacion">
+            <View style={styles.chipRow}>
+              <TouchableOpacity
+                style={[styles.chip, targetMode === 'person' && styles.chipActive]}
+                onPress={() => setTargetMode('person')}
+                activeOpacity={0.8}
+              >
+                <ThemedText
+                  style={[
+                    styles.chipText,
+                    targetMode === 'person' && styles.chipTextActive,
+                  ]}
+                >
+                  Reunion / persona
+                </ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.chip, targetMode === 'cleaningGroup' && styles.chipActive]}
+                onPress={() => setTargetMode('cleaningGroup')}
+                activeOpacity={0.8}
+              >
+                <ThemedText
+                  style={[
+                    styles.chipText,
+                    targetMode === 'cleaningGroup' && styles.chipTextActive,
+                  ]}
+                >
+                  Aseo grupo/familia
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
+          </Field>
         ) : null}
 
         <Field label="Titulo *" error={errors.title}>
@@ -324,24 +429,53 @@ export function AssignmentFormScreen() {
           />
         </Field>
 
-        <Field label="Reunion *" error={errors.meetingId}>
-          <View style={styles.chipRow}>
-            {sortedMeetings.map((meeting) => (
-              <TouchableOpacity
-                key={meeting.id}
-                style={[styles.chip, meetingId === meeting.id && styles.chipActive]}
-                onPress={() => setMeetingId(meeting.id)}
-                activeOpacity={0.8}
-                disabled={!canEditForm || mode === 'edit'}
-              >
-                <ThemedText style={[styles.chipText, meetingId === meeting.id && styles.chipTextActive]}>
-                  {meeting.title}
-                </ThemedText>
-              </TouchableOpacity>
-            ))}
-          </View>
-          {mode === 'edit' ? <ThemedText style={styles.hintText}>La reunion vinculada no se puede cambiar.</ThemedText> : null}
-        </Field>
+        {targetMode === 'person' || mode === 'edit' ? (
+          <Field label="Reunion *" error={errors.meetingId}>
+            <View style={styles.chipRow}>
+              {sortedMeetings.map((meeting) => (
+                <TouchableOpacity
+                  key={meeting.id}
+                  style={[styles.chip, meetingId === meeting.id && styles.chipActive]}
+                  onPress={() => setMeetingId(meeting.id)}
+                  activeOpacity={0.8}
+                  disabled={!canEditForm || mode === 'edit'}
+                >
+                  <ThemedText style={[styles.chipText, meetingId === meeting.id && styles.chipTextActive]}>
+                    {meeting.title}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {mode === 'edit' ? <ThemedText style={styles.hintText}>La reunion vinculada no se puede cambiar.</ThemedText> : null}
+          </Field>
+        ) : (
+          <Field label="Grupo o familia de aseo *" error={errors.cleaningGroupId}>
+            <View style={styles.chipRow}>
+              {cleaningGroups.map((group) => (
+                <TouchableOpacity
+                  key={group.id}
+                  style={[styles.chip, cleaningGroupId === group.id && styles.chipActive]}
+                  onPress={() => setCleaningGroupId(group.id)}
+                  activeOpacity={0.8}
+                  disabled={!canEditForm}
+                >
+                  <ThemedText
+                    style={[
+                      styles.chipText,
+                      cleaningGroupId === group.id && styles.chipTextActive,
+                    ]}
+                  >
+                    {group.groupType === 'family' ? 'Familia: ' : 'Grupo: '}
+                    {group.name}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <ThemedText style={styles.hintText}>
+              Se notificara a todos los integrantes del grupo seleccionado.
+            </ThemedText>
+          </Field>
+        )}
 
         <Field label="Prioridad">
           <View style={styles.chipRow}>
@@ -367,7 +501,7 @@ export function AssignmentFormScreen() {
           </View>
         </Field>
 
-        {mode === 'create' && isAdminOrSupervisor && (
+        {mode === 'create' && isAdminOrSupervisor && targetMode === 'person' && (
           <Field label="Asignar a (usuarios de la congregacion)" error={errors.assignedTo}>
             <TouchableOpacity
               style={[styles.selectTrigger, errors.assignedTo && styles.inputError]}

@@ -8,11 +8,11 @@ import { useAppColors } from '@/src/styles';
 import { getVisibleTabs } from '@/src/utils/permissions/permissions';
 
 export default function TabsLayout() {
-  const { role } = useUser();
+  const { role, servicePosition, serviceDepartment } = useUser();
   const { t } = useI18n();
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
-  const visible = getVisibleTabs(role);
+  const visible = getVisibleTabs(role, servicePosition, serviceDepartment);
   const bottomInset = Math.max(insets.bottom, 10);
   const tabBarHeight = 56 + bottomInset;
 

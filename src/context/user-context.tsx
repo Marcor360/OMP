@@ -19,6 +19,7 @@ interface UserContextType {
   email: string | null;
   role: UserRole | undefined;
   servicePosition: string | undefined;
+  serviceDepartment: string | undefined;
   isActive: boolean;
   congregationId: string | null;
   isAdmin: boolean;
@@ -117,6 +118,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const email = appUser?.email ?? user?.email ?? null;
     const role = appUser?.role;
     const servicePosition = appUser?.servicePosition;
+    const serviceDepartment = appUser?.serviceDepartment;
     const isActive = appUser?.isActive ?? false;
     const congregationId = appUser?.congregationId ?? null;
 
@@ -132,6 +134,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       email,
       role,
       servicePosition,
+      serviceDepartment,
       isActive,
       congregationId,
       isAdmin,

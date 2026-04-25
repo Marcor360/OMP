@@ -9,6 +9,7 @@ import {
 
 const USERS_COLLECTION = 'users';
 const CLEANING_GROUPS_COLLECTION = 'cleaningGroups';
+const CLEANING_GROUPS_LEGACY_COLLECTION = 'cleaning_groups';
 const NOTIFICATIONS_COLLECTION = 'notifications';
 
 const isNonEmptyString = (value: unknown): value is string =>
@@ -81,21 +82,46 @@ const resolveNotificationTokens = (data: Record<string, unknown>): string[] => {
 };
 
 export const getCleaningGroupMemberIds = async (
-  groupId: string | null | undefined
+  groupId: string | null | undefined,
+  congregationId?: string | null
 ): Promise<string[]> => {
   if (!groupId || groupId.trim().length === 0) {
     return [];
   }
 
-  const snap = await adminDb.collection(CLEANING_GROUPS_COLLECTION).doc(groupId).get();
+  const groupIdValue = groupId.trim();
+  const refs = congregationId && congregationId.trim().length > 0
+    ? [
+        adminDb
+          .collection('congregations')
+          .doc(congregationId.trim())
+          .collection(CLEANING_GROUPS_COLLECTION)
+          .doc(groupIdValue),
+        adminDb
+          .collection('congregations')
+          .doc(congregationId.trim())
+          .collection(CLEANING_GROUPS_LEGACY_COLLECTION)
+          .doc(groupIdValue),
+        adminDb.collection(CLEANING_GROUPS_COLLECTION).doc(groupIdValue),
+        adminDb.collection(CLEANING_GROUPS_LEGACY_COLLECTION).doc(groupIdValue),
+      ]
+    : [
+        adminDb.collection(CLEANING_GROUPS_COLLECTION).doc(groupIdValue),
+        adminDb.collection(CLEANING_GROUPS_LEGACY_COLLECTION).doc(groupIdValue),
+      ];
 
-  if (!snap.exists) {
-    return [];
+  for (const ref of refs) {
+    const snap = await ref.get();
+
+    if (!snap.exists) {
+      continue;
+    }
+
+    const data = snap.data() as Record<string, unknown>;
+    return dedupeStrings(asStringArray(data.memberIds));
   }
 
-  const data = snap.data() as Record<string, unknown>;
-
-  return dedupeStrings(asStringArray(data.memberIds));
+  return [];
 };
 
 export const getUserNotificationSettings = async (

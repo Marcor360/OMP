@@ -73,7 +73,9 @@ const resolveAssignedUsers = async (
 ): Promise<ResolvedAssignmentUsers> => {
   if (category === 'cleaning') {
     const groupId = typeof data.cleaningGroupId === 'string' ? data.cleaningGroupId : null;
-    const members = await getCleaningGroupMemberIds(groupId);
+    const congregationId =
+      typeof data.congregationId === 'string' ? data.congregationId : null;
+    const members = await getCleaningGroupMemberIds(groupId, congregationId);
 
     return {
       userIds: new Set(members),

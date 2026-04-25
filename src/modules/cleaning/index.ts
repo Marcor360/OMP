@@ -8,6 +8,10 @@ export type {
   CleaningStats,
   CleaningServiceErrorCode,
 } from './types/cleaning-group.types';
+export type {
+  MyCleaningDay,
+  MyCleaningDashboardSummary,
+} from './services/my-cleaning-dashboard-service';
 export { CleaningServiceError, CLEANING_MEMBER_STATUS_LABELS } from './types/cleaning-group.types';
 
 // ─── Servicios ────────────────────────────────────────────────────────────────
@@ -28,10 +32,12 @@ export { useCleaningPermission } from './hooks/use-cleaning-permission';
 export { useCleaningGroups } from './hooks/use-cleaning-groups';
 export { useCleaningGroupDetail } from './hooks/use-cleaning-group-detail';
 export { useCleaningAssignableUsers } from './hooks/use-cleaning-assignable-users';
+export { useMyCleaningDashboard } from './hooks/use-my-cleaning-dashboard';
 
 // ─── Componentes ─────────────────────────────────────────────────────────────
 export { CleaningGroupCard } from './components/CleaningGroupCard';
 export { CleaningGroupForm } from './components/CleaningGroupForm';
+export { MyCleaningDashboardCard } from './components/MyCleaningDashboardCard';
 export { CleaningMemberItem } from './components/CleaningMemberItem';
 export { CleaningStatsCard } from './components/CleaningStatsCard';
 export { CleaningUserSelectItem } from './components/CleaningUserSelectItem';

@@ -1,6 +1,7 @@
 import {
   Timestamp,
   addDoc,
+  collection,
   collectionGroup,
   deleteDoc,
   documentId,
@@ -33,6 +34,7 @@ import { getQueryCacheFirst } from '@/src/services/repositories/firestore-cache-
 import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
 import {
   Assignment,
+  CreateCleaningAssignmentDTO,
   AssignmentStatus,
   CreateAssignmentDTO,
   UpdateAssignmentDTO,
@@ -383,6 +385,41 @@ export const createAssignment = async (
   });
 
   clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
+  return ref.id;
+};
+
+/** Crea una asignacion de limpieza para un grupo/familia completa. */
+export const createCleaningGroupAssignment = async (
+  congregationId: string,
+  data: CreateCleaningAssignmentDTO,
+  assignedByUid: string,
+  assignedByName: string
+): Promise<string> => {
+  const ref = await addDoc(collection(db, 'congregations', congregationId, 'assignments'), {
+    congregationId,
+    category: 'cleaning',
+    type: 'cleaning',
+    title: data.title,
+    description: data.description ?? '',
+    notes: data.description ?? '',
+    priority: data.priority,
+    cleaningGroupId: data.cleaningGroupId,
+    cleaningGroupName: data.cleaningGroupName,
+    assignedToUid: data.cleaningGroupId,
+    assignedToName: data.cleaningGroupName,
+    assignedByUid,
+    assignedByName,
+    createdBy: assignedByUid,
+    updatedBy: assignedByUid,
+    dueDate: data.dueDate,
+    date: data.dueDate,
+    status: 'pending' as AssignmentStatus,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
+  clearSessionCacheByPrefix(`query:assignments-panel/${congregationId}/`);
   return ref.id;
 };
 
