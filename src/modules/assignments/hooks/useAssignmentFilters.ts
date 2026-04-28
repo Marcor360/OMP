@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AssignmentCategory,
   AssignmentFilters,
+  AssignmentTab,
 } from '@/src/modules/assignments/types/assignment.types';
 
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -49,7 +50,7 @@ const createDefaultFilters = (congregationId: string): AssignmentFilters => ({
   exactDate: '',
   rangeStart: '',
   rangeEnd: '',
-  category: 'midweek',
+  category: 'all',
   subType: 'all',
   assignedPerson: '',
   congregationId,
@@ -57,7 +58,7 @@ const createDefaultFilters = (congregationId: string): AssignmentFilters => ({
 });
 
 export const useAssignmentFilters = (congregationId: string) => {
-  const [activeTab, setActiveTab] = useState<AssignmentCategory>('midweek');
+  const [activeTab, setActiveTab] = useState<AssignmentTab>('all');
   const [filters, setFilters] = useState<AssignmentFilters>(
     createDefaultFilters(congregationId)
   );
@@ -97,7 +98,7 @@ export const useAssignmentFilters = (congregationId: string) => {
     []
   );
 
-  const setCategory = useCallback((category: AssignmentCategory) => {
+  const setCategory = useCallback((category: AssignmentTab) => {
     setActiveTab(category);
     setFilters((current) => ({
       ...current,
@@ -110,7 +111,7 @@ export const useAssignmentFilters = (congregationId: string) => {
   }, []);
 
   const resetFilters = useCallback(() => {
-    setActiveTab('midweek');
+    setActiveTab('all');
     setFilters(createDefaultFilters(congregationId));
   }, [congregationId]);
 

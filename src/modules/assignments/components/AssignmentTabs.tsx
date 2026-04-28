@@ -3,12 +3,13 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/src/components/themed-text';
 import {
-  AssignmentCategory,
+  AssignmentTab,
   ASSIGNMENT_CATEGORY_LABELS,
 } from '@/src/modules/assignments/types/assignment.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
-const TABS: AssignmentCategory[] = [
+const TABS: AssignmentTab[] = [
+  'all',
   'midweek',
   'weekend',
   'cleaning',
@@ -16,8 +17,8 @@ const TABS: AssignmentCategory[] = [
 ];
 
 interface AssignmentTabsProps {
-  activeTab: AssignmentCategory;
-  onChange: (next: AssignmentCategory) => void;
+  activeTab: AssignmentTab;
+  onChange: (next: AssignmentTab) => void;
 }
 
 export function AssignmentTabs({ activeTab, onChange }: AssignmentTabsProps) {

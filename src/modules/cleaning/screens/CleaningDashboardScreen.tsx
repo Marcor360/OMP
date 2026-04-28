@@ -4,7 +4,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppColors } from '@/src/styles';
 import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning-permission';
@@ -104,11 +104,16 @@ export function CleaningDashboardScreen() {
     },
     header: {
       paddingHorizontal: 20,
-      paddingTop: 20,
-      paddingBottom: 12,
+      paddingTop: 10,
+      paddingBottom: 14,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      gap: 16,
+    },
+    headerTextBlock: {
+      flex: 1,
+      minWidth: 0,
     },
     headerTitle: {
       fontSize: 24,
@@ -121,9 +126,9 @@ export function CleaningDashboardScreen() {
       marginTop: 2,
     },
     createBtn: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 48,
+      height: 48,
+      borderRadius: 16,
       backgroundColor: colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
@@ -135,14 +140,14 @@ export function CleaningDashboardScreen() {
     },
     statsRow: {
       flexDirection: 'row',
-      gap: 10,
-      paddingHorizontal: 20,
-      marginBottom: 16,
+      gap: 8,
+      paddingHorizontal: 18,
+      marginBottom: 18,
     },
     searchRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginHorizontal: 20,
+      marginHorizontal: 18,
       backgroundColor: colors.surface,
       borderRadius: 12,
       paddingHorizontal: 12,
@@ -159,7 +164,7 @@ export function CleaningDashboardScreen() {
     },
     filterRow: {
       flexDirection: 'row',
-      paddingHorizontal: 20,
+      paddingHorizontal: 18,
       gap: 8,
       marginBottom: 16,
     },
@@ -179,11 +184,11 @@ export function CleaningDashboardScreen() {
       color: colors.textMuted,
       textTransform: 'uppercase',
       letterSpacing: 0.6,
-      marginHorizontal: 20,
+      marginHorizontal: 18,
       marginBottom: 8,
     },
     listContent: {
-      paddingHorizontal: 20,
+      paddingHorizontal: 18,
       paddingBottom: 100,
     },
     emptyWrapper: {
@@ -202,14 +207,14 @@ export function CleaningDashboardScreen() {
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerTextBlock}>
           <Text style={styles.headerTitle}>Limpieza</Text>
           <Text style={styles.headerSub}>
             {stats.totalGroups} grupo{stats.totalGroups !== 1 ? 's' : ''} registrado
@@ -222,7 +227,7 @@ export function CleaningDashboardScreen() {
           accessibilityRole="button"
           accessibilityLabel="Crear nuevo grupo de limpieza"
         >
-          <Ionicons name="add" size={24} color="#fff" />
+          <Ionicons name="add" size={26} color={colors.onPrimary} />
         </TouchableOpacity>
       </View>
 

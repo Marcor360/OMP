@@ -25,6 +25,10 @@ import {
   mapAssignmentFromMeetingDoc,
 } from '@/src/modules/assignments/utils/assignment-mapper';
 import { getQueryCacheFirst } from '@/src/services/repositories/firestore-cache-first';
+import {
+  MeetingProgramSection,
+  normalizeMeetingSections,
+} from '@/src/types/meeting/program';
 
 const ASSIGNMENTS_CACHE_TTL_MS = 60 * 1000;
 const MAX_MEETINGS_TO_SCAN = 80;
@@ -53,6 +57,8 @@ interface MeetingLite {
   id: string;
   type: unknown;
   startDate: unknown;
+  title?: string;
+  sections: MeetingProgramSection[];
 }
 
 const toDate = (value: unknown): Date | null => {
@@ -138,9 +144,143 @@ const getMeetings = async (
           id: meetingDoc.id,
           type: data.type,
           startDate: data.startDate,
+          title: typeof data.title === 'string' ? data.title : undefined,
+          sections: normalizeMeetingSections(
+            data.sections,
+            data.type === 'midweek' || data.meetingCategory === 'midweek' ? 'midweek' : 'weekend'
+          ),
         } satisfies MeetingLite;
       }),
   });
+};
+
+const normalizeName = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const listMeetingProgramAssignments = (meetings: MeetingLite[], congregationId: string): Assignment[] => {
+  const assignments: Assignment[] = [];
+
+  meetings.forEach((meeting) => {
+    const meetingType = meeting.type === 'midweek' ? 'midweek' : 'weekend';
+
+    meeting.sections.forEach((section) => {
+      if (section.isEnabled === false) return;
+
+      section.assignments.forEach((assignment) => {
+        if (assignment.assignmentScope !== 'internal') return;
+
+        const assignedUsers = assignment.assignees
+          .filter((assignee) => assignee.assigneeType === 'registeredUser')
+          .map((assignee) => ({
+            userId: normalizeName(assignee.assigneeUserId),
+            name:
+              normalizeName(assignee.assigneeNameSnapshot) ??
+              normalizeName(assignee.assigneeUserId) ??
+              'Asignado',
+          }))
+          .filter((assignee) => Boolean(assignee.userId));
+
+        if (assignedUsers.length === 0) return;
+
+        const title = assignment.roleLabel
+          ? `${assignment.roleLabel}: ${assignment.title}`
+          : assignment.title;
+        const id = `${meeting.id}-${assignment.assignmentKey}`;
+
+        assignments.push({
+          id,
+          source: 'meeting',
+          sourceKey: `meeting-program:${meeting.id}:${assignment.assignmentKey}`,
+          congregationId,
+          meetingId: meeting.id,
+          category: meetingType,
+          subType: null,
+          meetingType,
+          date: toDate(meeting.startDate)?.toISOString() ?? new Date().toISOString(),
+          assignedUsers,
+          notes: section.title,
+          status: 'pending',
+          title: title || meeting.title || 'Asignacion de reunion',
+        });
+      });
+    });
+  });
+
+  return assignments;
+};
+
+const mapMeetingProgramAssignmentByKey = (
+  meeting: MeetingLite,
+  congregationId: string,
+  assignmentKey: string
+): Assignment | null => {
+  const meetingType = meeting.type === 'midweek' ? 'midweek' : 'weekend';
+
+  for (const section of meeting.sections) {
+    if (section.isEnabled === false) continue;
+
+    const assignment = section.assignments.find((item) => item.assignmentKey === assignmentKey);
+    if (!assignment || assignment.assignmentScope !== 'internal') continue;
+
+    const assignedUsers = assignment.assignees
+      .filter((assignee) => assignee.assigneeType === 'registeredUser')
+      .map((assignee) => ({
+        userId: normalizeName(assignee.assigneeUserId),
+        name:
+          normalizeName(assignee.assigneeNameSnapshot) ??
+          normalizeName(assignee.assigneeUserId) ??
+          'Asignado',
+      }))
+      .filter((assignee) => Boolean(assignee.userId));
+
+    const title = assignment.roleLabel
+      ? `${assignment.roleLabel}: ${assignment.title}`
+      : assignment.title;
+
+    return {
+      id: assignment.assignmentKey,
+      source: 'meeting',
+      sourceKey: `meeting-program:${meeting.id}:${assignment.assignmentKey}`,
+      congregationId,
+      meetingId: meeting.id,
+      category: meetingType,
+      subType: null,
+      meetingType,
+      date: toDate(meeting.startDate)?.toISOString() ?? new Date().toISOString(),
+      assignedUsers,
+      notes: section.title,
+      status: 'pending',
+      title: title || meeting.title || 'Asignacion de reunion',
+    };
+  }
+
+  return null;
+};
+
+const getMeetingProgramAssignmentByKey = async (
+  congregationId: string,
+  meetingId: string,
+  assignmentKey: string
+): Promise<Assignment | null> => {
+  const meetingSnap = await getDoc(doc(db, 'congregations', congregationId, 'meetings', meetingId));
+  if (!meetingSnap.exists()) return null;
+
+  const data = meetingSnap.data();
+  const meeting: MeetingLite = {
+    id: meetingSnap.id,
+    type: data.type,
+    startDate: data.startDate,
+    title: typeof data.title === 'string' ? data.title : undefined,
+    sections: normalizeMeetingSections(
+      data.sections,
+      data.type === 'midweek' || data.meetingCategory === 'midweek' ? 'midweek' : 'weekend'
+    ),
+  };
+
+  return mapMeetingProgramAssignmentByKey(meeting, congregationId, assignmentKey);
 };
 
 const listMeetingAssignments = async (
@@ -232,7 +372,11 @@ export const getAssignments = async (
     listStandaloneAssignments(congregationId, options.forceServer),
   ]);
 
-  return dedupeAssignments([...meetingAssignments, ...standaloneAssignments]);
+  return dedupeAssignments([
+    ...meetingAssignments,
+    ...listMeetingProgramAssignments(meetings, congregationId),
+    ...standaloneAssignments,
+  ]);
 };
 
 const matchBounds = (assignment: Assignment, bounds: DateBounds | undefined): boolean => {
@@ -259,6 +403,19 @@ export const getAssignmentById = async (
   const assignmentId = params.assignmentId.trim();
 
   if (!congregationId || !assignmentId) return null;
+
+  const [meetingIdFromCompound, assignmentKeyFromCompound] = assignmentId.split(':');
+  if (meetingIdFromCompound && assignmentKeyFromCompound) {
+    const programAssignment = await getMeetingProgramAssignmentByKey(
+      congregationId,
+      meetingIdFromCompound,
+      assignmentKeyFromCompound
+    );
+
+    if (programAssignment) {
+      return programAssignment;
+    }
+  }
 
   if (params.source === 'congregation' || (!params.source && !params.meetingId)) {
     const standaloneRef = doc(db, 'congregations', congregationId, 'assignments', assignmentId);
@@ -293,6 +450,16 @@ export const getAssignmentById = async (
           startDate: meetingData.startDate,
         }
       );
+    }
+
+    const programAssignment = await getMeetingProgramAssignmentByKey(
+      congregationId,
+      params.meetingId,
+      assignmentId
+    );
+
+    if (programAssignment) {
+      return programAssignment;
     }
   }
 

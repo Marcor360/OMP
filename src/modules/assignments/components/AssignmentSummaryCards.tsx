@@ -5,6 +5,7 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { ThemedText } from '@/src/components/themed-text';
 import {
   AssignmentCategory,
+  AssignmentTab,
   AssignmentSummary,
   ASSIGNMENT_CATEGORY_LABELS,
 } from '@/src/modules/assignments/types/assignment.types';
@@ -44,8 +45,8 @@ const CATEGORY_ACCENT = (
 
 interface AssignmentSummaryCardsProps {
   summary: AssignmentSummary;
-  activeTab: AssignmentCategory;
-  onSelect: (category: AssignmentCategory) => void;
+  activeTab: AssignmentTab;
+  onSelect: (category: AssignmentTab) => void;
 }
 
 export function AssignmentSummaryCards({

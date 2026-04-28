@@ -63,7 +63,7 @@ export function MidweekSectionEditor({
           activeOpacity={0.8}
           disabled={disabled}
         >
-          <Ionicons name="add" size={16} color="#fff" />
+          <Ionicons name="add" size={16} color={colors.onPrimary} />
           <ThemedText style={styles.addButtonText}>Agregar parte</ThemedText>
         </TouchableOpacity>
       </View>
@@ -158,7 +158,7 @@ const createStyles = (colors: AppColorSet) =>
       paddingVertical: 8,
     },
     addButtonText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontSize: 12,
       fontWeight: '700',
     },

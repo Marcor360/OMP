@@ -156,6 +156,7 @@ const notifyMeetingTarget = async (params: {
     sentBy: params.sentBy,
     metadata: {
       date: params.meetingDateLabel,
+      meetingId: params.meetingId,
       meetingType: params.meetingType,
       role: params.target.assignmentTitle,
     },

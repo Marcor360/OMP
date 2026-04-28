@@ -195,6 +195,9 @@ export const resolveAssignmentContext = (params: {
 
   return {
     assignmentId: params.assignmentId,
+    meetingId: isString(params.pathParams.meetingId) ?
+      params.pathParams.meetingId.trim() :
+      null,
     category,
     congregationId: resolveCongregationId(params.data, params.pathParams),
     date: resolveAssignmentDate(params.data),

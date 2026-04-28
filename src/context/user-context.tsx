@@ -41,6 +41,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const forceServerNextLoadRef = useRef(false);
+  const loadedUidRef = useRef<string | null>(null);
 
   const refreshProfile = useCallback(() => {
     forceServerNextLoadRef.current = true;
@@ -50,6 +51,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) {
       console.log('[UserContext] Sin usuario autenticado, limpiando perfil');
+      loadedUidRef.current = null;
       setAppUser(null);
       setProfileError(null);
       setLoadingProfile(false);
@@ -57,9 +59,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
 
     console.log('[UserContext] Iniciando carga de perfil para:', user.uid);
+    const isDifferentUser = loadedUidRef.current !== user.uid;
+    loadedUidRef.current = user.uid;
+
     setLoadingProfile(true);
     setProfileError(null);
-    setAppUser(null);
+    if (isDifferentUser) {
+      setAppUser(null);
+    }
 
     let cancelled = false;
 
@@ -75,6 +82,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
 
         console.log('[UserContext] Perfil cargado:', profile ? 'existe' : 'null');
+        loadedUidRef.current = user.uid;
         setAppUser(profile);
 
         if (!profile) {
@@ -96,7 +104,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         const formattedError = formatFirestoreError(error);
         console.error('[UserContext] Error cargando perfil:', formattedError);
-        setAppUser(null);
+        if (isDifferentUser) {
+          setAppUser(null);
+          loadedUidRef.current = null;
+        }
         setProfileError(formattedError);
       } finally {
         if (!cancelled) {

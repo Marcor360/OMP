@@ -28,7 +28,7 @@ export function ErrorState({
       <ThemedText style={styles.message}>{message}</ThemedText>
       {onRetry ? (
         <TouchableOpacity style={styles.button} onPress={onRetry} activeOpacity={0.8}>
-          <Ionicons name="refresh" size={16} color="#fff" />
+          <Ionicons name="refresh" size={16} color={colors.onPrimary} />
           <ThemedText style={styles.buttonText}>Reintentar</ThemedText>
         </TouchableOpacity>
       ) : null}
@@ -76,7 +76,7 @@ const createStyles = (colors: AppColorSet) =>
       gap: 8,
     },
     buttonText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontWeight: '600',
       fontSize: 14,
     },

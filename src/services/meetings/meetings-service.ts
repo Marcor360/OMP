@@ -29,6 +29,7 @@ import {
   CreateMeetingDTO,
   Meeting,
   MeetingCategory,
+  MeetingCleaningAssignmentMode,
   MeetingStatus,
   MeetingType,
   UpdateMeetingDTO,
@@ -73,6 +74,9 @@ const isMeetingCategory = (value: unknown): value is MeetingCategory =>
 
 const isPublicationStatus = (value: unknown): value is MeetingPublicationStatus =>
   value === 'draft' || value === 'published';
+
+const isCleaningAssignmentMode = (value: unknown): value is MeetingCleaningAssignmentMode =>
+  value === 'none' || value === 'selected' || value === 'all';
 
 const toStringArray = (value: unknown): string[] => {
   if (!Array.isArray(value)) return [];
@@ -141,6 +145,11 @@ const normalizeMeeting = (id: string, data: Record<string, unknown>): Meeting =>
       toStringArray(data.assignedUserIds).length > 0
         ? toStringArray(data.assignedUserIds)
         : collectAssignedUserIds(normalizedSections),
+    cleaningAssignmentMode: isCleaningAssignmentMode(data.cleaningAssignmentMode)
+      ? data.cleaningAssignmentMode
+      : 'none',
+    cleaningGroupIds: toStringArray(data.cleaningGroupIds),
+    cleaningGroupNames: toStringArray(data.cleaningGroupNames),
     searchableText:
       typeof data.searchableText === 'string'
         ? data.searchableText
@@ -222,12 +231,6 @@ type MeetingProgramKind = 'midweek' | 'weekend';
 
 const resolveProgramKindFromMeeting = (meeting: Pick<Meeting, 'type' | 'meetingCategory'>): MeetingProgramKind =>
   meeting.type === 'midweek' || meeting.meetingCategory === 'midweek' ? 'midweek' : 'weekend';
-
-const resolveProgramKindFromPayload = (params: {
-  type?: MeetingType;
-  meetingCategory?: MeetingCategory;
-}): MeetingProgramKind =>
-  params.type === 'midweek' || params.meetingCategory === 'midweek' ? 'midweek' : 'weekend';
 
 const timestampToDate = (value: unknown): Date | null => {
   if (!value) return null;
@@ -557,6 +560,9 @@ export const createMeeting = async (
     publicationStatus: normalizedProgram.publicationStatus,
     sections: normalizedProgram.sections,
     assignedUserIds: normalizedProgram.assignedUserIds,
+    cleaningAssignmentMode: data.cleaningAssignmentMode ?? 'none',
+    cleaningGroupIds: data.cleaningGroupIds ?? [],
+    cleaningGroupNames: data.cleaningGroupNames ?? [],
     searchableText: normalizedProgram.searchableText,
     midweekSections: legacyMidweekSections ?? data.midweekSections ?? null,
     organizerUid,
@@ -651,6 +657,9 @@ export const updateMeeting = async (
     publicationStatus: normalizedProgram.publicationStatus,
     sections: normalizedProgram.sections,
     assignedUserIds: normalizedProgram.assignedUserIds,
+    cleaningAssignmentMode: data.cleaningAssignmentMode,
+    cleaningGroupIds: data.cleaningGroupIds,
+    cleaningGroupNames: data.cleaningGroupNames,
     searchableText: normalizedProgram.searchableText,
     updatedAt: serverTimestamp(),
   };

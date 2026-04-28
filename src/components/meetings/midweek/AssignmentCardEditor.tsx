@@ -182,7 +182,7 @@ export function AssignmentCardEditor({
               onPress={addParticipant}
               disabled={disabled}
             >
-              <Ionicons name="add" size={16} color="#fff" />
+              <Ionicons name="add" size={16} color={colors.onPrimary} />
               <ThemedText style={styles.addParticipantText}>
                 {isLivingAsChristians && visibleParticipants.length === 1
                   ? 'Agregar participante 2'
@@ -329,7 +329,7 @@ const createStyles = (colors: AppColorSet) =>
       paddingVertical: 6,
     },
     addParticipantText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontSize: 12,
       fontWeight: '600',
     },

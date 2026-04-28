@@ -24,7 +24,7 @@ export function NotFoundScreen() {
         onPress={() => router.replace('/(protected)/(tabs)/' as any)}
         activeOpacity={0.8}
       >
-        <Ionicons name="home-outline" size={18} color="#fff" />
+        <Ionicons name="home-outline" size={18} color={colors.onPrimary} />
         <ThemedText style={styles.buttonText}>Ir al inicio</ThemedText>
       </TouchableOpacity>
     </View>
@@ -77,5 +77,5 @@ const createStyles = (colors: AppColorSet) =>
       paddingVertical: 14,
       borderRadius: 12,
     },
-    buttonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+    buttonText: { color: colors.onPrimary, fontWeight: '700', fontSize: 15 },
   });

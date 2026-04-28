@@ -26,6 +26,16 @@ type DeleteMeetingByManagerRequest = {
   meetingId: string;
 };
 
+type SyncMeetingCleaningAssignmentsRequest = {
+  congregationId: string;
+  meetingId: string;
+  mode: 'none' | 'selected' | 'all';
+  groups: { id: string; name: string }[];
+  meetingTitle: string;
+  meetingDate: TimestampType;
+  assignedByName: string;
+};
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (value === null || typeof value !== 'object') {
     return false;
@@ -168,6 +178,35 @@ export const deleteMeetingByManager = async (
     if (isFunctionUnavailable(error)) {
       throw new AppError(
         'La eliminacion de reuniones requiere Cloud Functions (deleteMeetingByManager).'
+      );
+    }
+
+    throw error;
+  }
+};
+
+export const syncMeetingCleaningAssignmentsByManager = async (
+  params: SyncMeetingCleaningAssignmentsRequest
+): Promise<void> => {
+  const callable = httpsCallable<
+    Omit<SyncMeetingCleaningAssignmentsRequest, 'meetingDate'> & { meetingDate: SerializableTimestamp },
+    { ok: true }
+  >(functions, 'syncMeetingCleaningAssignmentsByManager');
+
+  try {
+    await callable({
+      congregationId: params.congregationId,
+      meetingId: params.meetingId,
+      mode: params.mode,
+      groups: params.groups,
+      meetingTitle: params.meetingTitle,
+      meetingDate: toSerializableTimestamp(params.meetingDate),
+      assignedByName: params.assignedByName,
+    });
+  } catch (error) {
+    if (isFunctionUnavailable(error)) {
+      throw new AppError(
+        'La asignacion de limpieza por reunion requiere Cloud Functions (syncMeetingCleaningAssignmentsByManager).'
       );
     }
 

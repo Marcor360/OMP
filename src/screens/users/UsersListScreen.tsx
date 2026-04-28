@@ -101,7 +101,7 @@ export function UsersListScreen() {
             onPress={() => router.push('/(protected)/users/create')}
             activeOpacity={0.8}
           >
-            <Ionicons name="add" size={20} color="#fff" />
+            <Ionicons name="add" size={20} color={colors.onPrimary} />
             <ThemedText style={styles.addButtonText}>Nuevo</ThemedText>
           </TouchableOpacity>
         </RoleGuard>
@@ -170,7 +170,7 @@ const createStyles = (colors: AppColorSet) =>
       borderRadius: 8,
     },
     addButtonText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontWeight: '600',
       fontSize: 14,
     },

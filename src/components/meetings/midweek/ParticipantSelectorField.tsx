@@ -218,7 +218,7 @@ const createStyles = (colors: AppColorSet) =>
       borderColor: colors.primary,
     },
     modeText: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
-    modeTextActive: { color: '#fff' },
+    modeTextActive: { color: colors.onPrimary },
     fieldWrap: { gap: 6 },
     label: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
     input: {

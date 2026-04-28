@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback } from 'react';
 import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,6 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { AssignmentCard } from '@/src/modules/assignments/components/AssignmentCard';
-import { AssignmentFilters } from '@/src/modules/assignments/components/AssignmentFilters';
 import { AssignmentSummaryCards } from '@/src/modules/assignments/components/AssignmentSummaryCards';
 import { AssignmentTabs } from '@/src/modules/assignments/components/AssignmentTabs';
 import { useAssignmentFilters } from '@/src/modules/assignments/hooks/useAssignmentFilters';
@@ -19,7 +18,6 @@ import {
   Assignment,
   ASSIGNMENT_CATEGORY_LABELS,
 } from '@/src/modules/assignments/types/assignment.types';
-import { getCongregationDisplayName } from '@/src/services/congregations/congregations-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { useUser } from '@/src/context/user-context';
 import { RoleGuard } from '@/src/components/common/RoleGuard';
@@ -28,15 +26,12 @@ export function AssignmentsScreen() {
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const { congregationId, loadingProfile, profileError } = useUser();
-  const [congregationName, setCongregationName] = useState('Sin congregacion');
+  const { appUser, congregationId, loadingProfile, profileError, uid } = useUser();
 
   const {
     activeTab,
     filters,
-    updateFilter,
     setCategory,
-    resetFilters,
   } = useAssignmentFilters(congregationId ?? '');
 
   const {
@@ -50,30 +45,10 @@ export function AssignmentsScreen() {
   } = useAssignments({
     congregationId,
     filters,
+    uid,
+    cleaningGroupId: appUser?.cleaningGroupId,
+    cleaningGroupName: appUser?.cleaningGroupName,
   });
-
-  useEffect(() => {
-    if (!congregationId) {
-      setCongregationName('Sin congregacion');
-      return;
-    }
-
-    let cancelled = false;
-
-    getCongregationDisplayName(congregationId, { forceServer: true })
-      .then((name) => {
-        if (cancelled) return;
-        setCongregationName(name);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setCongregationName(congregationId);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [congregationId]);
 
   const openDetail = useCallback(
     (assignment: Assignment) => {
@@ -148,15 +123,6 @@ export function AssignmentsScreen() {
             />
 
             <AssignmentTabs activeTab={activeTab} onChange={setCategory} />
-
-            <AssignmentFilters
-              filters={filters}
-              congregationName={congregationName}
-              activeTab={activeTab}
-              onUpdate={updateFilter}
-              onSelectCategory={setCategory}
-              onReset={resetFilters}
-            />
 
             <View style={styles.counterRow}>
               <View style={styles.counterPill}>

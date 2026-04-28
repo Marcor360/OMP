@@ -44,9 +44,37 @@ const formatDate = (value: string): string => {
   });
 };
 
+const endOfWeek = (date: Date): Date => {
+  const result = new Date(date);
+  result.setHours(23, 59, 59, 999);
+
+  const day = result.getDay();
+  const daysUntilSunday = day === 0 ? 0 : 7 - day;
+  result.setDate(result.getDate() + daysUntilSunday);
+
+  return result;
+};
+
+const isMeetingAssignment = (assignment: Assignment): boolean =>
+  Boolean(assignment.meetingId) ||
+  assignment.category === 'midweek' ||
+  assignment.category === 'weekend';
+
+const isEffectivelyOverdue = (assignment: Assignment): boolean => {
+  const parsed = new Date(assignment.date);
+  if (Number.isNaN(parsed.getTime())) return false;
+
+  const expiresAt = isMeetingAssignment(assignment) ? endOfWeek(parsed) : parsed;
+  return expiresAt.getTime() < Date.now();
+};
+
 function AssignmentCardBase({ assignment, onPress }: AssignmentCardProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const effectiveStatus =
+    assignment.status === 'overdue' && !isEffectivelyOverdue(assignment)
+      ? 'pending'
+      : assignment.status;
 
   const accent = useMemo(
     () => categoryAccent(colors, assignment.category),
@@ -77,10 +105,10 @@ function AssignmentCardBase({ assignment, onPress }: AssignmentCardProps) {
             </ThemedText>
           </View>
 
-          {assignment.status ? (
+          {effectiveStatus ? (
             <View style={styles.statusBadge}>
               <ThemedText style={styles.statusBadgeText}>
-                {ASSIGNMENT_STATUS_LABELS[assignment.status]}
+                {ASSIGNMENT_STATUS_LABELS[effectiveStatus]}
               </ThemedText>
             </View>
           ) : null}

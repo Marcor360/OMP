@@ -39,6 +39,8 @@ export interface Assignment {
 
 export type AssignmentCategoryFilter = AssignmentCategory | 'all';
 
+export type AssignmentTab = AssignmentCategory | 'all';
+
 export type AssignmentSubTypeFilter = Exclude<AssignmentSubType, null> | 'all';
 
 export type AssignmentStatusFilter = AssignmentStatus | 'all';
@@ -56,7 +58,8 @@ export interface AssignmentFilters {
 
 export type AssignmentSummary = Record<AssignmentCategory, number>;
 
-export const ASSIGNMENT_CATEGORY_LABELS: Record<AssignmentCategory, string> = {
+export const ASSIGNMENT_CATEGORY_LABELS: Record<AssignmentTab, string> = {
+  all: 'Todas',
   midweek: 'Entre semana',
   weekend: 'Fin de semana',
   cleaning: 'Limpieza',

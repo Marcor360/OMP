@@ -5,6 +5,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import {
   AssignmentCategory,
   AssignmentFilters as AssignmentFilterValues,
+  AssignmentTab,
   ASSIGNMENT_CATEGORY_LABELS,
   ASSIGNMENT_STATUS_LABELS,
   ASSIGNMENT_SUBTYPE_LABELS,
@@ -14,12 +15,12 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 interface AssignmentFiltersProps {
   filters: AssignmentFilterValues;
   congregationName: string;
-  activeTab: AssignmentCategory;
+  activeTab: AssignmentTab;
   onUpdate: <K extends keyof AssignmentFilterValues>(
     key: K,
     value: AssignmentFilterValues[K]
   ) => void;
-  onSelectCategory: (category: AssignmentCategory) => void;
+  onSelectCategory: (category: AssignmentTab) => void;
   onReset: () => void;
 }
 
@@ -335,6 +336,6 @@ const createStyles = (colors: AppColorSet) =>
       fontWeight: '600',
     },
     chipTextActive: {
-      color: '#fff',
+      color: colors.onPrimary,
     },
   });

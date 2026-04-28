@@ -102,8 +102,8 @@ function WebOnlyNotice() {
         }}
         activeOpacity={0.8}
       >
-        <Ionicons name="arrow-back" size={18} color="#fff" />
-        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
+        <Ionicons name="arrow-back" size={18} color={colors.onPrimary} />
+        <Text style={{ color: colors.onPrimary, fontWeight: '700', fontSize: 15 }}>
           Volver al inicio
         </Text>
       </TouchableOpacity>

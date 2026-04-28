@@ -14,6 +14,22 @@ import { AppNotification } from '@/src/features/notifications/types/notification
 import { useNotifications } from '@/src/hooks/useNotifications';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
+const resolveAssignmentHref = (notification: AppNotification) => {
+  const [meetingIdFromAssignment, assignmentKey] = notification.assignmentId.split(':');
+  const meetingId =
+    notification.metadata?.meetingId ??
+    (meetingIdFromAssignment && assignmentKey ? meetingIdFromAssignment : null);
+  const assignmentId = assignmentKey ?? notification.assignmentId;
+
+  if (meetingId) {
+    return `/(protected)/assignments/${assignmentId}?source=meeting&meetingId=${encodeURIComponent(
+      meetingId
+    )}` as never;
+  }
+
+  return `/(protected)/assignments/${notification.assignmentId}` as never;
+};
+
 export function NotificationsScreen() {
   const router = useRouter();
   const colors = useAppColors();
@@ -37,7 +53,7 @@ export function NotificationsScreen() {
         await markRead(notification.id);
       }
 
-      router.push(`/(protected)/assignments/${notification.assignmentId}` as never);
+      router.push(resolveAssignmentHref(notification));
     },
     [markRead, router]
   );

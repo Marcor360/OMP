@@ -26,6 +26,7 @@ export {
   createMeetingByManager,
   updateMeetingByManager,
   deleteMeetingByManager,
+  syncMeetingCleaningAssignmentsByManager,
 } from './meetings-management.js';
 
 export {
@@ -36,3 +37,7 @@ export {
 export {
   scheduledDataCleanup,
 } from "./maintenance/scheduled-data-cleanup.js";
+
+export {
+  scheduledNotificationsCleanup,
+} from "./maintenance/scheduled-notifications-cleanup.js";

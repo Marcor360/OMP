@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -7,25 +6,15 @@ import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
 import { useAuth } from '@/src/context/auth-context';
-import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 import { ROLE_LABELS, STATUS_LABELS } from '@/src/types/user';
 import { formatDate } from '@/src/utils/dates/dates';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
 export function ProfileScreen() {
-  const { appUser, refreshProfile, loadingProfile } = useUser();
+  const { appUser } = useUser();
   const { logout } = useAuth();
   const colors = useAppColors();
   const styles = createStyles(colors);
-
-  const handleFocusRefresh = React.useCallback(() => {
-    refreshProfile();
-  }, [refreshProfile]);
-
-  useRefreshOnFocus(handleFocusRefresh, !loadingProfile, {
-    refreshOnAppActive: false,
-    skipInitialFocus: false,
-  });
 
   const handleLogout = async () => {
     const confirmed =

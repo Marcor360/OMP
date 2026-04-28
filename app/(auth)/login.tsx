@@ -139,7 +139,7 @@ export default function LoginScreen() {
                 activeOpacity={0.7}
               >
                 {isLoggingIn ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color={colors.onPrimary} />
                 ) : (
                   <ThemedText style={styles.buttonText}>Iniciar sesion</ThemedText>
                 )}
@@ -237,7 +237,7 @@ const createStyles = (colors: AppColors) =>
       opacity: 0.6,
     },
     buttonText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontSize: 16,
       fontWeight: '600',
     },

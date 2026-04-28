@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -552,9 +552,9 @@ export function MidweekMeetingFormScreen() {
               activeOpacity={0.8}
             >
               {importingPdf ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={colors.onPrimary} />
               ) : (
-                <Ionicons name="document-attach-outline" size={16} color="#fff" />
+                <Ionicons name="document-attach-outline" size={16} color={colors.onPrimary} />
               )}
               <ThemedText style={styles.importButtonText}>Cargar PDF</ThemedText>
             </TouchableOpacity>
@@ -826,7 +826,7 @@ export function MidweekMeetingFormScreen() {
           activeOpacity={0.8}
         >
           {saving ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.onPrimary} />
           ) : (
             <ThemedText style={styles.saveButtonText}>
               {mode === 'create' ? 'Crear reunion VyMC' : 'Guardar cambios'}
@@ -970,7 +970,7 @@ const createStyles = (colors: AppColorSet) =>
       paddingVertical: 9,
     },
     importButtonText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontWeight: '700',
       fontSize: 13,
     },
@@ -1034,7 +1034,7 @@ const createStyles = (colors: AppColorSet) =>
       fontWeight: '600',
     },
     chipTextActive: {
-      color: '#fff',
+      color: colors.onPrimary,
     },
     errorText: {
       color: colors.error,
@@ -1048,7 +1048,7 @@ const createStyles = (colors: AppColorSet) =>
       marginTop: 8,
     },
     saveButtonText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontWeight: '800',
       fontSize: 15,
     },

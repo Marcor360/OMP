@@ -423,6 +423,42 @@ export async function unregisterPushToken(uid: string): Promise<void> {
   }
 }
 
+export async function clearDeliveredNotificationsAndBadge(): Promise<void> {
+  if (!canUseRemotePushNotifications) return;
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) return;
+
+  try {
+    await Promise.all([
+      Notifications.dismissAllNotificationsAsync(),
+      Notifications.setBadgeCountAsync(0),
+    ]);
+  } catch {
+    // Best effort: Android/iOS can reject this if permissions or APIs are unavailable.
+  }
+}
+
+export async function syncNativeUnreadNotifications(
+  unreadCount: number
+): Promise<void> {
+  if (!canUseRemotePushNotifications) return;
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) return;
+
+  try {
+    const normalizedCount = Math.max(0, unreadCount);
+    await Notifications.setBadgeCountAsync(normalizedCount);
+
+    if (normalizedCount === 0) {
+      await Notifications.dismissAllNotificationsAsync();
+    }
+  } catch {
+    // Native notification state is a convenience layer; Firestore remains canonical.
+  }
+}
+
 export async function scheduleLocalNotification({
   title,
   body,

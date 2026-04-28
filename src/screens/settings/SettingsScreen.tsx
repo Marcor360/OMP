@@ -12,28 +12,18 @@ import { useUser } from '@/src/context/user-context';
 import { useI18n } from '@/src/i18n/index';
 import { LANGUAGE_DISPLAY_NAME } from '@/src/i18n/language-options';
 import { usePermissions } from '@/src/hooks/use-permissions';
-import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 import { ROLE_LABELS } from '@/src/types/user';
 import { type AppColors, useAppColors } from '@/src/styles';
 import { isExpoGo } from '@/src/utils/runtime';
 
 export function SettingsScreen() {
   const router = useRouter();
-  const { appUser, refreshProfile, loadingProfile } = useUser();
+  const { appUser } = useUser();
   const { isDarkMode } = useAppTheme();
   const { t, language } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const permissions = usePermissions();
-
-  const handleFocusRefresh = React.useCallback(() => {
-    refreshProfile();
-  }, [refreshProfile]);
-
-  useRefreshOnFocus(handleFocusRefresh, !loadingProfile, {
-    refreshOnAppActive: false,
-    skipInitialFocus: false,
-  });
 
   const handleNavigateToTheme = () => {
     router.push('/(protected)/settings/theme' as any);

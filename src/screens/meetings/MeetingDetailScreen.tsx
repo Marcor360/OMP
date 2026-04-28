@@ -286,7 +286,7 @@ const createStyles = (colors: AppColorSet) =>
     headerType: { fontSize: 13, color: colors.textMuted, fontWeight: '600' },
     sectionCard: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, overflow: 'hidden' },
     sectionBanner: { paddingVertical: 8, paddingHorizontal: 10, alignItems: 'center' },
-    sectionBannerText: { color: '#fff', fontSize: 13, fontWeight: '800', textTransform: 'uppercase' },
+    sectionBannerText: { color: colors.onPrimary, fontSize: 13, fontWeight: '800', textTransform: 'uppercase' },
     sectionBody: { padding: 12, gap: 10 },
     assignmentWrap: { gap: 2 },
     assignmentTitle: { fontSize: 15, fontWeight: '800', color: colors.textPrimary },

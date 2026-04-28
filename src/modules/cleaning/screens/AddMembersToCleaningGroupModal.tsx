@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppColors } from '@/src/styles';
 import { useCleaningAssignableUsers } from '@/src/modules/cleaning/hooks/use-cleaning-assignable-users';
@@ -47,6 +47,7 @@ export function AddMembersToCleaningGroupModal({
   confirming = false,
 }: AddMembersToCleaningGroupModalProps) {
   const colors = useAppColors();
+  const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(preSelectedIds);
 
@@ -184,7 +185,8 @@ export function AddMembersToCleaningGroupModal({
     },
     footer: {
       paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingTop: 16,
+      paddingBottom: Math.max(insets.bottom, 16),
       borderTopWidth: 1,
       borderTopColor: colors.divider,
       flexDirection: 'row',
@@ -217,7 +219,7 @@ export function AddMembersToCleaningGroupModal({
     confirmText: {
       fontSize: 15,
       fontWeight: '700',
-      color: '#fff',
+      color: colors.onPrimary,
     },
   });
 
@@ -327,7 +329,7 @@ export function AddMembersToCleaningGroupModal({
               }
             >
               {confirming ? (
-                <ActivityIndicator color="#fff" size="small" />
+                <ActivityIndicator color={colors.onPrimary} size="small" />
               ) : (
                 <Text style={styles.confirmText}>
                   {isCreateMode

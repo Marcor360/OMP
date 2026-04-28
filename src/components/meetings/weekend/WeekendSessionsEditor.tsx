@@ -160,7 +160,7 @@ export function WeekendSessionsEditor({
           activeOpacity={0.8}
           disabled={disabled}
         >
-          <Ionicons name="add-outline" size={15} color="#fff" />
+          <Ionicons name="add-outline" size={15} color={colors.onPrimary} />
           <ThemedText style={styles.addSessionButtonText}>Agregar sesion</ThemedText>
         </TouchableOpacity>
       </View>
@@ -384,7 +384,7 @@ const createStyles = (colors: AppColorSet) =>
       paddingHorizontal: 10,
       paddingVertical: 8,
     },
-    addSessionButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+    addSessionButtonText: { color: colors.onPrimary, fontSize: 12, fontWeight: '700' },
     sessionCard: {
       borderWidth: 1,
       borderColor: colors.border,
@@ -434,7 +434,7 @@ const createStyles = (colors: AppColorSet) =>
     },
     modeChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
     modeText: { fontSize: 12, color: colors.textMuted, fontWeight: '700' },
-    modeTextActive: { color: '#fff' },
+    modeTextActive: { color: colors.onPrimary },
     userButton: {
       borderWidth: 1,
       borderColor: colors.border,

@@ -79,7 +79,7 @@ const createStyles = (colors: AppColorSet) =>
       borderRadius: 8,
     },
     buttonText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontWeight: '600',
       fontSize: 14,
     },

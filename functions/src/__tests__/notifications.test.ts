@@ -135,7 +135,7 @@ describe('NotificationDocument — esquema isRead', () => {
   });
 
   it('acepta todas las categorías válidas', () => {
-    const categories: Array<NotificationCategory> = ['platform', 'cleaning', 'hospitality'];
+    const categories: NotificationCategory[] = ['platform', 'cleaning', 'hospitality'];
     categories.forEach((category) => {
       const payload = buildNotificationPayload({ ...baseParams, category });
       expect(payload.category).toBe(category);

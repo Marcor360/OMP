@@ -12,7 +12,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 
-import { priorityColor } from '@/src/components/common/StatusBadge';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
@@ -30,7 +29,7 @@ import { getAllUsers } from '@/src/services/users/users-service';
 import { getCleaningGroups } from '@/src/modules/cleaning/services/cleaning-service';
 import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { AssignmentPriority, ASSIGNMENT_PRIORITY_LABELS, UpdateAssignmentDTO } from '@/src/types/assignment';
+import { AssignmentPriority, UpdateAssignmentDTO } from '@/src/types/assignment';
 import { Meeting } from '@/src/types/meeting';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -38,12 +37,63 @@ import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
 type Mode = 'create' | 'edit';
 type AssignmentTargetMode = 'person' | 'cleaningGroup';
+type PersonAssignmentMode = 'user' | 'manual';
 
 type FormErrors = {
   title?: string;
+  dueDate?: string;
   meetingId?: string;
   assignedTo?: string;
+  manualAssigneeName?: string;
   cleaningGroupId?: string;
+};
+
+const PRESET_ASSIGNMENT_TITLES = [
+  'Limpieza general',
+  'Hospitalidad',
+  'Limpieza',
+  'Capitan de predicacion',
+] as const;
+
+const MONTH_NAMES = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+];
+
+const WEEKDAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+
+const startOfDay = (value: Date): Date => {
+  const next = new Date(value);
+  next.setHours(0, 0, 0, 0);
+  return next;
+};
+
+const sameCalendarDay = (left: Date, right: Date): boolean =>
+  left.getFullYear() === right.getFullYear() &&
+  left.getMonth() === right.getMonth() &&
+  left.getDate() === right.getDate();
+
+const formatDateLabel = (value: Date): string =>
+  `${value.getDate()} ${MONTH_NAMES[value.getMonth()].toLowerCase()} ${value.getFullYear()}`;
+
+const normalizeManualId = (value: string): string =>
+  `manual:${value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+
+const resolveCategoryFromTitle = (value: string): 'platform' | 'cleaning' | 'hospitality' | undefined => {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.includes('limpieza')) return 'cleaning';
+  if (normalized.includes('hospitalidad')) return 'hospitality';
+  return 'platform';
 };
 
 export function AssignmentFormScreen() {
@@ -56,13 +106,20 @@ export function AssignmentFormScreen() {
   const { appUser, congregationId, isAdminOrSupervisor, loadingProfile, profileError } = useUser();
 
   const mode: Mode = id ? 'edit' : 'create';
+  const today = useMemo(() => startOfDay(new Date()), []);
 
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState<string>(PRESET_ASSIGNMENT_TITLES[0]);
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<AssignmentPriority>('medium');
   const [targetMode, setTargetMode] = useState<AssignmentTargetMode>('person');
+  const [personAssignmentMode, setPersonAssignmentMode] = useState<PersonAssignmentMode>('user');
   const [assignedToName, setAssignedToName] = useState('');
   const [assignedToUid, setAssignedToUid] = useState('');
+  const [manualAssigneeName, setManualAssigneeName] = useState('');
+  const [selectedDueDate, setSelectedDueDate] = useState<Date>(today);
+  const [visibleMonth, setVisibleMonth] = useState<Date>(
+    () => new Date(today.getFullYear(), today.getMonth(), 1)
+  );
   const [users, setUsers] = useState<AppUser[]>([]);
   const [userSearch, setUserSearch] = useState('');
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -150,6 +207,14 @@ export function AssignmentFormScreen() {
         setAssignedToName(assignmentDoc.assignedToName);
         setAssignedToUid(assignmentDoc.assignedToUid);
         setUserSearch(assignmentDoc.assignedToName ?? '');
+        if (assignmentDoc.assignedToUid?.startsWith('manual:')) {
+          setPersonAssignmentMode('manual');
+          setManualAssigneeName(assignmentDoc.assignedToName ?? '');
+        }
+        const parsedDueDate = assignmentDoc.dueDate?.toDate?.();
+        const safeDueDate = parsedDueDate && parsedDueDate >= today ? startOfDay(parsedDueDate) : today;
+        setSelectedDueDate(safeDueDate);
+        setVisibleMonth(new Date(safeDueDate.getFullYear(), safeDueDate.getMonth(), 1));
         setMeetingId(assignmentDoc.meetingId ?? '');
       } catch (requestError) {
         Alert.alert('Error', formatFirestoreError(requestError));
@@ -169,19 +234,28 @@ export function AssignmentFormScreen() {
     meetingIdParam,
     mode,
     router,
+    today,
     user?.uid,
   ]);
 
   const validate = (): boolean => {
     const nextErrors: FormErrors = {
       title: validateRequired(title, 'El titulo'),
+      dueDate:
+        selectedDueDate < today
+          ? 'Selecciona una fecha de hoy en adelante.'
+          : undefined,
       meetingId:
         targetMode === 'person'
           ? validateRequired(meetingId, 'La reunion')
           : undefined,
       assignedTo:
-        mode === 'create' && targetMode === 'person'
+        mode === 'create' && targetMode === 'person' && personAssignmentMode === 'user'
           ? validateRequired(assignedToUid, 'La persona asignada')
+          : undefined,
+      manualAssigneeName:
+        mode === 'create' && targetMode === 'person' && personAssignmentMode === 'manual'
+          ? validateRequired(manualAssigneeName, 'El nombre manual')
           : undefined,
       cleaningGroupId:
         mode === 'create' && targetMode === 'cleaningGroup'
@@ -209,7 +283,8 @@ export function AssignmentFormScreen() {
     setSaving(true);
 
     try {
-      const dueDate = Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const dueDate = Timestamp.fromDate(selectedDueDate);
+      const selectedCategory = resolveCategoryFromTitle(title);
 
       if (mode === 'create') {
         if (targetMode === 'cleaningGroup') {
@@ -235,6 +310,16 @@ export function AssignmentFormScreen() {
             appUser?.displayName ?? user?.email ?? 'Sistema'
           );
         } else {
+          const manualName = manualAssigneeName.trim();
+          const finalAssignedToUid =
+            personAssignmentMode === 'manual'
+              ? normalizeManualId(manualName)
+              : assignedToUid || (user?.uid ?? '');
+          const finalAssignedToName =
+            personAssignmentMode === 'manual'
+              ? manualName
+              : assignedToName || (appUser?.displayName ?? 'Sin asignar');
+
           await createAssignment(
             congregationId,
             meetingId,
@@ -242,8 +327,9 @@ export function AssignmentFormScreen() {
               title,
               description,
               priority,
-              assignedToUid: assignedToUid || (user?.uid ?? ''),
-              assignedToName: assignedToName || (appUser?.displayName ?? 'Sin asignar'),
+              category: selectedCategory,
+              assignedToUid: finalAssignedToUid,
+              assignedToName: finalAssignedToName,
               dueDate,
               meetingId,
             },
@@ -254,7 +340,20 @@ export function AssignmentFormScreen() {
 
         Alert.alert('Exito', 'Asignacion creada correctamente.');
       } else if (id) {
-        const payload: UpdateAssignmentDTO = { title, description, priority };
+        const payload: UpdateAssignmentDTO = {
+          title,
+          description,
+          priority,
+          dueDate,
+          assignedToUid:
+            personAssignmentMode === 'manual'
+              ? normalizeManualId(manualAssigneeName)
+              : assignedToUid,
+          assignedToName:
+            personAssignmentMode === 'manual'
+              ? manualAssigneeName.trim()
+              : assignedToName,
+        };
         await updateAssignment(congregationId, meetingId, id, payload);
         Alert.alert('Exito', 'Asignacion actualizada.');
       }
@@ -321,7 +420,6 @@ export function AssignmentFormScreen() {
     );
   }
 
-  const priorities: AssignmentPriority[] = ['low', 'medium', 'high', 'critical'];
   const canEditForm = isAdminOrSupervisor;
   const hasAssignableUsers = mode !== 'create' || users.length > 0;
   const hasCleaningGroups = mode !== 'create' || cleaningGroups.length > 0;
@@ -329,14 +427,42 @@ export function AssignmentFormScreen() {
     isAdminOrSupervisor &&
     (targetMode === 'cleaningGroup'
       ? hasCleaningGroups
-      : meetings.length > 0 && hasAssignableUsers);
+      : meetings.length > 0 && (personAssignmentMode === 'manual' || hasAssignableUsers));
   const noMeetings = meetings.length === 0;
-  const noAssignableUsers = mode === 'create' && isAdminOrSupervisor && users.length === 0;
+  const noAssignableUsers =
+    mode === 'create' &&
+    isAdminOrSupervisor &&
+    users.length === 0 &&
+    personAssignmentMode === 'user';
   const noCleaningGroups =
     mode === 'create' &&
     isAdminOrSupervisor &&
     targetMode === 'cleaningGroup' &&
     cleaningGroups.length === 0;
+  const visibleMonthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
+  const visibleMonthEnd = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0);
+  const calendarLeadingBlanks = visibleMonthStart.getDay();
+  const calendarDays = Array.from({ length: visibleMonthEnd.getDate() }, (_, index) => {
+    const date = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), index + 1);
+    return startOfDay(date);
+  });
+  const canGoPreviousMonth =
+    visibleMonth.getFullYear() > today.getFullYear() ||
+    (visibleMonth.getFullYear() === today.getFullYear() &&
+      visibleMonth.getMonth() > today.getMonth());
+
+  const moveCalendarMonth = (offset: number) => {
+    setVisibleMonth((current) => {
+      const next = new Date(current.getFullYear(), current.getMonth() + offset, 1);
+      if (
+        next.getFullYear() < today.getFullYear() ||
+        (next.getFullYear() === today.getFullYear() && next.getMonth() < today.getMonth())
+      ) {
+        return current;
+      }
+      return next;
+    });
+  };
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
@@ -406,14 +532,21 @@ export function AssignmentFormScreen() {
         ) : null}
 
         <Field label="Titulo *" error={errors.title}>
-          <TextInput
-            style={[styles.input, errors.title && styles.inputError]}
-            value={title}
-            onChangeText={setTitle}
-            placeholder="Ej: Preparar informe mensual"
-            placeholderTextColor={colors.textDisabled}
-            editable={canEditForm}
-          />
+          <View style={styles.chipRow}>
+            {PRESET_ASSIGNMENT_TITLES.map((item) => (
+              <TouchableOpacity
+                key={item}
+                style={[styles.chip, title === item && styles.chipActive]}
+                onPress={() => setTitle(item)}
+                activeOpacity={0.8}
+                disabled={!canEditForm}
+              >
+                <ThemedText style={[styles.chipText, title === item && styles.chipTextActive]}>
+                  {item}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+          </View>
         </Field>
 
         <Field label="Descripcion">
@@ -427,6 +560,72 @@ export function AssignmentFormScreen() {
             numberOfLines={4}
             editable={canEditForm}
           />
+        </Field>
+
+        <Field label="Dia que toca *" error={errors.dueDate}>
+          <View style={styles.calendarBox}>
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity
+                style={[styles.calendarNavButton, !canGoPreviousMonth && styles.disabled]}
+                onPress={() => moveCalendarMonth(-1)}
+                disabled={!canGoPreviousMonth || !canEditForm}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="chevron-back" size={18} color={colors.textPrimary} />
+              </TouchableOpacity>
+              <ThemedText style={styles.calendarTitle}>
+                {MONTH_NAMES[visibleMonth.getMonth()]} {visibleMonth.getFullYear()}
+              </ThemedText>
+              <TouchableOpacity
+                style={styles.calendarNavButton}
+                onPress={() => moveCalendarMonth(1)}
+                disabled={!canEditForm}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="chevron-forward" size={18} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.calendarGrid}>
+              {WEEKDAY_LABELS.map((item) => (
+                <ThemedText key={item} style={styles.weekdayText}>
+                  {item}
+                </ThemedText>
+              ))}
+              {Array.from({ length: calendarLeadingBlanks }).map((_, index) => (
+                <View key={`blank-${index}`} style={styles.calendarDay} />
+              ))}
+              {calendarDays.map((date) => {
+                const disabledDate = date < today;
+                const selected = sameCalendarDay(date, selectedDueDate);
+
+                return (
+                  <TouchableOpacity
+                    key={date.toISOString()}
+                    style={[
+                      styles.calendarDay,
+                      selected && styles.calendarDaySelected,
+                      disabledDate && styles.calendarDayDisabled,
+                    ]}
+                    onPress={() => setSelectedDueDate(date)}
+                    disabled={disabledDate || !canEditForm}
+                    activeOpacity={0.8}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.calendarDayText,
+                        selected && styles.calendarDayTextSelected,
+                        disabledDate && styles.calendarDayTextDisabled,
+                      ]}
+                    >
+                      {date.getDate()}
+                    </ThemedText>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+          <ThemedText style={styles.hintText}>Seleccionado: {formatDateLabel(selectedDueDate)}</ThemedText>
         </Field>
 
         {targetMode === 'person' || mode === 'edit' ? (
@@ -477,32 +676,67 @@ export function AssignmentFormScreen() {
           </Field>
         )}
 
-        <Field label="Prioridad">
-          <View style={styles.chipRow}>
-            {priorities.map((item) => (
+        {mode === 'create' && isAdminOrSupervisor && targetMode === 'person' && (
+          <Field label="Asignar a (usuarios de la congregacion)" error={errors.assignedTo}>
+            <View style={styles.chipRow}>
               <TouchableOpacity
-                key={item}
-                style={[
-                  styles.chip,
-                  priority === item && {
-                    backgroundColor: priorityColor[item],
-                    borderColor: priorityColor[item],
-                  },
-                ]}
-                onPress={() => setPriority(item)}
+                style={[styles.chip, personAssignmentMode === 'user' && styles.chipActive]}
+                onPress={() => setPersonAssignmentMode('user')}
                 activeOpacity={0.8}
                 disabled={!canEditForm}
               >
-                <ThemedText style={[styles.chipText, priority === item && styles.chipTextActive]}>
-                  {ASSIGNMENT_PRIORITY_LABELS[item]}
+                <ThemedText
+                  style={[
+                    styles.chipText,
+                    personAssignmentMode === 'user' && styles.chipTextActive,
+                  ]}
+                >
+                  Usuario
                 </ThemedText>
               </TouchableOpacity>
-            ))}
-          </View>
-        </Field>
+              <TouchableOpacity
+                style={[styles.chip, personAssignmentMode === 'manual' && styles.chipActive]}
+                onPress={() => {
+                  setPersonAssignmentMode('manual');
+                  setIsUserDropdownOpen(false);
+                }}
+                activeOpacity={0.8}
+                disabled={!canEditForm}
+              >
+                <ThemedText
+                  style={[
+                    styles.chipText,
+                    personAssignmentMode === 'manual' && styles.chipTextActive,
+                  ]}
+                >
+                  Manual
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
 
-        {mode === 'create' && isAdminOrSupervisor && targetMode === 'person' && (
-          <Field label="Asignar a (usuarios de la congregacion)" error={errors.assignedTo}>
+            {personAssignmentMode === 'manual' ? (
+              <>
+                <TextInput
+                  style={[styles.input, errors.manualAssigneeName && styles.inputError]}
+                  value={manualAssigneeName}
+                  onChangeText={(value) => {
+                    setManualAssigneeName(value);
+                    setAssignedToName(value);
+                    setAssignedToUid(value.trim() ? normalizeManualId(value) : '');
+                  }}
+                  placeholder="Nombre de la persona"
+                  placeholderTextColor={colors.textDisabled}
+                  editable={canEditForm}
+                />
+                {errors.manualAssigneeName ? (
+                  <ThemedText style={styles.errorText}>{errors.manualAssigneeName}</ThemedText>
+                ) : null}
+                <ThemedText style={styles.hintText}>
+                  La opcion manual guarda el nombre en la asignacion; no envia push directo si no existe usuario.
+                </ThemedText>
+              </>
+            ) : (
+              <>
             <TouchableOpacity
               style={[styles.selectTrigger, errors.assignedTo && styles.inputError]}
               onPress={toggleUserDropdown}
@@ -571,6 +805,8 @@ export function AssignmentFormScreen() {
             {assignedToUid ? (
               <ThemedText style={styles.hintText}>Seleccionado: {assignedToName}</ThemedText>
             ) : null}
+              </>
+            )}
           </Field>
         )}
 
@@ -581,7 +817,7 @@ export function AssignmentFormScreen() {
           activeOpacity={0.8}
         >
           {saving ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.onPrimary} />
           ) : (
             <ThemedText style={styles.saveButtonText}>
               {mode === 'create' ? 'Crear asignacion' : 'Guardar cambios'}
@@ -645,7 +881,78 @@ const createStyles = (colors: AppColorSet) =>
       borderColor: colors.primary,
     },
     chipText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
-    chipTextActive: { color: '#fff' },
+    chipTextActive: { color: colors.onPrimary },
+    calendarBox: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+      padding: 10,
+      gap: 10,
+    },
+    calendarHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    calendarNavButton: {
+      width: 34,
+      height: 34,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.backgroundLight,
+    },
+    calendarTitle: {
+      flex: 1,
+      textAlign: 'center',
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    calendarGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    weekdayText: {
+      width: 38,
+      textAlign: 'center',
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    calendarDay: {
+      width: 38,
+      height: 34,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.backgroundLight,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    calendarDaySelected: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    calendarDayDisabled: {
+      opacity: 0.35,
+    },
+    calendarDayText: {
+      color: colors.textPrimary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    calendarDayTextSelected: {
+      color: colors.onPrimary,
+    },
+    calendarDayTextDisabled: {
+      color: colors.textDisabled,
+    },
     saveButton: {
       backgroundColor: colors.primary,
       borderRadius: 12,
@@ -654,7 +961,7 @@ const createStyles = (colors: AppColorSet) =>
       marginTop: 8,
     },
     disabled: { opacity: 0.6 },
-    saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+    saveButtonText: { color: colors.onPrimary, fontWeight: '700', fontSize: 16 },
     permissionNotice: {
       borderWidth: 1,
       borderColor: colors.warning + '66',

@@ -16,6 +16,9 @@ import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 interface UseAssignmentsParams {
   congregationId: string | null;
   filters: AssignmentFilters;
+  uid?: string | null;
+  cleaningGroupId?: string | null;
+  cleaningGroupName?: string | null;
 }
 
 const EMPTY_SUMMARY: AssignmentSummary = {
@@ -28,6 +31,9 @@ const EMPTY_SUMMARY: AssignmentSummary = {
 export const useAssignments = ({
   congregationId,
   filters,
+  uid,
+  cleaningGroupId,
+  cleaningGroupName,
 }: UseAssignmentsParams) => {
   const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,14 +124,47 @@ export const useAssignments = ({
     [filters]
   );
 
+  const userAssignments = useMemo(() => {
+    const normalizedGroupName = cleaningGroupName?.trim().toLowerCase() ?? '';
+
+    return allAssignments.filter((assignment) => {
+      if (uid && assignment.assignedUsers.some((person) => person.userId === uid)) {
+        return true;
+      }
+
+      if (assignment.category !== 'cleaning') {
+        return false;
+      }
+
+      if (cleaningGroupId) {
+        if (assignment.cleaningGroupId === cleaningGroupId) return true;
+        if (assignment.assignedUsers.some((person) => person.userId === cleaningGroupId)) {
+          return true;
+        }
+      }
+
+      if (normalizedGroupName.length > 0) {
+        if (assignment.cleaningGroupName?.trim().toLowerCase() === normalizedGroupName) {
+          return true;
+        }
+
+        return assignment.assignedUsers.some(
+          (person) => person.name.trim().toLowerCase() === normalizedGroupName
+        );
+      }
+
+      return false;
+    });
+  }, [allAssignments, cleaningGroupId, cleaningGroupName, uid]);
+
   const summary = useMemo(
-    () => summarizeAssignments(applyAssignmentFilters(allAssignments, summaryFilters)),
-    [allAssignments, summaryFilters]
+    () => summarizeAssignments(applyAssignmentFilters(userAssignments, summaryFilters)),
+    [summaryFilters, userAssignments]
   );
 
   const assignments = useMemo(
-    () => applyAssignmentFilters(allAssignments, filters),
-    [allAssignments, filters]
+    () => applyAssignmentFilters(userAssignments, filters),
+    [filters, userAssignments]
   );
 
   const onRefresh = useCallback(async () => {
@@ -135,7 +174,7 @@ export const useAssignments = ({
 
   return {
     assignments,
-    allAssignments,
+    allAssignments: userAssignments,
     summary: summary ?? EMPTY_SUMMARY,
     loading,
     refreshing,

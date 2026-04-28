@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppColors } from '@/src/styles';
 import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning-permission';
@@ -32,6 +32,7 @@ const DEFAULT_FORM: CleaningGroupFormValues = {
 /** Pantalla para crear un nuevo grupo de limpieza. */
 export function CreateCleaningGroupScreen() {
   const colors = useAppColors();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { congregationId, uid, loading: permLoading } = useCleaningPermission();
   const { refreshAll } = useCleaningCache();
@@ -109,6 +110,9 @@ export function CreateCleaningGroupScreen() {
     scroll: {
       flex: 1,
     },
+    scrollContent: {
+      paddingBottom: 12,
+    },
     keyboardContainer: {
       flex: 1,
     },
@@ -165,12 +169,21 @@ export function CreateCleaningGroupScreen() {
       color: colors.error,
       lineHeight: 18,
     },
+    footer: {
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: Math.max(insets.bottom, 12),
+      backgroundColor: colors.backgroundDark,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
     submitBtn: {
-      margin: 20,
+      minHeight: 52,
       borderRadius: 14,
       backgroundColor: colors.primary,
-      paddingVertical: 16,
+      paddingVertical: 14,
       alignItems: 'center',
+      justifyContent: 'center',
       shadowColor: colors.primary,
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.3,
@@ -183,7 +196,7 @@ export function CreateCleaningGroupScreen() {
     submitText: {
       fontSize: 16,
       fontWeight: '700',
-      color: '#fff',
+      color: colors.onPrimary,
     },
   });
 
@@ -210,6 +223,7 @@ export function CreateCleaningGroupScreen() {
 
       <ScrollView
         style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       >
@@ -261,19 +275,21 @@ export function CreateCleaningGroupScreen() {
       </ScrollView>
 
       {/* Botón crear */}
-      <TouchableOpacity
-        style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
-        onPress={handleSubmit}
-        disabled={submitting}
-        accessibilityRole="button"
-        accessibilityLabel="Crear grupo de limpieza"
-      >
-        {submitting ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <Text style={styles.submitText}>Crear grupo</Text>
-        )}
-      </TouchableOpacity>
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
+          onPress={handleSubmit}
+          disabled={submitting}
+          accessibilityRole="button"
+          accessibilityLabel="Crear grupo de limpieza"
+        >
+          {submitting ? (
+            <ActivityIndicator color={colors.onPrimary} size="small" />
+          ) : (
+            <Text style={styles.submitText}>Crear grupo</Text>
+          )}
+        </TouchableOpacity>
+      </View>
       </KeyboardAvoidingView>
 
       {/* Modal de integrantes */}

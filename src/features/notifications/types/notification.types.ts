@@ -17,10 +17,12 @@ export interface AppNotification {
   assignmentId: string;
   /** Campo canónico alineado con Firestore Security Rules y Cloud Functions. */
   isRead: boolean;
+  read: boolean;
   createdAt: Timestamp;
   sentBy?: string | null;
   metadata?: {
     date?: string | null;
+    meetingId?: string | null;
     meetingType?: NotificationMeetingType;
     role?: string | null;
   };

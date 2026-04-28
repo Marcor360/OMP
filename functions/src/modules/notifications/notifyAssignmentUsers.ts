@@ -152,6 +152,7 @@ const notifySingleUser = async (params: {
     sentBy: params.context.sentBy,
     metadata: {
       date: params.context.date,
+      meetingId: params.context.meetingId,
       meetingType: params.context.meetingType,
       role: params.role,
     },

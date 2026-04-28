@@ -233,7 +233,7 @@ export function DashboardScreen() {
         <View style={styles.summaryNotice}>
           <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
           <ThemedText style={styles.summaryNoticeText}>
-            Resumen precalculado no disponible. Mostrando datos del rango visible.
+            Resumen precalculado no disponible. Mostrando datos reales consultados.
           </ThemedText>
         </View>
       ) : null}

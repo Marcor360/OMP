@@ -22,10 +22,13 @@ import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
 import { useMeetingsManagementPermission } from '@/src/hooks/use-meetings-management-permission';
 import { setMeetingPublicationStatus } from '@/src/services/meetings/meeting-publish-service';
+import { syncMeetingCleaningAssignmentsByManager } from '@/src/services/meetings/manager-meetings-service';
 import {
   buildMeetingProgramFromMeeting,
   validateMeetingBeforePublish,
 } from '@/src/services/meetings/meeting-program-utils';
+import { getCleaningGroups } from '@/src/modules/cleaning/services/cleaning-service';
+import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types';
 import {
   WeekendMeetingSessionDraft,
   buildWeekendSectionsFromSessions,
@@ -47,6 +50,7 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   CreateMeetingDTO,
   Meeting,
+  MeetingCleaningAssignmentMode,
   MeetingStatus,
   MEETING_STATUS_LABELS,
   MEETING_TYPE_LABELS,
@@ -71,6 +75,7 @@ type Mode = 'create' | 'edit';
 type SaveIntent = 'draft' | 'published';
 type WeekendMeetingDay = 'saturday' | 'sunday';
 type MidweekMeetingDay = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday';
+type CleaningSelectionMode = MeetingCleaningAssignmentMode;
 
 interface MeetingFormErrors {
   title?: string;
@@ -361,6 +366,9 @@ export function MeetingFormScreen() {
       : [createEmptyWeekendMeetingSession(0)]
   );
   const [availableUsers, setAvailableUsers] = useState<ActiveCongregationUser[]>([]);
+  const [cleaningGroups, setCleaningGroups] = useState<CleaningGroup[]>([]);
+  const [cleaningSelectionMode, setCleaningSelectionMode] = useState<CleaningSelectionMode>('none');
+  const [selectedCleaningGroupIds, setSelectedCleaningGroupIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<MeetingFormErrors>({});
   const [publishErrors, setPublishErrors] = useState<string[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -381,11 +389,17 @@ export function MeetingFormScreen() {
         setLoading(mode === 'edit');
 
         const usersPromise = getActiveCongregationUsers(congregationId);
+        const cleaningGroupsPromise = getCleaningGroups(congregationId);
         const meetingPromise = mode === 'edit' && id ? getMeetingById(congregationId, id) : Promise.resolve(null);
-        const [users, meeting] = await Promise.all([usersPromise, meetingPromise]);
+        const [users, loadedCleaningGroups, meeting] = await Promise.all([
+          usersPromise,
+          cleaningGroupsPromise,
+          meetingPromise,
+        ]);
 
         if (cancelled) return;
         setAvailableUsers(users);
+        setCleaningGroups(loadedCleaningGroups.filter((group) => group.isActive));
 
         if (meeting && mode === 'edit') {
           setTitle(meeting.title);
@@ -410,6 +424,8 @@ export function MeetingFormScreen() {
           setLocation(meeting.location ?? '');
           setMeetingUrl(meeting.meetingUrl ?? '');
           setNotes(meeting.notes ?? '');
+          setCleaningSelectionMode(meeting.cleaningAssignmentMode ?? 'none');
+          setSelectedCleaningGroupIds(meeting.cleaningGroupIds ?? []);
           const normalizedSections = buildMeetingProgramFromMeeting(meeting);
           setSections(normalizedSections);
           setWeekendSessions(extractWeekendSessionsFromSections(normalizedSections));
@@ -438,6 +454,22 @@ export function MeetingFormScreen() {
     const defaults = createDefaultSectionsForMeetingType(meetingType);
     return defaults.filter((candidate) => !sections.some((current) => current.sectionKey === candidate.sectionKey));
   }, [meetingType, sections]);
+
+  const selectedCleaningGroups = useMemo(() => {
+    if (cleaningSelectionMode === 'none') return [];
+    if (cleaningSelectionMode === 'all') return cleaningGroups;
+
+    const selectedIds = new Set(selectedCleaningGroupIds);
+    return cleaningGroups.filter((group) => selectedIds.has(group.id));
+  }, [cleaningGroups, cleaningSelectionMode, selectedCleaningGroupIds]);
+
+  const toggleCleaningGroup = (groupId: string) => {
+    setSelectedCleaningGroupIds((current) =>
+      current.includes(groupId)
+        ? current.filter((item) => item !== groupId)
+        : [...current, groupId]
+    );
+  };
 
   const effectiveSections = useMemo<MeetingProgramSection[]>(() => {
     if (meetingType === 'weekend') {
@@ -652,6 +684,9 @@ export function MeetingFormScreen() {
       meetingUrl: normalizeUrl(meetingUrl),
       notes: normalizeText(notes),
       sections: effectiveSections,
+      cleaningAssignmentMode: cleaningSelectionMode,
+      cleaningGroupIds: selectedCleaningGroups.map((group) => group.id),
+      cleaningGroupNames: selectedCleaningGroups.map((group) => group.name),
       attendees: [actorUid],
       createdBy: actorUid,
       updatedBy: actorUid,
@@ -746,6 +781,16 @@ export function MeetingFormScreen() {
         setSaveError('No se pudo guardar la reunion. Revisa los campos e intenta nuevamente.');
         return;
       }
+
+      await syncMeetingCleaningAssignmentsByManager({
+        congregationId,
+        meetingId,
+        mode: cleaningSelectionMode,
+        groups: selectedCleaningGroups.map((group) => ({ id: group.id, name: group.name })),
+        meetingTitle: normalizeText(title) ?? DEFAULT_TITLE_BY_TYPE[meetingType],
+        meetingDate: Timestamp.fromDate(resolvedMeetingDate),
+        assignedByName: appUser?.displayName ?? user?.email ?? 'Usuario',
+      });
 
       if (intent === 'draft') {
         if (mode === 'edit') {
@@ -973,6 +1018,81 @@ export function MeetingFormScreen() {
               ))}
             </View>
           </Field>
+
+          <Field label="Grupo que toca limpieza">
+            <View style={styles.chips}>
+              {(['none', 'selected', 'all'] as const).map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.chip,
+                    cleaningSelectionMode === option && styles.chipActive,
+                  ]}
+                  onPress={() => setCleaningSelectionMode(option)}
+                  disabled={!canManage}
+                >
+                  <ThemedText
+                    style={[
+                      styles.chipText,
+                      cleaningSelectionMode === option && styles.chipTextActive,
+                    ]}
+                  >
+                    {option === 'none'
+                      ? 'Sin limpieza'
+                      : option === 'all'
+                        ? 'Limpieza general'
+                        : 'Elegir grupos'}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {cleaningGroups.length === 0 ? (
+              <ThemedText style={styles.weekHint}>
+                Crea grupos activos desde la pestana de Limpieza para poder asignarlos.
+              </ThemedText>
+            ) : null}
+
+            {cleaningSelectionMode === 'selected' ? (
+              <View style={styles.cleaningGroupGrid}>
+                {cleaningGroups.map((group) => {
+                  const isSelected = selectedCleaningGroupIds.includes(group.id);
+
+                  return (
+                    <TouchableOpacity
+                      key={group.id}
+                      style={[
+                        styles.cleaningGroupChip,
+                        isSelected && styles.cleaningGroupChipActive,
+                      ]}
+                      onPress={() => toggleCleaningGroup(group.id)}
+                      disabled={!canManage}
+                    >
+                      <Ionicons
+                        name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={16}
+                        color={isSelected ? colors.onPrimary : colors.textMuted}
+                      />
+                      <ThemedText
+                        style={[
+                          styles.cleaningGroupText,
+                          isSelected && styles.cleaningGroupTextActive,
+                        ]}
+                      >
+                        {group.name}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            {cleaningSelectionMode === 'all' && cleaningGroups.length > 0 ? (
+              <ThemedText style={styles.weekHint}>
+                Se avisara a todos los grupos activos de limpieza.
+              </ThemedText>
+            ) : null}
+          </Field>
         </View>
         <View style={styles.block}>
           <ThemedText style={styles.sectionTitle}>
@@ -1002,7 +1122,7 @@ export function MeetingFormScreen() {
                   };
                   setSections((current) => [...current, dynamicSection].map((section, index) => ({ ...section, order: index })));
                 }} disabled={!canManage}>
-                  <Ionicons name="add" size={14} color="#fff" />
+                  <Ionicons name="add" size={14} color={colors.onPrimary} />
                   <ThemedText style={styles.addButtonText}>Dinamica</ThemedText>
                 </TouchableOpacity>
               </View>
@@ -1103,7 +1223,7 @@ export function MeetingFormScreen() {
             {savingIntent === 'draft' ? <ActivityIndicator size="small" color={colors.primary} /> : <ThemedText style={styles.secondaryText}>Guardar borrador</ThemedText>}
           </TouchableOpacity>
           <TouchableOpacity style={[styles.primaryAction, Boolean(savingIntent) && styles.dim]} onPress={() => handleSave('published')} disabled={Boolean(savingIntent) || !canManage}>
-            {savingIntent === 'published' ? <ActivityIndicator size="small" color="#fff" /> : <ThemedText style={styles.primaryText}>Guardar y publicar</ThemedText>}
+            {savingIntent === 'published' ? <ActivityIndicator size="small" color={colors.onPrimary} /> : <ThemedText style={styles.primaryText}>Guardar y publicar</ThemedText>}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -1131,7 +1251,7 @@ const createStyles = (colors: AppColorSet) =>
     sectionTitle: { fontSize: 15, fontWeight: '800', color: colors.textSecondary },
     sectionHeaderRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
     addButton: { flexDirection: 'row', gap: 5, alignItems: 'center', backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
-    addButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+    addButtonText: { color: colors.onPrimary, fontSize: 12, fontWeight: '700' },
     field: { gap: 6 },
     label: { fontSize: 12, fontWeight: '700', color: colors.textMuted },
     input: { borderWidth: 1, borderColor: colors.border, borderRadius: 9, backgroundColor: colors.backgroundLight, color: colors.textPrimary, fontSize: 14, paddingHorizontal: 10, paddingVertical: 9 },
@@ -1175,7 +1295,12 @@ const createStyles = (colors: AppColorSet) =>
     chip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.surface },
     chipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
     chipText: { fontSize: 12, color: colors.textMuted, fontWeight: '700' },
-    chipTextActive: { color: '#fff' },
+    chipTextActive: { color: colors.onPrimary },
+    cleaningGroupGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    cleaningGroupChip: { minHeight: 34, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', gap: 6 },
+    cleaningGroupChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
+    cleaningGroupText: { fontSize: 12, color: colors.textPrimary, fontWeight: '700' },
+    cleaningGroupTextActive: { color: colors.onPrimary },
     sectionWrap: { gap: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 8, backgroundColor: colors.backgroundLight },
     sectionTopRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
     sectionInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surface, color: colors.textPrimary, fontWeight: '700', paddingHorizontal: 10, paddingVertical: 7, fontSize: 13 },
@@ -1190,6 +1315,6 @@ const createStyles = (colors: AppColorSet) =>
     secondaryAction: { flex: 1, borderWidth: 1, borderColor: colors.primary, borderRadius: 10, padding: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '12', minHeight: 44 },
     secondaryText: { color: colors.primary, fontWeight: '800', fontSize: 13 },
     primaryAction: { flex: 1, borderRadius: 10, padding: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, minHeight: 44 },
-    primaryText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+    primaryText: { color: colors.onPrimary, fontWeight: '800', fontSize: 13 },
     dim: { opacity: 0.55 },
   });

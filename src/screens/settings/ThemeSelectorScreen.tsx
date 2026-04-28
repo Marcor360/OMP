@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
@@ -20,7 +19,6 @@ const THEME_OPTIONS: {
 ];
 
 export function ThemeSelectorScreen() {
-  const router = useRouter();
   const { themeMode, setThemeMode } = useAppTheme();
   const { t } = useI18n();
   const colors = useAppColors();

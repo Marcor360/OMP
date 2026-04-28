@@ -18,6 +18,38 @@ import { AppNotification } from '@/src/features/notifications/types/notification
 
 const PAGE_LIMIT = 100;
 
+const startOfTodayMillis = (): number => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today.getTime();
+};
+
+const toDateMillis = (value: string | null | undefined): number | null => {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const isoDateOnly = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDateOnly) {
+    const parsed = new Date(`${trimmed}T00:00:00.000`).getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  const parsed = new Date(trimmed).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const isNotificationCurrent = (notification: AppNotification): boolean => {
+  const notificationDate = toDateMillis(notification.metadata?.date);
+
+  if (notificationDate === null) {
+    return true;
+  }
+
+  return notificationDate >= startOfTodayMillis();
+};
+
 const normalizeNotification = (
   id: string,
   raw: Record<string, unknown>
@@ -60,6 +92,7 @@ const normalizeNotification = (
     body: raw.body,
     assignmentId: raw.assignmentId,
     isRead,
+    read: isRead,
     createdAt: createdAt as AppNotification['createdAt'],
     sentBy: typeof raw.sentBy === 'string' ? raw.sentBy : null,
     metadata:
@@ -68,6 +101,10 @@ const normalizeNotification = (
             date:
               typeof (raw.metadata as Record<string, unknown>).date === 'string'
                 ? ((raw.metadata as Record<string, unknown>).date as string)
+                : null,
+            meetingId:
+              typeof (raw.metadata as Record<string, unknown>).meetingId === 'string'
+                ? ((raw.metadata as Record<string, unknown>).meetingId as string)
                 : null,
             meetingType:
               (raw.metadata as Record<string, unknown>).meetingType === 'midweek' ||
@@ -101,7 +138,8 @@ export const getUserNotifications = async (
 
   return snap.docs
     .map((docSnap) => normalizeNotification(docSnap.id, docSnap.data()))
-    .filter((item): item is AppNotification => item !== null);
+    .filter((item): item is AppNotification => item !== null)
+    .filter(isNotificationCurrent);
 };
 
 export const subscribeToUserNotifications = (
@@ -126,7 +164,8 @@ export const subscribeToUserNotifications = (
     (snap) => {
       const list = snap.docs
         .map((docSnap) => normalizeNotification(docSnap.id, docSnap.data()))
-        .filter((item): item is AppNotification => item !== null);
+        .filter((item): item is AppNotification => item !== null)
+        .filter(isNotificationCurrent);
 
       callback(list);
     },
@@ -154,7 +193,12 @@ export const subscribeToUnreadNotificationsCount = (
   return onSnapshot(
     q,
     (snap) => {
-      callback(snap.size);
+      const count = snap.docs
+        .map((docSnap) => normalizeNotification(docSnap.id, docSnap.data()))
+        .filter((item): item is AppNotification => item !== null)
+        .filter(isNotificationCurrent).length;
+
+      callback(count);
     },
     onError
   );

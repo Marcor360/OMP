@@ -171,13 +171,13 @@ export function MeetingsManagementScreen() {
 
             <View style={styles.actionBar}>
               <TouchableOpacity style={styles.createButton} onPress={() => router.push('/(protected)/meetings/create?type=weekend' as never)}>
-                <Ionicons name="add-outline" size={16} color="#fff" />
+                <Ionicons name="add-outline" size={16} color={colors.onPrimary} />
                 <ThemedText style={styles.createButtonText}>
                   {t('meetings.management.action.newWeekend')}
                 </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity style={styles.createButton} onPress={() => router.push('/(protected)/meetings/create?type=midweek' as never)}>
-                <Ionicons name="add-outline" size={16} color="#fff" />
+                <Ionicons name="add-outline" size={16} color={colors.onPrimary} />
                 <ThemedText style={styles.createButtonText}>
                   {t('meetings.management.action.newMidweek')}
                 </ThemedText>
@@ -269,14 +269,14 @@ const createStyles = (colors: AppColorSet) =>
     listContent: { paddingHorizontal: 14, paddingBottom: 28, gap: 10 },
     actionBar: { gap: 8, marginBottom: 10 },
     createButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12 },
-    createButtonText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+    createButtonText: { color: colors.onPrimary, fontWeight: '800', fontSize: 13 },
     secondaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.info + '66', backgroundColor: colors.infoLight, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12 },
     secondaryButtonText: { color: colors.infoDark, fontWeight: '700', fontSize: 13 },
     filtersRow: { flexDirection: 'row', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
     filterChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.surface },
     filterChipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
     filterChipText: { fontSize: 12, color: colors.textMuted, fontWeight: '700' },
-    filterChipTextActive: { color: '#fff' },
+    filterChipTextActive: { color: colors.onPrimary },
     meetingWrap: { gap: 8 },
     meetingActions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
     smallAction: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: colors.surface },

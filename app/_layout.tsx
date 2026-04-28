@@ -56,8 +56,6 @@ function RootLayoutNav() {
       setAppReady(true);
     }, 3000);
     return () => clearTimeout(timer);
-  // Solo depende de i18nReady para no reiniciar el timer en cada cambio de loading
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [i18nReady]);
 
   // Determinar si la app está lista para navegar

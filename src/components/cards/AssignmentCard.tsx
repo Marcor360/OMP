@@ -21,11 +21,30 @@ const priorityIcon: Record<string, keyof typeof Ionicons.glyphMap> = {
   critical: 'flash-outline',
 };
 
+const endOfWeek = (date: Date): Date => {
+  const result = new Date(date);
+  result.setHours(23, 59, 59, 999);
+
+  const day = result.getDay();
+  const daysUntilSunday = day === 0 ? 0 : 7 - day;
+  result.setDate(result.getDate() + daysUntilSunday);
+
+  return result;
+};
+
+const getOverdueDate = (assignment: Assignment): Date => {
+  const dueDate = assignment.dueDate.toDate();
+  return assignment.meetingId ? endOfWeek(dueDate) : dueDate;
+};
+
 export function AssignmentCard({ assignment, onPress }: AssignmentCardProps) {
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const overdue = isOverdue(assignment.dueDate) && assignment.status === 'pending';
+  const dateOverdue = isOverdue(getOverdueDate(assignment));
+  const effectiveStatus =
+    assignment.status === 'overdue' && !dateOverdue ? 'pending' : assignment.status;
+  const overdue = dateOverdue && effectiveStatus === 'pending';
 
   const handlePress = () => {
     if (onPress) onPress();
@@ -53,8 +72,8 @@ export function AssignmentCard({ assignment, onPress }: AssignmentCardProps) {
           <ThemedText style={styles.priority}>{ASSIGNMENT_PRIORITY_LABELS[assignment.priority]}</ThemedText>
           <View style={styles.spacer} />
           <StatusBadge
-            label={ASSIGNMENT_STATUS_LABELS[assignment.status]}
-            color={assignmentStatusColor[assignment.status]}
+            label={ASSIGNMENT_STATUS_LABELS[effectiveStatus]}
+            color={assignmentStatusColor[effectiveStatus]}
             size="sm"
           />
         </View>

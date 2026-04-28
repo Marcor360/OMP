@@ -9,14 +9,13 @@
  */
 
 import type {
-  CalendarCell,
   CalendarMonth,
   CalendarWeek,
   DayEntry,
+  FieldServiceStore,
   MonthSummary,
   WeekSummary,
 } from '@/src/modules/field-service/types/field-service.types';
-import type { FieldServiceStore } from '@/src/modules/field-service/types/field-service.types';
 import { toLocalDateString } from '@/src/modules/field-service/services/field-service-storage';
 
 // ─── Fecha local ──────────────────────────────────────────────────────────────

@@ -385,6 +385,7 @@ export const createAssignment = async (
   });
 
   clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
+  clearSessionCacheByPrefix(`query:assignments-panel/${congregationId}/`);
   return ref.id;
 };
 
@@ -441,6 +442,7 @@ export const updateAssignment = async (
     ...extra,
   });
   clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
+  clearSessionCacheByPrefix(`query:assignments-panel/${congregationId}/`);
 };
 
 /** Elimina una asignacion */
@@ -451,6 +453,7 @@ export const deleteAssignment = async (
 ): Promise<void> => {
   await deleteDoc(assignmentDocRef(congregationId, meetingId, assignmentId));
   clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
+  clearSessionCacheByPrefix(`query:assignments-panel/${congregationId}/`);
 };
 
 /** Cuenta asignaciones por estado */

@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppColors } from '@/src/styles';
 import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning-permission';
@@ -34,6 +34,7 @@ interface EditCleaningGroupScreenProps {
 /** Pantalla para editar nombre, descripción y estado de un grupo de limpieza. */
 export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProps) {
   const colors = useAppColors();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { congregationId, loading: permLoading } = useCleaningPermission();
   const { group, loading, error, refresh } = useCleaningGroupDetail(
@@ -120,6 +121,9 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
       color: colors.textPrimary,
     },
     scroll: { flex: 1 },
+    scrollContent: {
+      paddingBottom: 12,
+    },
     keyboardContainer: { flex: 1 },
     formContainer: {
       padding: 20,
@@ -148,12 +152,21 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
       color: colors.error,
       lineHeight: 18,
     },
+    footer: {
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: Math.max(insets.bottom, 12),
+      backgroundColor: colors.backgroundDark,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
     saveBtn: {
-      margin: 20,
+      minHeight: 52,
       borderRadius: 14,
       backgroundColor: colors.primary,
-      paddingVertical: 16,
+      paddingVertical: 14,
       alignItems: 'center',
+      justifyContent: 'center',
       shadowColor: colors.primary,
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.3,
@@ -164,7 +177,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
     saveText: {
       fontSize: 16,
       fontWeight: '700',
-      color: '#fff',
+      color: colors.onPrimary,
     },
   });
 
@@ -191,6 +204,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
 
       <ScrollView
         style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       >
@@ -212,19 +226,21 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
         </View>
       </ScrollView>
 
-      <TouchableOpacity
-        style={[styles.saveBtn, submitting && styles.saveBtnDisabled]}
-        onPress={handleSubmit}
-        disabled={submitting}
-        accessibilityRole="button"
-        accessibilityLabel="Guardar cambios"
-      >
-        {submitting ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <Text style={styles.saveText}>Guardar cambios</Text>
-        )}
-      </TouchableOpacity>
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={[styles.saveBtn, submitting && styles.saveBtnDisabled]}
+          onPress={handleSubmit}
+          disabled={submitting}
+          accessibilityRole="button"
+          accessibilityLabel="Guardar cambios"
+        >
+          {submitting ? (
+            <ActivityIndicator color={colors.onPrimary} size="small" />
+          ) : (
+            <Text style={styles.saveText}>Guardar cambios</Text>
+          )}
+        </TouchableOpacity>
+      </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

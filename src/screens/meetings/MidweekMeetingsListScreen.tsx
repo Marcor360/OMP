@@ -205,7 +205,7 @@ export function MidweekMeetingsListScreen() {
               onPress={() => router.push('/(protected)/meetings/create?type=midweek' as never)}
               activeOpacity={0.8}
             >
-              <Ionicons name="add" size={18} color="#fff" />
+              <Ionicons name="add" size={18} color={colors.onPrimary} />
               <ThemedText style={styles.addButtonText}>Nueva VyMC</ThemedText>
             </TouchableOpacity>
           </View>
@@ -314,7 +314,7 @@ const createStyles = (colors: AppColorSet) =>
       paddingVertical: 8,
       borderRadius: 8,
     },
-    addButtonText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+    addButtonText: { color: colors.onPrimary, fontWeight: '700', fontSize: 13 },
     importButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -409,7 +409,7 @@ const createStyles = (colors: AppColorSet) =>
       borderColor: colors.primary,
     },
     filterText: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
-    filterTextActive: { color: '#fff' },
+    filterTextActive: { color: colors.onPrimary },
     listContent: {
       paddingBottom: 32,
     },

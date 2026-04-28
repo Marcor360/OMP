@@ -5,10 +5,13 @@
 import { useEffect } from 'react';
 
 import {
+  clearDeliveredNotificationsAndBadge,
   configureNotificationHandler,
   getNotificationPermissionStatus,
   registerPushTokenForUser,
+  syncNativeUnreadNotifications,
 } from '@/src/services/notifications/notifications-service';
+import { subscribeToUnreadNotificationsCount } from '@/src/services/notifications/notificationService';
 import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 
 interface UseNotificationSetupOptions {
@@ -27,10 +30,12 @@ export function useNotificationSetup({ uid, isAuthenticated }: UseNotificationSe
     }
 
     if (!isAuthenticated || !uid) {
+      void clearDeliveredNotificationsAndBadge();
       return;
     }
 
     let cancelled = false;
+    let unsubscribeUnread = () => {};
 
     const tryRegisterIfPermissionGranted = async () => {
       const status = await getNotificationPermissionStatus();
@@ -42,9 +47,19 @@ export function useNotificationSetup({ uid, isAuthenticated }: UseNotificationSe
     };
 
     void tryRegisterIfPermissionGranted();
+    unsubscribeUnread = subscribeToUnreadNotificationsCount(
+      uid,
+      (unreadCount) => {
+        void syncNativeUnreadNotifications(unreadCount);
+      },
+      () => {
+        void syncNativeUnreadNotifications(0);
+      }
+    );
 
     return () => {
       cancelled = true;
+      unsubscribeUnread();
     };
   }, [isAuthenticated, uid]);
 }

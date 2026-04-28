@@ -50,7 +50,7 @@ const createStyles = (colors: AppColorSet) =>
       paddingHorizontal: 5,
     },
     badgeText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontSize: 10,
       fontWeight: '800',
     },

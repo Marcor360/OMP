@@ -656,7 +656,7 @@ export function UserFormScreen() {
           activeOpacity={0.8}
         >
           {saving ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.onPrimary} />
           ) : (
             <ThemedText style={styles.saveButtonText}>
               {mode === 'create' ? 'Crear usuario' : 'Guardar cambios'}
@@ -826,7 +826,7 @@ const createStyles = (colors: AppColorSet) =>
       color: colors.textMuted,
     },
     departmentChipTextActive: {
-      color: '#fff',
+      color: colors.onPrimary,
     },
     departmentChipTextDisabled: {
       color: colors.textDisabled,
@@ -850,7 +850,7 @@ const createStyles = (colors: AppColorSet) =>
       color: colors.textMuted,
     },
     roleChipTextActive: {
-      color: '#fff',
+      color: colors.onPrimary,
     },
     saveButton: {
       backgroundColor: colors.primary,
@@ -863,7 +863,7 @@ const createStyles = (colors: AppColorSet) =>
       opacity: 0.6,
     },
     saveButtonText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontWeight: '700',
       fontSize: 16,
     },

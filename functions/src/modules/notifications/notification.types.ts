@@ -5,6 +5,7 @@ export type MeetingType = 'midweek' | 'weekend' | null;
 
 export interface NotificationMetadata {
   date?: string | null;
+  meetingId?: string | null;
   meetingType?: MeetingType;
   role?: string | null;
 }
@@ -42,6 +43,7 @@ export interface ResolvedAssignmentUsers {
 
 export interface AssignmentNotificationContext {
   assignmentId: string;
+  meetingId: string | null;
   congregationId: string | null;
   category: NotificationCategory;
   meetingType: MeetingType;

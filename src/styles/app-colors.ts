@@ -4,6 +4,7 @@ import { BrandPalette } from '@/src/styles/palette';
 
 const light = {
   primary: BrandPalette.primaryBlue,
+  onPrimary: BrandPalette.white,
   primaryDark: '#1D4ED8',
   primaryLight: '#3B82F6',
 
@@ -62,6 +63,7 @@ const light = {
 
 const dark = {
   primary: '#60A5FA',
+  onPrimary: '#111827',
   primaryDark: BrandPalette.primaryBlue,
   primaryLight: '#93C5FD',
 
@@ -114,7 +116,7 @@ const dark = {
   overlay: 'rgba(0, 0, 0, 0.7)',
 
   tabActive: '#93C5FD',
-  tabInactive: '#6B7280',
+  tabInactive: '#94A3B8',
   tabBar: '#0F172A',
 } as const;
 
@@ -131,6 +133,6 @@ export function getAppColors(scheme: AppColorSchemeName): AppColors {
 }
 
 const currentScheme = Appearance.getColorScheme() ?? 'light';
-export const AppColors = getAppColors(currentScheme);
+export const CurrentAppColors = getAppColors(currentScheme);
 
 export type AppColor = keyof AppColors;

@@ -105,7 +105,7 @@ export function LanguageOnboardingScreen() {
           activeOpacity={0.8}
         >
           {saving ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.onPrimary} />
           ) : (
             <ThemedText style={styles.continueText}>
               {t('language.onboarding.continue')}
@@ -182,7 +182,7 @@ const createStyles = (colors: ReturnType<typeof useAppColors>) =>
       paddingHorizontal: 14,
     },
     continueText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontSize: 14,
       fontWeight: '800',
     },

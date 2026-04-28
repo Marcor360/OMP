@@ -8,6 +8,7 @@ import {
 
 export type MeetingStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type MeetingCategory = 'general' | 'midweek' | 'weekend';
+export type MeetingCleaningAssignmentMode = 'none' | 'selected' | 'all';
 export type MeetingType =
   | 'internal'
   | 'external'
@@ -40,6 +41,9 @@ export interface Meeting {
   attendees: string[];
   attendeeNames?: string[];
   assignedUserIds?: string[];
+  cleaningAssignmentMode?: MeetingCleaningAssignmentMode;
+  cleaningGroupIds?: string[];
+  cleaningGroupNames?: string[];
   searchableText?: string;
   notes?: string;
   openingSong?: string;
@@ -75,6 +79,9 @@ export interface CreateMeetingDTO {
   attendees: string[];
   attendeeNames?: string[];
   assignedUserIds?: string[];
+  cleaningAssignmentMode?: MeetingCleaningAssignmentMode;
+  cleaningGroupIds?: string[];
+  cleaningGroupNames?: string[];
   searchableText?: string;
   notes?: string;
   openingSong?: string;
@@ -108,6 +115,9 @@ export interface UpdateMeetingDTO {
   attendees?: string[];
   attendeeNames?: string[];
   assignedUserIds?: string[];
+  cleaningAssignmentMode?: MeetingCleaningAssignmentMode;
+  cleaningGroupIds?: string[];
+  cleaningGroupNames?: string[];
   searchableText?: string;
   notes?: string;
   openingSong?: string;

@@ -40,6 +40,16 @@ type DeleteMeetingByManagerPayload = {
   meetingId?: unknown;
 };
 
+type SyncMeetingCleaningAssignmentsPayload = {
+  congregationId?: unknown;
+  meetingId?: unknown;
+  mode?: unknown;
+  groups?: unknown;
+  meetingTitle?: unknown;
+  meetingDate?: unknown;
+  assignedByName?: unknown;
+};
+
 const normalizeText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -108,6 +118,29 @@ const toStringArray = (value: unknown): string[] => {
   return value
     .map((item) => normalizeText(item))
     .filter((item): item is string => Boolean(item));
+};
+
+const toCleaningMode = (value: unknown): 'none' | 'selected' | 'all' => {
+  if (value === 'selected' || value === 'all') return value;
+  return 'none';
+};
+
+const toCleaningGroups = (value: unknown): { id: string; name: string }[] => {
+  if (!Array.isArray(value)) return [];
+
+  const byId = new Map<string, { id: string; name: string }>();
+  value.forEach((item) => {
+    const record = asRecord(item);
+    const id = normalizeText(record?.id);
+    if (!id) return;
+
+    byId.set(id, {
+      id,
+      name: normalizeText(record?.name) ?? 'Grupo de limpieza',
+    });
+  });
+
+  return Array.from(byId.values());
 };
 
 const toTimestamp = (value: unknown): Timestamp | undefined => {
@@ -485,6 +518,9 @@ const buildMeetingWritePayload = (params: {
     chairman: normalizeText(params.meetingData.chairman),
     sections: toFirestoreSectionsPayload(sections),
     assignedUserIds,
+    cleaningAssignmentMode: toCleaningMode(params.meetingData.cleaningAssignmentMode),
+    cleaningGroupIds: toStringArray(params.meetingData.cleaningGroupIds),
+    cleaningGroupNames: toStringArray(params.meetingData.cleaningGroupNames),
     searchableText:
       normalizeText(params.meetingData.searchableText) ??
       buildMeetingSearchableText({
@@ -529,7 +565,8 @@ export const createMeetingByManager = onCall(
     const payload = request.data as CreateMeetingByManagerPayload;
     const congregationId = parseCongregationId(payload.congregationId);
     const meetingData = parseMeetingData(payload.meetingData);
-    const requester = await getRequesterProfile(request.auth.uid);
+    const requesterUid = request.auth.uid;
+    const requester = await getRequesterProfile(requesterUid);
 
     assertMeetingManager({ requester, congregationId });
     const meetingRange = toMeetingRangeFromData(meetingData);
@@ -612,6 +649,111 @@ export const updateMeetingByManager = onCall(
 
     await meetingRef.update(updatePayload);
 
+    return { ok: true };
+  }
+);
+
+export const syncMeetingCleaningAssignmentsByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<{ ok: true }> => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const payload = request.data as SyncMeetingCleaningAssignmentsPayload;
+    const congregationId = parseCongregationId(payload.congregationId);
+    const meetingId = parseMeetingId(payload.meetingId);
+    const requesterUid = request.auth.uid;
+    const requester = await getRequesterProfile(requesterUid);
+
+    assertMeetingManager({ requester, congregationId });
+
+    const meetingRef = adminDb
+      .collection('congregations')
+      .doc(congregationId)
+      .collection('meetings')
+      .doc(meetingId);
+    const meetingSnap = await meetingRef.get();
+    if (!meetingSnap.exists) {
+      throw new HttpsError('not-found', 'Reunion no encontrada.');
+    }
+
+    const mode = toCleaningMode(payload.mode);
+    const groups = mode === 'none' ? [] : toCleaningGroups(payload.groups);
+    const meetingData = (meetingSnap.data() ?? {}) as Record<string, unknown>;
+    const meetingDate = toTimestamp(payload.meetingDate) ?? resolveMeetingDate(meetingData);
+    const meetingTitle =
+      normalizeText(payload.meetingTitle) ??
+      normalizeText(meetingData.title) ??
+      'Reunion';
+    const assignedByName =
+      normalizeText(payload.assignedByName) ??
+      requester.displayName ??
+      requester.email ??
+      'Usuario';
+
+    const assignmentsRef = meetingRef.collection('assignments');
+    const existingSnap = await assignmentsRef
+      .where('source', '==', 'meeting-cleaning')
+      .get();
+    const existingIds = new Set(existingSnap.docs.map((doc) => doc.id));
+    const targetIds = new Set(groups.map((group) => `cleaning-${group.id}`));
+    const batch = adminDb.batch();
+
+    existingSnap.docs.forEach((docSnap) => {
+      if (!targetIds.has(docSnap.id)) {
+        batch.delete(docSnap.ref);
+      }
+    });
+
+    groups.forEach((group) => {
+      const assignmentId = `cleaning-${group.id}`;
+      const ref = assignmentsRef.doc(assignmentId);
+      const isExisting = existingIds.has(assignmentId);
+
+      batch.set(
+        ref,
+        sanitizeForFirestore({
+          congregationId,
+          meetingId,
+          source: 'meeting-cleaning',
+          category: 'cleaning',
+          type: 'cleaning',
+          title: mode === 'all' ? `Limpieza general - ${group.name}` : `Limpieza - ${group.name}`,
+          description: meetingTitle,
+          notes: meetingTitle,
+          priority: 'medium',
+          cleaningGroupId: group.id,
+          cleaningGroupName: group.name,
+          assignedToUid: group.id,
+          assignedToName: group.name,
+          assignedByUid: requesterUid,
+          assignedByName,
+          createdBy: requesterUid,
+          updatedBy: requesterUid,
+          dueDate: meetingDate,
+          date: meetingDate,
+          status: 'pending',
+          assignedUsers: [],
+          ...(isExisting ? {} : { createdAt: FieldValue.serverTimestamp() }),
+          updatedAt: FieldValue.serverTimestamp(),
+        }) as Record<string, unknown>,
+        { merge: true }
+      );
+    });
+
+    batch.update(
+      meetingRef,
+      sanitizeForFirestore({
+        cleaningAssignmentMode: mode,
+        cleaningGroupIds: groups.map((group) => group.id),
+        cleaningGroupNames: groups.map((group) => group.name),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: requesterUid,
+      }) as Record<string, unknown>
+    );
+
+    await batch.commit();
     return { ok: true };
   }
 );

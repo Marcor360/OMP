@@ -389,7 +389,7 @@ export function FieldServiceDayModal({
                   onPress={handleSave}
                   accessibilityLabel="Guardar horas"
                 >
-                  <Ionicons name="checkmark" size={18} color="#fff" />
+                  <Ionicons name="checkmark" size={18} color={colors.onPrimary} />
                   <Text style={styles.saveBtnText}>
                     {!hasExisting
                       ? 'Guardar'
@@ -606,7 +606,7 @@ const createStyles = (colors: ReturnType<typeof useAppColors>) =>
       borderRadius: 12,
     },
     saveBtnText: {
-      color: '#fff',
+      color: colors.onPrimary,
       fontSize: 15,
       fontWeight: '700',
     },
