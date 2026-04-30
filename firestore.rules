@@ -261,6 +261,107 @@ service cloud.firestore {
         && sameKeysOnUpdate(['notificationTokens', 'pushTokenUpdatedAt', 'updatedAt', 'uid']);
     }
 
+    function isValidEventType(type) {
+      return type in [
+        'conmemoracion',
+        'asamblea_circuito',
+        'asamblea_regional',
+        'visita_superintendente',
+        'reunion_especial',
+        'capacitacion'
+      ];
+    }
+
+    function validEventData(data) {
+      return hasOnlyKeys(data, [
+          'congregationId',
+          'type',
+          'title',
+          'superintendentName',
+          'superintendentWifeName',
+          'startDate',
+          'endDate',
+          'deleteAt',
+          'location',
+          'color',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == myCongregationId()
+        && isValidEventType(data.type)
+        && data.startDate is timestamp
+        && data.endDate is timestamp
+        && data.deleteAt is timestamp
+        && data.color is string
+        && data.createdBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (
+          !('updatedBy' in data)
+          || data.updatedBy is string
+        )
+        && (
+          !('location' in data)
+          || data.location is string
+        )
+        && (
+          !('superintendentWifeName' in data)
+          || data.superintendentWifeName is string
+        )
+        && (
+          data.type == 'visita_superintendente'
+          ? (
+            isNonEmptyString(data.superintendentName)
+            && !('title' in data)
+          )
+          : (
+            isNonEmptyString(data.title)
+            && !('superintendentName' in data)
+            && !('superintendentWifeName' in data)
+          )
+        );
+    }
+
+    function validEventCreate() {
+      return isAdminOrSupervisor()
+        && validEventData(request.resource.data)
+        && request.resource.data.createdBy == currentUid();
+    }
+
+    function validEventUpdate() {
+      return isAdminOrSupervisor()
+        && resource.data.congregationId == myCongregationId()
+        && validEventData(request.resource.data)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function validExpoPushTokenDoc(userId) {
+      return isSameUser(userId)
+        && isActive()
+        && hasOnlyKeys(request.resource.data, [
+          'token',
+          'userId',
+          'congregationId',
+          'platform',
+          'deviceName',
+          'isActive',
+          'updatedAt'
+        ])
+        && isNonEmptyString(request.resource.data.token)
+        && request.resource.data.userId == userId
+        && request.resource.data.congregationId == currentUserData().congregationId
+        && request.resource.data.platform in ['ios', 'android']
+        && (
+          request.resource.data.deviceName == null
+          || request.resource.data.deviceName is string
+        )
+        && request.resource.data.isActive is bool
+        && request.resource.data.updatedAt is timestamp;
+    }
+
     function validCleaningMembershipUserUpdate() {
       return isCleaningManager()
         && storedDocInMyCongregation()
@@ -624,6 +725,15 @@ service cloud.firestore {
     // REGLAS: USERS
     // =========================================================================
 
+    match /events/{eventId} {
+      allow get, list: if isActive()
+        && resource.data.congregationId == myCongregationId();
+      allow create: if validEventCreate();
+      allow update: if validEventUpdate();
+      allow delete: if isAdminOrSupervisor()
+        && resource.data.congregationId == myCongregationId();
+    }
+
     match /users/{userId} {
       allow get: if isSameUser(userId)
         || (isCleaningManager() && storedDocInMyCongregation());
@@ -655,6 +765,12 @@ service cloud.firestore {
         );
 
       allow delete: if isAdmin() && storedDocInMyCongregation();
+
+      match /pushTokens/{tokenDocId} {
+        allow get, list: if isSameUser(userId);
+        allow create, update: if validExpoPushTokenDoc(userId);
+        allow delete: if isSameUser(userId);
+      }
     }
 
     // =========================================================================

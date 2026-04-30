@@ -15,6 +15,14 @@ import { useNotifications } from '@/src/hooks/useNotifications';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
 const resolveAssignmentHref = (notification: AppNotification) => {
+  if (notification.type === 'event') {
+    return (notification.data?.url ?? '/(protected)/(tabs)') as never;
+  }
+
+  if (!notification.assignmentId) {
+    return '/(protected)/(tabs)' as never;
+  }
+
   const [meetingIdFromAssignment, assignmentKey] = notification.assignmentId.split(':');
   const meetingId =
     notification.metadata?.meetingId ??

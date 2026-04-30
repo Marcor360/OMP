@@ -1,12 +1,27 @@
 import { Stack } from 'expo-router';
 import { UserProvider } from '@/src/context/user-context';
+import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
 import { useI18n } from '@/src/i18n/index';
+import { useUser } from '@/src/context/user-context';
+
+function ProtectedNotificationSetup() {
+  const { uid, congregationId, isSessionValid } = useUser();
+
+  useNotificationSetup({
+    uid,
+    congregationId,
+    isAuthenticated: isSessionValid,
+  });
+
+  return null;
+}
 
 export default function ProtectedLayout() {
   const { t } = useI18n();
 
   return (
     <UserProvider>
+      <ProtectedNotificationSetup />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="users/[id]" options={{ headerShown: false }} />
@@ -22,6 +37,8 @@ export default function ProtectedLayout() {
         <Stack.Screen name="assignments/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/create" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/edit/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="events/create" options={{ headerShown: false }} />
+        <Stack.Screen name="events/edit/[id]" options={{ headerShown: false }} />
         {/* Módulo de limpieza */}
         <Stack.Screen name="cleaning/index" options={{ headerShown: false }} />
         <Stack.Screen name="cleaning/create" options={{ headerShown: false }} />

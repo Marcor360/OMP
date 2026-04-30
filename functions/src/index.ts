@@ -8,8 +8,6 @@ export {
   deleteUserByAdmin,
 } from './users.js';
 
-export { importMidweekMeetingsFromPdf } from "./midweek-import.js";
-
 export {
   deleteAuthUserOnProfileDelete,
   deleteUserProfileOnAuthDelete,
@@ -20,6 +18,10 @@ export {
   notifyCongregationAssignmentUsers,
   notifyMeetingAssignmentUsers,
 } from './modules/notifications/notifyAssignmentUsers.js';
+
+export {
+  sendExpoPushOnNotificationCreated,
+} from './modules/notifications/sendExpoPushOnNotificationCreated.js';
 
 export { setMeetingPublicationStatus } from './meetings-publication.js';
 export {
@@ -33,6 +35,14 @@ export {
   notifyMeetingPublicationAndChanges,
   sendMeetingReminderThreeDaysBefore,
 } from './meetings-notifications.js';
+
+export {
+  createEventByManager,
+  updateEventByManager,
+  deleteEventByManager,
+  notifyEventChanges,
+  scheduledEventsCleanup,
+} from './events.js';
 
 export {
   scheduledDataCleanup,

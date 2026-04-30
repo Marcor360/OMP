@@ -63,7 +63,7 @@ const light = {
 
 const dark = {
   primary: '#60A5FA',
-  onPrimary: '#111827',
+  onPrimary: BrandPalette.white,
   primaryDark: BrandPalette.primaryBlue,
   primaryLight: '#93C5FD',
 

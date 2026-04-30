@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 
+import { AssignmentCardEditorErrors } from '@/src/components/meetings/midweek/AssignmentCardEditor';
 import { MidweekSectionEditor } from '@/src/components/meetings/midweek/MidweekSectionEditor';
 import { WeekendSessionsEditor } from '@/src/components/meetings/weekend/WeekendSessionsEditor';
 import { LoadingState } from '@/src/components/common/LoadingState';
@@ -295,7 +296,7 @@ const editorSectionToProgramSection = (
 
   return {
     sectionKey: currentSection.sectionKey,
-    title: normalizeText(editorSection.title) ?? currentSection.title,
+    title: editorSection.title,
     order: currentSection.order,
     sectionType: currentSection.sectionType,
     isRequired: currentSection.isRequired,
@@ -310,7 +311,7 @@ const editorSectionToProgramSection = (
       return {
         assignmentKey: assignment.id,
         sectionKey: currentSection.sectionKey,
-        title: normalizeText(assignment.title) ?? `Parte ${index + 1}`,
+        title: assignment.title,
         roleLabel: normalizeText(assignment.theme ?? ''),
         assignmentScope: assignment.assignmentScope ?? 'internal',
         assignees: participants.map((participant) =>
@@ -370,6 +371,9 @@ export function MeetingFormScreen() {
   const [cleaningSelectionMode, setCleaningSelectionMode] = useState<CleaningSelectionMode>('none');
   const [selectedCleaningGroupIds, setSelectedCleaningGroupIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<MeetingFormErrors>({});
+  const [midweekAssignmentErrors, setMidweekAssignmentErrors] = useState<
+    Record<string, AssignmentCardEditorErrors>
+  >({});
   const [publishErrors, setPublishErrors] = useState<string[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [loading, setLoading] = useState(mode === 'edit');
@@ -664,6 +668,34 @@ export function MeetingFormScreen() {
     return Array.from(new Set(errorsBuffer));
   };
 
+  const validateMidweekAssignmentTitles = (): string[] => {
+    const errorsBuffer: string[] = [];
+    const nextAssignmentErrors: Record<string, AssignmentCardEditorErrors> = {};
+
+    sections.forEach((section) => {
+      if (section.isEnabled === false) {
+        return;
+      }
+
+      section.assignments.forEach((assignment, assignmentIndex) => {
+        if (normalizeText(assignment.title)) {
+          return;
+        }
+
+        nextAssignmentErrors[assignment.assignmentKey] = {
+          ...nextAssignmentErrors[assignment.assignmentKey],
+          title: 'El titulo de la parte es obligatorio.',
+        };
+        errorsBuffer.push(
+          `${section.title || 'Seccion sin titulo'} - Parte ${assignmentIndex + 1}: falta el titulo.`
+        );
+      });
+    });
+
+    setMidweekAssignmentErrors(nextAssignmentErrors);
+    return Array.from(new Set(errorsBuffer));
+  };
+
   const buildPayload = (startDate: Date, endDate: Date, actorUid: string): CreateMeetingDTO => {
     const startTimestamp = Timestamp.fromDate(startDate);
     const endTimestamp = Timestamp.fromDate(endDate);
@@ -709,6 +741,17 @@ export function MeetingFormScreen() {
     if (!actorUid) {
       Alert.alert('Error', 'Tu sesion no tiene un UID valido para guardar. Cierra sesion e inicia nuevamente.');
       return null;
+    }
+
+    if (meetingType === 'midweek') {
+      const titleErrors = validateMidweekAssignmentTitles();
+      if (titleErrors.length > 0) {
+        setPublishErrors(titleErrors);
+        Alert.alert('Validacion', titleErrors.join('\n'));
+        return null;
+      }
+    } else {
+      setMidweekAssignmentErrors({});
     }
 
     const payload = buildPayload(validation.startDate, validation.endDate, actorUid);
@@ -1178,11 +1221,32 @@ export function MeetingFormScreen() {
                       section={editorSection}
                       users={availableUsers}
                       disabled={!canManage || section.isEnabled === false}
-                      onChange={(nextEditorSection) =>
+                      errors={midweekAssignmentErrors}
+                      onChange={(nextEditorSection) => {
+                        setMidweekAssignmentErrors((current) => {
+                          let changed = false;
+                          const nextErrors = { ...current };
+
+                          nextEditorSection.items.forEach((assignment) => {
+                            if (normalizeText(assignment.title) && nextErrors[assignment.id]?.title) {
+                              const rest = { ...nextErrors[assignment.id] };
+                              delete rest.title;
+                              changed = true;
+                              if (Object.keys(rest).length > 0) {
+                                nextErrors[assignment.id] = rest;
+                              } else {
+                                delete nextErrors[assignment.id];
+                              }
+                            }
+                          });
+
+                          return changed ? nextErrors : current;
+                        });
+
                         updateSection(section.sectionKey, (currentSection) =>
                           editorSectionToProgramSection(nextEditorSection, currentSection)
-                        )
-                      }
+                        );
+                      }}
                     />
                   </View>
                 );

@@ -11,7 +11,6 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
 
 import { AssignmentCardEditorErrors } from '@/src/components/meetings/midweek/AssignmentCardEditor';
 import { MidweekSectionEditor } from '@/src/components/meetings/midweek/MidweekSectionEditor';
@@ -29,7 +28,6 @@ import {
   getMidweekMeetingById,
   updateMidweekMeeting,
 } from '@/src/services/meetings/midweek-meetings-service';
-import { importMidweekMeetingsFromPdf } from '@/src/services/meetings/midweek-import-service';
 import {
   ActiveCongregationUser,
   getActiveCongregationUsers,
@@ -42,7 +40,6 @@ import {
   normalizeSectionOrder,
 } from '@/src/types/midweek-meeting';
 import { MeetingStatus, MEETING_STATUS_LABELS } from '@/src/types/meeting';
-import { readDocumentPickerAssetAsBase64 } from '@/src/utils/files/document-picker';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
@@ -194,7 +191,6 @@ export function MidweekMeetingFormScreen() {
   const [errors, setErrors] = useState<MidweekMeetingFormErrors>({ assignments: {} });
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
-  const [importingPdf, setImportingPdf] = useState(false);
 
   useEffect(() => {
     if (loadingProfile) return;
@@ -385,59 +381,6 @@ export function MidweekMeetingFormScreen() {
     });
   };
 
-  const handleImportPdf = async () => {
-    if (!congregationId || !canEdit) return;
-
-    try {
-      const selection = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf'],
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-
-      if (selection.canceled || !selection.assets?.[0]) {
-        return;
-      }
-
-      const pickedAsset = selection.assets[0];
-      const base64Content = await readDocumentPickerAssetAsBase64(pickedAsset, {
-        processKey: 'midweek-meetings',
-      });
-
-      if (!base64Content || base64Content.trim().length === 0) {
-        Alert.alert('Error', 'No se pudo leer el contenido del PDF seleccionado.');
-        return;
-      }
-
-      setImportingPdf(true);
-
-      const imported = await importMidweekMeetingsFromPdf({
-        congregationId,
-        pdfBase64: base64Content,
-        fileName: pickedAsset.name,
-      });
-
-      const importedWeeks =
-        imported.importedWeekLabels.length > 0
-          ? `\n\nSemanas detectadas:\n- ${imported.importedWeekLabels.join('\n- ')}`
-          : '';
-
-      Alert.alert(
-        'Importacion completada',
-        `Semanas procesadas: ${imported.totalWeeks}\n` +
-          `Creadas: ${imported.createdCount}\n` +
-          `Actualizadas: ${imported.updatedCount}` +
-          importedWeeks
-      );
-
-      router.replace('/(protected)/meetings/midweek' as never);
-    } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
-    } finally {
-      setImportingPdf(false);
-    }
-  };
-
   const handleSave = async () => {
     if (!isAdminOrSupervisor) {
       Alert.alert('Permisos insuficientes', 'No tienes permisos para guardar reuniones entre semana.');
@@ -533,31 +476,6 @@ export function MidweekMeetingFormScreen() {
             <ThemedText style={styles.permissionText}>
               No tienes permisos para crear o editar reuniones de entre semana.
             </ThemedText>
-          </View>
-        ) : null}
-
-        {canEdit ? (
-          <View style={styles.importBox}>
-            <View style={styles.importTextWrap}>
-              <ThemedText style={styles.importTitle}>Importar desde PDF (opcional)</ThemedText>
-              <ThemedText style={styles.importDescription}>
-                Carga el PDF de la semana para crear o actualizar reuniones automaticamente en estado pendiente.
-              </ThemedText>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.importButton, importingPdf && styles.disabled]}
-              onPress={handleImportPdf}
-              disabled={importingPdf}
-              activeOpacity={0.8}
-            >
-              {importingPdf ? (
-                <ActivityIndicator size="small" color={colors.onPrimary} />
-              ) : (
-                <Ionicons name="document-attach-outline" size={16} color={colors.onPrimary} />
-              )}
-              <ThemedText style={styles.importButtonText}>Cargar PDF</ThemedText>
-            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -938,41 +856,6 @@ const createStyles = (colors: AppColorSet) =>
       borderRadius: 12,
       backgroundColor: colors.surface,
       padding: 12,
-    },
-    importBox: {
-      gap: 10,
-      borderWidth: 1,
-      borderColor: colors.info + '55',
-      borderRadius: 12,
-      backgroundColor: colors.infoLight,
-      padding: 12,
-    },
-    importTextWrap: {
-      gap: 4,
-    },
-    importTitle: {
-      fontSize: 14,
-      fontWeight: '800',
-      color: colors.infoDark,
-    },
-    importDescription: {
-      fontSize: 12,
-      color: colors.infoDark,
-    },
-    importButton: {
-      alignSelf: 'flex-start',
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      backgroundColor: colors.info,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 9,
-    },
-    importButtonText: {
-      color: colors.onPrimary,
-      fontWeight: '700',
-      fontSize: 13,
     },
     sectionTitle: {
       fontSize: 16,

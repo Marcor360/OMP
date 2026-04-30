@@ -11,6 +11,21 @@ const USERS_COLLECTION = 'users';
 const CLEANING_GROUPS_COLLECTION = 'cleaningGroups';
 const CLEANING_GROUPS_LEGACY_COLLECTION = 'cleaning_groups';
 const NOTIFICATIONS_COLLECTION = 'notifications';
+const CONGREGATIONS_COLLECTION = 'congregations';
+
+const resolveNotificationUrl = (assignmentId: string, metadata: NotificationMetadata): string => {
+  const [meetingIdFromAssignment, assignmentKey] = assignmentId.split(':');
+  const meetingId = metadata.meetingId ?? (meetingIdFromAssignment && assignmentKey ? meetingIdFromAssignment : null);
+  const resolvedAssignmentId = assignmentKey ?? assignmentId;
+
+  if (meetingId) {
+    return `/(protected)/assignments/${encodeURIComponent(resolvedAssignmentId)}?source=meeting&meetingId=${encodeURIComponent(
+      meetingId
+    )}`;
+  }
+
+  return `/(protected)/assignments/${encodeURIComponent(assignmentId)}`;
+};
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
@@ -174,7 +189,35 @@ export const createInternalNotification = async (params: {
     metadata: params.metadata,
   };
 
-  await adminDb.collection(NOTIFICATIONS_COLLECTION).doc(params.notificationId).set(payload);
+  const batch = adminDb.batch();
+
+  batch.set(adminDb.collection(NOTIFICATIONS_COLLECTION).doc(params.notificationId), payload);
+
+  if (params.congregationId) {
+    batch.set(
+      adminDb
+        .collection(CONGREGATIONS_COLLECTION)
+        .doc(params.congregationId)
+        .collection(NOTIFICATIONS_COLLECTION)
+        .doc(params.notificationId),
+      {
+        notificationId: params.notificationId,
+        congregationId: params.congregationId,
+        userIds: [params.userId],
+        title: params.title,
+        body: params.body,
+        type: 'assignment',
+        category: params.category,
+        assignmentId: params.assignmentId,
+        data: {
+          url: resolveNotificationUrl(params.assignmentId, params.metadata),
+        },
+        createdAt: FieldValue.serverTimestamp(),
+      }
+    );
+  }
+
+  await batch.commit();
 };
 
 export const removeInvalidTokens = async (

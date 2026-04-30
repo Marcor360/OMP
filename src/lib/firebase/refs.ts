@@ -4,9 +4,15 @@ import { db } from '@/src/lib/firebase/app';
 
 export const usersCollectionRef = () => collection(db, 'users');
 export const userDocRef = (uid: string) => doc(db, 'users', uid);
+export const userPushTokensCollectionRef = (uid: string) =>
+  collection(db, 'users', uid, 'pushTokens');
+export const userPushTokenDocRef = (uid: string, tokenDocId: string) =>
+  doc(db, 'users', uid, 'pushTokens', tokenDocId);
 export const notificationsCollectionRef = () => collection(db, 'notifications');
 export const notificationDocRef = (notificationId: string) =>
   doc(db, 'notifications', notificationId);
+export const eventsCollectionRef = () => collection(db, 'events');
+export const eventDocRef = (eventId: string) => doc(db, 'events', eventId);
 
 export const congregationsCollectionRef = () => collection(db, 'congregations');
 export const congregationDocRef = (congregationId: string) => doc(db, 'congregations', congregationId);

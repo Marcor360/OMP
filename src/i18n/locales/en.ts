@@ -101,7 +101,6 @@ export const en = {
   'meetings.management.noCongregation': 'The current profile congregation was not found.',
   'meetings.management.action.newWeekend': 'New weekend',
   'meetings.management.action.newMidweek': 'New Midweek',
-  'meetings.management.action.importMidweekPdf': 'Import Midweek PDF',
   'meetings.management.filter.all': 'All',
   'meetings.management.filter.draft': 'Draft',
   'meetings.management.filter.published': 'Published',

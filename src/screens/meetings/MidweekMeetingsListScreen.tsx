@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
   FlatList,
   StyleSheet,
   TouchableOpacity,
@@ -9,7 +7,6 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
 
 import { MidweekMeetingCard } from '@/src/components/cards/MidweekMeetingCard';
 import { EmptyState } from '@/src/components/common/EmptyState';
@@ -20,14 +17,12 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useMeetingsManagementPermission } from '@/src/hooks/use-meetings-management-permission';
-import { importMidweekMeetingsFromPdf } from '@/src/services/meetings/midweek-import-service';
 import {
   MidweekMeeting,
   getMidweekMeetingsByWeek,
 } from '@/src/services/meetings/midweek-meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { MeetingStatus, MEETING_STATUS_LABELS } from '@/src/types/meeting';
-import { readDocumentPickerAssetAsBase64 } from '@/src/utils/files/document-picker';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { formatWeekLabel, getWeekEnd, getWeekStart, moveWeek } from '@/src/utils/dates/week-range';
 
@@ -50,7 +45,6 @@ export function MidweekMeetingsListScreen() {
   const [filter, setFilter] = useState<MeetingStatus | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()));
   const weekEnd = useMemo(() => getWeekEnd(weekStart), [weekStart]);
@@ -114,59 +108,6 @@ export function MidweekMeetingsListScreen() {
     setWeekStart(getWeekStart(new Date()));
   };
 
-  const handleImportPdf = async () => {
-    if (!congregationId) return;
-
-    try {
-      const selection = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf'],
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-
-      if (selection.canceled || !selection.assets?.[0]) {
-        return;
-      }
-
-      const pickedAsset = selection.assets[0];
-      const base64Content = await readDocumentPickerAssetAsBase64(pickedAsset, {
-        processKey: 'midweek-meetings',
-      });
-
-      if (!base64Content || base64Content.trim().length === 0) {
-        Alert.alert('Error', 'No se pudo leer el contenido del PDF seleccionado.');
-        return;
-      }
-
-      setImporting(true);
-
-      const imported = await importMidweekMeetingsFromPdf({
-        congregationId,
-        pdfBase64: base64Content,
-        fileName: pickedAsset.name,
-      });
-
-      const importedWeeks =
-        imported.importedWeekLabels.length > 0
-          ? `\n\nSemanas detectadas:\n- ${imported.importedWeekLabels.join('\n- ')}`
-          : '';
-
-      Alert.alert(
-        'Importacion completada',
-        `Semanas procesadas: ${imported.totalWeeks}\n` +
-          `Creadas: ${imported.createdCount}\n` +
-          `Actualizadas: ${imported.updatedCount}` +
-          importedWeeks
-      );
-
-      await onRefresh();
-    } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
-    } finally {
-      setImporting(false);
-    }
-  };
-
   if (loading || permLoading) {
     return <LoadingState message="Cargando reuniones entre semana..." />;
   }
@@ -186,20 +127,6 @@ export function MidweekMeetingsListScreen() {
 
         <RoleGuard allowedRoles={['admin', 'supervisor']}>
           <View style={styles.toolbarActions}>
-            <TouchableOpacity
-              style={[styles.importButton, importing && styles.buttonDisabled]}
-              onPress={handleImportPdf}
-              activeOpacity={0.8}
-              disabled={importing}
-            >
-              {importing ? (
-                <ActivityIndicator size="small" color={colors.infoDark} />
-              ) : (
-                <Ionicons name="document-attach-outline" size={16} color={colors.infoDark} />
-              )}
-              <ThemedText style={styles.importButtonText}>Importar PDF</ThemedText>
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => router.push('/(protected)/meetings/create?type=midweek' as never)}
@@ -226,12 +153,6 @@ export function MidweekMeetingsListScreen() {
           <ThemedText style={styles.weekNavButtonText}>Siguiente</ThemedText>
           <Ionicons name="chevron-forward-outline" size={16} color={colors.textMuted} />
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.importHintWrap}>
-        <ThemedText style={styles.importHint}>
-          Importar PDF es opcional. Tambien puedes crear reuniones manualmente.
-        </ThemedText>
       </View>
 
       <View style={styles.filterRow}>
@@ -315,36 +236,6 @@ const createStyles = (colors: AppColorSet) =>
       borderRadius: 8,
     },
     addButtonText: { color: colors.onPrimary, fontWeight: '700', fontSize: 13 },
-    importButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      backgroundColor: colors.infoLight,
-      borderWidth: 1,
-      borderColor: colors.info + '55',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 8,
-      minWidth: 120,
-      justifyContent: 'center',
-    },
-    buttonDisabled: {
-      opacity: 0.7,
-    },
-    importButtonText: {
-      color: colors.infoDark,
-      fontWeight: '700',
-      fontSize: 12,
-    },
-    importHintWrap: {
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      paddingBottom: 4,
-    },
-    importHint: {
-      fontSize: 12,
-      color: colors.textMuted,
-    },
     weekNavRow: {
       flexDirection: 'row',
       alignItems: 'center',

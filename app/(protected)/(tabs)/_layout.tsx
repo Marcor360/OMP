@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FirstLoginWelcomeModal } from '@/src/components/common/FirstLoginWelcomeModal';
@@ -13,9 +14,13 @@ export default function TabsLayout() {
   const { t } = useI18n();
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const visible = getVisibleTabs(role, servicePosition, serviceDepartment);
   const bottomInset = Math.max(insets.bottom, 10);
-  const tabBarHeight = 56 + bottomInset;
+  const isCompactWeb = Platform.OS === 'web' && width < 560;
+  const showTabLabels = !isCompactWeb;
+  const tabIconSize = isCompactWeb ? 24 : 22;
+  const tabBarHeight = (showTabLabels ? 56 : 48) + bottomInset;
 
   const hide = (tab: string) => !visible.includes(tab as never);
 
@@ -30,13 +35,19 @@ export default function TabsLayout() {
             borderTopColor: colors.border,
             borderTopWidth: 1,
             height: tabBarHeight,
-            paddingTop: 8,
-            paddingBottom: Math.max(bottomInset - 2, 8),
+            paddingTop: showTabLabels ? 8 : 6,
+            paddingBottom: showTabLabels ? Math.max(bottomInset - 2, 8) : Math.max(bottomInset, 8),
           },
+          tabBarShowLabel: showTabLabels,
           tabBarActiveTintColor: colors.tabActive,
           tabBarInactiveTintColor: colors.tabInactive,
           tabBarItemStyle: {
-            paddingVertical: 2,
+            minWidth: 0,
+            paddingHorizontal: 0,
+            paddingVertical: showTabLabels ? 2 : 0,
+          },
+          tabBarIconStyle: {
+            marginTop: showTabLabels ? 0 : 2,
           },
           tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginBottom: 2 },
         }}
@@ -45,8 +56,8 @@ export default function TabsLayout() {
           name="index"
           options={{
             title: t('tabs.home'),
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home-outline" size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="home-outline" size={tabIconSize} color={color} />
             ),
           }}
         />
@@ -55,8 +66,8 @@ export default function TabsLayout() {
           options={{
             title: t('tabs.meetings'),
             href: hide('meetings') ? null : undefined,
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="calendar-outline" size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="calendar-outline" size={tabIconSize} color={color} />
             ),
           }}
         />
@@ -65,8 +76,8 @@ export default function TabsLayout() {
           options={{
             title: t('tabs.assignments'),
             href: hide('assignments') ? null : undefined,
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="checkmark-done-outline" size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="checkmark-done-outline" size={tabIconSize} color={color} />
             ),
           }}
         />
@@ -75,8 +86,8 @@ export default function TabsLayout() {
           options={{
             title: t('tabs.users'),
             href: hide('users') ? null : undefined,
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="people-outline" size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="people-outline" size={tabIconSize} color={color} />
             ),
           }}
         />
@@ -85,8 +96,8 @@ export default function TabsLayout() {
           options={{
             title: t('tabs.cleaning'),
             href: hide('cleaning') ? null : undefined,
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="sparkles-outline" size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="sparkles-outline" size={tabIconSize} color={color} />
             ),
           }}
         />
@@ -95,8 +106,8 @@ export default function TabsLayout() {
           options={{
             title: t('tabs.profile'),
             href: hide('profile') ? null : undefined,
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="person-outline" size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="person-outline" size={tabIconSize} color={color} />
             ),
           }}
         />
@@ -105,8 +116,8 @@ export default function TabsLayout() {
           options={{
             title: t('tabs.settings'),
             href: hide('settings') ? null : undefined,
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="settings-outline" size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="settings-outline" size={tabIconSize} color={color} />
             ),
           }}
         />

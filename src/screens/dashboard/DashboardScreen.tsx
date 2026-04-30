@@ -11,6 +11,7 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { NotificationsBadge } from '@/src/features/notifications/components/NotificationsBadge';
+import { DashboardEventsSection } from '@/src/features/events/components/DashboardEventsSection';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
 import { getCongregationDisplayName } from '@/src/services/congregations/congregations-service';
@@ -26,6 +27,7 @@ import { FieldServiceDashboardCard } from '@/src/modules/field-service/component
 import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 import { MyCleaningDashboardCard } from '@/src/modules/cleaning/components/MyCleaningDashboardCard';
 import { useMyCleaningDashboard } from '@/src/modules/cleaning/hooks/use-my-cleaning-dashboard';
+import { useEvents } from '@/src/hooks/use-events';
 
 export function DashboardScreen() {
   const router = useRouter();
@@ -51,7 +53,7 @@ export function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [usingSummary, setUsingSummary] = useState(true);
+  const [, setUsingSummary] = useState(true);
 
   const {
     summary: cleaningSummary,
@@ -69,6 +71,12 @@ export function DashboardScreen() {
   const isAdmin = canManageUsers(role);
   const canManage = canManageAssignments(role);
   const canManageCleaningGroups = canManageCleaning(role, servicePosition, serviceDepartment);
+  const {
+    events,
+    loading: eventsLoading,
+    error: eventsError,
+    refresh: refreshEvents,
+  } = useEvents(congregationId);
 
   const loadingRef = React.useRef(false);
 
@@ -142,8 +150,9 @@ export function DashboardScreen() {
     if (!loadingProfile) {
       void loadData(true);
       void refreshCleaningSummary();
+      void refreshEvents();
     }
-  }, [loadData, loadingProfile, refreshCleaningSummary]);
+  }, [loadData, loadingProfile, refreshCleaningSummary, refreshEvents]);
 
   useRefreshOnFocus(handleFocusRefresh, true, {
     refreshOnAppActive: false,
@@ -177,6 +186,7 @@ export function DashboardScreen() {
     setRefreshing(true);
     void loadData(true);
     void refreshCleaningSummary();
+    void refreshEvents();
   };
 
   if (loading || loadingProfile) return <LoadingState message="Cargando dashboard..." />;
@@ -229,17 +239,17 @@ export function DashboardScreen() {
         </View>
       ) : null}
 
-      {!usingSummary ? (
-        <View style={styles.summaryNotice}>
-          <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
-          <ThemedText style={styles.summaryNoticeText}>
-            Resumen precalculado no disponible. Mostrando datos reales consultados.
-          </ThemedText>
-        </View>
-      ) : null}
-
       {/* â”€â”€ Contador de Horas de PredicaciÃ³n (solo dispositivo mÃ³vil) â”€â”€ */}
       {Platform.OS !== 'web' && <FieldServiceDashboardCard />}
+
+      <DashboardEventsSection
+        events={events}
+        loading={eventsLoading}
+        error={eventsError}
+        canManage={canManage}
+        congregationId={congregationId}
+        onRefresh={refreshEvents}
+      />
 
       <MyCleaningDashboardCard
         summary={cleaningSummary}
@@ -363,23 +373,6 @@ const createStyles = (colors: AppColorSet, isCompact: boolean) =>
       color: colors.error,
       fontSize: 13,
       fontWeight: '600',
-    },
-    summaryNotice: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      backgroundColor: colors.warning + '20',
-      borderRadius: 10,
-      padding: 12,
-      marginBottom: 16,
-      borderWidth: 1,
-      borderColor: colors.warning + '44',
-    },
-    summaryNoticeText: {
-      color: colors.warning,
-      fontSize: 12,
-      fontWeight: '600',
-      flex: 1,
     },
     section: {
       marginTop: 8,

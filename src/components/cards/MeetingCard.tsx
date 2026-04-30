@@ -13,6 +13,7 @@ import { formatDate } from '@/src/utils/dates/dates';
 interface MeetingCardProps {
   meeting: Meeting;
   onPress?: () => void;
+  muted?: boolean;
 }
 
 const meetingTypeIcon: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -24,7 +25,7 @@ const meetingTypeIcon: Record<string, keyof typeof Ionicons.glyphMap> = {
   weekend: 'calendar-clear-outline',
 };
 
-export function MeetingCard({ meeting, onPress }: MeetingCardProps) {
+export function MeetingCard({ meeting, onPress, muted = false }: MeetingCardProps) {
   const router = useRouter();
   const { t } = useI18n();
   const colors = useAppColors();
@@ -53,20 +54,30 @@ export function MeetingCard({ meeting, onPress }: MeetingCardProps) {
   };
 
   return (
-    <TouchableOpacity style={styles.card} onPress={handlePress} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={[styles.card, muted && styles.cardMuted]}
+      onPress={handlePress}
+      activeOpacity={0.8}
+    >
       <View style={styles.row}>
-        <View style={[styles.typeIcon, { backgroundColor: colors.primary + '22' }]}>
-          <Ionicons name={meetingTypeIcon[meeting.type] ?? 'calendar-outline'} size={20} color={colors.primary} />
+        <View style={[styles.typeIcon, { backgroundColor: (muted ? colors.textMuted : colors.primary) + '22' }]}>
+          <Ionicons
+            name={meetingTypeIcon[meeting.type] ?? 'calendar-outline'}
+            size={20}
+            color={muted ? colors.textMuted : colors.primary}
+          />
         </View>
         <View style={styles.info}>
-          <ThemedText style={styles.title} numberOfLines={2}>
+          <ThemedText style={[styles.title, muted && styles.titleMuted]} numberOfLines={2}>
             {meeting.title}
           </ThemedText>
-          <ThemedText style={styles.type}>{meetingTypeLabelByType[meeting.type]}</ThemedText>
+          <ThemedText style={[styles.type, muted && styles.textMuted]}>
+            {meetingTypeLabelByType[meeting.type]}
+          </ThemedText>
         </View>
         <StatusBadge
           label={meetingStatusLabelByStatus[meeting.status]}
-          color={meetingStatusColor[meeting.status]}
+          color={muted ? colors.textMuted : meetingStatusColor[meeting.status]}
           size="sm"
         />
       </View>
@@ -74,12 +85,14 @@ export function MeetingCard({ meeting, onPress }: MeetingCardProps) {
       <View style={styles.footer}>
         <View style={styles.metaRow}>
           <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
-          <ThemedText style={styles.meta}>{formatDate(meeting.meetingDate ?? meeting.startDate)}</ThemedText>
+          <ThemedText style={[styles.meta, muted && styles.textMuted]}>
+            {formatDate(meeting.meetingDate ?? meeting.startDate)}
+          </ThemedText>
         </View>
         {meeting.location ? (
           <View style={styles.metaRow}>
             <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-            <ThemedText style={styles.meta} numberOfLines={1}>
+            <ThemedText style={[styles.meta, muted && styles.textMuted]} numberOfLines={1}>
               {meeting.location}
             </ThemedText>
           </View>
@@ -98,6 +111,11 @@ const createStyles = (colors: AppColorSet) =>
       gap: 12,
       borderWidth: 1,
       borderColor: colors.border,
+    },
+    cardMuted: {
+      backgroundColor: colors.surfaceRaised,
+      borderColor: colors.border,
+      opacity: 0.68,
     },
     row: {
       flexDirection: 'row',
@@ -122,6 +140,9 @@ const createStyles = (colors: AppColorSet) =>
       color: colors.textPrimary,
       lineHeight: 20,
     },
+    titleMuted: {
+      color: colors.textMuted,
+    },
     type: {
       fontSize: 12,
       color: colors.textMuted,
@@ -141,6 +162,9 @@ const createStyles = (colors: AppColorSet) =>
     },
     meta: {
       fontSize: 12,
+      color: colors.textMuted,
+    },
+    textMuted: {
       color: colors.textMuted,
     },
   });

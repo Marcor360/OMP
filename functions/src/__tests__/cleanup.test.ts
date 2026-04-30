@@ -62,22 +62,22 @@ describe('normalizeStoragePath', () => {
 
   it('parsea ruta gs:// correctamente', () => {
     const result = normalizeStoragePath(
-      'gs://my-bucket/path/to/file.pdf',
+      'gs://my-bucket/path/to/file.png',
       defaultBucket
     );
     expect(result).toEqual({
       bucketName: 'my-bucket',
-      objectPath: 'path/to/file.pdf',
+      objectPath: 'path/to/file.png',
     });
   });
 
   it('parsea URL https:// de Firebase Storage', () => {
     const url =
-      'https://firebasestorage.googleapis.com/v0/b/my-project.appspot.com/o/docs%2Ffile.pdf?alt=media';
+      'https://firebasestorage.googleapis.com/v0/b/my-project.appspot.com/o/docs%2Ffile.png?alt=media';
     const result = normalizeStoragePath(url, defaultBucket);
     expect(result).toEqual({
       bucketName: 'my-project.appspot.com',
-      objectPath: 'docs/file.pdf',
+      objectPath: 'docs/file.png',
     });
   });
 
@@ -110,7 +110,7 @@ describe('normalizeStoragePath', () => {
   });
 
   it('devuelve null para URL https sin patrón /b/.../o/...', () => {
-    const result = normalizeStoragePath('https://example.com/file.pdf', defaultBucket);
+    const result = normalizeStoragePath('https://example.com/file.png', defaultBucket);
     expect(result).toBeNull();
   });
 });

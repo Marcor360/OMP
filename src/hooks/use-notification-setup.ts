@@ -7,19 +7,23 @@ import { useEffect } from 'react';
 import {
   clearDeliveredNotificationsAndBadge,
   configureNotificationHandler,
-  getNotificationPermissionStatus,
-  registerPushTokenForUser,
   syncNativeUnreadNotifications,
 } from '@/src/services/notifications/notifications-service';
 import { subscribeToUnreadNotificationsCount } from '@/src/services/notifications/notificationService';
+import { registerExpoPushTokenForUser } from '@/src/services/notifications/push-notifications.service';
 import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 
 interface UseNotificationSetupOptions {
   uid: string | null;
+  congregationId: string | null;
   isAuthenticated: boolean;
 }
 
-export function useNotificationSetup({ uid, isAuthenticated }: UseNotificationSetupOptions): void {
+export function useNotificationSetup({
+  uid,
+  congregationId,
+  isAuthenticated,
+}: UseNotificationSetupOptions): void {
   useEffect(() => {
     configureNotificationHandler();
   }, []);
@@ -29,7 +33,7 @@ export function useNotificationSetup({ uid, isAuthenticated }: UseNotificationSe
       return;
     }
 
-    if (!isAuthenticated || !uid) {
+    if (!isAuthenticated || !uid || !congregationId) {
       void clearDeliveredNotificationsAndBadge();
       return;
     }
@@ -37,16 +41,18 @@ export function useNotificationSetup({ uid, isAuthenticated }: UseNotificationSe
     let cancelled = false;
     let unsubscribeUnread = () => {};
 
-    const tryRegisterIfPermissionGranted = async () => {
-      const status = await getNotificationPermissionStatus();
-      if (status !== 'granted' || cancelled) {
+    const tryRegisterPushToken = async () => {
+      if (cancelled) {
         return;
       }
 
-      await registerPushTokenForUser(uid);
+      await registerExpoPushTokenForUser({
+        userId: uid,
+        congregationId,
+      });
     };
 
-    void tryRegisterIfPermissionGranted();
+    void tryRegisterPushToken();
     unsubscribeUnread = subscribeToUnreadNotificationsCount(
       uid,
       (unreadCount) => {
@@ -61,5 +67,5 @@ export function useNotificationSetup({ uid, isAuthenticated }: UseNotificationSe
       cancelled = true;
       unsubscribeUnread();
     };
-  }, [isAuthenticated, uid]);
+  }, [congregationId, isAuthenticated, uid]);
 }

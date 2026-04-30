@@ -101,7 +101,6 @@ export const es = {
   'meetings.management.noCongregation': 'No se encontro la congregacion del perfil actual.',
   'meetings.management.action.newWeekend': 'Nueva fin de semana',
   'meetings.management.action.newMidweek': 'Nueva VyMC',
-  'meetings.management.action.importMidweekPdf': 'Importar PDF VyMC',
   'meetings.management.filter.all': 'Todas',
   'meetings.management.filter.draft': 'Borrador',
   'meetings.management.filter.published': 'Publicada',

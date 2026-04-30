@@ -3,6 +3,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
 import { LogBox, Platform } from 'react-native';
@@ -11,9 +12,10 @@ import { AuthProvider, useAuth } from '@/src/context/auth-context';
 import { ThemeModeProvider, useAppTheme } from '@/src/context/theme-context';
 import { I18nProvider, useI18n } from '@/src/i18n/index';
 import { getAppColors } from '@/src/styles';
-import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
 import { useInitialPermissions } from '@/src/hooks/use-initial-permissions';
 import { useCacheControlCleanup } from '@/src/hooks/use-cache-control-cleanup';
+import { configureGlobalNotificationHandler } from '@/src/services/notifications/push-notifications.service';
+import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 
 // Prevenir que el splash se oculte automáticamente
 if (Platform.OS !== 'web') {
@@ -39,11 +41,29 @@ function RootLayoutNav() {
   // Request initial permissions once on app mount.
   useInitialPermissions();
 
-  // Initialize push notifications when user is authenticated.
-  useNotificationSetup({
-    uid: user?.uid ?? null,
-    isAuthenticated: !!user,
-  });
+  useEffect(() => {
+    configureGlobalNotificationHandler();
+  }, []);
+
+  useEffect(() => {
+    if (!canUseRemotePushNotifications) {
+      return;
+    }
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const url = response.notification.request.content.data?.url;
+
+        if (typeof url === 'string' && url.startsWith('/')) {
+          router.push(url as never);
+        }
+      }
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, [router]);
 
   // Controlled cleanup for temporary cache.
   useCacheControlCleanup();

@@ -62,7 +62,19 @@ const normalizeNotification = (
     return null;
   }
 
-  if (typeof raw.assignmentId !== 'string' || raw.assignmentId.trim().length === 0) {
+  const type = raw.type === 'event' ? 'event' : 'assignment';
+
+  if (
+    type === 'assignment' &&
+    (typeof raw.assignmentId !== 'string' || raw.assignmentId.trim().length === 0)
+  ) {
+    return null;
+  }
+
+  if (
+    type === 'event' &&
+    (typeof raw.eventId !== 'string' || raw.eventId.trim().length === 0)
+  ) {
     return null;
   }
 
@@ -83,14 +95,16 @@ const normalizeNotification = (
     id,
     userId: raw.userId,
     congregationId: typeof raw.congregationId === 'string' ? raw.congregationId : null,
-    type: raw.type === 'assignment' ? 'assignment' : 'assignment',
+    type,
     category:
       raw.category === 'platform' || raw.category === 'cleaning' || raw.category === 'hospitality'
         ? raw.category
         : null,
     title: raw.title,
     body: raw.body,
-    assignmentId: raw.assignmentId,
+    assignmentId: typeof raw.assignmentId === 'string' ? raw.assignmentId : undefined,
+    eventId: typeof raw.eventId === 'string' ? raw.eventId : undefined,
+    eventType: typeof raw.eventType === 'string' ? raw.eventType : undefined,
     isRead,
     read: isRead,
     createdAt: createdAt as AppNotification['createdAt'],
@@ -114,6 +128,15 @@ const normalizeNotification = (
             role:
               typeof (raw.metadata as Record<string, unknown>).role === 'string'
                 ? ((raw.metadata as Record<string, unknown>).role as string)
+                : null,
+          }
+        : undefined,
+    data:
+      raw.data && typeof raw.data === 'object'
+        ? {
+            url:
+              typeof (raw.data as Record<string, unknown>).url === 'string'
+                ? ((raw.data as Record<string, unknown>).url as string)
                 : null,
           }
         : undefined,

@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 
-export type NotificationType = 'assignment';
+export type NotificationType = 'assignment' | 'event';
 
 export type NotificationCategory = 'platform' | 'cleaning' | 'hospitality' | null;
 
@@ -14,7 +14,9 @@ export interface AppNotification {
   category: NotificationCategory;
   title: string;
   body: string;
-  assignmentId: string;
+  assignmentId?: string;
+  eventId?: string;
+  eventType?: string;
   /** Campo canónico alineado con Firestore Security Rules y Cloud Functions. */
   isRead: boolean;
   read: boolean;
@@ -25,6 +27,9 @@ export interface AppNotification {
     meetingId?: string | null;
     meetingType?: NotificationMeetingType;
     role?: string | null;
+  };
+  data?: {
+    url?: string | null;
   };
 }
 

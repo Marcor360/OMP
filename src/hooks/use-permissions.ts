@@ -8,9 +8,9 @@ import { AppState, AppStateStatus, Linking } from 'react-native';
 import { useUser } from '@/src/context/user-context';
 import {
   getNotificationPermissionStatus,
-  registerPushTokenForUser,
   requestNotificationPermission,
 } from '@/src/services/notifications/notifications-service';
+import { registerExpoPushTokenForUser } from '@/src/services/notifications/push-notifications.service';
 import { PermissionState, PermissionStatus } from '@/src/types/permissions.types';
 import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 
@@ -23,7 +23,7 @@ interface UsePermissionsResult {
 }
 
 export function usePermissions(): UsePermissionsResult {
-  const { uid } = useUser();
+  const { uid, congregationId } = useUser();
   const [state, setState] = useState<PermissionState>({
     notifications: 'undetermined',
   });
@@ -74,12 +74,15 @@ export function usePermissions(): UsePermissionsResult {
     const result = await requestNotificationPermission();
     setState((prev) => ({ ...prev, notifications: result }));
 
-    if (result === 'granted' && uid) {
-      void registerPushTokenForUser(uid);
+    if (result === 'granted' && uid && congregationId) {
+      void registerExpoPushTokenForUser({
+        userId: uid,
+        congregationId,
+      });
     }
 
     return result;
-  }, [uid]);
+  }, [congregationId, uid]);
 
   const openSettings = useCallback(async () => {
     try {

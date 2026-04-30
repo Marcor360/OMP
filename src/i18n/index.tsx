@@ -49,7 +49,7 @@ export type AppTranslationKey =
   | 'theme.title' | 'theme.option.system' | 'theme.option.light' | 'theme.option.dark' | 'theme.description'
   | 'language.title' | 'language.option.es' | 'language.option.en' | 'language.option.fr' | 'language.option.ar' | 'language.option.hi' | 'language.option.zh' | 'language.description' | 'language.info' | 'language.onboarding.title' | 'language.onboarding.subtitle' | 'language.onboarding.continue'
   | 'meetings.management.title' | 'meetings.management.subtitle' | 'meetings.management.loading' | 'meetings.management.noCongregation'
-  | 'meetings.management.action.newWeekend' | 'meetings.management.action.newMidweek' | 'meetings.management.action.importMidweekPdf'
+  | 'meetings.management.action.newWeekend' | 'meetings.management.action.newMidweek'
   | 'meetings.management.filter.all' | 'meetings.management.filter.draft' | 'meetings.management.filter.published'
   | 'meetings.management.row.view' | 'meetings.management.row.edit' | 'meetings.management.row.publish' | 'meetings.management.row.unpublish' | 'meetings.management.row.delete'
   | 'meetings.management.alert.validation' | 'meetings.management.alert.success' | 'meetings.management.alert.published' | 'meetings.management.alert.sentToDraft'
