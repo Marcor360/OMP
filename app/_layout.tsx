@@ -3,7 +3,6 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import * as Notifications from 'expo-notifications';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
 import { LogBox, Platform } from 'react-native';
@@ -50,18 +49,24 @@ function RootLayoutNav() {
       return;
     }
 
-    const subscription = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
+    let subscription: { remove: () => void } | null = null;
+    let cancelled = false;
+
+    void import('expo-notifications').then((Notifications) => {
+      if (cancelled) return;
+
+      subscription = Notifications.addNotificationResponseReceivedListener((response) => {
         const url = response.notification.request.content.data?.url;
 
         if (typeof url === 'string' && url.startsWith('/')) {
           router.push(url as never);
         }
-      }
-    );
+      });
+    });
 
     return () => {
-      subscription.remove();
+      cancelled = true;
+      subscription?.remove();
     };
   }, [router]);
 

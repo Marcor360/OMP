@@ -166,25 +166,25 @@ export function SettingsScreen() {
               icon="people-outline"
               label={t('settings.admin.userManagement')}
               showArrow
-              onPress={() => router.push('/(protected)/users' as any)}
+              onPress={() => router.push('/(protected)/(tabs)/users' as any)}
             />
             <SettingRow
               icon="calendar-outline"
               label={t('settings.admin.meetingManagement')}
               showArrow
-              onPress={() => router.push('/(protected)/meetings' as any)}
+              onPress={() => router.push('/(protected)/(tabs)/meetings' as any)}
             />
             <SettingRow
               icon="checkmark-done-outline"
               label={t('settings.admin.assignmentManagement')}
               showArrow
-              onPress={() => router.push('/(protected)/assignments' as any)}
+              onPress={() => router.push('/(protected)/(tabs)/assignments' as any)}
             />
             <SettingRow
               icon="sparkles-outline"
               label={t('settings.admin.cleaningGroups')}
               showArrow
-              onPress={() => router.push('/(protected)/cleaning' as any)}
+              onPress={() => router.push('/(protected)/(tabs)/cleaning' as any)}
             />
             <SettingRow
               icon="notifications-outline"
@@ -203,28 +203,28 @@ export function SettingsScreen() {
             label={t('settings.organization.meetingCalendar')}
             value={t('common.view')}
             showArrow
-            onPress={() => router.push('/(protected)/meetings' as any)}
+            onPress={() => router.push('/(protected)/(tabs)/meetings' as any)}
           />
           <SettingRow
             icon="person-outline"
             label={t('settings.organization.myAssignments')}
             value={t('common.view')}
             showArrow
-            onPress={() => router.push('/(protected)/assignments' as any)}
+            onPress={() => router.push('/(protected)/(tabs)/assignments' as any)}
           />
           <SettingRow
             icon="time-outline"
             label={t('settings.organization.upcomingResponsibilities')}
             value={t('common.view')}
             showArrow
-            onPress={() => router.push('/(protected)/dashboard' as any)}
+            onPress={() => router.push('/(protected)/(tabs)/' as any)}
           />
           <SettingRow
             icon="archive-outline"
             label={t('settings.organization.assignmentHistory')}
             value={t('common.view')}
             showArrow
-            onPress={() => router.push('/(protected)/assignments' as any)}
+            onPress={() => router.push('/(protected)/(tabs)/assignments' as any)}
           />
         </Section>
 

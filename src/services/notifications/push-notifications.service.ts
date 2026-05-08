@@ -1,6 +1,5 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { serverTimestamp, setDoc } from 'firebase/firestore';
 
@@ -32,6 +31,18 @@ export type PushNotificationRegistrationResult =
     };
 
 const DEFAULT_CHANNEL_ID = 'default';
+type NotificationsModule = typeof import('expo-notifications');
+
+let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
+
+const loadExpoNotifications = async (): Promise<NotificationsModule | null> => {
+  if (!canUseRemotePushNotifications) {
+    return null;
+  }
+
+  notificationsModulePromise ??= import('expo-notifications').catch(() => null);
+  return notificationsModulePromise;
+};
 
 const mapExpoStatus = (
   raw: 'granted' | 'denied' | 'undetermined' | string
@@ -76,13 +87,15 @@ export const configureGlobalNotificationHandler = (): void => {
     return;
   }
 
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
+  void loadExpoNotifications().then((Notifications) => {
+    Notifications?.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
   });
 };
 
@@ -90,6 +103,9 @@ export const ensureDefaultNotificationChannel = async (): Promise<void> => {
   if (Platform.OS !== 'android' || !canUseRemotePushNotifications) {
     return;
   }
+
+  const Notifications = await loadExpoNotifications();
+  if (!Notifications) return;
 
   await Notifications.setNotificationChannelAsync(DEFAULT_CHANNEL_ID, {
     name: 'Notificaciones',
@@ -107,6 +123,9 @@ export const getPushNotificationPermissionStatus =
     }
 
     try {
+      const Notifications = await loadExpoNotifications();
+      if (!Notifications) return 'unavailable';
+
       const { status } = await Notifications.getPermissionsAsync();
       return mapExpoStatus(status);
     } catch {
@@ -122,6 +141,9 @@ export const requestPushNotificationPermission =
 
     try {
       await ensureDefaultNotificationChannel();
+      const Notifications = await loadExpoNotifications();
+      if (!Notifications) return 'unavailable';
+
       const { status } = await Notifications.requestPermissionsAsync({
         ios: {
           allowAlert: true,
@@ -194,6 +216,15 @@ export const registerExpoPushTokenForUser = async (params: {
         ok: false,
         reason: 'MISSING_PROJECT_ID',
         message: 'No se encontro projectId de EAS para Expo Push Token.',
+      };
+    }
+
+    const Notifications = await loadExpoNotifications();
+    if (!Notifications) {
+      return {
+        ok: false,
+        reason: 'UNKNOWN_ERROR',
+        message: 'No se pudo cargar expo-notifications.',
       };
     }
 

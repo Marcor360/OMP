@@ -913,7 +913,7 @@ export function MeetingFormScreen() {
           });
         }
 
-        router.replace('/meetings/manage' as never);
+        router.replace('/(protected)/meetings/manage' as never);
         return;
       }
 
@@ -928,13 +928,13 @@ export function MeetingFormScreen() {
         Alert.alert('Publicacion bloqueada', publishResult.errors.join('\n'));
 
         if (mode === 'create') {
-          router.replace(`/meetings/edit/${meetingId}` as never);
+          router.replace(`/(protected)/meetings/edit/${meetingId}` as never);
         }
 
         return;
       }
 
-      router.replace('/meetings/manage' as never);
+      router.replace('/(protected)/meetings/manage' as never);
     } catch (requestError) {
       const message = formatFirestoreError(requestError);
       setSaveError(message);
