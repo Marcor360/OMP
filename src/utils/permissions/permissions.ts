@@ -1,4 +1,4 @@
-import { UserRole } from '@/src/types/user';
+import { AppUser, UserRole } from '@/src/types/user';
 
 export const ROLE_HIERARCHY: Record<UserRole, number> = {
   admin: 3,
@@ -27,6 +27,28 @@ export const canManageMeetings = (role: UserRole | undefined): boolean =>
 export const canManageAssignments = (role: UserRole | undefined): boolean =>
   role === 'admin' || role === 'supervisor';
 
+export const canManageOutgoingTalks = (
+  profile:
+    | Pick<AppUser, 'role' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments' | 'isActive'>
+    | null
+    | undefined
+): boolean =>
+  Boolean(
+    profile?.isActive &&
+      (
+        profile.role === 'admin' ||
+        (
+          profile.servicePosition === 'encargado' &&
+          profile.serviceDepartment === 'discursos'
+        ) ||
+        profile.serviceAssignments?.some(
+          (assignment) =>
+            assignment.position === 'encargado' &&
+            assignment.department === 'discursos'
+        )
+      )
+  );
+
 /** ¿Puede ver la sección de usuarios? */
 export const canViewUsers = (role: UserRole | undefined): boolean =>
   role === 'admin' || role === 'supervisor';
@@ -39,25 +61,33 @@ export const canAccessSettings = (role: UserRole | undefined): boolean =>
 export const canManageCleaning = (
   role: UserRole | undefined,
   servicePosition?: string | undefined,
-  serviceDepartment?: string | undefined
+  serviceDepartment?: string | undefined,
+  serviceAssignments?: Pick<AppUser, 'serviceAssignments'>['serviceAssignments']
 ): boolean =>
   role === 'admin' ||
   role === 'supervisor' ||
   (servicePosition === 'encargado' &&
-    (!serviceDepartment || serviceDepartment === 'limpieza'));
+    (!serviceDepartment || serviceDepartment === 'limpieza')) ||
+  serviceAssignments?.some(
+    (assignment) =>
+      assignment.position === 'encargado' &&
+      (!assignment.department || assignment.department === 'limpieza')
+  ) === true;
 
 /** ¿Puede gestionar grupos de hospitalidad? (mismos permisos que limpieza) */
 export const canManageHospitality = (
   role: UserRole | undefined,
   servicePosition?: string | undefined,
-  serviceDepartment?: string | undefined
-): boolean => canManageCleaning(role, servicePosition, serviceDepartment);
+  serviceDepartment?: string | undefined,
+  serviceAssignments?: Pick<AppUser, 'serviceAssignments'>['serviceAssignments']
+): boolean => canManageCleaning(role, servicePosition, serviceDepartment, serviceAssignments);
 
 /** Retorna las tabs visibles según el rol */
 export const getVisibleTabs = (
   role: UserRole | undefined,
   servicePosition?: string | undefined,
-  serviceDepartment?: string | undefined
+  serviceDepartment?: string | undefined,
+  serviceAssignments?: Pick<AppUser, 'serviceAssignments'>['serviceAssignments']
 ): ('index' | 'users' | 'meetings' | 'assignments' | 'profile' | 'settings' | 'cleaning' | 'preaching')[] => {
   const base = ['index', 'meetings', 'assignments', 'preaching', 'profile'] as const;
   if (role === 'admin') {
@@ -66,7 +96,7 @@ export const getVisibleTabs = (
   if (role === 'supervisor') {
     return [...base, 'settings', 'cleaning'];
   }
-  if (canManageCleaning(role, servicePosition, serviceDepartment)) {
+  if (canManageCleaning(role, servicePosition, serviceDepartment, serviceAssignments)) {
     return [...base, 'cleaning'];
   }
   return [...base];

@@ -39,6 +39,7 @@ export function DashboardScreen() {
     role,
     servicePosition,
     serviceDepartment,
+    serviceAssignments,
     loadingProfile,
     profileError,
   } = useUser();
@@ -70,7 +71,12 @@ export function DashboardScreen() {
 
   const isAdmin = canManageUsers(role);
   const canManage = canManageAssignments(role);
-  const canManageCleaningGroups = canManageCleaning(role, servicePosition, serviceDepartment);
+  const canManageCleaningGroups = canManageCleaning(
+    role,
+    servicePosition,
+    serviceDepartment,
+    serviceAssignments
+  );
   const {
     events,
     loading: eventsLoading,

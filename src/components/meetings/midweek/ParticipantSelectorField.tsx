@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
+import { OUTGOING_TALK_BLOCK_MESSAGE } from '@/src/modules/assignments/utils/outgoing-talks';
 import { ActiveCongregationUser } from '@/src/services/users/active-users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { ParticipantAssignment } from '@/src/types/midweek-meeting';
@@ -17,6 +18,7 @@ interface ParticipantSelectorFieldProps {
   allowManual?: boolean;
   title?: string;
   canRemove?: boolean;
+  blockedUserIds?: Set<string>;
 }
 
 export function ParticipantSelectorField({
@@ -29,6 +31,7 @@ export function ParticipantSelectorField({
   allowManual = true,
   title = 'Participante',
   canRemove = true,
+  blockedUserIds,
 }: ParticipantSelectorFieldProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -54,6 +57,8 @@ export function ParticipantSelectorField({
   };
 
   const selectUser = (user: ActiveCongregationUser) => {
+    if (blockedUserIds?.has(user.uid)) return;
+
     onChange({
       ...participant,
       mode: 'user',
@@ -157,20 +162,35 @@ export function ParticipantSelectorField({
                 >
                   {users.map((user) => {
                     const isSelected = participant.userId === user.uid;
+                    const isBlocked = blockedUserIds?.has(user.uid) === true;
 
                     return (
                       <TouchableOpacity
                         key={user.uid}
-                        style={[styles.userOption, isSelected && styles.userOptionSelected]}
+                        style={[
+                          styles.userOption,
+                          isSelected && styles.userOptionSelected,
+                          isBlocked && styles.userOptionDisabled,
+                        ]}
                         onPress={() => selectUser(user)}
                         activeOpacity={0.7}
+                        disabled={isBlocked}
                       >
                         <ThemedText
-                          style={[styles.userOptionText, isSelected && styles.userOptionTextSelected]}
+                          style={[
+                            styles.userOptionText,
+                            isSelected && styles.userOptionTextSelected,
+                            isBlocked && styles.userOptionDisabledText,
+                          ]}
                         >
                           {user.displayName}
                         </ThemedText>
                         {user.email ? <ThemedText style={styles.userOptionEmail}>{user.email}</ThemedText> : null}
+                        {isBlocked ? (
+                          <ThemedText style={styles.userOptionBlocked}>
+                            {OUTGOING_TALK_BLOCK_MESSAGE}
+                          </ThemedText>
+                        ) : null}
                       </TouchableOpacity>
                     );
                   })}
@@ -267,9 +287,14 @@ const createStyles = (colors: AppColorSet) =>
     userOptionSelected: {
       backgroundColor: colors.primary + '22',
     },
+    userOptionDisabled: {
+      opacity: 0.5,
+    },
     userOptionText: { fontSize: 14, color: colors.textPrimary, fontWeight: '500' },
     userOptionTextSelected: { color: colors.primary, fontWeight: '700' },
+    userOptionDisabledText: { color: colors.textDisabled },
     userOptionEmail: { fontSize: 11, color: colors.textMuted },
+    userOptionBlocked: { fontSize: 11, color: colors.warning, fontWeight: '700' },
     emptyUsers: { paddingHorizontal: 12, paddingVertical: 12, color: colors.textMuted, fontSize: 13 },
     errorText: { color: colors.error, fontSize: 12 },
   });

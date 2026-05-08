@@ -37,6 +37,12 @@ import {
   extractWeekendSessionsFromSections,
   validateWeekendSessionsForPublish,
 } from '@/src/services/meetings/weekend-meeting-adapter';
+import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
+import {
+  OUTGOING_TALK_BLOCK_MESSAGE,
+  getBlockedOutgoingTalkUserIds,
+} from '@/src/modules/assignments/utils/outgoing-talks';
+import { OutgoingTalk } from '@/src/modules/assignments/types/outgoing-talks.types';
 import { resolveMeetingTemplate } from '@/src/services/meetings/meeting-template';
 import {
   createMeeting,
@@ -367,6 +373,7 @@ export function MeetingFormScreen() {
       : [createEmptyWeekendMeetingSession(0)]
   );
   const [availableUsers, setAvailableUsers] = useState<ActiveCongregationUser[]>([]);
+  const [outgoingTalks, setOutgoingTalks] = useState<OutgoingTalk[]>([]);
   const [cleaningGroups, setCleaningGroups] = useState<CleaningGroup[]>([]);
   const [cleaningSelectionMode, setCleaningSelectionMode] = useState<CleaningSelectionMode>('none');
   const [selectedCleaningGroupIds, setSelectedCleaningGroupIds] = useState<string[]>([]);
@@ -535,6 +542,31 @@ export function MeetingFormScreen() {
     return selectedMidweekMeetingDate;
   }, [meetingType, selectedMidweekMeetingDate, selectedWeekendMeetingDate]);
 
+  useEffect(() => {
+    if (!congregationId) {
+      setOutgoingTalks([]);
+      return;
+    }
+
+    let cancelled = false;
+    void getScheduledOutgoingTalksForWeek(congregationId, resolvedMeetingDate)
+      .then((items) => {
+        if (!cancelled) setOutgoingTalks(items);
+      })
+      .catch(() => {
+        if (!cancelled) setOutgoingTalks([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [congregationId, resolvedMeetingDate]);
+
+  const blockedOutgoingTalkUserIds = useMemo(
+    () => getBlockedOutgoingTalkUserIds(resolvedMeetingDate, outgoingTalks),
+    [outgoingTalks, resolvedMeetingDate]
+  );
+
   const selectedWeekLabel = useMemo(
     () => formatWeekLabel(selectedWeekStart, selectedWeekEnd),
     [selectedWeekEnd, selectedWeekStart]
@@ -647,6 +679,10 @@ export function MeetingFormScreen() {
               errorsBuffer.push(
                 `${assignmentLabel}: El usuario del participante ${participantIndex + 1} no existe o esta inactivo.`
               );
+            } else if (blockedOutgoingTalkUserIds.has(userId)) {
+              errorsBuffer.push(
+                `${assignmentLabel}: ${participant.displayName || 'El usuario'} no esta disponible por salida a discursar esta semana.`
+              );
             }
             return;
           }
@@ -755,6 +791,24 @@ export function MeetingFormScreen() {
     }
 
     const payload = buildPayload(validation.startDate, validation.endDate, actorUid);
+    const blockedAssignedUsers = new Set(
+      (payload.sections ?? [])
+        .flatMap((section) => section.assignments)
+        .flatMap((assignment) => assignment.assignees)
+        .map((assignee) => assignee.assigneeUserId)
+        .filter((candidate): candidate is string => Boolean(candidate))
+        .filter((candidate) => blockedOutgoingTalkUserIds.has(candidate))
+    );
+
+    if (blockedAssignedUsers.size > 0) {
+      const blockedErrors = Array.from(blockedAssignedUsers).map((userId) => {
+        const name = availableUsers.find((item) => item.uid === userId)?.displayName ?? userId;
+        return `${name}: ${OUTGOING_TALK_BLOCK_MESSAGE}.`;
+      });
+      setPublishErrors(blockedErrors);
+      Alert.alert('No se puede guardar', blockedErrors.join('\n'));
+      return null;
+    }
 
     if (intent === 'published') {
       if (meetingType === 'midweek') {
@@ -771,10 +825,25 @@ export function MeetingFormScreen() {
           weekendSessions,
           availableUsers
         );
+        const weekendBlockedErrors = weekendSessions.flatMap((session, index) => {
+          const blockedNames = [
+            session.publicTalk.speaker.userId,
+            session.watchtowerStudy.conductor.userId,
+            session.watchtowerStudy.reader.userId,
+          ]
+            .filter((candidate): candidate is string => Boolean(candidate))
+            .filter((candidate) => blockedOutgoingTalkUserIds.has(candidate))
+            .map((candidate) => availableUsers.find((item) => item.uid === candidate)?.displayName ?? candidate);
 
-        if (weekendValidationErrors.length > 0) {
-          setPublishErrors(weekendValidationErrors);
-          Alert.alert('No se puede publicar', weekendValidationErrors.join('\n'));
+          return blockedNames.map(
+            (name) => `Sesion ${index + 1}: ${name} - ${OUTGOING_TALK_BLOCK_MESSAGE}.`
+          );
+        });
+
+        if (weekendValidationErrors.length > 0 || weekendBlockedErrors.length > 0) {
+          const allErrors = [...weekendValidationErrors, ...weekendBlockedErrors];
+          setPublishErrors(allErrors);
+          Alert.alert('No se puede publicar', allErrors.join('\n'));
           return null;
         }
       }
@@ -1147,6 +1216,7 @@ export function MeetingFormScreen() {
               sessions={weekendSessions}
               users={availableUsers}
               disabled={!canManage}
+              blockedUserIds={blockedOutgoingTalkUserIds}
               onChange={setWeekendSessions}
             />
           ) : (
@@ -1222,6 +1292,7 @@ export function MeetingFormScreen() {
                       users={availableUsers}
                       disabled={!canManage || section.isEnabled === false}
                       errors={midweekAssignmentErrors}
+                      blockedUserIds={blockedOutgoingTalkUserIds}
                       onChange={(nextEditorSection) => {
                         setMidweekAssignmentErrors((current) => {
                           let changed = false;

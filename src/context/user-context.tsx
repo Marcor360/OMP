@@ -20,6 +20,7 @@ interface UserContextType {
   role: UserRole | undefined;
   servicePosition: string | undefined;
   serviceDepartment: string | undefined;
+  serviceAssignments: AppUser['serviceAssignments'];
   isActive: boolean;
   congregationId: string | null;
   isAdmin: boolean;
@@ -130,6 +131,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const role = appUser?.role;
     const servicePosition = appUser?.servicePosition;
     const serviceDepartment = appUser?.serviceDepartment;
+    const serviceAssignments = appUser?.serviceAssignments;
     const isActive = appUser?.isActive ?? false;
     const congregationId = appUser?.congregationId ?? null;
 
@@ -146,6 +148,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       role,
       servicePosition,
       serviceDepartment,
+      serviceAssignments,
       isActive,
       congregationId,
       isAdmin,

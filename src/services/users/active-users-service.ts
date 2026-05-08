@@ -7,6 +7,10 @@ export interface ActiveCongregationUser {
   displayName: string;
   email?: string;
   role?: string;
+  congregationId: string;
+  isActive: boolean;
+  isElder: boolean;
+  isMinisterialServant: boolean;
 }
 
 const normalizeText = (value: unknown): string | undefined => {
@@ -45,6 +49,20 @@ const toActiveUser = (uid: string, data: Record<string, unknown>): ActiveCongreg
   displayName: computeDisplayName(uid, data),
   email: normalizeText(data.email),
   role: normalizeText(data.role),
+  congregationId: normalizeText(data.congregationId) ?? '',
+  isActive: isActiveUserRecord(data),
+  isElder:
+    typeof data.isElder === 'boolean'
+      ? data.isElder
+      : typeof data.privileges === 'object' &&
+          data.privileges !== null &&
+          (data.privileges as Record<string, unknown>).isElder === true,
+  isMinisterialServant:
+    typeof data.isMinisterialServant === 'boolean'
+      ? data.isMinisterialServant
+      : typeof data.privileges === 'object' &&
+          data.privileges !== null &&
+          (data.privileges as Record<string, unknown>).isMinisterialServant === true,
 });
 
 const sortByDisplayName = (items: ActiveCongregationUser[]): ActiveCongregationUser[] =>

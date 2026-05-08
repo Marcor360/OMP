@@ -21,6 +21,7 @@ interface MidweekSectionEditorProps {
   disabled?: boolean;
   onChange: (section: MidweekMeetingSection) => void;
   errors?: Record<string, AssignmentCardEditorErrors>;
+  blockedUserIds?: Set<string>;
 }
 
 export function MidweekSectionEditor({
@@ -29,6 +30,7 @@ export function MidweekSectionEditor({
   disabled,
   onChange,
   errors,
+  blockedUserIds,
 }: MidweekSectionEditorProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -83,6 +85,7 @@ export function MidweekSectionEditor({
               canMoveUp={index > 0}
               canMoveDown={index < section.items.length - 1}
               errors={errors?.[item.id]}
+              blockedUserIds={blockedUserIds}
               onMoveUp={() => {
                 if (index === 0) return;
 

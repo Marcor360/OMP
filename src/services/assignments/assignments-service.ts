@@ -12,20 +12,20 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  updateDoc,
   where,
   type Query,
   type QueryConstraint,
   type QuerySnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
 import {
   assignmentDocRef,
   congregationMeetingsCollectionRef,
   meetingAssignmentsCollectionRef,
 } from '@/src/lib/firebase/refs';
-import { db } from '@/src/lib/firebase/app';
+import { db, functions } from '@/src/lib/firebase/app';
 import {
   logFirestoreListenerCreated,
   logFirestoreListenerDestroyed,
@@ -43,6 +43,11 @@ import {
 type AssignmentFilters = {
   userUid?: string;
   status?: AssignmentStatus;
+};
+
+type SerializableTimestamp = {
+  seconds: number;
+  nanoseconds: number;
 };
 
 const ASSIGNMENTS_CACHE_TTL_MS = 60 * 1000;
@@ -73,6 +78,35 @@ const normalizeAssignment = (
     ...base,
     meetingId: base.meetingId ?? meetingId,
   };
+};
+
+const toSerializableTimestamp = (value: Timestamp): SerializableTimestamp => ({
+  seconds: value.seconds,
+  nanoseconds: value.nanoseconds,
+});
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (!value || typeof value !== 'object') return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const toCallableSafe = (value: unknown): unknown => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (value instanceof Timestamp) return toSerializableTimestamp(value);
+  if (Array.isArray(value)) {
+    return value.map((item) => toCallableSafe(item)).filter((item) => item !== undefined);
+  }
+  if (isPlainObject(value)) {
+    const output: Record<string, unknown> = {};
+    Object.entries(value).forEach(([key, child]) => {
+      const safeChild = toCallableSafe(child);
+      if (safeChild !== undefined) output[key] = safeChild;
+    });
+    return output;
+  }
+  return value;
 };
 
 const applyAssignmentFilters = (
@@ -374,19 +408,32 @@ export const createAssignment = async (
   assignedByUid: string,
   assignedByName: string
 ): Promise<string> => {
-  const ref = await addDoc(meetingAssignmentsCollectionRef(congregationId, meetingId), {
-    ...data,
+  const callable = httpsCallable<
+    {
+      congregationId: string;
+      meetingId: string;
+      assignmentData: Record<string, unknown>;
+      assignedByName: string;
+    },
+    { assignmentId: string }
+  >(functions, 'createMeetingAssignmentByManager');
+
+  const result = await callable({
+    congregationId,
     meetingId,
-    assignedByUid,
+    assignmentData: toCallableSafe({
+      ...data,
+      meetingId,
+      assignedByUid,
+      assignedByName,
+      status: 'pending' as AssignmentStatus,
+    }) as Record<string, unknown>,
     assignedByName,
-    status: 'pending' as AssignmentStatus,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
   });
 
   clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
   clearSessionCacheByPrefix(`query:assignments-panel/${congregationId}/`);
-  return ref.id;
+  return result.data.assignmentId;
 };
 
 /** Crea una asignacion de limpieza para un grupo/familia completa. */
@@ -431,15 +478,21 @@ export const updateAssignment = async (
   assignmentId: string,
   data: UpdateAssignmentDTO
 ): Promise<void> => {
-  const extra: Record<string, unknown> = { updatedAt: serverTimestamp() };
+  const callable = httpsCallable<
+    {
+      congregationId: string;
+      meetingId: string;
+      assignmentId: string;
+      assignmentData: Record<string, unknown>;
+    },
+    { ok: true }
+  >(functions, 'updateMeetingAssignmentByManager');
 
-  if (data.status === 'completed') {
-    extra.completedAt = serverTimestamp();
-  }
-
-  await updateDoc(assignmentDocRef(congregationId, meetingId, assignmentId), {
-    ...data,
-    ...extra,
+  await callable({
+    congregationId,
+    meetingId,
+    assignmentId,
+    assignmentData: toCallableSafe(data) as Record<string, unknown>,
   });
   clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
   clearSessionCacheByPrefix(`query:assignments-panel/${congregationId}/`);

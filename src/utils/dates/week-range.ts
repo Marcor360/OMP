@@ -25,3 +25,47 @@ export const moveWeek = (baseStart: Date, offset: number): Date => {
 export const formatWeekLabel = (weekStart: Date, weekEnd: Date): string =>
   `${weekStart.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} - ${weekEnd.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}`;
 
+export const formatDateKey = (value: Date): string => {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+export const parseDateKey = (value: string): Date | null => {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+
+  const [, yearRaw, monthRaw, dayRaw] = match;
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const parsed = new Date(year, month - 1, day);
+  parsed.setHours(0, 0, 0, 0);
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+};
+
+export const getWeekRangeForDate = (
+  value: Date | string
+): { weekStartDate: string; weekEndDate: string; startDate: Date; endDate: Date } => {
+  const parsed = typeof value === 'string' ? parseDateKey(value) : value;
+  const base = parsed instanceof Date ? parsed : new Date();
+  const startDate = getWeekStart(base);
+  const endDate = getWeekEnd(startDate);
+
+  return {
+    weekStartDate: formatDateKey(startDate),
+    weekEndDate: formatDateKey(endDate),
+    startDate,
+    endDate,
+  };
+};

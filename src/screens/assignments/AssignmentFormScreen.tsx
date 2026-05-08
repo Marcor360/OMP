@@ -27,6 +27,12 @@ import {
 import { getAllMeetings } from '@/src/services/meetings/meetings-service';
 import { getAllUsers } from '@/src/services/users/users-service';
 import { getCleaningGroups } from '@/src/modules/cleaning/services/cleaning-service';
+import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
+import {
+  OUTGOING_TALK_BLOCK_MESSAGE,
+  getBlockedOutgoingTalkUserIds,
+} from '@/src/modules/assignments/utils/outgoing-talks';
+import { OutgoingTalk } from '@/src/modules/assignments/types/outgoing-talks.types';
 import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AssignmentPriority, UpdateAssignmentDTO } from '@/src/types/assignment';
@@ -121,6 +127,7 @@ export function AssignmentFormScreen() {
     () => new Date(today.getFullYear(), today.getMonth(), 1)
   );
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [outgoingTalks, setOutgoingTalks] = useState<OutgoingTalk[]>([]);
   const [userSearch, setUserSearch] = useState('');
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [meetingId, setMeetingId] = useState('');
@@ -238,6 +245,31 @@ export function AssignmentFormScreen() {
     user?.uid,
   ]);
 
+  useEffect(() => {
+    if (!congregationId) {
+      setOutgoingTalks([]);
+      return;
+    }
+
+    let cancelled = false;
+    void getScheduledOutgoingTalksForWeek(congregationId, selectedDueDate)
+      .then((items) => {
+        if (!cancelled) setOutgoingTalks(items);
+      })
+      .catch(() => {
+        if (!cancelled) setOutgoingTalks([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [congregationId, selectedDueDate]);
+
+  const blockedOutgoingTalkUserIds = useMemo(
+    () => getBlockedOutgoingTalkUserIds(selectedDueDate, outgoingTalks),
+    [outgoingTalks, selectedDueDate]
+  );
+
   const validate = (): boolean => {
     const nextErrors: FormErrors = {
       title: validateRequired(title, 'El titulo'),
@@ -251,7 +283,8 @@ export function AssignmentFormScreen() {
           : undefined,
       assignedTo:
         mode === 'create' && targetMode === 'person' && personAssignmentMode === 'user'
-          ? validateRequired(assignedToUid, 'La persona asignada')
+          ? validateRequired(assignedToUid, 'La persona asignada') ??
+            (blockedOutgoingTalkUserIds.has(assignedToUid) ? OUTGOING_TALK_BLOCK_MESSAGE : undefined)
           : undefined,
       manualAssigneeName:
         mode === 'create' && targetMode === 'person' && personAssignmentMode === 'manual'
@@ -383,6 +416,7 @@ export function AssignmentFormScreen() {
   }, [userSearch, users]);
 
   const selectAssignee = (selectedUser: AppUser) => {
+    if (blockedOutgoingTalkUserIds.has(selectedUser.uid)) return;
     setAssignedToUid(selectedUser.uid);
     setAssignedToName(selectedUser.displayName);
     setUserSearch(selectedUser.displayName);
@@ -772,21 +806,30 @@ export function AssignmentFormScreen() {
                   {filteredUsers.map((item, index) => {
                     const selected = assignedToUid === item.uid;
                     const isLast = index === filteredUsers.length - 1;
+                    const isBlocked = blockedOutgoingTalkUserIds.has(item.uid);
                     return (
                       <TouchableOpacity
                         key={item.uid}
                         style={[
                           styles.userItem,
                           selected && styles.userItemSelected,
+                          isBlocked && styles.userItemDisabled,
                           isLast && styles.userItemLast,
                         ]}
                         onPress={() => selectAssignee(item)}
                         activeOpacity={0.8}
-                        disabled={!canEditForm}
+                        disabled={!canEditForm || isBlocked}
                       >
                         <View style={styles.userInfo}>
-                          <ThemedText style={styles.userName}>{item.displayName}</ThemedText>
+                          <ThemedText style={[styles.userName, isBlocked && styles.userItemDisabledText]}>
+                            {item.displayName}
+                          </ThemedText>
                           <ThemedText style={styles.userEmail}>{item.email}</ThemedText>
+                          {isBlocked ? (
+                            <ThemedText style={styles.userBlockedText}>
+                              {OUTGOING_TALK_BLOCK_MESSAGE}
+                            </ThemedText>
+                          ) : null}
                         </View>
                         {selected ? (
                           <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
@@ -1035,6 +1078,17 @@ const createStyles = (colors: AppColorSet) =>
     },
     userItemSelected: {
       backgroundColor: colors.primary + '14',
+    },
+    userItemDisabled: {
+      opacity: 0.5,
+    },
+    userItemDisabledText: {
+      color: colors.textDisabled,
+    },
+    userBlockedText: {
+      fontSize: 11,
+      color: colors.warning,
+      fontWeight: '700',
     },
     userInfo: {
       flex: 1,

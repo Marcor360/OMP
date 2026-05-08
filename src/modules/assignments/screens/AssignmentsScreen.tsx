@@ -21,12 +21,14 @@ import {
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { useUser } from '@/src/context/user-context';
 import { RoleGuard } from '@/src/components/common/RoleGuard';
+import { canManageOutgoingTalks } from '@/src/utils/permissions/permissions';
 
 export function AssignmentsScreen() {
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { appUser, congregationId, loadingProfile, profileError, uid } = useUser();
+  const showOutgoingTalks = canManageOutgoingTalks(appUser);
 
   const {
     activeTab,
@@ -95,16 +97,28 @@ export function AssignmentsScreen() {
         title="Asignaciones"
         subtitle="Panel de solo lectura"
         actions={
-          <RoleGuard allowedRoles={['admin', 'supervisor']}>
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={() => router.push('/(protected)/assignments/create' as never)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add" size={16} color={colors.primary} />
-              <ThemedText style={styles.createButtonText}>Nuevo</ThemedText>
-            </TouchableOpacity>
-          </RoleGuard>
+          <View style={styles.actionsRow}>
+            {showOutgoingTalks ? (
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={() => router.push('/(protected)/assignments/outgoing-talks' as never)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="exit-outline" size={16} color={colors.primary} />
+                <ThemedText style={styles.createButtonText}>Salidas</ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            <RoleGuard allowedRoles={['admin', 'supervisor']}>
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={() => router.push('/(protected)/assignments/create' as never)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="add" size={16} color={colors.primary} />
+                <ThemedText style={styles.createButtonText}>Nuevo</ThemedText>
+              </TouchableOpacity>
+            </RoleGuard>
+          </View>
         }
       />
 
@@ -162,6 +176,12 @@ const createStyles = (colors: AppColorSet) =>
     },
     separator: {
       height: 10,
+    },
+    actionsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      justifyContent: 'flex-end',
     },
     counterRow: {
       paddingHorizontal: 16,

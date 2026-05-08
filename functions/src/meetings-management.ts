@@ -50,6 +50,20 @@ type SyncMeetingCleaningAssignmentsPayload = {
   assignedByName?: unknown;
 };
 
+type CreateMeetingAssignmentPayload = {
+  congregationId?: unknown;
+  meetingId?: unknown;
+  assignmentData?: unknown;
+  assignedByName?: unknown;
+};
+
+type UpdateMeetingAssignmentPayload = {
+  congregationId?: unknown;
+  meetingId?: unknown;
+  assignmentId?: unknown;
+  assignmentData?: unknown;
+};
+
 const normalizeText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -284,6 +298,15 @@ const parseMeetingData = (value: unknown): Record<string, unknown> => {
   return meetingData;
 };
 
+const parseAssignmentData = (value: unknown): Record<string, unknown> => {
+  const assignmentData = asRecord(value);
+  if (!assignmentData) {
+    throw new HttpsError('invalid-argument', 'assignmentData es obligatorio.');
+  }
+
+  return assignmentData;
+};
+
 const getRequesterProfile = async (uid: string): Promise<RequesterProfile> => {
   const snap = await adminDb.collection('users').doc(uid).get();
 
@@ -329,6 +352,34 @@ const assertMeetingManager = (params: {
   }
 };
 
+const assertNoOutgoingTalkConflictForUser = async (params: {
+  congregationId: string;
+  userId?: string;
+  assignmentDate?: Timestamp;
+}) => {
+  const userId = normalizeText(params.userId);
+  if (!userId || userId.startsWith('manual:') || !params.assignmentDate) return;
+
+  const weekStartDate = getWeekStartKeyFromTimestamp(params.assignmentDate);
+  const snapshot = await adminDb
+    .collection('congregations')
+    .doc(params.congregationId)
+    .collection('outgoingTalks')
+    .where('speakerUserId', '==', userId)
+    .where('status', '==', 'scheduled')
+    .where('weekStartDate', '==', weekStartDate)
+    .limit(1)
+    .get();
+
+  if (!snapshot.empty) {
+    const data = snapshot.docs[0].data() as Record<string, unknown>;
+    throw new HttpsError(
+      'failed-precondition',
+      `${normalizeText(data.speakerName) ?? userId} no esta disponible: salida a discursar esta semana.`
+    );
+  }
+};
+
 const toMeetingRangeFromData = (data: Record<string, unknown>): {
   meetingType: MeetingProgramKind;
   startDate: Timestamp;
@@ -367,6 +418,18 @@ const formatShortDate = (value: Timestamp): string =>
     month: '2-digit',
     year: 'numeric',
   });
+
+const formatDateKey = (value: Date): string =>
+  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+
+const getWeekStartKeyFromTimestamp = (value: Timestamp): string => {
+  const date = value.toDate();
+  date.setHours(0, 0, 0, 0);
+  const day = date.getDay();
+  const shift = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + shift);
+  return formatDateKey(date);
+};
 
 const resolveErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
@@ -459,6 +522,49 @@ const assertNoMeetingConflict = async (params: {
       } para ese rango (${formatShortDate(params.range.startDate)} al ${formatShortDate(
         params.range.endDate
       )}).`
+    );
+  }
+};
+
+const assertNoOutgoingTalkAssignmentConflict = async (params: {
+  congregationId: string;
+  meetingData: Record<string, unknown>;
+}) => {
+  const sections = normalizeMeetingSectionsFromDoc(params.meetingData);
+  const assignedUserIds = buildAssignedUserIdsFromSections(sections);
+  if (assignedUserIds.length === 0) return;
+
+  const meetingDate =
+    resolveMeetingDate(params.meetingData) ??
+    toTimestamp(params.meetingData.startDate) ??
+    Timestamp.now();
+  const weekStartDate = getWeekStartKeyFromTimestamp(meetingDate);
+
+  const snapshot = await adminDb
+    .collection('congregations')
+    .doc(params.congregationId)
+    .collection('outgoingTalks')
+    .where('status', '==', 'scheduled')
+    .where('weekStartDate', '==', weekStartDate)
+    .limit(100)
+    .get();
+
+  const blockedByUserId = new Map<string, string>();
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data() as Record<string, unknown>;
+    const speakerUserId = normalizeText(data.speakerUserId);
+    if (!speakerUserId) return;
+    blockedByUserId.set(
+      speakerUserId,
+      normalizeText(data.speakerName) ?? speakerUserId
+    );
+  });
+
+  const conflict = assignedUserIds.find((userId) => blockedByUserId.has(userId));
+  if (conflict) {
+    throw new HttpsError(
+      'failed-precondition',
+      `${blockedByUserId.get(conflict) ?? conflict} no esta disponible: salida a discursar esta semana.`
     );
   }
 };
@@ -583,6 +689,11 @@ export const createMeetingByManager = onCall(
       range: meetingRange,
     });
 
+    await assertNoOutgoingTalkAssignmentConflict({
+      congregationId,
+      meetingData,
+    });
+
     const meetingPayload = buildMeetingWritePayload({
       meetingData,
       requesterUid: request.auth.uid,
@@ -637,6 +748,11 @@ export const updateMeetingByManager = onCall(
       congregationId,
       range: mergedRange,
       excludeMeetingId: meetingId,
+    });
+
+    await assertNoOutgoingTalkAssignmentConflict({
+      congregationId,
+      meetingData: mergedMeetingData,
     });
 
     const updatePayload = buildMeetingWritePayload({
@@ -754,6 +870,106 @@ export const syncMeetingCleaningAssignmentsByManager = onCall(
     );
 
     await batch.commit();
+    return { ok: true };
+  }
+);
+
+export const createMeetingAssignmentByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<{ assignmentId: string }> => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const payload = request.data as CreateMeetingAssignmentPayload;
+    const congregationId = parseCongregationId(payload.congregationId);
+    const meetingId = parseMeetingId(payload.meetingId);
+    const assignmentData = parseAssignmentData(payload.assignmentData);
+    const requester = await getRequesterProfile(request.auth.uid);
+    assertMeetingManager({ requester, congregationId });
+
+    const dueDate = toTimestamp(assignmentData.dueDate) ?? toTimestamp(assignmentData.date);
+    await assertNoOutgoingTalkConflictForUser({
+      congregationId,
+      userId: normalizeText(assignmentData.assignedToUid),
+      assignmentDate: dueDate,
+    });
+
+    const ref = await adminDb
+      .collection('congregations')
+      .doc(congregationId)
+      .collection('meetings')
+      .doc(meetingId)
+      .collection('assignments')
+      .add(
+        sanitizeForFirestore({
+          ...assignmentData,
+          congregationId,
+          meetingId,
+          assignedByUid: request.auth.uid,
+          assignedByName:
+            normalizeText(payload.assignedByName) ??
+            requester.displayName ??
+            requester.email ??
+            'Usuario',
+          status: normalizeText(assignmentData.status) ?? 'pending',
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }) as Record<string, unknown>
+      );
+
+    return { assignmentId: ref.id };
+  }
+);
+
+export const updateMeetingAssignmentByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<{ ok: true }> => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const payload = request.data as UpdateMeetingAssignmentPayload;
+    const congregationId = parseCongregationId(payload.congregationId);
+    const meetingId = parseMeetingId(payload.meetingId);
+    const assignmentId = parseMeetingId(payload.assignmentId);
+    const assignmentData = parseAssignmentData(payload.assignmentData);
+    const requester = await getRequesterProfile(request.auth.uid);
+    assertMeetingManager({ requester, congregationId });
+
+    const ref = adminDb
+      .collection('congregations')
+      .doc(congregationId)
+      .collection('meetings')
+      .doc(meetingId)
+      .collection('assignments')
+      .doc(assignmentId);
+    const current = await ref.get();
+    if (!current.exists) {
+      throw new HttpsError('not-found', 'Asignacion no encontrada.');
+    }
+
+    const merged = {
+      ...(current.data() as Record<string, unknown>),
+      ...assignmentData,
+    };
+    const dueDate = toTimestamp(merged.dueDate) ?? toTimestamp(merged.date);
+    await assertNoOutgoingTalkConflictForUser({
+      congregationId,
+      userId: normalizeText(merged.assignedToUid),
+      assignmentDate: dueDate,
+    });
+
+    await ref.update(
+      sanitizeForFirestore({
+        ...assignmentData,
+        updatedAt: FieldValue.serverTimestamp(),
+        ...(assignmentData.status === 'completed'
+          ? { completedAt: FieldValue.serverTimestamp() }
+          : {}),
+      }) as Record<string, unknown>
+    );
+
     return { ok: true };
   }
 );

@@ -32,6 +32,12 @@ import {
   ActiveCongregationUser,
   getActiveCongregationUsers,
 } from '@/src/services/users/active-users-service';
+import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
+import {
+  OUTGOING_TALK_BLOCK_MESSAGE,
+  getBlockedOutgoingTalkUserIds,
+} from '@/src/modules/assignments/utils/outgoing-talks';
+import { OutgoingTalk } from '@/src/modules/assignments/types/outgoing-talks.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   MIDWEEK_REQUIRED_SECTION_IDS,
@@ -188,6 +194,7 @@ export function MidweekMeetingFormScreen() {
 
   const [form, setForm] = useState<MidweekMeetingFormState>(initialFormState);
   const [availableUsers, setAvailableUsers] = useState<ActiveCongregationUser[]>([]);
+  const [outgoingTalks, setOutgoingTalks] = useState<OutgoingTalk[]>([]);
   const [errors, setErrors] = useState<MidweekMeetingFormErrors>({ assignments: {} });
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
@@ -245,6 +252,36 @@ export function MidweekMeetingFormScreen() {
     };
   }, [congregationId, id, loadingProfile, mode, router]);
 
+  const parsedAssignmentDate = React.useMemo(
+    () => parseInputDateTime(form.startDateInput) ?? new Date(),
+    [form.startDateInput]
+  );
+
+  useEffect(() => {
+    if (!congregationId) {
+      setOutgoingTalks([]);
+      return;
+    }
+
+    let cancelled = false;
+    void getScheduledOutgoingTalksForWeek(congregationId, parsedAssignmentDate)
+      .then((items) => {
+        if (!cancelled) setOutgoingTalks(items);
+      })
+      .catch(() => {
+        if (!cancelled) setOutgoingTalks([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [congregationId, parsedAssignmentDate]);
+
+  const blockedOutgoingTalkUserIds = React.useMemo(
+    () => getBlockedOutgoingTalkUserIds(parsedAssignmentDate, outgoingTalks),
+    [outgoingTalks, parsedAssignmentDate]
+  );
+
   const validate = (): { isValid: boolean; startDate?: Date; endDate?: Date } => {
     const topLevelErrors: MidweekMeetingFormErrors = {
       title: validateRequired(form.title, 'El titulo general'),
@@ -252,6 +289,8 @@ export function MidweekMeetingFormScreen() {
       bibleReading: validateRequired(form.bibleReading, 'La lectura biblica'),
       chairmanUserId: form.chairmanUserId.trim().length === 0
         ? 'El presidente es obligatorio.'
+        : blockedOutgoingTalkUserIds.has(form.chairmanUserId)
+          ? OUTGOING_TALK_BLOCK_MESSAGE
         : undefined,
       startDateInput: undefined,
       endDateInput: undefined,
@@ -330,6 +369,8 @@ export function MidweekMeetingFormScreen() {
           } else if (scope !== 'internal') {
             participantErrors[participant.id] =
               'Las asignaciones informativas no deben usar usuario interno.';
+          } else if (blockedOutgoingTalkUserIds.has(participant.userId)) {
+            participantErrors[participant.id] = OUTGOING_TALK_BLOCK_MESSAGE;
           }
         });
 
@@ -621,6 +662,7 @@ export function MidweekMeetingFormScreen() {
               selectedUserId={form.chairmanUserId}
               disabled={!canEdit}
               hasError={Boolean(errors.chairmanUserId)}
+              blockedUserIds={blockedOutgoingTalkUserIds}
               onSelect={(user) =>
                 setForm((current) => ({
                   ...current,
@@ -652,6 +694,7 @@ export function MidweekMeetingFormScreen() {
                   users={availableUsers}
                   selectedUserId={form.openingPrayerUserId}
                   disabled={!canEdit}
+                  blockedUserIds={blockedOutgoingTalkUserIds}
                   onSelect={(user) =>
                     setForm((current) => ({
                       ...current,
@@ -698,6 +741,7 @@ export function MidweekMeetingFormScreen() {
               users={availableUsers}
               selectedUserId={form.closingPrayerUserId}
               disabled={!canEdit}
+              blockedUserIds={blockedOutgoingTalkUserIds}
               onSelect={(user) =>
                 setForm((current) => ({
                   ...current,
@@ -720,6 +764,7 @@ export function MidweekMeetingFormScreen() {
               users={availableUsers}
               disabled={!canEdit}
               errors={errors.assignments}
+              blockedUserIds={blockedOutgoingTalkUserIds}
               onChange={(nextSection) => updateSection(section.id, nextSection)}
             />
           ))}
@@ -764,6 +809,7 @@ function UserPickerField({
   disabled,
   hasError,
   onSelect,
+  blockedUserIds,
 }: {
   label: string;
   users: ActiveCongregationUser[];
@@ -771,6 +817,7 @@ function UserPickerField({
   disabled?: boolean;
   hasError?: boolean;
   onSelect: (user: ActiveCongregationUser) => void;
+  blockedUserIds?: Set<string>;
 }) {
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -801,16 +848,34 @@ function UserPickerField({
             >
               {users.map((user) => {
                 const isSelected = user.uid === selectedUserId;
+                const isBlocked = blockedUserIds?.has(user.uid) === true;
                 return (
                   <TouchableOpacity
                     key={user.uid}
-                    onPress={() => { onSelect(user); setUpeExpanded(false); }}
-                    style={{ paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: isSelected ? (colors.primary + '22') : undefined }}
+                    onPress={() => {
+                      if (isBlocked) return;
+                      onSelect(user);
+                      setUpeExpanded(false);
+                    }}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.border,
+                      backgroundColor: isSelected ? (colors.primary + '22') : undefined,
+                      opacity: isBlocked ? 0.5 : 1,
+                    }}
                     activeOpacity={0.7}
+                    disabled={isBlocked}
                   >
-                    <ThemedText style={{ fontSize: 14, color: isSelected ? colors.primary : colors.textPrimary, fontWeight: isSelected ? '700' : '500' }}>
+                    <ThemedText style={{ fontSize: 14, color: isBlocked ? colors.textDisabled : isSelected ? colors.primary : colors.textPrimary, fontWeight: isSelected ? '700' : '500' }}>
                       {user.displayName}
                     </ThemedText>
+                    {isBlocked ? (
+                      <ThemedText style={{ fontSize: 11, color: colors.warning, fontWeight: '700', marginTop: 2 }}>
+                        {OUTGOING_TALK_BLOCK_MESSAGE}
+                      </ThemedText>
+                    ) : null}
                   </TouchableOpacity>
                 );
               })}

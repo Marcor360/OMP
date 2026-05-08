@@ -31,6 +31,7 @@ import {
   UpdateUserDTO,
   USER_SERVICE_DEPARTMENT_LABELS,
   UserServiceDepartment,
+  UserServiceAssignment,
   UserServicePosition,
   UserRole,
   UserStatus,
@@ -103,6 +104,44 @@ const buildDepartmentLabel = (
   return undefined;
 };
 
+const normalizeServiceAssignment = (value: unknown): UserServiceAssignment | null => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  const position = isUserServicePosition(source.position) ? source.position : undefined;
+  if (!position) return null;
+  const department = isUserServiceDepartment(source.department) ? source.department : undefined;
+  const label = buildDepartmentLabel(position, department);
+  if (!label) return null;
+  return { position, department, label };
+};
+
+const normalizeServiceAssignments = (
+  value: unknown,
+  fallbackPosition?: UserServicePosition,
+  fallbackDepartment?: UserServiceDepartment
+): UserServiceAssignment[] => {
+  const normalized = Array.isArray(value)
+    ? value
+        .map(normalizeServiceAssignment)
+        .filter((item): item is UserServiceAssignment => Boolean(item))
+    : [];
+  const byKey = new Map<string, UserServiceAssignment>();
+  normalized.forEach((item) => {
+    byKey.set(`${item.position}:${item.department ?? ''}`, item);
+  });
+
+  const fallbackLabel = buildDepartmentLabel(fallbackPosition, fallbackDepartment);
+  if (fallbackPosition && fallbackLabel) {
+    byKey.set(`${fallbackPosition}:${fallbackDepartment ?? ''}`, {
+      position: fallbackPosition,
+      department: fallbackDepartment,
+      label: fallbackLabel,
+    });
+  }
+
+  return Array.from(byKey.values());
+};
+
 const USER_PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
 const USERS_QUERY_CACHE_TTL_MS = 60 * 1000;
 
@@ -152,12 +191,23 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
     ? data.serviceDepartment
     : undefined;
   const computedDepartment = buildDepartmentLabel(servicePosition, serviceDepartment);
+  const serviceAssignments = normalizeServiceAssignments(
+    data.serviceAssignments,
+    servicePosition,
+    serviceDepartment
+  );
   const privileges = normalizeBooleanMap(data.privileges, [
     'isElder',
     'isMinisterialServant',
     'isRegularPioneer',
     'isAuxiliaryPioneer',
   ] as const);
+  const isElder =
+    typeof data.isElder === 'boolean' ? data.isElder : privileges?.isElder === true;
+  const isMinisterialServant =
+    typeof data.isMinisterialServant === 'boolean'
+      ? data.isMinisterialServant
+      : privileges?.isMinisterialServant === true;
   const responsibilities = normalizeBooleanMap(data.responsibilities, [
     'isPreachingManager',
   ] as const);
@@ -183,8 +233,11 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
         : undefined),
     servicePosition,
     serviceDepartment,
+    serviceAssignments,
     privileges,
     responsibilities,
+    isElder,
+    isMinisterialServant,
     avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : undefined,
     // Campos del módulo de limpieza
     cleaningEligible: typeof data.cleaningEligible === 'boolean' ? data.cleaningEligible : true,
@@ -288,6 +341,9 @@ export const createUserProfile = async (
 
   await setDoc(userDocRef(uid), {
     ...data,
+    isElder: data.isElder ?? (data.privileges?.isElder === true),
+    isMinisterialServant:
+      data.isMinisterialServant ?? (data.privileges?.isMinisterialServant === true),
     isActive,
     status: isActive ? 'active' : 'inactive',
     createdAt: serverTimestamp(),

@@ -50,6 +50,12 @@ export interface UserResponsibilities {
   isPreachingManager?: boolean;
 }
 
+export interface UserServiceAssignment {
+  position: UserServicePosition;
+  department?: UserServiceDepartment;
+  label: string;
+}
+
 export interface AppUser {
   uid: string;
   email: string;
@@ -62,8 +68,11 @@ export interface AppUser {
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
+  serviceAssignments?: UserServiceAssignment[];
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
+  isElder: boolean;
+  isMinisterialServant: boolean;
   avatarUrl?: string;
   secondLastName?: string;
   // Campos de modulo de limpieza
@@ -91,8 +100,11 @@ export interface CreateUserDTO {
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
+  serviceAssignments?: UserServiceAssignment[];
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
+  isElder?: boolean;
+  isMinisterialServant?: boolean;
   secondLastName?: string;
 }
 
@@ -106,8 +118,11 @@ export interface UpdateUserDTO {
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
+  serviceAssignments?: UserServiceAssignment[];
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
+  isElder?: boolean;
+  isMinisterialServant?: boolean;
   // Campos de modulo de limpieza
   cleaningEligible?: boolean;
   cleaningGroupId?: string | null;
@@ -156,14 +171,24 @@ export const getPioneerType = (
 
 export const isPreachingManager = (
   user:
-    | Pick<AppUser, 'privileges' | 'servicePosition' | 'serviceDepartment'>
+    | Pick<AppUser, 'privileges' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
     | null
     | undefined
 ): boolean =>
   Boolean(
-    user?.serviceDepartment === 'predicacion' &&
-      (
-        (user.servicePosition === 'encargado' && user.privileges?.isElder === true) ||
-        user.servicePosition === 'auxiliar'
+    (
+      user?.serviceDepartment === 'predicacion' &&
+        (
+          (user.servicePosition === 'encargado' && user.privileges?.isElder === true) ||
+          user.servicePosition === 'auxiliar'
+        )
+    ) ||
+      user?.serviceAssignments?.some(
+        (assignment) =>
+          assignment.department === 'predicacion' &&
+          (
+            (assignment.position === 'encargado' && user.privileges?.isElder === true) ||
+            assignment.position === 'auxiliar'
+          )
       )
   );

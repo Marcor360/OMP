@@ -25,6 +25,7 @@ interface AssignmentCardEditorProps {
   onRemove: () => void;
   onChange: (assignment: MidweekAssignment) => void;
   errors?: AssignmentCardEditorErrors;
+  blockedUserIds?: Set<string>;
 }
 
 const normalizeParticipants = (
@@ -49,6 +50,7 @@ export function AssignmentCardEditor({
   onRemove,
   onChange,
   errors,
+  blockedUserIds,
 }: AssignmentCardEditorProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -209,6 +211,7 @@ export function AssignmentCardEditor({
                   allowManual
                   title={participantLabel(participantIndex)}
                   canRemove={visibleParticipants.length > 1}
+                  blockedUserIds={blockedUserIds}
                   onChange={(nextParticipant) => {
                     const nextParticipants = visibleParticipants.map((current, currentIndex) =>
                       currentIndex === participantIndex ? nextParticipant : current

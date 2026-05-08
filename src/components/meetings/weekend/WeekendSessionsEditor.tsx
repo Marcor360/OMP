@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
+import { OUTGOING_TALK_BLOCK_MESSAGE } from '@/src/modules/assignments/utils/outgoing-talks';
 import { ActiveCongregationUser } from '@/src/services/users/active-users-service';
 import {
   WeekendMeetingSessionDraft,
@@ -16,6 +17,7 @@ interface WeekendSessionsEditorProps {
   users: ActiveCongregationUser[];
   disabled?: boolean;
   onChange: (sessions: WeekendMeetingSessionDraft[]) => void;
+  blockedUserIds?: Set<string>;
 }
 
 interface UserSelectFieldProps {
@@ -26,6 +28,7 @@ interface UserSelectFieldProps {
   disabled?: boolean;
   placeholder: string;
   onSelect: (user: ActiveCongregationUser) => void;
+  blockedUserIds?: Set<string>;
 }
 
 function UserSelectField({
@@ -36,6 +39,7 @@ function UserSelectField({
   disabled,
   placeholder,
   onSelect,
+  blockedUserIds,
 }: UserSelectFieldProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -73,22 +77,38 @@ function UserSelectField({
             <ScrollView nestedScrollEnabled style={styles.userList}>
               {users.map((user) => {
                 const isSelected = user.uid === valueUserId;
+                const isBlocked = blockedUserIds?.has(user.uid) === true;
                 return (
                   <TouchableOpacity
                     key={user.uid}
-                    style={[styles.userOption, isSelected && styles.userOptionSelected]}
+                    style={[
+                      styles.userOption,
+                      isSelected && styles.userOptionSelected,
+                      isBlocked && styles.userOptionDisabled,
+                    ]}
                     onPress={() => {
+                      if (isBlocked) return;
                       onSelect(user);
                       setExpanded(false);
                     }}
                     activeOpacity={0.7}
+                    disabled={isBlocked}
                   >
                     <ThemedText
-                      style={[styles.userOptionText, isSelected && styles.userOptionTextSelected]}
+                      style={[
+                        styles.userOptionText,
+                        isSelected && styles.userOptionTextSelected,
+                        isBlocked && styles.userOptionDisabledText,
+                      ]}
                     >
                       {user.displayName}
                     </ThemedText>
                     {user.email ? <ThemedText style={styles.userOptionEmail}>{user.email}</ThemedText> : null}
+                    {isBlocked ? (
+                      <ThemedText style={styles.userOptionBlocked}>
+                        {OUTGOING_TALK_BLOCK_MESSAGE}
+                      </ThemedText>
+                    ) : null}
                   </TouchableOpacity>
                 );
               })}
@@ -105,6 +125,7 @@ export function WeekendSessionsEditor({
   users,
   disabled,
   onChange,
+  blockedUserIds,
 }: WeekendSessionsEditorProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -276,6 +297,7 @@ export function WeekendSessionsEditor({
                 users={users}
                 disabled={disabled}
                 placeholder="Seleccionar discursante"
+                blockedUserIds={blockedUserIds}
                 onSelect={(user) =>
                   updateSession(session.id, (current) => ({
                     ...current,
@@ -321,6 +343,7 @@ export function WeekendSessionsEditor({
               users={users}
               disabled={disabled}
               placeholder="Seleccionar conductor"
+              blockedUserIds={blockedUserIds}
               onSelect={(user) =>
                 updateSession(session.id, (current) => ({
                   ...current,
@@ -343,6 +366,7 @@ export function WeekendSessionsEditor({
               users={users}
               disabled={disabled}
               placeholder="Seleccionar lector"
+              blockedUserIds={blockedUserIds}
               onSelect={(user) =>
                 updateSession(session.id, (current) => ({
                   ...current,
@@ -464,8 +488,11 @@ const createStyles = (colors: AppColorSet) =>
       gap: 2,
     },
     userOptionSelected: { backgroundColor: colors.primary + '22' },
+    userOptionDisabled: { opacity: 0.5 },
     userOptionText: { color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
     userOptionTextSelected: { color: colors.primary },
+    userOptionDisabledText: { color: colors.textDisabled },
     userOptionEmail: { fontSize: 12, color: colors.textMuted },
+    userOptionBlocked: { fontSize: 11, color: colors.warning, fontWeight: '700' },
     emptyUsers: { paddingHorizontal: 12, paddingVertical: 10, fontSize: 12, color: colors.textMuted },
   });

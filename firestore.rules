@@ -87,24 +87,72 @@ service cloud.firestore {
       return isAdminOrSupervisor()
         || (
           isActive()
-          && currentUserData().servicePosition == 'encargado'
           && (
-            !('serviceDepartment' in currentUserData())
-            || currentUserData().serviceDepartment == 'limpieza'
+            (
+              currentUserData().servicePosition == 'encargado'
+              && (
+                !('serviceDepartment' in currentUserData())
+                || currentUserData().serviceDepartment == 'limpieza'
+              )
+            )
+            || (
+              currentUserData().serviceAssignments is list
+              && currentUserData().serviceAssignments.hasAny([
+                { position: 'encargado', department: 'limpieza', label: 'Encargado de Limpieza' }
+              ])
+            )
           )
         );
     }
 
     function isPreachingManager() {
       return isActive()
-        && currentUserData().serviceDepartment == 'predicacion'
         && (
           (
-            currentUserData().servicePosition == 'encargado'
-            && currentUserData().privileges is map
-            && currentUserData().privileges.isElder == true
+            currentUserData().serviceDepartment == 'predicacion'
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && currentUserData().privileges is map
+                && currentUserData().privileges.isElder == true
+              )
+              || currentUserData().servicePosition == 'auxiliar'
+            )
           )
-          || currentUserData().servicePosition == 'auxiliar'
+          || (
+            currentUserData().serviceAssignments is list
+            && (
+              (
+                currentUserData().privileges is map
+                && currentUserData().privileges.isElder == true
+                && currentUserData().serviceAssignments.hasAny([
+                  { position: 'encargado', department: 'predicacion', label: 'Encargado de Predicacion' }
+                ])
+              )
+              || currentUserData().serviceAssignments.hasAny([
+                { position: 'auxiliar', department: 'predicacion', label: 'Auxiliar de Predicacion' }
+              ])
+            )
+          )
+        );
+    }
+
+    function isOutgoingTalksManager() {
+      return isAdmin()
+        || (
+          isActive()
+          && (
+            (
+              currentUserData().servicePosition == 'encargado'
+              && currentUserData().serviceDepartment == 'discursos'
+            )
+            || (
+              currentUserData().serviceAssignments is list
+              && currentUserData().serviceAssignments.hasAny([
+                { position: 'encargado', department: 'discursos', label: 'Encargado de Discursos' }
+              ])
+            )
+          )
         );
     }
 
@@ -118,7 +166,10 @@ service cloud.firestore {
     }
 
     function canListCongregationUsers() {
-      return isCleaningManager() || isPreachingManager() || isAdminOrSupervisor();
+      return isCleaningManager()
+        || isPreachingManager()
+        || isOutgoingTalksManager()
+        || isAdminOrSupervisor();
     }
 
     function isSameUser(userId) {
@@ -171,9 +222,12 @@ service cloud.firestore {
         // Campos de asignación de servicio — escritura por Cloud Functions.
         'servicePosition',
         'serviceDepartment',
+        'serviceAssignments',
         'department',
         'privileges',
         'responsibilities',
+        'isElder',
+        'isMinisterialServant',
         'createdAt',
         'updatedAt',
         // Campos de notificaciones push — escritura controlada por validPushTokenUpdate()
@@ -256,7 +310,24 @@ service cloud.firestore {
         && (
           !('responsibilities' in data)
           || validUserResponsibilities(data.responsibilities)
+        )
+        && (
+          !('serviceAssignments' in data)
+          || validUserServiceAssignments(data.serviceAssignments)
+        )
+        && (
+          !('isElder' in data)
+          || data.isElder is bool
+        )
+        && (
+          !('isMinisterialServant' in data)
+          || data.isMinisterialServant is bool
         );
+    }
+
+    function validUserServiceAssignments(assignments) {
+      return assignments is list
+        && assignments.size() <= 20;
     }
 
     function validUserPrivileges(privileges) {
@@ -739,6 +810,69 @@ service cloud.firestore {
         && (!('relatedId' in data) || data.relatedId is string);
     }
 
+    function validOutgoingTalkStatus(status) {
+      return status is string && status in ['scheduled', 'cancelled', 'completed'];
+    }
+
+    function validDateKey(value) {
+      return value is string
+        && value.matches('^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$');
+    }
+
+    function validTimeKey(value) {
+      return value is string
+        && value.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$');
+    }
+
+    function validOutgoingTalkData(data, congregationId) {
+      return hasOnlyKeys(data, [
+          'congregationId',
+          'speakerUserId',
+          'speakerName',
+          'destinationCongregationName',
+          'talkDate',
+          'talkTime',
+          'weekStartDate',
+          'weekEndDate',
+          'status',
+          'notes',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'speakerUserId',
+          'speakerName',
+          'destinationCongregationName',
+          'talkDate',
+          'talkTime',
+          'weekStartDate',
+          'weekEndDate',
+          'status',
+          'createdBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && isNonEmptyString(data.speakerUserId)
+        && isNonEmptyString(data.speakerName)
+        && isNonEmptyString(data.destinationCongregationName)
+        && validDateKey(data.talkDate)
+        && validTimeKey(data.talkTime)
+        && validDateKey(data.weekStartDate)
+        && validDateKey(data.weekEndDate)
+        && data.weekStartDate <= data.talkDate
+        && data.talkDate <= data.weekEndDate
+        && validOutgoingTalkStatus(data.status)
+        && data.createdBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('updatedBy' in data) || data.updatedBy is string)
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000));
+    }
+
     // =========================================================================
     // CHANGE LOGS
     // =========================================================================
@@ -981,14 +1115,7 @@ service cloud.firestore {
         match /assignments/{assignmentId} {
           allow get, list: if sameCongregation(congregationId);
 
-          allow create: if isAdminOrSupervisor()
-            && sameCongregation(congregationId)
-            && validAssignmentData(request.resource.data, congregationId, meetingId);
-
-          allow update: if isAdminOrSupervisor()
-            && sameCongregation(congregationId)
-            && validAssignmentData(request.resource.data, congregationId, meetingId)
-            && preservesCreatedAt();
+          allow create, update: if false;
 
           allow delete: if isAdmin();
         }
@@ -1010,6 +1137,22 @@ service cloud.firestore {
           && preservesCreatedAt();
 
         allow delete: if isAdmin();
+      }
+
+      // -----------------------------------------------------------------------
+      // OUTGOING TALKS
+      // Escritura directa cerrada: las altas/cambios pasan por Cloud Functions.
+      // -----------------------------------------------------------------------
+      match /outgoingTalks/{outgoingTalkId} {
+        allow get, list: if sameCongregation(congregationId)
+          && isOutgoingTalksManager();
+
+        allow create, update: if false
+          && sameCongregation(congregationId)
+          && isOutgoingTalksManager()
+          && validOutgoingTalkData(request.resource.data, congregationId);
+
+        allow delete: if false;
       }
 
       // -----------------------------------------------------------------------

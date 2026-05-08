@@ -30,6 +30,12 @@ type ServiceAssignment = {
   label?: string;
 };
 
+type StoredServiceAssignment = {
+  position: ServicePosition;
+  department?: ServiceDepartment;
+  label: string;
+};
+
 type RequesterProfile = {
   role: Role;
   isActive: boolean;
@@ -52,6 +58,7 @@ type CreateUserPayload = {
   servicePosition?: ServicePosition;
   serviceDepartment?: ServiceDepartment;
   departmentLabel?: string;
+  serviceAssignments: StoredServiceAssignment[];
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
 };
@@ -68,6 +75,8 @@ type UpdateUserPayload = {
   servicePositionProvided: boolean;
   serviceDepartmentProvided: boolean;
   serviceAssignmentProvided: boolean;
+  serviceAssignmentsRaw?: unknown;
+  serviceAssignmentsProvided: boolean;
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
   privilegesProvided: boolean;
@@ -263,54 +272,125 @@ const normalizeAssignmentForRole = (
   };
 };
 
+const normalizeStoredAssignmentForRole = (
+  role: Role,
+  position?: ServicePosition,
+  department?: ServiceDepartment
+): StoredServiceAssignment | null => {
+  const assignment = normalizeAssignmentForRole(role, position, department);
+  if (!assignment.position || !assignment.label) return null;
+  return {
+    position: assignment.position,
+    department: assignment.department,
+    label: assignment.label,
+  };
+};
+
+const parseServiceAssignments = (
+  value: unknown,
+  role: Role,
+  fallback?: ServiceAssignment
+): StoredServiceAssignment[] => {
+  const byKey = new Map<string, StoredServiceAssignment>();
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => {
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+        throw new HttpsError('invalid-argument', 'Funciones congregacionales invalidas.');
+      }
+      const record = item as Record<string, unknown>;
+      const normalized = normalizeStoredAssignmentForRole(
+        role,
+        parseServicePosition(record.position),
+        parseServiceDepartment(record.department)
+      );
+      if (normalized) {
+        byKey.set(`${normalized.position}:${normalized.department ?? ''}`, normalized);
+      }
+    });
+  }
+
+  const fallbackStored = normalizeStoredAssignmentForRole(
+    role,
+    fallback?.position,
+    fallback?.department
+  );
+  if (fallbackStored) {
+    byKey.set(`${fallbackStored.position}:${fallbackStored.department ?? ''}`, fallbackStored);
+  }
+
+  const assignments = Array.from(byKey.values()).slice(0, 20);
+  const hasCoordinator = assignments.some((assignment) => assignment.position === 'coordinador');
+  const hasSecretary = assignments.some((assignment) => assignment.position === 'secretario');
+
+  if (hasCoordinator && hasSecretary) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Una misma persona no puede ser Coordinador y Secretario a la vez.'
+    );
+  }
+
+  return assignments;
+};
+
 const shouldValidateAssignmentUniqueness = (
   assignment: ServiceAssignment,
   isActive: boolean
 ): boolean => {
   if (!isActive) return false;
-  return assignment.position === 'coordinador' || assignment.position === 'secretario' || assignment.position === 'encargado';
+  return assignment.position === 'coordinador' || assignment.position === 'secretario';
 };
 
 const assertAssignmentUniqueness = async (params: {
   congregationId: string;
-  assignment: ServiceAssignment;
+  assignments: ServiceAssignment[];
   excludeUid?: string;
   isActive: boolean;
 }): Promise<void> => {
-  const { congregationId, assignment, excludeUid, isActive } = params;
-  if (!shouldValidateAssignmentUniqueness(assignment, isActive)) {
+  const { congregationId, assignments, excludeUid, isActive } = params;
+  const targetAssignments = assignments.filter((assignment) =>
+    shouldValidateAssignmentUniqueness(assignment, isActive)
+  );
+  if (targetAssignments.length === 0) {
     return;
   }
 
   const db = getFirestore();
-  let q = db
+  const snap = await db
     .collection('users')
     .where('congregationId', '==', congregationId)
     .where('isActive', '==', true)
-    .where('servicePosition', '==', assignment.position);
+    .limit(500)
+    .get();
 
-  if (assignment.position === 'encargado') {
-    q = q.where('serviceDepartment', '==', assignment.department);
+  for (const assignment of targetAssignments) {
+    const owner = snap.docs.find((doc) => {
+      if (doc.id === excludeUid) return false;
+      const data = doc.data() as Record<string, unknown>;
+      const legacy = parseLegacyAssignmentLabel(normalizeText(data.department));
+      const currentAssignments = parseServiceAssignments(
+        data.serviceAssignments,
+        (data.role === 'admin' || data.role === 'supervisor' || data.role === 'user') ? data.role : 'user',
+        {
+          position: parseServicePosition(data.servicePosition) ?? legacy.position,
+          department: parseServiceDepartment(data.serviceDepartment) ?? legacy.department,
+        }
+      );
+      return currentAssignments.some((current) => current.position === assignment.position);
+    });
+
+    if (!owner) continue;
+
+    if (assignment.position === 'coordinador') {
+      throw new HttpsError('already-exists', 'Ya existe un Coordinador activo en esta congregacion.');
+    }
+
+    if (assignment.position === 'secretario') {
+      throw new HttpsError('already-exists', 'Ya existe un Secretario activo en esta congregacion.');
+    }
+
+    throw new HttpsError('already-exists', 'Esta funcion congregacional ya esta ocupada.');
   }
-
-  const snap = await q.limit(5).get();
-  const owner = snap.docs.find((doc) => doc.id !== excludeUid);
-
-  if (!owner) return;
-
-  if (assignment.position === 'coordinador') {
-    throw new HttpsError('already-exists', 'Ya existe un Coordinador activo en esta congregacion.');
-  }
-
-  if (assignment.position === 'secretario') {
-    throw new HttpsError('already-exists', 'Ya existe un Secretario activo en esta congregacion.');
-  }
-
-  const label = assignment.department ? SERVICE_DEPARTMENT_LABELS[assignment.department] : 'ese departamento';
-  throw new HttpsError(
-    'already-exists',
-    `Ya existe un Encargado activo para ${label}.`
-  );
 };
 
 const normalizeDomainCandidate = (value: unknown): string | undefined => {
@@ -523,6 +603,8 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
   const rawPosition = parseServicePosition(data.servicePosition) ?? legacyAssignment.position;
   const rawDepartment = parseServiceDepartment(data.serviceDepartment) ?? legacyAssignment.department;
   const assignment = normalizeAssignmentForRole(role, rawPosition, rawDepartment);
+  const serviceAssignments = parseServiceAssignments(data.serviceAssignments, role, assignment);
+  const primaryAssignment = serviceAssignments[0] ?? assignment;
   const privileges = parsePrivileges(data.privileges);
   const responsibilities = parseResponsibilities(data.responsibilities);
 
@@ -537,9 +619,10 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
     isActive: typeof data.isActive === 'boolean' ? data.isActive : true,
     phone: normalizeText(data.phone),
     password,
-    servicePosition: assignment.position,
-    serviceDepartment: assignment.department,
-    departmentLabel: assignment.label,
+    servicePosition: primaryAssignment.position,
+    serviceDepartment: primaryAssignment.department,
+    departmentLabel: primaryAssignment.label,
+    serviceAssignments,
     privileges,
     responsibilities,
   };
@@ -602,6 +685,7 @@ const parseUpdateUserPayload = (raw: unknown): UpdateUserPayload => {
     ? (parseServiceDepartment(nested.serviceDepartment) ?? legacyAssignment.department)
     : undefined;
   const privilegesProvided = Object.prototype.hasOwnProperty.call(nested, 'privileges');
+  const serviceAssignmentsProvided = Object.prototype.hasOwnProperty.call(nested, 'serviceAssignments');
   const responsibilitiesProvided = Object.prototype.hasOwnProperty.call(nested, 'responsibilities');
   const privileges = privilegesProvided ? parsePrivileges(nested.privileges) : undefined;
   const responsibilities = responsibilitiesProvided
@@ -620,6 +704,8 @@ const parseUpdateUserPayload = (raw: unknown): UpdateUserPayload => {
     servicePositionProvided,
     serviceDepartmentProvided,
     serviceAssignmentProvided: servicePositionProvided || serviceDepartmentProvided,
+    serviceAssignmentsRaw: nested.serviceAssignments,
+    serviceAssignmentsProvided,
     privileges,
     responsibilities,
     privilegesProvided,
@@ -678,10 +764,7 @@ export const createUserByAdmin = onCall(
 
     await assertAssignmentUniqueness({
       congregationId: payload.congregationId,
-      assignment: {
-        position: payload.servicePosition,
-        department: payload.serviceDepartment,
-      },
+      assignments: payload.serviceAssignments,
       isActive: payload.isActive,
     });
 
@@ -728,9 +811,12 @@ export const createUserByAdmin = onCall(
       if (payload.servicePosition) userDoc.servicePosition = payload.servicePosition;
       if (payload.serviceDepartment) userDoc.serviceDepartment = payload.serviceDepartment;
       if (payload.departmentLabel) userDoc.department = payload.departmentLabel;
+      userDoc.serviceAssignments = payload.serviceAssignments;
       if (payload.privileges && Object.keys(payload.privileges).length > 0) {
         userDoc.privileges = payload.privileges;
       }
+      userDoc.isElder = payload.privileges?.isElder === true;
+      userDoc.isMinisterialServant = payload.privileges?.isMinisterialServant === true;
       if (payload.responsibilities && Object.keys(payload.responsibilities).length > 0) {
         userDoc.responsibilities = payload.responsibilities;
       }
@@ -776,6 +862,7 @@ export const updateUserByAdmin = onCall(
       servicePosition?: ServicePosition;
       serviceDepartment?: ServiceDepartment;
       department?: string;
+      serviceAssignments?: StoredServiceAssignment[];
     };
 
     if (target.congregationId !== requester.congregationId) {
@@ -808,10 +895,14 @@ export const updateUserByAdmin = onCall(
     }
 
     const normalizedAssignment = normalizeAssignmentForRole(nextRole, nextPosition, nextDepartment);
+    const nextServiceAssignments = payload.serviceAssignmentsProvided
+      ? parseServiceAssignments(payload.serviceAssignmentsRaw, nextRole)
+      : parseServiceAssignments(target.serviceAssignments, nextRole, normalizedAssignment);
+    const primaryAssignment = nextServiceAssignments[0];
 
     await assertAssignmentUniqueness({
       congregationId: target.congregationId,
-      assignment: normalizedAssignment,
+      assignments: nextServiceAssignments,
       excludeUid: payload.uid,
       isActive: nextIsActive,
     });
@@ -864,24 +955,29 @@ export const updateUserByAdmin = onCall(
       docUpdates.phone = payload.phone ?? FieldValue.delete();
     }
 
-    if (payload.serviceAssignmentProvided || payload.role) {
-      if (normalizedAssignment.position) {
-        docUpdates.servicePosition = normalizedAssignment.position;
+    if (payload.serviceAssignmentsProvided || payload.serviceAssignmentProvided || payload.role) {
+      if (primaryAssignment?.position) {
+        docUpdates.servicePosition = primaryAssignment.position;
       } else {
         docUpdates.servicePosition = FieldValue.delete();
       }
 
-      if (normalizedAssignment.department) {
-        docUpdates.serviceDepartment = normalizedAssignment.department;
+      if (primaryAssignment?.department) {
+        docUpdates.serviceDepartment = primaryAssignment.department;
       } else {
         docUpdates.serviceDepartment = FieldValue.delete();
       }
 
-      if (normalizedAssignment.label) {
-        docUpdates.department = normalizedAssignment.label;
+      if (primaryAssignment?.label) {
+        docUpdates.department = primaryAssignment.label;
       } else {
         docUpdates.department = FieldValue.delete();
       }
+    }
+
+    if (payload.serviceAssignmentsProvided || payload.serviceAssignmentProvided || payload.role) {
+      docUpdates.serviceAssignments =
+        nextServiceAssignments.length > 0 ? nextServiceAssignments : FieldValue.delete();
     }
 
     if (payload.privilegesProvided) {
@@ -889,6 +985,8 @@ export const updateUserByAdmin = onCall(
         payload.privileges && Object.keys(payload.privileges).length > 0
           ? payload.privileges
           : FieldValue.delete();
+      docUpdates.isElder = payload.privileges?.isElder === true;
+      docUpdates.isMinisterialServant = payload.privileges?.isMinisterialServant === true;
     }
 
     if (payload.responsibilitiesProvided) {

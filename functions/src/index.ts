@@ -29,7 +29,16 @@ export {
   updateMeetingByManager,
   deleteMeetingByManager,
   syncMeetingCleaningAssignmentsByManager,
+  createMeetingAssignmentByManager,
+  updateMeetingAssignmentByManager,
 } from './meetings-management.js';
+
+export {
+  createOutgoingTalkByManager,
+  updateOutgoingTalkByManager,
+  cancelOutgoingTalkByManager,
+  completeOutgoingTalkByManager,
+} from './outgoing-talks.js';
 
 export {
   notifyMeetingPublicationAndChanges,
