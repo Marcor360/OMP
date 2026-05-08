@@ -96,7 +96,7 @@ export const es = {
 
   // Meetings management
   'meetings.management.title': 'Gestion de reuniones',
-  'meetings.management.subtitle': 'Admin y Supervisor',
+  'meetings.management.subtitle': 'Anciano y Siervo ministerial',
   'meetings.management.loading': 'Cargando gestion de reuniones...',
   'meetings.management.noCongregation': 'No se encontro la congregacion del perfil actual.',
   'meetings.management.action.newWeekend': 'Nueva fin de semana',
@@ -147,9 +147,9 @@ export const es = {
   'about.build': 'Compilacion',
 
   // Roles
-  'role.admin': 'Administrador',
-  'role.supervisor': 'Supervisor',
-  'role.user': 'Usuario',
+  'role.admin': 'Anciano',
+  'role.supervisor': 'Siervo ministerial',
+  'role.user': 'Publicador',
 
   // Permission Row
   'permission.notifications.title': 'Notificaciones',

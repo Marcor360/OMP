@@ -83,6 +83,17 @@ service cloud.firestore {
       return isAdmin() || isSupervisor();
     }
 
+    function isElder() {
+      return isActive()
+        && (
+          currentUserData().isElder == true
+          || (
+            currentUserData().privileges is map
+            && currentUserData().privileges.isElder == true
+          )
+        );
+    }
+
     function isCleaningManager() {
       return isAdminOrSupervisor()
         || (
@@ -1073,6 +1084,12 @@ service cloud.firestore {
         && preservesCreatedAt();
 
       allow delete: if false;
+
+      match /private/{privateDocId} {
+        allow get, list: if sameCongregation(congregationId)
+          && isElder();
+        allow write: if false;
+      }
 
       // -----------------------------------------------------------------------
       // PERSONS

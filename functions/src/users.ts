@@ -102,6 +102,14 @@ const SERVICE_DEPARTMENT_LABEL_TO_KEY: Record<string, ServiceDepartment> = Objec
   Object.entries(SERVICE_DEPARTMENT_LABELS).map(([key, value]) => [value, key as ServiceDepartment])
 ) as Record<string, ServiceDepartment>;
 
+type CongregationPlanId = 'basic' | 'intermediate' | 'complete';
+
+const PLAN_LIMITS: Record<CongregationPlanId, number> = {
+  basic: 70,
+  intermediate: 120,
+  complete: 200,
+};
+
 function assertValidRole(role: unknown): asserts role is Role {
   if (role !== 'admin' && role !== 'supervisor' && role !== 'user') {
     throw new HttpsError('invalid-argument', 'Rol invalido.');
@@ -746,6 +754,54 @@ const parseUidFromPayload = (raw: unknown): string => {
   return uid;
 };
 
+const normalizePlanId = (value: unknown): CongregationPlanId => {
+  if (value === 'intermediate' || value === 'complete') return value;
+  return 'basic';
+};
+
+const resolveCongregationActiveUsersLimit = async (congregationId: string): Promise<number> => {
+  const db = getFirestore();
+  const privatePlanSnap = await db
+    .collection('congregations')
+    .doc(congregationId)
+    .collection('private')
+    .doc('plan')
+    .get();
+  const privatePlan = privatePlanSnap.exists ? privatePlanSnap.data() as Record<string, unknown> : {};
+
+  if (typeof privatePlan.activeUsersLimit === 'number' && Number.isFinite(privatePlan.activeUsersLimit)) {
+    return Math.max(0, Math.floor(privatePlan.activeUsersLimit));
+  }
+
+  const planId = normalizePlanId(privatePlan.planId);
+  return PLAN_LIMITS[planId];
+};
+
+const assertCongregationHasUserCapacity = async (params: {
+  congregationId: string;
+  willCreateActiveUser: boolean;
+}) => {
+  if (!params.willCreateActiveUser) return;
+
+  const db = getFirestore();
+  const [limitValue, activeUsersSnap] = await Promise.all([
+    resolveCongregationActiveUsersLimit(params.congregationId),
+    db
+      .collection('users')
+      .where('congregationId', '==', params.congregationId)
+      .where('isActive', '==', true)
+      .limit(205)
+      .get(),
+  ]);
+
+  if (activeUsersSnap.size >= limitValue) {
+    throw new HttpsError(
+      'resource-exhausted',
+      `La congregacion alcanzo el limite de usuarios activos de su plan (${limitValue}).`
+    );
+  }
+};
+
 export const createUserByAdmin = onCall(
   { region: 'us-central1' },
   async (request) => {
@@ -766,6 +822,11 @@ export const createUserByAdmin = onCall(
       congregationId: payload.congregationId,
       assignments: payload.serviceAssignments,
       isActive: payload.isActive,
+    });
+
+    await assertCongregationHasUserCapacity({
+      congregationId: payload.congregationId,
+      willCreateActiveUser: payload.isActive,
     });
 
     const auth = getAuth();

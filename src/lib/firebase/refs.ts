@@ -17,6 +17,9 @@ export const eventDocRef = (eventId: string) => doc(db, 'events', eventId);
 export const congregationsCollectionRef = () => collection(db, 'congregations');
 export const congregationDocRef = (congregationId: string) => doc(db, 'congregations', congregationId);
 
+export const congregationPrivatePlanDocRef = (congregationId: string) =>
+  doc(db, 'congregations', congregationId, 'private', 'plan');
+
 export const congregationPersonsCollectionRef = (congregationId: string) =>
   collection(db, 'congregations', congregationId, 'persons');
 

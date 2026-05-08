@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -13,17 +13,47 @@ import { useI18n } from '@/src/i18n/index';
 import { LANGUAGE_DISPLAY_NAME } from '@/src/i18n/language-options';
 import { usePermissions } from '@/src/hooks/use-permissions';
 import { ROLE_LABELS } from '@/src/types/user';
+import { CongregationPlanUsage } from '@/src/types/congregation-plan';
+import { getCongregationPlanUsage } from '@/src/services/congregations/congregations-service';
 import { type AppColors, useAppColors } from '@/src/styles';
 import { isExpoGo } from '@/src/utils/runtime';
 
 export function SettingsScreen() {
   const router = useRouter();
-  const { appUser } = useUser();
+  const { appUser, congregationId } = useUser();
   const { isDarkMode } = useAppTheme();
   const { t, language } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const permissions = usePermissions();
+  const [planUsage, setPlanUsage] = useState<CongregationPlanUsage | null>(null);
+  const [loadingPlan, setLoadingPlan] = useState(false);
+  const canViewCongregationPlan =
+    appUser?.isElder === true || appUser?.privileges?.isElder === true;
+
+  useEffect(() => {
+    if (!congregationId || !canViewCongregationPlan) {
+      setPlanUsage(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingPlan(true);
+    getCongregationPlanUsage(congregationId)
+      .then((usage) => {
+        if (!cancelled) setPlanUsage(usage);
+      })
+      .catch(() => {
+        if (!cancelled) setPlanUsage(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPlan(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewCongregationPlan, congregationId]);
 
   const handleNavigateToTheme = () => {
     router.push('/(protected)/settings/theme' as any);
@@ -105,6 +135,30 @@ export function SettingsScreen() {
             value={appUser ? ROLE_LABELS[appUser.role] : '--'}
           />
         </Section>
+
+        {canViewCongregationPlan ? (
+          <Section title="Plan de congregacion">
+            <SettingRow
+              icon="business-outline"
+              label="Plan actual"
+              value={loadingPlan ? 'Cargando...' : planUsage?.planLabel ?? '--'}
+            />
+            <SettingRow
+              icon="people-outline"
+              label="Usuarios activos"
+              value={
+                planUsage
+                  ? `${planUsage.activeUsersCount}/${planUsage.activeUsersLimit}`
+                  : '--'
+              }
+            />
+            <SettingRow
+              icon="person-add-outline"
+              label="Usuarios disponibles"
+              value={planUsage ? String(planUsage.remainingActiveUsers) : '--'}
+            />
+          </Section>
+        ) : null}
 
         <RoleGuard requiredRole="admin">
           <Section title={t('settings.section.administration')}>

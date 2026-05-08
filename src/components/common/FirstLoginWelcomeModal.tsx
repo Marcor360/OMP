@@ -27,10 +27,11 @@ export function FirstLoginWelcomeModal({ uid, enabled }: FirstLoginWelcomeModalP
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const maxCardHeight = Math.max(360, height - insets.top - insets.bottom - 32);
+  const availableCardHeight = Math.max(320, height - insets.top - insets.bottom - 48);
+  const cardHeight = Math.min(availableCardHeight, 720);
   const styles = useMemo(
-    () => createStyles(colors, insets, maxCardHeight),
-    [colors, insets, maxCardHeight]
+    () => createStyles(colors, insets, cardHeight),
+    [colors, insets, cardHeight]
   );
   const [visible, setVisible] = useState(false);
   const [storageKey, setStorageKey] = useState<string | null>(null);
@@ -166,7 +167,7 @@ export function FirstLoginWelcomeModal({ uid, enabled }: FirstLoginWelcomeModalP
   );
 }
 
-const createStyles = (colors: AppColorSet, insets: EdgeInsets, maxCardHeight: number) =>
+const createStyles = (colors: AppColorSet, insets: EdgeInsets, cardHeight: number) =>
   StyleSheet.create({
     backdrop: {
       flex: 1,
@@ -180,7 +181,7 @@ const createStyles = (colors: AppColorSet, insets: EdgeInsets, maxCardHeight: nu
     card: {
       width: '100%',
       maxWidth: 520,
-      maxHeight: maxCardHeight,
+      height: cardHeight,
       overflow: 'hidden',
       borderRadius: 24,
       borderWidth: 1,
@@ -197,15 +198,15 @@ const createStyles = (colors: AppColorSet, insets: EdgeInsets, maxCardHeight: nu
       alignItems: 'center',
       gap: 14,
       paddingHorizontal: 22,
-      paddingTop: 24,
-      paddingBottom: 18,
+      paddingTop: 20,
+      paddingBottom: 16,
       backgroundColor: colors.backgroundMedium,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
     iconWrap: {
-      width: 56,
-      height: 56,
+      width: 48,
+      height: 48,
       borderRadius: 18,
       alignItems: 'center',
       justifyContent: 'center',
@@ -226,17 +227,18 @@ const createStyles = (colors: AppColorSet, insets: EdgeInsets, maxCardHeight: nu
     },
     title: {
       color: colors.textPrimary,
-      fontSize: 24,
+      fontSize: 21,
       fontWeight: '800',
-      lineHeight: 29,
+      lineHeight: 26,
     },
     scroller: {
-      flexShrink: 1,
+      flex: 1,
+      minHeight: 0,
     },
     content: {
       gap: 14,
-      padding: 22,
-      paddingBottom: 18,
+      padding: 18,
+      paddingBottom: 20,
     },
     paragraph: {
       color: colors.textSecondary,
@@ -283,8 +285,8 @@ const createStyles = (colors: AppColorSet, insets: EdgeInsets, maxCardHeight: nu
     },
     footer: {
       paddingHorizontal: 18,
-      paddingTop: 14,
-      paddingBottom: Math.max(insets.bottom, 10) + 12,
+      paddingTop: 12,
+      paddingBottom: Math.max(insets.bottom, 8) + 10,
       borderTopWidth: 1,
       borderTopColor: colors.border,
       backgroundColor: colors.surface,

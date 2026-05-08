@@ -96,7 +96,7 @@ export const en = {
 
   // Meetings management
   'meetings.management.title': 'Meetings management',
-  'meetings.management.subtitle': 'Admin and Supervisor',
+  'meetings.management.subtitle': 'Elder and Ministerial servant',
   'meetings.management.loading': 'Loading meetings management...',
   'meetings.management.noCongregation': 'The current profile congregation was not found.',
   'meetings.management.action.newWeekend': 'New weekend',
@@ -147,9 +147,9 @@ export const en = {
   'about.build': 'Build',
 
   // Roles
-  'role.admin': 'Administrator',
-  'role.supervisor': 'Supervisor',
-  'role.user': 'User',
+  'role.admin': 'Elder',
+  'role.supervisor': 'Ministerial servant',
+  'role.user': 'Publisher',
 
   // Permission Row
   'permission.notifications.title': 'Notifications',

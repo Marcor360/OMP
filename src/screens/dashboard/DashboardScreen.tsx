@@ -29,6 +29,11 @@ import { MyCleaningDashboardCard } from '@/src/modules/cleaning/components/MyCle
 import { useMyCleaningDashboard } from '@/src/modules/cleaning/hooks/use-my-cleaning-dashboard';
 import { useEvents } from '@/src/hooks/use-events';
 
+const getDashboardAssignmentKey = (assignment: Assignment, index: number): string => {
+  const dueMillis = assignment.dueDate?.toMillis?.() ?? index;
+  return `${assignment.meetingId ?? 'standalone'}:${assignment.id}:${dueMillis}:${index}`;
+};
+
 export function DashboardScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -310,8 +315,8 @@ export function DashboardScreen() {
           <ThemedText style={styles.emptyText}>Sin asignaciones pendientes.</ThemedText>
         ) : (
           <View style={styles.list}>
-            {pendingAssignments.map((assignment) => (
-              <AssignmentCard key={assignment.id} assignment={assignment} />
+            {pendingAssignments.map((assignment, index) => (
+              <AssignmentCard key={getDashboardAssignmentKey(assignment, index)} assignment={assignment} />
             ))}
           </View>
         )}

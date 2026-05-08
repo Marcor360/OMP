@@ -17,7 +17,11 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { getCongregationEmailDomain } from '@/src/services/congregations/congregations-service';
+import {
+  getCongregationEmailDomain,
+  getCongregationPlanUsage,
+} from '@/src/services/congregations/congregations-service';
+import { CongregationPlanUsage } from '@/src/types/congregation-plan';
 import {
   createUserByAdmin,
   updateUserByAdmin,
@@ -179,6 +183,7 @@ export function UserFormScreen() {
   const [privileges, setPrivileges] = useState<UserPrivileges>({});
   const [responsibilities, setResponsibilities] = useState<UserResponsibilities>({});
   const [allowedEmailDomain, setAllowedEmailDomain] = useState('congregacion.com');
+  const [planUsage, setPlanUsage] = useState<CongregationPlanUsage | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
@@ -190,6 +195,26 @@ export function UserFormScreen() {
       .then((domain) => setAllowedEmailDomain(domain))
       .catch(() => setAllowedEmailDomain('congregacion.com'));
   }, [congregationId]);
+
+  useEffect(() => {
+    if (!congregationId || !isAdmin) {
+      setPlanUsage(null);
+      return;
+    }
+
+    let cancelled = false;
+    getCongregationPlanUsage(congregationId, { forceServer: true })
+      .then((usage) => {
+        if (!cancelled) setPlanUsage(usage);
+      })
+      .catch(() => {
+        if (!cancelled) setPlanUsage(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [congregationId, isAdmin]);
 
   useEffect(() => {
     if (!congregationId) {
@@ -574,6 +599,15 @@ export function UserFormScreen() {
           <View style={styles.permissionNotice}>
             <ThemedText style={styles.permissionText}>
               Solo administradores pueden guardar cambios en usuarios.
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {mode === 'create' && planUsage ? (
+          <View style={styles.planNotice}>
+            <ThemedText style={styles.planTitle}>{planUsage.planLabel}</ThemedText>
+            <ThemedText style={styles.hintText}>
+              Usuarios activos: {planUsage.activeUsersCount}/{planUsage.activeUsersLimit}. Disponibles: {planUsage.remainingActiveUsers}.
             </ThemedText>
           </View>
         ) : null}
@@ -1213,5 +1247,18 @@ const createStyles = (colors: AppColorSet) =>
       fontSize: 13,
       color: colors.warning,
       fontWeight: '600',
+    },
+    planNotice: {
+      borderWidth: 1,
+      borderColor: colors.primary + '55',
+      backgroundColor: colors.primary + '12',
+      borderRadius: 10,
+      padding: 12,
+      gap: 4,
+    },
+    planTitle: {
+      color: colors.primary,
+      fontSize: 13,
+      fontWeight: '800',
     },
   });

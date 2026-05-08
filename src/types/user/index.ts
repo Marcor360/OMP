@@ -136,9 +136,9 @@ export interface UpdateUserDTO {
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
-  admin: 'Administrador',
-  supervisor: 'Supervisor',
-  user: 'Usuario',
+  admin: 'Anciano',
+  supervisor: 'Siervo ministerial',
+  user: 'Publicador',
 };
 
 export const STATUS_LABELS: Record<UserStatus, string> = {
