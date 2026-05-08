@@ -71,8 +71,8 @@ export function MyCleaningDashboardCard({
         <ThemedText style={styles.mutedText}>Cargando tus dias de limpieza...</ThemedText>
       ) : hasGroup && summary?.days.length ? (
         <View style={styles.days}>
-          {summary.days.map((day) => (
-            <View key={day.sourceKey} style={styles.dayRow}>
+          {summary.days.map((day, index) => (
+            <View key={`${day.sourceKey}:${day.date}:${index}`} style={styles.dayRow}>
               <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
               <ThemedText style={styles.dayText} numberOfLines={1}>
                 {formatCleaningDate(day.date)}

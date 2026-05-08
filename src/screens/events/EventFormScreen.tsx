@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -24,7 +26,6 @@ import {
   validateEventForm,
 } from '@/src/services/events/events-service';
 import {
-  CongregationEvent,
   CongregationEventFormValues,
   CongregationEventType,
   EVENT_TYPE_LABELS,
@@ -53,16 +54,18 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
   const params = useLocalSearchParams<{ id?: string }>();
   const eventId = typeof params.id === 'string' ? params.id : null;
   const { uid, congregationId, isAdminOrSupervisor, loadingProfile, profileError } = useUser();
+  const { width } = useWindowDimensions();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const isMobileLayout = width < 640;
 
-  const [event, setEvent] = useState<CongregationEvent | null>(null);
   const [values, setValues] = useState<CongregationEventFormValues>(
     eventToFormValues(null)
   );
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [typeSelectorVisible, setTypeSelectorVisible] = useState(false);
   const [activeDatePicker, setActiveDatePicker] = useState<
     'startDate' | 'endDate' | null
   >(null);
@@ -70,6 +73,7 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
   const isSingleDay = SINGLE_DAY_EVENT_TYPES.includes(values.type);
   const hasOptionalEndDate = OPTIONAL_END_DATE_EVENT_TYPES.includes(values.type);
   const isSuperintendentVisit = values.type === 'visita_superintendente';
+  const selectedTypeLabel = EVENT_TYPE_LABELS[values.type];
 
   const subtitle = useMemo(
     () => (mode === 'create' ? 'Crear evento' : 'Editar evento'),
@@ -94,7 +98,6 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
           return;
         }
 
-        setEvent(found);
         setValues(eventToFormValues(found));
       } catch (requestError) {
         if (!cancelled) {
@@ -209,23 +212,36 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
         keyboardShouldPersistTaps="handled"
       >
         <Field label="Tipo de evento">
-          <View style={styles.typeGrid}>
-            {EVENT_TYPES.map((type) => {
-              const active = values.type === type;
-              return (
-                <TouchableOpacity
-                  key={type}
-                  style={[styles.typeChip, active && styles.typeChipActive]}
-                  onPress={() => updateValue('type', type)}
-                  activeOpacity={0.8}
-                >
-                  <ThemedText style={[styles.typeChipText, active && styles.typeChipTextActive]}>
-                    {EVENT_TYPE_LABELS[type]}
-                  </ThemedText>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          {isMobileLayout ? (
+            <TouchableOpacity
+              style={styles.typeSelect}
+              onPress={() => setTypeSelectorVisible(true)}
+              activeOpacity={0.8}
+            >
+              <ThemedText style={styles.typeSelectText} numberOfLines={2}>
+                {selectedTypeLabel}
+              </ThemedText>
+              <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.typeGrid}>
+              {EVENT_TYPES.map((type) => {
+                const active = values.type === type;
+                return (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.typeChip, active && styles.typeChipActive]}
+                    onPress={() => updateValue('type', type)}
+                    activeOpacity={0.8}
+                  >
+                    <ThemedText style={[styles.typeChipText, active && styles.typeChipTextActive]}>
+                      {EVENT_TYPE_LABELS[type]}
+                    </ThemedText>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </Field>
 
         {isSuperintendentVisit ? (
@@ -323,6 +339,52 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
         }}
         onClose={() => setActiveDatePicker(null)}
       />
+      <Modal
+        visible={typeSelectorVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTypeSelectorVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.typeModal}>
+            <View style={styles.typeModalHeader}>
+              <ThemedText style={styles.typeModalTitle}>Tipo de evento</ThemedText>
+              <TouchableOpacity
+                style={styles.typeModalClose}
+                onPress={() => setTypeSelectorVisible(false)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close" size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.typeModalList} showsVerticalScrollIndicator={false}>
+              {EVENT_TYPES.map((type) => {
+                const active = values.type === type;
+                return (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.typeOption, active && styles.typeOptionActive]}
+                    onPress={() => {
+                      updateValue('type', type);
+                      setTypeSelectorVisible(false);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <ThemedText
+                      style={[styles.typeOptionText, active && styles.typeOptionTextActive]}
+                    >
+                      {EVENT_TYPE_LABELS[type]}
+                    </ThemedText>
+                    {active ? (
+                      <Ionicons name="checkmark" size={18} color={colors.primary} />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -425,6 +487,93 @@ const createStyles = (colors: AppColorSet) =>
     },
     typeChipTextActive: {
       color: colors.onPrimary,
+    },
+    typeSelect: {
+      minHeight: 48,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      backgroundColor: colors.surface,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    typeSelectText: {
+      flex: 1,
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: '800',
+      lineHeight: 18,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: colors.overlay,
+      justifyContent: 'center',
+      padding: 16,
+    },
+    typeModal: {
+      width: '100%',
+      maxWidth: 520,
+      maxHeight: '80%',
+      alignSelf: 'center',
+      backgroundColor: colors.backgroundLight,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      overflow: 'hidden',
+    },
+    typeModalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      padding: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    typeModalTitle: {
+      color: colors.textPrimary,
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    typeModalClose: {
+      width: 34,
+      height: 34,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surfaceRaised,
+    },
+    typeModalList: {
+      maxHeight: 420,
+    },
+    typeOption: {
+      minHeight: 50,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    typeOptionActive: {
+      backgroundColor: colors.primary + '16',
+    },
+    typeOptionText: {
+      flex: 1,
+      color: colors.textSecondary,
+      fontSize: 14,
+      lineHeight: 19,
+      fontWeight: '700',
+    },
+    typeOptionTextActive: {
+      color: colors.primary,
+      fontWeight: '800',
     },
     input: {
       minHeight: 46,

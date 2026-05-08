@@ -58,8 +58,8 @@ export const getVisibleTabs = (
   role: UserRole | undefined,
   servicePosition?: string | undefined,
   serviceDepartment?: string | undefined
-): ('index' | 'users' | 'meetings' | 'assignments' | 'profile' | 'settings' | 'cleaning')[] => {
-  const base = ['index', 'meetings', 'assignments', 'profile'] as const;
+): ('index' | 'users' | 'meetings' | 'assignments' | 'profile' | 'settings' | 'cleaning' | 'preaching')[] => {
+  const base = ['index', 'meetings', 'assignments', 'preaching', 'profile'] as const;
   if (role === 'admin') {
     return [...base, 'users', 'settings', 'cleaning'];
   }

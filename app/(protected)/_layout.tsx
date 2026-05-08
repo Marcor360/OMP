@@ -1,8 +1,7 @@
 import { Stack } from 'expo-router';
-import { UserProvider } from '@/src/context/user-context';
+import { UserProvider, useUser } from '@/src/context/user-context';
 import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
 import { useI18n } from '@/src/i18n/index';
-import { useUser } from '@/src/context/user-context';
 
 function ProtectedNotificationSetup() {
   const { uid, congregationId, isSessionValid } = useUser();
@@ -46,6 +45,7 @@ export default function ProtectedLayout() {
         <Stack.Screen name="cleaning/edit/[id]" options={{ headerShown: false }} />
         {/* Módulo: Contador de Horas de Predicación (100% local, sin Firebase) */}
         <Stack.Screen name="field-service" options={{ headerShown: false }} />
+        <Stack.Screen name="preaching/manager" options={{ headerShown: false }} />
         <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
         <Stack.Screen name="unauthorized" options={{ headerShown: false }} />
         {/* Settings */}

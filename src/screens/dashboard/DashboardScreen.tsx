@@ -242,6 +242,23 @@ export function DashboardScreen() {
       {/* â”€â”€ Contador de Horas de PredicaciÃ³n (solo dispositivo mÃ³vil) â”€â”€ */}
       {Platform.OS !== 'web' && <FieldServiceDashboardCard />}
 
+      <TouchableOpacity
+        style={styles.preachingCard}
+        onPress={() => router.push('/(protected)/(tabs)/preaching' as any)}
+        activeOpacity={0.85}
+      >
+        <View style={styles.preachingIcon}>
+          <Ionicons name="document-text-outline" size={20} color={colors.primary} />
+        </View>
+        <View style={styles.preachingText}>
+          <ThemedText style={styles.preachingTitle}>Predicacion</ThemedText>
+          <ThemedText style={styles.preachingSubtitle}>
+            Enviar informe mensual
+          </ThemedText>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
+      </TouchableOpacity>
+
       <DashboardEventsSection
         events={events}
         loading={eventsLoading}
@@ -372,6 +389,39 @@ const createStyles = (colors: AppColorSet, isCompact: boolean) =>
     alertText: {
       color: colors.error,
       fontSize: 13,
+      fontWeight: '600',
+    },
+    preachingCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 16,
+    },
+    preachingIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.primary + '18',
+    },
+    preachingText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    preachingTitle: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: colors.textPrimary,
+    },
+    preachingSubtitle: {
+      fontSize: 12,
+      color: colors.textMuted,
       fontWeight: '600',
     },
     section: {

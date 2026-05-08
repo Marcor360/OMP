@@ -6,7 +6,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/src/components/themed-text';
 import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common/StatusBadge';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { AppUser, ROLE_LABELS, STATUS_LABELS } from '@/src/types/user';
+import {
+  AppUser,
+  PRIVILEGE_LABELS,
+  ROLE_LABELS,
+  STATUS_LABELS,
+} from '@/src/types/user';
 
 interface UserCardProps {
   user: AppUser;
@@ -33,6 +38,13 @@ export function UserCard({ user, onPress }: UserCardProps) {
     }
   };
 
+  const congregationLabels = [
+    user.privileges?.isElder ? PRIVILEGE_LABELS.isElder : null,
+    user.privileges?.isMinisterialServant ? PRIVILEGE_LABELS.isMinisterialServant : null,
+    user.privileges?.isRegularPioneer ? PRIVILEGE_LABELS.isRegularPioneer : null,
+    user.privileges?.isAuxiliaryPioneer ? PRIVILEGE_LABELS.isAuxiliaryPioneer : null,
+  ].filter(Boolean);
+
   return (
     <TouchableOpacity style={styles.card} onPress={handlePress} activeOpacity={0.8}>
       <View style={[styles.avatar, { backgroundColor: roleColor[user.role] + '33' }]}>
@@ -50,6 +62,11 @@ export function UserCard({ user, onPress }: UserCardProps) {
           <StatusBadge label={ROLE_LABELS[user.role]} color={roleColor[user.role]} size="sm" />
           <StatusBadge label={STATUS_LABELS[user.status]} color={userStatusColor[user.status]} size="sm" />
         </View>
+        {congregationLabels.length > 0 ? (
+          <ThemedText style={styles.congregationLabels} numberOfLines={1}>
+            {congregationLabels.join(' · ')}
+          </ThemedText>
+        ) : null}
       </View>
 
       <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
@@ -97,5 +114,11 @@ const createStyles = (colors: AppColorSet) =>
       flexDirection: 'row',
       gap: 6,
       marginTop: 4,
+    },
+    congregationLabels: {
+      marginTop: 3,
+      fontSize: 11,
+      color: colors.textMuted,
+      fontWeight: '600',
     },
   });

@@ -19,7 +19,13 @@ import {
 } from '@/src/services/users/admin-users-service';
 import { subscribeToUser } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { AppUser, ROLE_LABELS, STATUS_LABELS, UserStatus } from '@/src/types/user';
+import {
+  AppUser,
+  PRIVILEGE_LABELS,
+  ROLE_LABELS,
+  STATUS_LABELS,
+  UserStatus,
+} from '@/src/types/user';
 import { formatDate } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
@@ -204,6 +210,12 @@ export function UserDetailScreen() {
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  const privilegesLabel = [
+    user.privileges?.isElder ? PRIVILEGE_LABELS.isElder : null,
+    user.privileges?.isMinisterialServant ? PRIVILEGE_LABELS.isMinisterialServant : null,
+    user.privileges?.isRegularPioneer ? PRIVILEGE_LABELS.isRegularPioneer : null,
+    user.privileges?.isAuxiliaryPioneer ? PRIVILEGE_LABELS.isAuxiliaryPioneer : null,
+  ].filter(Boolean).join(', ');
 
   return (
     <ScreenContainer scrollable={false}>
@@ -239,6 +251,7 @@ export function UserDetailScreen() {
         <View style={styles.card}>
           <InfoRow icon="call-outline" label="Telefono" value={user.phone ?? '--'} />
           <InfoRow icon="business-outline" label="Departamento" value={user.department ?? '--'} />
+          <InfoRow icon="ribbon-outline" label="Privilegios" value={privilegesLabel || '--'} />
           <InfoRow icon="home-outline" label="Congregacion" value={congregationName} />
           <InfoRow icon="calendar-outline" label="Creado" value={formatDate(user.createdAt)} />
           <InfoRow icon="time-outline" label="Actualizado" value={formatDate(user.updatedAt)} />

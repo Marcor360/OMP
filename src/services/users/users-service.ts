@@ -114,6 +114,23 @@ const normalizeStringArray = (value: unknown): string[] => {
     .map((item) => item.trim());
 };
 
+const normalizeBooleanMap = <TKeys extends string>(
+  value: unknown,
+  keys: readonly TKeys[]
+): Partial<Record<TKeys, boolean>> | undefined => {
+  if (typeof value !== 'object' || value === null) return undefined;
+
+  const source = value as Record<string, unknown>;
+  const normalized = keys.reduce<Partial<Record<TKeys, boolean>>>((acc, key) => {
+    if (typeof source[key] === 'boolean') {
+      acc[key] = source[key] as boolean;
+    }
+    return acc;
+  }, {});
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
 export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
   const role = normalizeRole(data.role);
   const normalizedStatus = normalizeStatus(data.status);
@@ -135,6 +152,15 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
     ? data.serviceDepartment
     : undefined;
   const computedDepartment = buildDepartmentLabel(servicePosition, serviceDepartment);
+  const privileges = normalizeBooleanMap(data.privileges, [
+    'isElder',
+    'isMinisterialServant',
+    'isRegularPioneer',
+    'isAuxiliaryPioneer',
+  ] as const);
+  const responsibilities = normalizeBooleanMap(data.responsibilities, [
+    'isPreachingManager',
+  ] as const);
 
   return {
     uid,
@@ -157,6 +183,8 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
         : undefined),
     servicePosition,
     serviceDepartment,
+    privileges,
+    responsibilities,
     avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : undefined,
     // Campos del módulo de limpieza
     cleaningEligible: typeof data.cleaningEligible === 'boolean' ? data.cleaningEligible : true,

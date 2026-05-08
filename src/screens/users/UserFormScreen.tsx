@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,10 +28,13 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   type AppUser,
   ROLE_LABELS,
+  PRIVILEGE_LABELS,
   USER_SERVICE_DEPARTMENTS,
   USER_SERVICE_DEPARTMENT_LABELS,
   USER_SERVICE_POSITION_LABELS,
   UpdateUserDTO,
+  UserPrivileges,
+  UserResponsibilities,
   UserServiceDepartment,
   UserServicePosition,
   UserRole,
@@ -48,6 +52,7 @@ interface FormErrors {
   password?: string;
   newPassword?: string;
   assignment?: string;
+  privileges?: string;
 }
 
 const DEPARTMENT_LABEL_TO_KEY: Record<string, UserServiceDepartment> = Object.fromEntries(
@@ -73,6 +78,15 @@ const buildGeneratedEmailPreview = (
     `${normalizeNameForEmail(firstName)}${normalizeNameForEmail(middleName)}${normalizeNameForEmail(lastName)}` ||
     'usuario';
   return `${(primary || fallback)}@${domain.toLowerCase()}`;
+};
+
+const copyToClipboard = async (value: string): Promise<boolean> => {
+  if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return true;
+  }
+
+  return false;
 };
 
 const parseLegacyAssignment = (
@@ -157,6 +171,8 @@ export function UserFormScreen() {
   const [activeUsers, setActiveUsers] = useState<AppUser[]>([]);
   const [servicePosition, setServicePosition] = useState<ServiceSelection>('none');
   const [serviceDepartment, setServiceDepartment] = useState<UserServiceDepartment | ''>('');
+  const [privileges, setPrivileges] = useState<UserPrivileges>({});
+  const [responsibilities, setResponsibilities] = useState<UserResponsibilities>({});
   const [allowedEmailDomain, setAllowedEmailDomain] = useState('congregacion.com');
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(mode === 'edit');
@@ -227,6 +243,9 @@ export function UserFormScreen() {
           setServicePosition(legacy.position);
           setServiceDepartment(legacy.department);
         }
+
+        setPrivileges(loadedUser.privileges ?? {});
+        setResponsibilities(loadedUser.responsibilities ?? {});
       })
       .catch((requestError) => {
         Alert.alert('Error', formatFirestoreError(requestError));
@@ -239,6 +258,25 @@ export function UserFormScreen() {
     () => buildGeneratedEmailPreview(firstName, middleName, lastName, allowedEmailDomain),
     [allowedEmailDomain, firstName, middleName, lastName]
   );
+
+  const handleCopyValue = async (label: string, value: string) => {
+    if (!value.trim()) {
+      Alert.alert('Sin datos', `No hay ${label.toLowerCase()} para copiar.`);
+      return;
+    }
+
+    try {
+      const copied = await copyToClipboard(value);
+      Alert.alert(
+        copied ? 'Copiado' : 'No disponible',
+        copied
+          ? `${label} copiado al portapapeles.`
+          : 'El portapapeles automatico solo esta disponible en la version web compatible.'
+      );
+    } catch {
+      Alert.alert('No se pudo copiar', 'Intenta seleccionar el texto manualmente.');
+    }
+  };
 
   const positionOptions = useMemo<ServiceSelection[]>(
     () =>
@@ -296,6 +334,36 @@ export function UserFormScreen() {
     return occupiedAssignments.occupiedEncargadoDepartments.has(department);
   };
 
+  const togglePrivilege = (key: keyof UserPrivileges) => {
+    if (!isAdmin) return;
+
+    setPrivileges((current) => {
+      const nextValue = !current[key];
+      const next: UserPrivileges = {
+        ...current,
+        [key]: nextValue,
+      };
+
+      if (key === 'isElder' && nextValue) {
+        next.isMinisterialServant = false;
+      }
+
+      if (key === 'isMinisterialServant' && nextValue) {
+        next.isElder = false;
+      }
+
+      if (key === 'isRegularPioneer' && nextValue) {
+        next.isAuxiliaryPioneer = false;
+      }
+
+      if (key === 'isAuxiliaryPioneer' && nextValue) {
+        next.isRegularPioneer = false;
+      }
+
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (!positionOptions.includes(servicePosition)) {
       setServicePosition('none');
@@ -333,6 +401,12 @@ export function UserFormScreen() {
     const assignmentError = needsDepartment(servicePosition)
       ? validateRequired(serviceDepartment, 'El departamento')
       : undefined;
+    const privilegesError =
+      privileges.isRegularPioneer && privileges.isAuxiliaryPioneer
+        ? 'Un usuario no puede ser Precursor Regular y Auxiliar al mismo tiempo.'
+        : privileges.isElder && privileges.isMinisterialServant
+          ? 'Un usuario no puede ser Anciano y Siervo Ministerial al mismo tiempo.'
+        : undefined;
 
     const nextErrors: FormErrors =
       mode === 'create'
@@ -343,6 +417,7 @@ export function UserFormScreen() {
               validateRequired(password, 'La contrasena') ??
               validateMinLength(password, 6, 'La contrasena'),
             assignment: assignmentError,
+            privileges: privilegesError,
           }
         : {
             displayName: validateRequired(displayName, 'El nombre'),
@@ -351,6 +426,7 @@ export function UserFormScreen() {
                 ? validateMinLength(newPassword, 6, 'La nueva contrasena')
                 : undefined,
             assignment: assignmentError,
+            privileges: privilegesError,
           };
 
     setErrors(nextErrors);
@@ -396,13 +472,30 @@ export function UserFormScreen() {
           department: departmentLabel,
           servicePosition: normalizedServicePosition,
           serviceDepartment: normalizedServiceDepartment,
+          privileges,
+          responsibilities,
           isActive: true,
         });
+        const assignedEmail = createdUser.email ?? generatedEmailPreview;
+        const credentialsText = `Correo: ${assignedEmail}\nContrasena: ${password}`;
 
         Alert.alert(
           'Usuario creado',
-          `Correo asignado: ${createdUser.email ?? generatedEmailPreview}\nDominio: @${createdUser.requiredDomain ?? allowedEmailDomain}`
+          `Correo asignado: ${assignedEmail}\nContrasena inicial: ${password}\nDominio: @${createdUser.requiredDomain ?? allowedEmailDomain}`,
+          [
+            {
+              text: 'Copiar credenciales',
+              onPress: () => {
+                void copyToClipboard(credentialsText).finally(() => router.back());
+              },
+            },
+            {
+              text: 'Cerrar',
+              onPress: () => router.back(),
+            },
+          ]
         );
+        return;
       } else if (id) {
         const payload: UpdateUserDTO = {
           displayName,
@@ -411,6 +504,8 @@ export function UserFormScreen() {
           department: departmentLabel,
           servicePosition: normalizedServicePosition,
           serviceDepartment: normalizedServiceDepartment,
+          privileges,
+          responsibilities,
         };
 
         await updateUserByAdmin({ uid: id, data: payload });
@@ -506,13 +601,28 @@ export function UserFormScreen() {
                 placeholder="Minimo 6 caracteres"
                 visible={showPassword}
                 onToggleVisibility={() => setShowPassword((value) => !value)}
+                onCopy={() => void handleCopyValue('Contrasena', password)}
                 hasError={Boolean(errors.password)}
                 editable={isAdmin}
               />
             </Field>
 
             <Field label="Correo generado automaticamente">
-              <TextInput style={styles.inputReadOnly} value={generatedEmailPreview} editable={false} />
+              <View style={styles.copyInputWrap}>
+                <TextInput
+                  style={styles.copyInput}
+                  value={generatedEmailPreview}
+                  editable={false}
+                />
+                <TouchableOpacity
+                  style={styles.copyButton}
+                  onPress={() => void handleCopyValue('Correo', generatedEmailPreview)}
+                  activeOpacity={0.8}
+                  disabled={!generatedEmailPreview.trim()}
+                >
+                  <Ionicons name="copy-outline" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
               <ThemedText style={styles.hintText}>
                 Si ya existe un correo igual, se intentara con primer+segundo+apellido y despues numeracion.
               </ThemedText>
@@ -538,6 +648,7 @@ export function UserFormScreen() {
                 placeholder="Dejar vacio para no cambiar"
                 visible={showNewPassword}
                 onToggleVisibility={() => setShowNewPassword((value) => !value)}
+                onCopy={() => void handleCopyValue('Nueva contrasena', newPassword)}
                 hasError={Boolean(errors.newPassword)}
                 editable={isAdmin}
               />
@@ -649,6 +760,35 @@ export function UserFormScreen() {
           </Field>
         ) : null}
 
+        <Field label="Privilegios / nombramientos" error={errors.privileges}>
+          <View style={styles.departmentRow}>
+            <ToggleChip
+              label={PRIVILEGE_LABELS.isElder}
+              selected={Boolean(privileges.isElder)}
+              disabled={!isAdmin}
+              onPress={() => togglePrivilege('isElder')}
+            />
+            <ToggleChip
+              label={PRIVILEGE_LABELS.isMinisterialServant}
+              selected={Boolean(privileges.isMinisterialServant)}
+              disabled={!isAdmin}
+              onPress={() => togglePrivilege('isMinisterialServant')}
+            />
+            <ToggleChip
+              label={PRIVILEGE_LABELS.isRegularPioneer}
+              selected={Boolean(privileges.isRegularPioneer)}
+              disabled={!isAdmin}
+              onPress={() => togglePrivilege('isRegularPioneer')}
+            />
+            <ToggleChip
+              label={PRIVILEGE_LABELS.isAuxiliaryPioneer}
+              selected={Boolean(privileges.isAuxiliaryPioneer)}
+              disabled={!isAdmin}
+              onPress={() => togglePrivilege('isAuxiliaryPioneer')}
+            />
+          </View>
+        </Field>
+
         <TouchableOpacity
           style={[styles.saveButton, (saving || !isAdmin) && styles.saveButtonDisabled]}
           onPress={handleSave}
@@ -674,6 +814,7 @@ function PasswordInput({
   placeholder,
   visible,
   onToggleVisibility,
+  onCopy,
   hasError,
   editable,
 }: {
@@ -682,6 +823,7 @@ function PasswordInput({
   placeholder: string;
   visible: boolean;
   onToggleVisibility: () => void;
+  onCopy?: () => void;
   hasError: boolean;
   editable: boolean;
 }) {
@@ -707,6 +849,16 @@ function PasswordInput({
           color={colors.textMuted}
         />
       </TouchableOpacity>
+      {onCopy ? (
+        <TouchableOpacity
+          style={styles.eyeButton}
+          onPress={onCopy}
+          activeOpacity={0.8}
+          disabled={!value.trim()}
+        >
+          <Ionicons name="copy-outline" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -729,6 +881,44 @@ function Field({
       {children}
       {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
     </View>
+  );
+}
+
+function ToggleChip({
+  label,
+  selected,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.departmentChip,
+        selected && styles.departmentChipActive,
+        disabled && styles.departmentChipDisabled,
+      ]}
+      onPress={onPress}
+      activeOpacity={0.8}
+      disabled={disabled}
+    >
+      <ThemedText
+        style={[
+          styles.departmentChipText,
+          selected && styles.departmentChipTextActive,
+          disabled && styles.departmentChipTextDisabled,
+        ]}
+      >
+        {label}
+      </ThemedText>
+    </TouchableOpacity>
   );
 }
 
@@ -783,6 +973,25 @@ const createStyles = (colors: AppColorSet) =>
       padding: 12,
       fontSize: 15,
       color: colors.textMuted,
+    },
+    copyInputWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surfaceRaised,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingLeft: 12,
+      paddingRight: 8,
+    },
+    copyInput: {
+      flex: 1,
+      paddingVertical: 12,
+      fontSize: 15,
+      color: colors.textMuted,
+    },
+    copyButton: {
+      padding: 6,
     },
     inputError: {
       borderColor: colors.error,

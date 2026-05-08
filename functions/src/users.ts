@@ -13,6 +13,17 @@ type ServiceDepartment =
   | 'predicacion'
   | 'acomodadores_microfonos';
 
+type UserPrivileges = {
+  isElder?: boolean;
+  isMinisterialServant?: boolean;
+  isRegularPioneer?: boolean;
+  isAuxiliaryPioneer?: boolean;
+};
+
+type UserResponsibilities = {
+  isPreachingManager?: boolean;
+};
+
 type ServiceAssignment = {
   position?: ServicePosition;
   department?: ServiceDepartment;
@@ -41,6 +52,8 @@ type CreateUserPayload = {
   servicePosition?: ServicePosition;
   serviceDepartment?: ServiceDepartment;
   departmentLabel?: string;
+  privileges?: UserPrivileges;
+  responsibilities?: UserResponsibilities;
 };
 
 type UpdateUserPayload = {
@@ -55,6 +68,10 @@ type UpdateUserPayload = {
   servicePositionProvided: boolean;
   serviceDepartmentProvided: boolean;
   serviceAssignmentProvided: boolean;
+  privileges?: UserPrivileges;
+  responsibilities?: UserResponsibilities;
+  privilegesProvided: boolean;
+  responsibilitiesProvided: boolean;
 };
 
 type UpdatePasswordPayload = {
@@ -115,6 +132,67 @@ const parseServiceDepartment = (value: unknown): ServiceDepartment | undefined =
 
   throw new HttpsError('invalid-argument', 'Departamento de servicio invalido.');
 };
+
+const parseBooleanMap = <TKeys extends string>(
+  value: unknown,
+  keys: readonly TKeys[],
+  label: string
+): Partial<Record<TKeys, boolean>> | undefined => {
+  if (value === undefined) return undefined;
+
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new HttpsError('invalid-argument', `${label} invalido.`);
+  }
+
+  const source = value as Record<string, unknown>;
+  const invalidKey = Object.keys(source).find((key) => !keys.includes(key as TKeys));
+  if (invalidKey) {
+    throw new HttpsError('invalid-argument', `${label} contiene campos no permitidos.`);
+  }
+
+  const normalized = keys.reduce<Partial<Record<TKeys, boolean>>>((acc, key) => {
+    if (source[key] !== undefined) {
+      if (typeof source[key] !== 'boolean') {
+        throw new HttpsError('invalid-argument', `${label} debe contener valores booleanos.`);
+      }
+      acc[key] = source[key] as boolean;
+    }
+    return acc;
+  }, {});
+
+  return Object.keys(normalized).length > 0 ? normalized : {};
+};
+
+const parsePrivileges = (value: unknown): UserPrivileges | undefined => {
+  const privileges = parseBooleanMap(
+    value,
+    ['isElder', 'isMinisterialServant', 'isRegularPioneer', 'isAuxiliaryPioneer'] as const,
+    'Privilegios'
+  ) as UserPrivileges | undefined;
+
+  if (privileges?.isRegularPioneer && privileges?.isAuxiliaryPioneer) {
+    throw new HttpsError(
+      'invalid-argument',
+      'Un usuario no puede ser Precursor Regular y Auxiliar al mismo tiempo.'
+    );
+  }
+
+  if (privileges?.isElder && privileges?.isMinisterialServant) {
+    throw new HttpsError(
+      'invalid-argument',
+      'Un usuario no puede ser Anciano y Siervo Ministerial al mismo tiempo.'
+    );
+  }
+
+  return privileges;
+};
+
+const parseResponsibilities = (value: unknown): UserResponsibilities | undefined =>
+  parseBooleanMap(
+    value,
+    ['isPreachingManager'] as const,
+    'Responsabilidades'
+  ) as UserResponsibilities | undefined;
 
 const parseLegacyAssignmentLabel = (
   label: string | undefined
@@ -445,6 +523,8 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
   const rawPosition = parseServicePosition(data.servicePosition) ?? legacyAssignment.position;
   const rawDepartment = parseServiceDepartment(data.serviceDepartment) ?? legacyAssignment.department;
   const assignment = normalizeAssignmentForRole(role, rawPosition, rawDepartment);
+  const privileges = parsePrivileges(data.privileges);
+  const responsibilities = parseResponsibilities(data.responsibilities);
 
   return {
     firstName,
@@ -460,6 +540,8 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
     servicePosition: assignment.position,
     serviceDepartment: assignment.department,
     departmentLabel: assignment.label,
+    privileges,
+    responsibilities,
   };
 };
 
@@ -519,6 +601,12 @@ const parseUpdateUserPayload = (raw: unknown): UpdateUserPayload => {
   const serviceDepartment = serviceDepartmentProvided
     ? (parseServiceDepartment(nested.serviceDepartment) ?? legacyAssignment.department)
     : undefined;
+  const privilegesProvided = Object.prototype.hasOwnProperty.call(nested, 'privileges');
+  const responsibilitiesProvided = Object.prototype.hasOwnProperty.call(nested, 'responsibilities');
+  const privileges = privilegesProvided ? parsePrivileges(nested.privileges) : undefined;
+  const responsibilities = responsibilitiesProvided
+    ? parseResponsibilities(nested.responsibilities)
+    : undefined;
 
   return {
     uid,
@@ -532,6 +620,10 @@ const parseUpdateUserPayload = (raw: unknown): UpdateUserPayload => {
     servicePositionProvided,
     serviceDepartmentProvided,
     serviceAssignmentProvided: servicePositionProvided || serviceDepartmentProvided,
+    privileges,
+    responsibilities,
+    privilegesProvided,
+    responsibilitiesProvided,
   };
 };
 
@@ -636,6 +728,12 @@ export const createUserByAdmin = onCall(
       if (payload.servicePosition) userDoc.servicePosition = payload.servicePosition;
       if (payload.serviceDepartment) userDoc.serviceDepartment = payload.serviceDepartment;
       if (payload.departmentLabel) userDoc.department = payload.departmentLabel;
+      if (payload.privileges && Object.keys(payload.privileges).length > 0) {
+        userDoc.privileges = payload.privileges;
+      }
+      if (payload.responsibilities && Object.keys(payload.responsibilities).length > 0) {
+        userDoc.responsibilities = payload.responsibilities;
+      }
 
       await db.collection('users').doc(userRecord.uid).set(userDoc);
 
@@ -784,6 +882,20 @@ export const updateUserByAdmin = onCall(
       } else {
         docUpdates.department = FieldValue.delete();
       }
+    }
+
+    if (payload.privilegesProvided) {
+      docUpdates.privileges =
+        payload.privileges && Object.keys(payload.privileges).length > 0
+          ? payload.privileges
+          : FieldValue.delete();
+    }
+
+    if (payload.responsibilitiesProvided) {
+      docUpdates.responsibilities =
+        payload.responsibilities && Object.keys(payload.responsibilities).length > 0
+          ? payload.responsibilities
+          : FieldValue.delete();
     }
 
     await targetRef.update(docUpdates);

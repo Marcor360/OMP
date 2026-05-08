@@ -95,6 +95,32 @@ service cloud.firestore {
         );
     }
 
+    function isPreachingManager() {
+      return isActive()
+        && currentUserData().serviceDepartment == 'predicacion'
+        && (
+          (
+            currentUserData().servicePosition == 'encargado'
+            && currentUserData().privileges is map
+            && currentUserData().privileges.isElder == true
+          )
+          || currentUserData().servicePosition == 'auxiliar'
+        );
+    }
+
+    function isPioneer() {
+      return isActive()
+        && currentUserData().privileges is map
+        && (
+          currentUserData().privileges.isRegularPioneer == true
+          || currentUserData().privileges.isAuxiliaryPioneer == true
+        );
+    }
+
+    function canListCongregationUsers() {
+      return isCleaningManager() || isPreachingManager() || isAdminOrSupervisor();
+    }
+
     function isSameUser(userId) {
       return isAuthenticated() && currentUid() == userId;
     }
@@ -146,6 +172,8 @@ service cloud.firestore {
         'servicePosition',
         'serviceDepartment',
         'department',
+        'privileges',
+        'responsibilities',
         'createdAt',
         'updatedAt',
         // Campos de notificaciones push — escritura controlada por validPushTokenUpdate()
@@ -220,7 +248,37 @@ service cloud.firestore {
           !('cleaningGroupName' in data)
           || data.cleaningGroupName == null
           || data.cleaningGroupName is string
+        )
+        && (
+          !('privileges' in data)
+          || validUserPrivileges(data.privileges)
+        )
+        && (
+          !('responsibilities' in data)
+          || validUserResponsibilities(data.responsibilities)
         );
+    }
+
+    function validUserPrivileges(privileges) {
+      return privileges is map
+        && privileges.keys().hasOnly([
+          'isElder',
+          'isMinisterialServant',
+          'isRegularPioneer',
+          'isAuxiliaryPioneer'
+        ])
+        && (!('isElder' in privileges) || privileges.isElder is bool)
+        && (!('isMinisterialServant' in privileges) || privileges.isMinisterialServant is bool)
+        && (!('isRegularPioneer' in privileges) || privileges.isRegularPioneer is bool)
+        && (!('isAuxiliaryPioneer' in privileges) || privileges.isAuxiliaryPioneer is bool)
+        && !(privileges.isElder == true && privileges.isMinisterialServant == true)
+        && !(privileges.isRegularPioneer == true && privileges.isAuxiliaryPioneer == true);
+    }
+
+    function validUserResponsibilities(responsibilities) {
+      return responsibilities is map
+        && responsibilities.keys().hasOnly(['isPreachingManager'])
+        && (!('isPreachingManager' in responsibilities) || responsibilities.isPreachingManager is bool);
     }
 
     function validUserCreate(userId) {
@@ -268,7 +326,10 @@ service cloud.firestore {
         'asamblea_regional',
         'visita_superintendente',
         'reunion_especial',
-        'capacitacion'
+        'capacitacion',
+        'reunion_anual_precursores',
+        'reunion_precursores_visita_superintendente',
+        'reunion_ancianos_siervos_ministeriales'
       ];
     }
 
@@ -709,6 +770,93 @@ service cloud.firestore {
         && (!('metadata' in data) || data.metadata is map);
     }
 
+    function validMonthId(monthId) {
+      return monthId is string
+        && monthId.matches('^\\d{4}-(0[1-9]|1[0-2])$');
+    }
+
+    function allowedPreachingReportKeys() {
+      return [
+        'userId',
+        'userName',
+        'congregationId',
+        'congregationName',
+        'monthId',
+        'monthName',
+        'participated',
+        'bibleStudies',
+        'returnVisits',
+        'comments',
+        'isPioneer',
+        'pioneerType',
+        'hours',
+        'submittedAt',
+        'updatedAt',
+        'submittedBy'
+      ];
+    }
+
+    function validPreachingReportWrite(data, congregationId, monthId, userId) {
+      return hasOnlyKeys(data, allowedPreachingReportKeys())
+        && hasAllKeys(data, [
+          'userId',
+          'userName',
+          'congregationId',
+          'monthId',
+          'monthName',
+          'participated',
+          'bibleStudies',
+          'returnVisits',
+          'isPioneer',
+          'submittedAt',
+          'updatedAt',
+          'submittedBy'
+        ])
+        && validMonthId(monthId)
+        && data.userId == userId
+        && data.userId == currentUid()
+        && data.submittedBy == currentUid()
+        && data.congregationId == congregationId
+        && data.monthId == monthId
+        && data.userName is string
+        && data.monthName is string
+        && (!('congregationName' in data) || data.congregationName is string)
+        && data.participated is bool
+        && data.bibleStudies is int
+        && data.bibleStudies >= 0
+        && data.returnVisits is int
+        && data.returnVisits >= 0
+        && (
+          !('comments' in data)
+          || data.comments == null
+          || (data.comments is string && data.comments.size() <= 500)
+        )
+        && data.isPioneer is bool
+        && data.isPioneer == isPioneer()
+        && (
+          !('pioneerType' in data)
+          || data.pioneerType == null
+          || data.pioneerType in ['regular', 'auxiliary']
+        )
+        && data.submittedAt is timestamp
+        && data.updatedAt is timestamp
+        && (
+          isPioneer()
+          || !('hours' in data)
+          || data.hours == null
+        )
+        && (
+          !isPioneer()
+          || data.hours is number
+          || data.hours == null
+        )
+        && (
+          !isPioneer()
+          || data.hours == null
+          || data.hours >= 0
+        );
+    }
+
     // =========================================================================
     // REGLAS: SYSTEM
     // Solo lectura para usuarios autenticados.
@@ -736,13 +884,13 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isSameUser(userId)
-        || (isCleaningManager() && storedDocInMyCongregation());
+        || (canListCongregationUsers() && storedDocInMyCongregation());
 
       // list sólo dentro de la propia congregación.
       // Firestore Security Rules no permiten inspeccionar filtros de query,
       // por lo que la restricción real se aplica en la app (siempre filtra por congregationId).
       // myCongregationId() != null garantiza que el solicitante tiene perfil activo con congregación.
-      allow list: if isCleaningManager() && myCongregationId() != null;
+      allow list: if canListCongregationUsers() && myCongregationId() != null;
 
       allow create: if isAdmin()
         && validUserCreate(userId)
@@ -940,6 +1088,30 @@ service cloud.firestore {
           );
 
         allow delete: if isAdmin();
+      }
+
+      // -----------------------------------------------------------------------
+      // PREACHING REPORTS
+      // -----------------------------------------------------------------------
+      match /preachingReports/{monthId}/submissions/{userId} {
+        allow get: if sameCongregation(congregationId)
+          && (
+            isSameUser(userId)
+            || isPreachingManager()
+            || isAdminOrSupervisor()
+          );
+
+        allow list: if sameCongregation(congregationId)
+          && (
+            isPreachingManager()
+            || isAdminOrSupervisor()
+          );
+
+        allow create, update: if sameCongregation(congregationId)
+          && isSameUser(userId)
+          && validPreachingReportWrite(request.resource.data, congregationId, monthId, userId);
+
+        allow delete: if false;
       }
 
       // -----------------------------------------------------------------------

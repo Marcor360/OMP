@@ -4,7 +4,7 @@ import { getAssignments } from '@/src/modules/assignments/services/assignments.s
 import { Assignment } from '@/src/modules/assignments/types/assignment.types';
 
 const CACHE_PREFIX = '@omp/my-cleaning-dashboard';
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const UPCOMING_DAYS = 90;
 const MAX_VISIBLE_ASSIGNMENTS = 4;
@@ -96,6 +96,23 @@ const toCleaningDay = (assignment: Assignment): MyCleaningDay => ({
   notes: assignment.notes,
 });
 
+const dedupeCleaningAssignments = (assignments: Assignment[]): Assignment[] => {
+  const seen = new Set<string>();
+
+  return assignments.filter((assignment) => {
+    const key = [
+      assignment.source,
+      assignment.meetingId ?? 'standalone',
+      assignment.id,
+      assignment.sourceKey,
+    ].join(':');
+
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 const isFreshCache = (
   summary: MyCleaningDashboardSummary,
   params: MyCleaningDashboardParams
@@ -157,7 +174,7 @@ export const getMyCleaningDashboardSummary = async (
     forceServer: params.forceServer,
   });
 
-  const days = assignments
+  const relevantAssignments = assignments
     .filter((assignment) => assignment.category === 'cleaning')
     .filter((assignment) => assignment.status !== 'completed' && assignment.status !== 'cancelled')
     .filter((assignment) =>
@@ -171,7 +188,9 @@ export const getMyCleaningDashboardSummary = async (
       const leftDate = parseDate(left.date)?.getTime() ?? 0;
       const rightDate = parseDate(right.date)?.getTime() ?? 0;
       return leftDate - rightDate;
-    })
+    });
+
+  const days = dedupeCleaningAssignments(relevantAssignments)
     .slice(0, MAX_VISIBLE_ASSIGNMENTS)
     .map(toCleaningDay);
 

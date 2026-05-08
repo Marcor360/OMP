@@ -6,7 +6,10 @@ export type CongregationEventType =
   | 'asamblea_regional'
   | 'visita_superintendente'
   | 'reunion_especial'
-  | 'capacitacion';
+  | 'capacitacion'
+  | 'reunion_anual_precursores'
+  | 'reunion_precursores_visita_superintendente'
+  | 'reunion_ancianos_siervos_ministeriales';
 
 export interface CongregationEvent {
   id: string;
@@ -43,6 +46,9 @@ export const EVENT_TYPE_LABELS: Record<CongregationEventType, string> = {
   visita_superintendente: 'Visita del Superintendente de Circuito',
   reunion_especial: 'Reunion Especial',
   capacitacion: 'Capacitacion',
+  reunion_anual_precursores: 'Reunion Anual de Precursores',
+  reunion_precursores_visita_superintendente: 'Reunion con Precursores - Visita del Superintendente',
+  reunion_ancianos_siervos_ministeriales: 'Reunion con Ancianos y Siervos Ministeriales',
 };
 
 export const EVENT_TYPE_COLORS: Record<CongregationEventType, string> = {
@@ -52,11 +58,17 @@ export const EVENT_TYPE_COLORS: Record<CongregationEventType, string> = {
   visita_superintendente: '#16A34A',
   reunion_especial: '#F97316',
   capacitacion: '#0D9488',
+  reunion_anual_precursores: '#6366F1',
+  reunion_precursores_visita_superintendente: '#0891B2',
+  reunion_ancianos_siervos_ministeriales: '#9333EA',
 };
 
 export const SINGLE_DAY_EVENT_TYPES: CongregationEventType[] = [
   'conmemoracion',
   'asamblea_circuito',
+  'reunion_anual_precursores',
+  'reunion_precursores_visita_superintendente',
+  'reunion_ancianos_siervos_ministeriales',
 ];
 
 export const OPTIONAL_END_DATE_EVENT_TYPES: CongregationEventType[] = [

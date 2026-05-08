@@ -1,0 +1,330 @@
+import React from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+
+import { EmptyState } from '@/src/components/common/EmptyState';
+import { ErrorState } from '@/src/components/common/ErrorState';
+import { StatCard } from '@/src/components/cards/StatCard';
+import { ThemedText } from '@/src/components/themed-text';
+import { usePreachingManagerReports } from '@/src/hooks/usePreachingManagerReports';
+import {
+  getMonthName,
+  shiftMonthId,
+} from '@/src/services/preaching-report.service';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { MissingPreachingReportUser, PreachingReportSubmission } from '@/src/types/preaching-report.types';
+import { PRIVILEGE_LABELS, UserPrivileges } from '@/src/types/user';
+import { formatDateTime } from '@/src/utils/dates/dates';
+
+interface PreachingManagerPanelProps {
+  congregationId: string | null;
+  enabled: boolean;
+}
+
+const formatPioneerType = (submission: PreachingReportSubmission): string => {
+  if (submission.pioneerType === 'regular') return 'Regular';
+  if (submission.pioneerType === 'auxiliary') return 'Auxiliar';
+  return 'No precursor';
+};
+
+const privilegeLabels = (privileges?: UserPrivileges): string => {
+  const labels = [
+    privileges?.isElder ? PRIVILEGE_LABELS.isElder : null,
+    privileges?.isMinisterialServant ? PRIVILEGE_LABELS.isMinisterialServant : null,
+    privileges?.isRegularPioneer ? PRIVILEGE_LABELS.isRegularPioneer : null,
+    privileges?.isAuxiliaryPioneer ? PRIVILEGE_LABELS.isAuxiliaryPioneer : null,
+  ].filter(Boolean);
+
+  return labels.length > 0 ? labels.join(', ') : 'Sin privilegios registrados';
+};
+
+export function PreachingManagerPanel({ congregationId, enabled }: PreachingManagerPanelProps) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+  const {
+    monthId,
+    setMonthId,
+    submissions,
+    missingUsers,
+    summary,
+    loading,
+    error,
+    refresh,
+  } = usePreachingManagerReports({ congregationId, enabled });
+
+  if (!enabled) {
+    return (
+      <ErrorState message="No tienes permisos para ver el panel de predicacion." />
+    );
+  }
+
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
+
+  return (
+    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.monthBar}>
+        <TouchableOpacity
+          style={styles.monthButton}
+          onPress={() => setMonthId(shiftMonthId(monthId, -1))}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="chevron-back" size={18} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <View style={styles.monthTitleWrap}>
+          <ThemedText style={styles.monthLabel}>Mes seleccionado</ThemedText>
+          <ThemedText style={styles.monthTitle}>{getMonthName(monthId)}</ThemedText>
+        </View>
+        <TouchableOpacity
+          style={styles.monthButton}
+          onPress={() => setMonthId(shiftMonthId(monthId, 1))}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="chevron-forward" size={18} color={colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator color={colors.primary} />
+          <ThemedText style={styles.loadingText}>Cargando informes...</ThemedText>
+        </View>
+      ) : null}
+
+      <View style={styles.statsGrid}>
+        <StatCard title="Publicadores" value={summary.totalActivePublishers} icon="people-outline" color={colors.primary} />
+        <StatCard title="Enviados" value={summary.totalSubmitted} icon="checkmark-circle-outline" color={colors.success} />
+      </View>
+      <View style={styles.statsGrid}>
+        <StatCard title="Faltantes" value={summary.totalMissing} icon="alert-circle-outline" color={colors.warning} />
+        <StatCard title="Horas" value={summary.totalPioneerHours} icon="time-outline" color={colors.accent} />
+      </View>
+      <View style={styles.statsGrid}>
+        <StatCard title="Estudios" value={summary.totalBibleStudies} icon="book-outline" color={colors.secondary} />
+        <StatCard title="Cursos" value={summary.totalReturnVisits} icon="return-down-forward-outline" color={colors.info} />
+      </View>
+
+      <SectionTitle title="Informes enviados" count={submissions.length} />
+      {submissions.length === 0 ? (
+        <EmptyState
+          icon="document-text-outline"
+          title="Sin informes"
+          description="Aun no hay informes enviados para este mes."
+        />
+      ) : (
+        <View style={styles.list}>
+          {submissions.map((submission) => (
+            <View key={submission.userId} style={styles.card}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardTitle}>{submission.userName}</ThemedText>
+                <ThemedText style={styles.statusPill}>
+                  {submission.participated ? 'Si participo' : 'No participo'}
+                </ThemedText>
+              </View>
+              <InfoLine label="Estudios" value={String(submission.bibleStudies)} />
+              <InfoLine label="Cursos" value={String(submission.returnVisits)} />
+              <InfoLine label="Tipo de precursor" value={formatPioneerType(submission)} />
+              {submission.isPioneer ? (
+                <InfoLine label="Horas" value={String(submission.hours ?? 0)} />
+              ) : null}
+              {submission.comments ? (
+                <InfoLine label="Comentarios" value={submission.comments} />
+              ) : null}
+              <InfoLine label="Fecha de envio" value={formatDateTime(submission.updatedAt)} />
+            </View>
+          ))}
+        </View>
+      )}
+
+      <SectionTitle title="Faltantes" count={missingUsers.length} />
+      {missingUsers.length === 0 ? (
+        <EmptyState
+          icon="checkmark-done-outline"
+          title="Todos han informado"
+          description="No hay publicadores faltantes para este mes."
+        />
+      ) : (
+        <View style={styles.list}>
+          {missingUsers.map((user) => (
+            <MissingUserCard key={user.uid} user={user} />
+          ))}
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+function SectionTitle({ title, count }: { title: string; count: number }) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
+  return (
+    <View style={styles.sectionHeader}>
+      <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+      <ThemedText style={styles.sectionCount}>{count}</ThemedText>
+    </View>
+  );
+}
+
+function InfoLine({ label, value }: { label: string; value: string }) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
+  return (
+    <View style={styles.infoLine}>
+      <ThemedText style={styles.infoLabel}>{label}</ThemedText>
+      <ThemedText style={styles.infoValue}>{value}</ThemedText>
+    </View>
+  );
+}
+
+function MissingUserCard({ user }: { user: MissingPreachingReportUser }) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <ThemedText style={styles.cardTitle}>{user.displayName}</ThemedText>
+        <ThemedText style={styles.missingPill}>Falta informe</ThemedText>
+      </View>
+      <InfoLine label="Privilegios" value={privilegeLabels(user.privileges)} />
+    </View>
+  );
+}
+
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    content: {
+      padding: 16,
+      gap: 14,
+      paddingBottom: 32,
+    },
+    monthBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 10,
+    },
+    monthButton: {
+      width: 38,
+      height: 38,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surfaceRaised,
+    },
+    monthTitleWrap: {
+      flex: 1,
+      alignItems: 'center',
+      minWidth: 0,
+    },
+    monthLabel: {
+      fontSize: 11,
+      color: colors.textMuted,
+      fontWeight: '600',
+    },
+    monthTitle: {
+      fontSize: 16,
+      color: colors.textPrimary,
+      fontWeight: '800',
+      textTransform: 'capitalize',
+    },
+    loadingBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      padding: 12,
+    },
+    loadingText: {
+      fontSize: 13,
+      color: colors.textMuted,
+    },
+    statsGrid: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 8,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: colors.textPrimary,
+    },
+    sectionCount: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: colors.textMuted,
+      backgroundColor: colors.surfaceRaised,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    list: {
+      gap: 10,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 14,
+      gap: 8,
+    },
+    cardHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    cardTitle: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '800',
+      color: colors.textPrimary,
+    },
+    statusPill: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.success,
+      backgroundColor: colors.success + '20',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    missingPill: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.warning,
+      backgroundColor: colors.warning + '20',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    infoLine: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    infoLabel: {
+      flex: 1,
+      fontSize: 12,
+      color: colors.textMuted,
+      fontWeight: '600',
+    },
+    infoValue: {
+      flex: 1,
+      fontSize: 12,
+      color: colors.textPrimary,
+      fontWeight: '700',
+      textAlign: 'right',
+    },
+  });

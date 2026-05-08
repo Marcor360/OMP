@@ -1,0 +1,355 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Modal,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+
+import { ThemedText } from '@/src/components/themed-text';
+import { getMonthName } from '@/src/services/preaching-report.service';
+import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import {
+  PreachingReportFormValues,
+  PreachingReportSubmission,
+} from '@/src/types/preaching-report.types';
+import { AppUser, isPioneer } from '@/src/types/user';
+
+interface PreachingReportModalProps {
+  visible: boolean;
+  user: AppUser;
+  monthId: string;
+  congregationName: string;
+  existingReport?: PreachingReportSubmission | null;
+  saving?: boolean;
+  onClose: () => void;
+  onSubmit: (values: PreachingReportFormValues) => Promise<void>;
+}
+
+const parseIntegerField = (value: string): number | null => {
+  if (value.trim() === '') return 0;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+};
+
+const parseHoursField = (value: string): number | null => {
+  if (value.trim() === '') return 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+
+export function PreachingReportModal({
+  visible,
+  user,
+  monthId,
+  congregationName,
+  existingReport,
+  saving = false,
+  onClose,
+  onSubmit,
+}: PreachingReportModalProps) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+  const userIsPioneer = isPioneer(user);
+
+  const [participated, setParticipated] = useState(existingReport?.participated ?? false);
+  const [bibleStudies, setBibleStudies] = useState(String(existingReport?.bibleStudies ?? 0));
+  const [returnVisits, setReturnVisits] = useState(String(existingReport?.returnVisits ?? 0));
+  const [comments, setComments] = useState(existingReport?.comments ?? '');
+  const [hours, setHours] = useState(String(existingReport?.hours ?? 0));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    setParticipated(existingReport?.participated ?? false);
+    setBibleStudies(String(existingReport?.bibleStudies ?? 0));
+    setReturnVisits(String(existingReport?.returnVisits ?? 0));
+    setComments(existingReport?.comments ?? '');
+    setHours(String(existingReport?.hours ?? 0));
+    setError(null);
+  }, [existingReport, visible]);
+
+  const monthName = useMemo(() => getMonthName(monthId), [monthId]);
+
+  const handleSubmit = async () => {
+    const normalizedBibleStudies = parseIntegerField(bibleStudies);
+    const normalizedReturnVisits = parseIntegerField(returnVisits);
+    const normalizedHours = parseHoursField(hours);
+
+    if (normalizedBibleStudies === null) {
+      setError('Estudios debe ser un numero entero mayor o igual a 0.');
+      return;
+    }
+
+    if (normalizedReturnVisits === null) {
+      setError('Cursos debe ser un numero entero mayor o igual a 0.');
+      return;
+    }
+
+    if (userIsPioneer && normalizedHours === null) {
+      setError('Total de horas debe ser un numero mayor o igual a 0.');
+      return;
+    }
+
+    setError(null);
+
+    await onSubmit({
+      participated,
+      bibleStudies: normalizedBibleStudies,
+      returnVisits: normalizedReturnVisits,
+      comments,
+      hours: userIsPioneer ? normalizedHours : null,
+    });
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <View style={styles.modal}>
+          <View style={styles.header}>
+            <View>
+              <ThemedText style={styles.title}>Informe de predicacion</ThemedText>
+              <ThemedText style={styles.subtitle}>{monthName}</ThemedText>
+            </View>
+            <TouchableOpacity style={styles.iconButton} onPress={onClose} disabled={saving}>
+              <Ionicons name="close" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.metaBox}>
+            <Ionicons name="home-outline" size={16} color={colors.textMuted} />
+            <ThemedText style={styles.metaText} numberOfLines={1}>
+              {congregationName}
+            </ThemedText>
+          </View>
+
+          <TouchableOpacity
+            style={styles.checkboxRow}
+            onPress={() => setParticipated((value) => !value)}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.checkbox, participated && styles.checkboxChecked]}>
+              {participated ? (
+                <Ionicons name="checkmark" size={14} color={colors.onPrimary} />
+              ) : null}
+            </View>
+            <ThemedText style={styles.checkboxLabel}>
+              Participaste este mes en la predicacion
+            </ThemedText>
+          </TouchableOpacity>
+
+          <Field label="Numero de estudios">
+            <TextInput
+              style={styles.input}
+              value={bibleStudies}
+              onChangeText={setBibleStudies}
+              keyboardType="number-pad"
+              placeholder="0"
+              placeholderTextColor={colors.textDisabled}
+            />
+          </Field>
+
+          <Field label="Numero de cursos">
+            <TextInput
+              style={styles.input}
+              value={returnVisits}
+              onChangeText={setReturnVisits}
+              keyboardType="number-pad"
+              placeholder="0"
+              placeholderTextColor={colors.textDisabled}
+            />
+          </Field>
+
+          <Field label="Comentarios">
+            <TextInput
+              style={[styles.input, styles.commentsInput]}
+              value={comments}
+              onChangeText={setComments}
+              placeholder="Opcional"
+              placeholderTextColor={colors.textDisabled}
+              multiline
+              maxLength={500}
+            />
+          </Field>
+
+          {userIsPioneer ? (
+            <Field label="Total de horas">
+              <TextInput
+                style={styles.input}
+                value={hours}
+                onChangeText={setHours}
+                keyboardType="decimal-pad"
+                placeholder="0"
+                placeholderTextColor={colors.textDisabled}
+              />
+            </Field>
+          ) : null}
+
+          {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+
+          <TouchableOpacity
+            style={[styles.submitButton, saving && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={saving}
+            activeOpacity={0.85}
+          >
+            {saving ? (
+              <ActivityIndicator color={colors.onPrimary} />
+            ) : (
+              <>
+                <Ionicons name="send-outline" size={16} color={colors.onPrimary} />
+                <ThemedText style={styles.submitButtonText}>Enviar informe</ThemedText>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
+  return (
+    <View style={styles.field}>
+      <ThemedText style={styles.label}>{label}</ThemedText>
+      {children}
+    </View>
+  );
+}
+
+const createStyles = (colors: AppColorSet) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: colors.overlay,
+      justifyContent: 'center',
+      padding: 18,
+    },
+    modal: {
+      backgroundColor: colors.backgroundLight,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 16,
+      gap: 14,
+      width: '100%',
+      maxWidth: 520,
+      alignSelf: 'center',
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      gap: 12,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: colors.textPrimary,
+    },
+    subtitle: {
+      fontSize: 13,
+      color: colors.textMuted,
+      textTransform: 'capitalize',
+      marginTop: 2,
+    },
+    iconButton: {
+      width: 34,
+      height: 34,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surfaceRaised,
+    },
+    metaBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      borderRadius: 10,
+      padding: 10,
+    },
+    metaText: {
+      flex: 1,
+      fontSize: 13,
+      color: colors.textSecondary,
+      fontWeight: '600',
+    },
+    checkboxRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 4,
+    },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface,
+    },
+    checkboxChecked: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    checkboxLabel: {
+      flex: 1,
+      fontSize: 14,
+      color: colors.textPrimary,
+      fontWeight: '600',
+    },
+    field: {
+      gap: 6,
+    },
+    label: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      fontWeight: '600',
+    },
+    input: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: 12,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    commentsInput: {
+      minHeight: 82,
+      textAlignVertical: 'top',
+    },
+    errorText: {
+      color: colors.error,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    submitButton: {
+      minHeight: 48,
+      backgroundColor: colors.primary,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 8,
+    },
+    submitButtonDisabled: {
+      opacity: 0.65,
+    },
+    submitButtonText: {
+      color: colors.onPrimary,
+      fontWeight: '800',
+      fontSize: 15,
+    },
+  });

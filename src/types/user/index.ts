@@ -39,6 +39,17 @@ export const USER_SERVICE_DEPARTMENTS: UserServiceDepartment[] = [
   'acomodadores_microfonos',
 ];
 
+export interface UserPrivileges {
+  isElder?: boolean;
+  isMinisterialServant?: boolean;
+  isRegularPioneer?: boolean;
+  isAuxiliaryPioneer?: boolean;
+}
+
+export interface UserResponsibilities {
+  isPreachingManager?: boolean;
+}
+
 export interface AppUser {
   uid: string;
   email: string;
@@ -51,6 +62,8 @@ export interface AppUser {
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
+  privileges?: UserPrivileges;
+  responsibilities?: UserResponsibilities;
   avatarUrl?: string;
   secondLastName?: string;
   // Campos de modulo de limpieza
@@ -78,6 +91,8 @@ export interface CreateUserDTO {
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
+  privileges?: UserPrivileges;
+  responsibilities?: UserResponsibilities;
   secondLastName?: string;
 }
 
@@ -91,6 +106,8 @@ export interface UpdateUserDTO {
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
+  privileges?: UserPrivileges;
+  responsibilities?: UserResponsibilities;
   // Campos de modulo de limpieza
   cleaningEligible?: boolean;
   cleaningGroupId?: string | null;
@@ -114,3 +131,39 @@ export const STATUS_LABELS: Record<UserStatus, string> = {
   inactive: 'Inactivo',
   suspended: 'Suspendido',
 };
+
+export const PRIVILEGE_LABELS: Record<keyof UserPrivileges, string> = {
+  isElder: 'Anciano',
+  isMinisterialServant: 'Siervo Ministerial',
+  isRegularPioneer: 'Precursor Regular',
+  isAuxiliaryPioneer: 'Precursor Auxiliar',
+};
+
+export const RESPONSIBILITY_LABELS: Record<keyof UserResponsibilities, string> = {
+  isPreachingManager: 'Encargado de predicacion',
+};
+
+export const isPioneer = (user: Pick<AppUser, 'privileges'> | null | undefined): boolean =>
+  Boolean(user?.privileges?.isRegularPioneer || user?.privileges?.isAuxiliaryPioneer);
+
+export const getPioneerType = (
+  user: Pick<AppUser, 'privileges'> | null | undefined
+): 'regular' | 'auxiliary' | null => {
+  if (user?.privileges?.isRegularPioneer) return 'regular';
+  if (user?.privileges?.isAuxiliaryPioneer) return 'auxiliary';
+  return null;
+};
+
+export const isPreachingManager = (
+  user:
+    | Pick<AppUser, 'privileges' | 'servicePosition' | 'serviceDepartment'>
+    | null
+    | undefined
+): boolean =>
+  Boolean(
+    user?.serviceDepartment === 'predicacion' &&
+      (
+        (user.servicePosition === 'encargado' && user.privileges?.isElder === true) ||
+        user.servicePosition === 'auxiliar'
+      )
+  );

@@ -12,7 +12,10 @@ type EventType =
   | 'asamblea_regional'
   | 'visita_superintendente'
   | 'reunion_especial'
-  | 'capacitacion';
+  | 'capacitacion'
+  | 'reunion_anual_precursores'
+  | 'reunion_precursores_visita_superintendente'
+  | 'reunion_ancianos_siervos_ministeriales';
 
 const REGION = 'us-central1';
 const TIME_ZONE = 'America/Mexico_City';
@@ -28,6 +31,9 @@ const EVENT_TYPE_LABELS: Record<EventType, string> = {
   visita_superintendente: 'Visita del Superintendente de Circuito',
   reunion_especial: 'Reunion Especial',
   capacitacion: 'Capacitacion',
+  reunion_anual_precursores: 'Reunion Anual de Precursores',
+  reunion_precursores_visita_superintendente: 'Reunion con Precursores - Visita del Superintendente',
+  reunion_ancianos_siervos_ministeriales: 'Reunion con Ancianos y Siervos Ministeriales',
 };
 
 const EVENT_TYPE_COLORS: Record<EventType, string> = {
@@ -37,11 +43,17 @@ const EVENT_TYPE_COLORS: Record<EventType, string> = {
   visita_superintendente: '#16A34A',
   reunion_especial: '#F97316',
   capacitacion: '#0D9488',
+  reunion_anual_precursores: '#6366F1',
+  reunion_precursores_visita_superintendente: '#0891B2',
+  reunion_ancianos_siervos_ministeriales: '#9333EA',
 };
 
 const SINGLE_DAY_EVENT_TYPES = new Set<EventType>([
   'conmemoracion',
   'asamblea_circuito',
+  'reunion_anual_precursores',
+  'reunion_precursores_visita_superintendente',
+  'reunion_ancianos_siervos_ministeriales',
 ]);
 
 const OPTIONAL_END_DATE_EVENT_TYPES = new Set<EventType>([

@@ -41,6 +41,34 @@ export const congregationNotificationsCollectionRef = (congregationId: string) =
 export const congregationChangeLogsCollectionRef = (congregationId: string) =>
   collection(db, 'congregations', congregationId, 'changeLogs');
 
+export const preachingReportSubmissionsCollectionRef = (
+  congregationId: string,
+  monthId: string
+) =>
+  collection(
+    db,
+    'congregations',
+    congregationId,
+    'preachingReports',
+    monthId,
+    'submissions'
+  );
+
+export const preachingReportSubmissionDocRef = (
+  congregationId: string,
+  monthId: string,
+  userId: string
+) =>
+  doc(
+    db,
+    'congregations',
+    congregationId,
+    'preachingReports',
+    monthId,
+    'submissions',
+    userId
+  );
+
 export const dashboardSummaryDocRef = (congregationId: string) =>
   doc(db, 'dashboardSummary', congregationId);
 

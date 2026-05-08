@@ -3,7 +3,13 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/src/lib/firebase/app';
 import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import { deleteUser, updateUser } from '@/src/services/users/users-service';
-import { UpdateUserDTO, UserServiceDepartment, UserServicePosition } from '@/src/types/user';
+import {
+  UpdateUserDTO,
+  UserPrivileges,
+  UserResponsibilities,
+  UserServiceDepartment,
+  UserServicePosition,
+} from '@/src/types/user';
 import { AppError } from '@/src/utils/errors/errors';
 
 export type CreateUserByAdminPayload = {
@@ -21,6 +27,8 @@ export type CreateUserByAdminPayload = {
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
+  privileges?: UserPrivileges;
+  responsibilities?: UserResponsibilities;
 };
 
 export type CreateUserByAdminResult = {
