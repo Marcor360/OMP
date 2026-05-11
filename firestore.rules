@@ -109,7 +109,7 @@ service cloud.firestore {
             || (
               currentUserData().serviceAssignments is list
               && currentUserData().serviceAssignments.hasAny([
-                { position: 'encargado', department: 'limpieza', label: 'Encargado de Limpieza' }
+                { 'position': 'encargado', 'department': 'limpieza', 'label': 'Encargado de Limpieza' }
               ])
             )
           )
@@ -137,11 +137,11 @@ service cloud.firestore {
                 currentUserData().privileges is map
                 && currentUserData().privileges.isElder == true
                 && currentUserData().serviceAssignments.hasAny([
-                  { position: 'encargado', department: 'predicacion', label: 'Encargado de Predicacion' }
+                  { 'position': 'encargado', 'department': 'predicacion', 'label': 'Encargado de Predicacion' }
                 ])
               )
               || currentUserData().serviceAssignments.hasAny([
-                { position: 'auxiliar', department: 'predicacion', label: 'Auxiliar de Predicacion' }
+                { 'position': 'auxiliar', 'department': 'predicacion', 'label': 'Auxiliar de Predicacion' }
               ])
             )
           )
@@ -160,7 +160,7 @@ service cloud.firestore {
             || (
               currentUserData().serviceAssignments is list
               && currentUserData().serviceAssignments.hasAny([
-                { position: 'encargado', department: 'discursos', label: 'Encargado de Discursos' }
+                { 'position': 'encargado', 'department': 'discursos', 'label': 'Encargado de Discursos' }
               ])
             )
           )
@@ -177,10 +177,13 @@ service cloud.firestore {
     }
 
     function canListCongregationUsers() {
-      return isCleaningManager()
-        || isPreachingManager()
-        || isOutgoingTalksManager()
-        || isAdminOrSupervisor();
+      return canAccessCongregationData(myCongregationId())
+        && (
+          isCleaningManager()
+          || isPreachingManager()
+          || isOutgoingTalksManager()
+          || isAdminOrSupervisor()
+        );
     }
 
     function isSameUser(userId) {
@@ -197,14 +200,132 @@ service cloud.firestore {
         && myCongregationId() == congregationId;
     }
 
+    function congregationPath(congregationId) {
+      return /databases/$(database)/documents/congregations/$(congregationId);
+    }
+
+    function congregationAccessBlocked(congregationId) {
+      return exists(congregationPath(congregationId))
+        && !accessBlockExpired(get(congregationPath(congregationId)).data)
+        && (
+          get(congregationPath(congregationId)).data.disabled == true
+          || get(congregationPath(congregationId)).data.deactivated == true
+          || get(congregationPath(congregationId)).data.accessDisabled == true
+          || get(congregationPath(congregationId)).data.isActive == false
+          || get(congregationPath(congregationId)).data.active == false
+          || get(congregationPath(congregationId)).data.enabled == false
+          || get(congregationPath(congregationId)).data.status in [
+            'inactive',
+            'inactivo',
+            'disabled',
+            'desactivada',
+            'suspended',
+            'suspendida',
+            'maintenance',
+            'mantenimiento'
+          ]
+        );
+    }
+
+    function systemMaintenanceBlocked() {
+      return systemMaintenanceDocBlocked(/databases/$(database)/documents/system/maintenance)
+        || systemMaintenanceDocBlocked(/databases/$(database)/documents/system/congregationAccess)
+        || systemMaintenanceDocBlocked(/databases/$(database)/documents/system/platform);
+    }
+
+    function systemMaintenanceDocBlocked(systemDocPath) {
+      return exists(systemDocPath)
+        && !accessBlockExpired(get(systemDocPath).data)
+        && (
+          get(systemDocPath).data.maintenanceMode == true
+          || get(systemDocPath).data.systemMaintenance == true
+          || get(systemDocPath).data.disableCongregations == true
+          || get(systemDocPath).data.allCongregationsDisabled == true
+          || get(systemDocPath).data.congregationsDisabled == true
+          || get(systemDocPath).data.enabled == false
+          || get(systemDocPath).data.isActive == false
+        );
+    }
+
+    function accessBlockExpired(data) {
+      return explicitAccessBlockExpired(data)
+        || maxAccessBlockExpired(data);
+    }
+
+    function explicitAccessBlockExpired(data) {
+      return (
+        ('blockedUntil' in data)
+        && data.blockedUntil is timestamp
+        && data.blockedUntil <= request.time
+      ) || (
+        ('disabledUntil' in data)
+        && data.disabledUntil is timestamp
+        && data.disabledUntil <= request.time
+      ) || (
+        ('deactivatedUntil' in data)
+        && data.deactivatedUntil is timestamp
+        && data.deactivatedUntil <= request.time
+      ) || (
+        ('maintenanceUntil' in data)
+        && data.maintenanceUntil is timestamp
+        && data.maintenanceUntil <= request.time
+      ) || (
+        ('maintenanceEndsAt' in data)
+        && data.maintenanceEndsAt is timestamp
+        && data.maintenanceEndsAt <= request.time
+      ) || (
+        ('unlockAt' in data)
+        && data.unlockAt is timestamp
+        && data.unlockAt <= request.time
+      ) || (
+        ('reactivateAt' in data)
+        && data.reactivateAt is timestamp
+        && data.reactivateAt <= request.time
+      ) || (
+        ('reactivationAt' in data)
+        && data.reactivationAt is timestamp
+        && data.reactivationAt <= request.time
+      ) || (
+        ('expiresAt' in data)
+        && data.expiresAt is timestamp
+        && data.expiresAt <= request.time
+      ) || (
+        ('endsAt' in data)
+        && data.endsAt is timestamp
+        && data.endsAt <= request.time
+      );
+    }
+
+    function maxAccessBlockExpired(data) {
+      return accessStartExpired(data, 'deactivatedAt')
+        || accessStartExpired(data, 'disabledAt')
+        || accessStartExpired(data, 'blockedAt')
+        || accessStartExpired(data, 'maintenanceStartedAt')
+        || accessStartExpired(data, 'startedAt')
+        || accessStartExpired(data, 'updatedAt')
+        || accessStartExpired(data, 'createdAt');
+    }
+
+    function accessStartExpired(data, field) {
+      return field in data
+        && data[field] is timestamp
+        && data[field] + duration.value(5, 'h') <= request.time;
+    }
+
+    function canAccessCongregationData(congregationId) {
+      return sameCongregation(congregationId)
+        && !congregationAccessBlocked(congregationId)
+        && !systemMaintenanceBlocked();
+    }
+
     function storedDocInMyCongregation() {
       return resource.data.congregationId is string
-        && sameCongregation(resource.data.congregationId);
+        && canAccessCongregationData(resource.data.congregationId);
     }
 
     function targetDocInMyCongregation() {
       return request.resource.data.congregationId is string
-        && sameCongregation(request.resource.data.congregationId);
+        && canAccessCongregationData(request.resource.data.congregationId);
     }
 
     // =========================================================================
@@ -221,6 +342,7 @@ service cloud.firestore {
         'secondLastName',
         'displayName',
         'phone',
+        'gender',
         'photoURL',
         'role',
         'isActive',
@@ -252,7 +374,13 @@ service cloud.firestore {
         // Campos de módulo de limpieza
         'cleaningEligible',
         'cleaningGroupId',
-        'cleaningGroupName'
+        'cleaningGroupName',
+        'createdBy',
+        'createdByName',
+        'createdByEmail',
+        'updatedBy',
+        'updatedByName',
+        'updatedByEmail'
       ];
     }
 
@@ -287,6 +415,10 @@ service cloud.firestore {
         && (
           !('phone' in data)
           || data.phone is string
+        )
+        && (
+          !('gender' in data)
+          || data.gender in ['masculino', 'femenino']
         )
         && (
           !('photoURL' in data)
@@ -333,6 +465,30 @@ service cloud.firestore {
         && (
           !('isMinisterialServant' in data)
           || data.isMinisterialServant is bool
+        )
+        && (
+          !('createdBy' in data)
+          || data.createdBy is string
+        )
+        && (
+          !('createdByName' in data)
+          || data.createdByName is string
+        )
+        && (
+          !('createdByEmail' in data)
+          || data.createdByEmail is string
+        )
+        && (
+          !('updatedBy' in data)
+          || data.updatedBy is string
+        )
+        && (
+          !('updatedByName' in data)
+          || data.updatedByName is string
+        )
+        && (
+          !('updatedByEmail' in data)
+          || data.updatedByEmail is string
         );
     }
 
@@ -1020,7 +1176,8 @@ service cloud.firestore {
 
     match /events/{eventId} {
       allow get, list: if isActive()
-        && resource.data.congregationId == myCongregationId();
+        && resource.data.congregationId == myCongregationId()
+        && canAccessCongregationData(resource.data.congregationId);
       allow create: if validEventCreate();
       allow update: if validEventUpdate();
       allow delete: if isAdminOrSupervisor()
@@ -1075,11 +1232,11 @@ service cloud.firestore {
       allow list: if false;
 
       allow create: if isAdmin()
-        && sameCongregation(congregationId)
+        && canAccessCongregationData(congregationId)
         && validCongregationData(request.resource.data);
 
       allow update: if isAdmin()
-        && sameCongregation(congregationId)
+        && canAccessCongregationData(congregationId)
         && validCongregationData(request.resource.data)
         && preservesCreatedAt();
 
@@ -1087,6 +1244,7 @@ service cloud.firestore {
 
       match /private/{privateDocId} {
         allow get, list: if sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && isElder();
         allow write: if false;
       }
@@ -1095,14 +1253,14 @@ service cloud.firestore {
       // PERSONS
       // -----------------------------------------------------------------------
       match /persons/{personId} {
-        allow get, list: if sameCongregation(congregationId);
+        allow get, list: if canAccessCongregationData(congregationId);
 
         allow create: if isAdminOrSupervisor()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && validPersonData(request.resource.data, congregationId);
 
         allow update: if isAdminOrSupervisor()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && validPersonData(request.resource.data, congregationId)
           && preservesCreatedAt();
 
@@ -1113,14 +1271,14 @@ service cloud.firestore {
       // MEETINGS
       // -----------------------------------------------------------------------
       match /meetings/{meetingId} {
-        allow get, list: if sameCongregation(congregationId);
+        allow get, list: if canAccessCongregationData(congregationId);
 
         allow create: if isAdminOrSupervisor()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && validMeetingData(request.resource.data, congregationId);
 
         allow update: if isAdminOrSupervisor()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && validMeetingData(request.resource.data, congregationId)
           && preservesCreatedAt();
 
@@ -1130,7 +1288,7 @@ service cloud.firestore {
         // ASSIGNMENTS
         // ---------------------------------------------------------------------
         match /assignments/{assignmentId} {
-          allow get, list: if sameCongregation(congregationId);
+          allow get, list: if canAccessCongregationData(congregationId);
 
           allow create, update: if false;
 
@@ -1142,14 +1300,14 @@ service cloud.firestore {
       // ASSIGNMENTS (congregation scoped: limpieza, hospitalidad u otras tareas)
       // -----------------------------------------------------------------------
       match /assignments/{assignmentId} {
-        allow get, list: if sameCongregation(congregationId);
+        allow get, list: if canAccessCongregationData(congregationId);
 
         allow create: if isAdminOrSupervisor()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && validStandaloneAssignmentData(request.resource.data, congregationId);
 
         allow update: if isAdminOrSupervisor()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && validStandaloneAssignmentData(request.resource.data, congregationId)
           && preservesCreatedAt();
 
@@ -1161,11 +1319,11 @@ service cloud.firestore {
       // Escritura directa cerrada: las altas/cambios pasan por Cloud Functions.
       // -----------------------------------------------------------------------
       match /outgoingTalks/{outgoingTalkId} {
-        allow get, list: if sameCongregation(congregationId)
+        allow get, list: if canAccessCongregationData(congregationId)
           && isOutgoingTalksManager();
 
         allow create, update: if false
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && isOutgoingTalksManager()
           && validOutgoingTalkData(request.resource.data, congregationId);
 
@@ -1176,39 +1334,39 @@ service cloud.firestore {
       // CLEANING GROUPS
       // -----------------------------------------------------------------------
       match /cleaningGroups/{groupId} {
-        allow get, list: if sameCongregation(congregationId);
+        allow get, list: if canAccessCongregationData(congregationId);
 
         allow create: if isCleaningManager()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && validCleaningGroupData(request.resource.data, congregationId);
 
         allow update: if isCleaningManager()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && resource.data.congregationId == congregationId
           && validCleaningGroupData(request.resource.data, congregationId)
           && preservesCreatedAt();
 
         allow delete: if isAdmin()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && resource.data.congregationId == congregationId;
       }
 
       // Compatibilidad con el nombre legacy usado por versiones anteriores.
       match /cleaning_groups/{groupId} {
-        allow get, list: if sameCongregation(congregationId);
+        allow get, list: if canAccessCongregationData(congregationId);
 
         allow create: if isCleaningManager()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && validCleaningGroupData(request.resource.data, congregationId);
 
         allow update: if isCleaningManager()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && resource.data.congregationId == congregationId
           && validCleaningGroupData(request.resource.data, congregationId)
           && preservesCreatedAt();
 
         allow delete: if isAdmin()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && resource.data.congregationId == congregationId;
       }
 
@@ -1216,25 +1374,25 @@ service cloud.firestore {
       // NOTIFICATIONS
       // -----------------------------------------------------------------------
       match /notifications/{notificationId} {
-        allow get: if sameCongregation(congregationId)
+        allow get: if canAccessCongregationData(congregationId)
           && (
             !('userId' in resource.data)
             || resource.data.userId == currentUid()
             || isAdminOrSupervisor()
           );
 
-        allow list: if sameCongregation(congregationId) && isAdminOrSupervisor();
+        allow list: if canAccessCongregationData(congregationId) && isAdminOrSupervisor();
 
         allow create: if isAdminOrSupervisor()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && validNotificationData(request.resource.data, congregationId);
 
         allow update: if (
             isAdminOrSupervisor()
-            && sameCongregation(congregationId)
+            && canAccessCongregationData(congregationId)
             && validNotificationData(request.resource.data, congregationId)
           ) || (
-            sameCongregation(congregationId)
+            canAccessCongregationData(congregationId)
             && resource.data.userId == currentUid()
             && request.resource.data.congregationId == resource.data.congregationId
             && request.resource.data.userId == resource.data.userId
@@ -1254,20 +1412,20 @@ service cloud.firestore {
       // PREACHING REPORTS
       // -----------------------------------------------------------------------
       match /preachingReports/{monthId}/submissions/{userId} {
-        allow get: if sameCongregation(congregationId)
+        allow get: if canAccessCongregationData(congregationId)
           && (
             isSameUser(userId)
             || isPreachingManager()
             || isAdminOrSupervisor()
           );
 
-        allow list: if sameCongregation(congregationId)
+        allow list: if canAccessCongregationData(congregationId)
           && (
             isPreachingManager()
             || isAdminOrSupervisor()
           );
 
-        allow create, update: if sameCongregation(congregationId)
+        allow create, update: if canAccessCongregationData(congregationId)
           && isSameUser(userId)
           && validPreachingReportWrite(request.resource.data, congregationId, monthId, userId);
 
@@ -1278,10 +1436,10 @@ service cloud.firestore {
       // CHANGE LOGS
       // -----------------------------------------------------------------------
       match /changeLogs/{logId} {
-        allow get, list: if isAdminOrSupervisor() && sameCongregation(congregationId);
+        allow get, list: if isAdminOrSupervisor() && canAccessCongregationData(congregationId);
 
         allow create: if isActive()
-          && sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
           && validChangeLogData(request.resource.data, congregationId);
 
         allow update, delete: if false;
@@ -1296,7 +1454,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /dashboardSummary/{congregationId} {
-      allow read: if sameCongregation(congregationId);
+      allow read: if canAccessCongregationData(congregationId);
       allow write: if false;
     }
 
@@ -1308,11 +1466,11 @@ service cloud.firestore {
     match /cleaningGroups/{groupId} {
       allow get: if isActive()
         && resource.data.congregationId is string
-        && sameCongregation(resource.data.congregationId);
+        && canAccessCongregationData(resource.data.congregationId);
 
       // list restringido a usuarios activos de la misma congregación que el documento.
       // myCongregationId() != null garantiza que el solicitante tiene congregación asignada.
-      allow list: if isActive() && myCongregationId() != null;
+      allow list: if isActive() && canAccessCongregationData(myCongregationId());
 
       allow create: if isCleaningManager()
         && targetDocInMyCongregation()

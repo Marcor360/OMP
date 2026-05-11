@@ -25,6 +25,7 @@ import {
   ROLE_LABELS,
   STATUS_LABELS,
   UserStatus,
+  UserGender,
 } from '@/src/types/user';
 import { formatDate } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -216,6 +217,12 @@ export function UserDetailScreen() {
     user.privileges?.isRegularPioneer ? PRIVILEGE_LABELS.isRegularPioneer : null,
     user.privileges?.isAuxiliaryPioneer ? PRIVILEGE_LABELS.isAuxiliaryPioneer : null,
   ].filter(Boolean).join(', ');
+  const createdByLabel = user.createdByName ?? user.createdByEmail ?? user.createdBy ?? '--';
+  const updatedByLabel = user.updatedByName ?? user.updatedByEmail ?? user.updatedBy ?? createdByLabel;
+  const genderLabels: Record<UserGender, string> = {
+    masculino: 'Masculino',
+    femenino: 'Femenino',
+  };
 
   return (
     <ScreenContainer scrollable={false}>
@@ -250,9 +257,12 @@ export function UserDetailScreen() {
 
         <View style={styles.card}>
           <InfoRow icon="call-outline" label="Telefono" value={user.phone ?? '--'} />
+          <InfoRow icon="person-outline" label="Genero" value={user.gender ? genderLabels[user.gender] : '--'} />
           <InfoRow icon="business-outline" label="Departamento" value={user.department ?? '--'} />
           <InfoRow icon="ribbon-outline" label="Privilegios" value={privilegesLabel || '--'} />
           <InfoRow icon="home-outline" label="Congregacion" value={congregationName} />
+          <InfoRow icon="person-add-outline" label="Creado por" value={createdByLabel} />
+          <InfoRow icon="person-outline" label="Actualizado por" value={updatedByLabel} />
           <InfoRow icon="calendar-outline" label="Creado" value={formatDate(user.createdAt)} />
           <InfoRow icon="time-outline" label="Actualizado" value={formatDate(user.updatedAt)} />
         </View>

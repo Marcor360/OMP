@@ -10,6 +10,7 @@ import {
   UserServiceDepartment,
   UserServiceAssignment,
   UserServicePosition,
+  UserGender,
 } from '@/src/types/user';
 import { AppError } from '@/src/utils/errors/errors';
 
@@ -25,6 +26,7 @@ export type CreateUserByAdminPayload = {
   congregationId: string;
   isActive?: boolean;
   phone?: string;
+  gender?: UserGender;
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;

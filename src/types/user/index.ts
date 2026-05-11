@@ -2,6 +2,7 @@ import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'admin' | 'supervisor' | 'user';
 export type UserStatus = 'active' | 'inactive' | 'suspended';
+export type UserGender = 'masculino' | 'femenino';
 export type UserServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar';
 export type UserServiceDepartment =
   | 'limpieza'
@@ -65,6 +66,7 @@ export interface AppUser {
   isActive: boolean;
   status: UserStatus;
   phone?: string;
+  gender?: UserGender;
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
@@ -85,6 +87,12 @@ export interface AppUser {
   platformNotifications?: boolean;
   cleaningNotifications?: boolean;
   hospitalityNotifications?: boolean;
+  createdBy?: string;
+  createdByName?: string;
+  createdByEmail?: string;
+  updatedBy?: string;
+  updatedByName?: string;
+  updatedByEmail?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -97,6 +105,7 @@ export interface CreateUserDTO {
   congregationId: string;
   isActive?: boolean;
   phone?: string;
+  gender?: UserGender;
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;
@@ -105,6 +114,12 @@ export interface CreateUserDTO {
   responsibilities?: UserResponsibilities;
   isElder?: boolean;
   isMinisterialServant?: boolean;
+  createdBy?: string;
+  createdByName?: string;
+  createdByEmail?: string;
+  updatedBy?: string;
+  updatedByName?: string;
+  updatedByEmail?: string;
   secondLastName?: string;
 }
 
@@ -115,6 +130,7 @@ export interface UpdateUserDTO {
   isActive?: boolean;
   congregationId?: string;
   phone?: string;
+  gender?: UserGender;
   department?: string;
   servicePosition?: UserServicePosition;
   serviceDepartment?: UserServiceDepartment;

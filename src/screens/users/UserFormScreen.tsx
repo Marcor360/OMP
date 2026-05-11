@@ -42,6 +42,7 @@ import {
   UserServiceAssignment,
   UserServiceDepartment,
   UserServicePosition,
+  UserGender,
   UserRole,
 } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -56,6 +57,7 @@ interface FormErrors {
   lastName?: string;
   password?: string;
   newPassword?: string;
+  gender?: string;
   assignment?: string;
   privileges?: string;
 }
@@ -156,6 +158,13 @@ const resolveServiceAssignmentFromUser = (
 const assignmentKey = (assignment: Pick<UserServiceAssignment, 'position' | 'department'>): string =>
   `${assignment.position}:${assignment.department ?? ''}`;
 
+const GENDER_LABELS: Record<UserGender, string> = {
+  masculino: 'Masculino',
+  femenino: 'Femenino',
+};
+
+const genderOptions: UserGender[] = ['masculino', 'femenino'];
+
 export function UserFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
@@ -175,6 +184,7 @@ export function UserFormScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [role, setRole] = useState<UserRole>('user');
+  const [gender, setGender] = useState<UserGender | null>(null);
   const [phone, setPhone] = useState('');
   const [activeUsers, setActiveUsers] = useState<AppUser[]>([]);
   const [servicePositionDraft, setServicePositionDraft] = useState<ServiceSelection>('none');
@@ -263,6 +273,7 @@ export function UserFormScreen() {
 
         setDisplayName(loadedUser.displayName);
         setRole(loadedUser.role);
+        setGender(loadedUser.gender ?? null);
         setPhone(loadedUser.phone ?? '');
 
         setServiceAssignments(resolveServiceAssignmentFromUser(loadedUser));
@@ -467,6 +478,7 @@ export function UserFormScreen() {
             password:
               validateRequired(password, 'La contrasena') ??
               validateMinLength(password, 6, 'La contrasena'),
+            gender: gender ? undefined : 'El genero es requerido.',
             assignment: assignmentError,
             privileges: privilegesError,
           }
@@ -476,6 +488,7 @@ export function UserFormScreen() {
               newPassword.trim().length > 0
                 ? validateMinLength(newPassword, 6, 'La nueva contrasena')
                 : undefined,
+            gender: gender ? undefined : 'El genero es requerido.',
             assignment: assignmentError,
             privileges: privilegesError,
           };
@@ -500,6 +513,13 @@ export function UserFormScreen() {
     setSaving(true);
 
     try {
+      const selectedGender = gender;
+      if (!selectedGender) {
+        setErrors((current) => ({ ...current, gender: 'El genero es requerido.' }));
+        setSaving(false);
+        return;
+      }
+
       const normalizedMiddle = middleName.trim() || undefined;
       const primaryAssignment = serviceAssignments[0];
       const normalizedServicePosition = primaryAssignment?.position;
@@ -517,6 +537,7 @@ export function UserFormScreen() {
           email: generatedEmailPreview,
           role,
           congregationId,
+          gender: selectedGender,
           phone,
           department: departmentLabel,
           servicePosition: normalizedServicePosition,
@@ -552,6 +573,7 @@ export function UserFormScreen() {
         const payload: UpdateUserDTO = {
           displayName,
           role,
+          gender: selectedGender,
           phone,
           department: departmentLabel,
           servicePosition: normalizedServicePosition,
@@ -732,6 +754,24 @@ export function UserFormScreen() {
               >
                 <ThemedText style={[styles.roleChipText, role === item && styles.roleChipTextActive]}>
                   {ROLE_LABELS[item]}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Field>
+
+        <Field label="Genero *" error={errors.gender}>
+          <View style={styles.roleRow}>
+            {genderOptions.map((item) => (
+              <TouchableOpacity
+                key={item}
+                style={[styles.roleChip, gender === item && styles.roleChipActive]}
+                onPress={() => setGender(item)}
+                activeOpacity={0.8}
+                disabled={!isAdmin}
+              >
+                <ThemedText style={[styles.roleChipText, gender === item && styles.roleChipTextActive]}>
+                  {GENDER_LABELS[item]}
                 </ThemedText>
               </TouchableOpacity>
             ))}

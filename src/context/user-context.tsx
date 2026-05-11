@@ -9,7 +9,9 @@ import React, {
 } from 'react';
 
 import { useAuth } from '@/src/context/auth-context';
+import { getCongregationAccessState } from '@/src/services/congregations/congregations-service';
 import { getCurrentUserProfile } from '@/src/services/users/users-service';
+import { CongregationAccessState } from '@/src/types/congregation-access';
 import { AppUser, UserRole } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
@@ -23,6 +25,7 @@ interface UserContextType {
   serviceAssignments: AppUser['serviceAssignments'];
   isActive: boolean;
   congregationId: string | null;
+  congregationAccess: CongregationAccessState | null;
   isAdmin: boolean;
   isSupervisor: boolean;
   isAdminOrSupervisor: boolean;
@@ -38,6 +41,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
 
   const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [congregationAccess, setCongregationAccess] =
+    useState<CongregationAccessState | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -54,6 +59,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       console.log('[UserContext] Sin usuario autenticado, limpiando perfil');
       loadedUidRef.current = null;
       setAppUser(null);
+      setCongregationAccess(null);
       setProfileError(null);
       setLoadingProfile(false);
       return;
@@ -85,6 +91,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         console.log('[UserContext] Perfil cargado:', profile ? 'existe' : 'null');
         loadedUidRef.current = user.uid;
         setAppUser(profile);
+        setCongregationAccess(null);
 
         if (!profile) {
           const errorMsg = 'No se encontro el perfil del usuario autenticado.';
@@ -98,7 +105,24 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           const errorMsg = 'Tu cuenta esta inactiva. Contacta a un administrador.';
           console.warn('[UserContext]', errorMsg);
           setProfileError(errorMsg);
+          setCongregationAccess(null);
+        } else if (!profile.congregationId) {
+          const errorMsg = 'Tu cuenta no tiene congregacion asignada.';
+          console.warn('[UserContext]', errorMsg);
+          setProfileError(errorMsg);
+          setCongregationAccess(null);
         } else {
+          const accessState = await getCongregationAccessState(profile.congregationId);
+          if (cancelled) return;
+
+          setCongregationAccess(accessState);
+
+          if (accessState.isBlocked) {
+            console.warn('[UserContext]', accessState.message);
+            setProfileError(accessState.message);
+            return;
+          }
+
           setProfileError(null);
         }
       } catch (error) {
@@ -107,6 +131,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         console.error('[UserContext] Error cargando perfil:', formattedError);
         if (isDifferentUser) {
           setAppUser(null);
+          setCongregationAccess(null);
           loadedUidRef.current = null;
         }
         setProfileError(formattedError);
@@ -134,12 +159,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const serviceAssignments = appUser?.serviceAssignments;
     const isActive = appUser?.isActive ?? false;
     const congregationId = appUser?.congregationId ?? null;
+    const congregationBlocked = congregationAccess?.isBlocked === true;
 
     const isAdmin = role === 'admin';
     const isSupervisor = role === 'supervisor';
     const isAdminOrSupervisor = isAdmin || isSupervisor;
 
-    const isSessionValid = Boolean(uid && appUser && isActive && congregationId);
+    const isSessionValid = Boolean(
+      uid && appUser && isActive && congregationId && !congregationBlocked
+    );
 
     return {
       appUser,
@@ -151,6 +179,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       serviceAssignments,
       isActive,
       congregationId,
+      congregationAccess,
       isAdmin,
       isSupervisor,
       isAdminOrSupervisor,
@@ -159,7 +188,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       profileError,
       refreshProfile,
     };
-  }, [appUser, loadingProfile, profileError, refreshProfile, user]);
+  }, [appUser, congregationAccess, loadingProfile, profileError, refreshProfile, user]);
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 }

@@ -3,6 +3,7 @@ import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 type Role = 'admin' | 'supervisor' | 'user';
+type Gender = 'masculino' | 'femenino';
 type ServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar';
 type ServiceDepartment =
   | 'limpieza'
@@ -54,6 +55,7 @@ type CreateUserPayload = {
   congregationId: string;
   isActive: boolean;
   phone?: string;
+  gender: Gender;
   password: string;
   servicePosition?: ServicePosition;
   serviceDepartment?: ServiceDepartment;
@@ -70,6 +72,8 @@ type UpdateUserPayload = {
   isActive?: boolean;
   phone?: string;
   phoneProvided: boolean;
+  gender?: Gender;
+  genderProvided: boolean;
   servicePosition?: ServicePosition;
   serviceDepartment?: ServiceDepartment;
   servicePositionProvided: boolean;
@@ -122,6 +126,33 @@ const normalizeText = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const SYSTEM_ACTOR_LABEL = 'Sistema Sistema';
+
+const resolveActorName = (
+  actor: Pick<RequesterProfile, 'displayName' | 'email'> | null | undefined,
+  fallbackUid: string
+): string => {
+  const name = normalizeText(actor?.displayName);
+  const email = normalizeText(actor?.email);
+
+  if (!name && (!email || email === 'tu_correo@gmail.com')) {
+    return SYSTEM_ACTOR_LABEL;
+  }
+
+  if (email === 'tu_correo@gmail.com') {
+    return SYSTEM_ACTOR_LABEL;
+  }
+
+  return name ?? email ?? fallbackUid;
+};
+
+const resolveActorEmail = (
+  actor: Pick<RequesterProfile, 'email'> | null | undefined
+): string => {
+  const email = normalizeText(actor?.email);
+  return email === 'tu_correo@gmail.com' ? SYSTEM_ACTOR_LABEL : (email ?? '');
+};
+
 const parseServicePosition = (value: unknown): ServicePosition | undefined => {
   const text = normalizeText(value);
   if (!text) return undefined;
@@ -129,6 +160,13 @@ const parseServicePosition = (value: unknown): ServicePosition | undefined => {
     return text;
   }
   throw new HttpsError('invalid-argument', 'Asignacion de servicio invalida.');
+};
+
+const parseGender = (value: unknown): Gender | undefined => {
+  const text = normalizeText(value);
+  if (!text) return undefined;
+  if (text === 'masculino' || text === 'femenino') return text;
+  throw new HttpsError('invalid-argument', 'Genero invalido.');
 };
 
 const parseServiceDepartment = (value: unknown): ServiceDepartment | undefined => {
@@ -595,8 +633,9 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
     normalizeText(data.displayName) ?? [firstName, middleName, lastName, secondLastName].filter(Boolean).join(' ').trim();
   const congregationId = normalizeText(data.congregationId);
   const password = normalizeText(data.password);
+  const gender = parseGender(data.gender);
 
-  if (!firstName || !lastName || !displayName || !congregationId || !password) {
+  if (!firstName || !lastName || !displayName || !congregationId || !password || !gender) {
     throw new HttpsError('invalid-argument', 'Faltan datos requeridos para crear usuario.');
   }
 
@@ -626,6 +665,7 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
     congregationId,
     isActive: typeof data.isActive === 'boolean' ? data.isActive : true,
     phone: normalizeText(data.phone),
+    gender,
     password,
     servicePosition: primaryAssignment.position,
     serviceDepartment: primaryAssignment.department,
@@ -678,6 +718,7 @@ const parseUpdateUserPayload = (raw: unknown): UpdateUserPayload => {
   }
 
   const phoneProvided = Object.prototype.hasOwnProperty.call(nested, 'phone');
+  const genderProvided = Object.prototype.hasOwnProperty.call(nested, 'gender');
   const servicePositionProvided =
     Object.prototype.hasOwnProperty.call(nested, 'servicePosition') ||
     Object.prototype.hasOwnProperty.call(nested, 'department');
@@ -707,6 +748,8 @@ const parseUpdateUserPayload = (raw: unknown): UpdateUserPayload => {
     isActive,
     phone: normalizeText(nested.phone),
     phoneProvided,
+    gender: genderProvided ? parseGender(nested.gender) : undefined,
+    genderProvided,
     servicePosition,
     serviceDepartment,
     servicePositionProvided,
@@ -860,6 +903,13 @@ export const createUserByAdmin = onCall(
         status: payload.isActive ? 'active' : 'inactive',
         congregationId: payload.congregationId,
         congregationDomain: requiredDomain,
+        gender: payload.gender,
+        createdBy: request.auth.uid,
+        createdByName: resolveActorName(requester, request.auth.uid),
+        createdByEmail: resolveActorEmail(requester),
+        updatedBy: request.auth.uid,
+        updatedByName: resolveActorName(requester, request.auth.uid),
+        updatedByEmail: resolveActorEmail(requester),
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       };
@@ -983,6 +1033,9 @@ export const updateUserByAdmin = onCall(
     }
 
     const docUpdates: Record<string, unknown> = {
+      updatedBy: request.auth.uid,
+      updatedByName: resolveActorName(requester, request.auth.uid),
+      updatedByEmail: resolveActorEmail(requester),
       updatedAt: FieldValue.serverTimestamp(),
     };
 
@@ -1014,6 +1067,10 @@ export const updateUserByAdmin = onCall(
 
     if (payload.phoneProvided) {
       docUpdates.phone = payload.phone ?? FieldValue.delete();
+    }
+
+    if (payload.genderProvided && payload.gender) {
+      docUpdates.gender = payload.gender;
     }
 
     if (payload.serviceAssignmentsProvided || payload.serviceAssignmentProvided || payload.role) {
@@ -1093,7 +1150,12 @@ export const updateUserPasswordByAdmin = onCall(
     }
 
     await getAuth().updateUser(payload.uid, { password: payload.newPassword });
-    await targetRef.update({ updatedAt: FieldValue.serverTimestamp() });
+    await targetRef.update({
+      updatedBy: request.auth.uid,
+      updatedByName: resolveActorName(requester, request.auth.uid),
+      updatedByEmail: resolveActorEmail(requester),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
 
     return { ok: true };
   }
@@ -1133,6 +1195,9 @@ export const disableUserByAdmin = onCall(
     await targetRef.update({
       isActive: false,
       status: 'inactive',
+      updatedBy: request.auth.uid,
+      updatedByName: resolveActorName(requester, request.auth.uid),
+      updatedByEmail: resolveActorEmail(requester),
       updatedAt: FieldValue.serverTimestamp(),
     });
 

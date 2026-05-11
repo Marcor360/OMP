@@ -2,6 +2,8 @@ import { Stack } from 'expo-router';
 import { UserProvider, useUser } from '@/src/context/user-context';
 import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
 import { useI18n } from '@/src/i18n/index';
+import { LoadingState } from '@/src/components/common/LoadingState';
+import { CongregationBlockedScreen } from '@/src/screens/errors/CongregationBlockedScreen';
 
 function ProtectedNotificationSetup() {
   const { uid, congregationId, isSessionValid } = useUser();
@@ -16,10 +18,27 @@ function ProtectedNotificationSetup() {
 }
 
 export default function ProtectedLayout() {
-  const { t } = useI18n();
-
   return (
     <UserProvider>
+      <ProtectedContent />
+    </UserProvider>
+  );
+}
+
+function ProtectedContent() {
+  const { t } = useI18n();
+  const { congregationAccess, loadingProfile } = useUser();
+
+  if (loadingProfile) {
+    return <LoadingState message="Verificando acceso..." />;
+  }
+
+  if (congregationAccess?.isBlocked) {
+    return <CongregationBlockedScreen access={congregationAccess} />;
+  }
+
+  return (
+    <>
       <ProtectedNotificationSetup />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -63,6 +82,6 @@ export default function ProtectedLayout() {
           options={{ title: t('settings.screen.about'), headerShown: true }}
         />
       </Stack>
-    </UserProvider>
+    </>
   );
 }

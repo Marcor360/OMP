@@ -33,6 +33,7 @@ import {
   UserServiceDepartment,
   UserServiceAssignment,
   UserServicePosition,
+  UserGender,
   UserRole,
   UserStatus,
 } from '@/src/types/user';
@@ -42,6 +43,9 @@ const isUserRole = (value: unknown): value is UserRole =>
 
 const isUserStatus = (value: unknown): value is UserStatus =>
   value === 'active' || value === 'inactive' || value === 'suspended';
+
+const isUserGender = (value: unknown): value is UserGender =>
+  value === 'masculino' || value === 'femenino';
 
 const normalizeRole = (value: unknown): UserRole => {
   if (isUserRole(value)) return value;
@@ -170,6 +174,24 @@ const normalizeBooleanMap = <TKeys extends string>(
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
 
+const SYSTEM_ACTOR_LABEL = 'Sistema Sistema';
+
+const normalizeActorLabel = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  if (
+    trimmed === 'system' ||
+    trimmed === 'sistema' ||
+    trimmed === 'tu_correo@gmail.com'
+  ) {
+    return SYSTEM_ACTOR_LABEL;
+  }
+
+  return trimmed;
+};
+
 export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUser => {
   const role = normalizeRole(data.role);
   const normalizedStatus = normalizeStatus(data.status);
@@ -226,6 +248,7 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
     isActive,
     status,
     phone: typeof data.phone === 'string' ? data.phone : undefined,
+    gender: isUserGender(data.gender) ? data.gender : undefined,
     department:
       computedDepartment ??
       (typeof data.department === 'string' && data.department.trim().length > 0
@@ -255,6 +278,12 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
     platformNotifications: data.platformNotifications !== false,
     cleaningNotifications: data.cleaningNotifications !== false,
     hospitalityNotifications: data.hospitalityNotifications !== false,
+    createdBy: normalizeActorLabel(data.createdBy),
+    createdByName: normalizeActorLabel(data.createdByName),
+    createdByEmail: normalizeActorLabel(data.createdByEmail),
+    updatedBy: normalizeActorLabel(data.updatedBy),
+    updatedByName: normalizeActorLabel(data.updatedByName),
+    updatedByEmail: normalizeActorLabel(data.updatedByEmail),
     createdAt: data.createdAt as AppUser['createdAt'],
     updatedAt: data.updatedAt as AppUser['updatedAt'],
   };
@@ -346,6 +375,12 @@ export const createUserProfile = async (
       data.isMinisterialServant ?? (data.privileges?.isMinisterialServant === true),
     isActive,
     status: isActive ? 'active' : 'inactive',
+    createdBy: data.createdBy,
+    createdByName: data.createdByName,
+    createdByEmail: data.createdByEmail,
+    updatedBy: data.updatedBy,
+    updatedByName: data.updatedByName,
+    updatedByEmail: data.updatedByEmail,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
