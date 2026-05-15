@@ -17,10 +17,12 @@ import { useAuth } from '@/src/hooks/use-auth';
 import { type AppColors, useAppColors } from '@/src/styles';
 import { handleAuthError } from '@/src/utils/firebase-auth-errors';
 import { LoginValidationErrors } from '@/src/types/auth.types';
+import { useI18n } from '@/src/i18n/index';
 
 export default function LoginScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { language, t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -33,13 +35,13 @@ export default function LoginScreen() {
     const newErrors: LoginValidationErrors = {};
 
     if (!email) {
-      newErrors.email = 'El correo es requerido';
+      newErrors.email = t('auth.validation.emailRequired');
     } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Ingresa un correo valido';
+      newErrors.email = t('auth.validation.emailInvalid');
     }
 
     if (!password) {
-      newErrors.password = 'La contrasena es requerida';
+      newErrors.password = t('auth.validation.passwordRequired');
     }
 
     setErrors(newErrors);
@@ -57,7 +59,7 @@ export default function LoginScreen() {
       await login(email, password);
       // La navegacion se maneja en el layout protegido
     } catch (error) {
-      Alert.alert('Error de inicio de sesion', handleAuthError(error));
+      Alert.alert(t('auth.login.errorTitle'), handleAuthError(error, language === 'en' ? 'en' : 'es'));
     } finally {
       setIsLoggingIn(false);
     }
@@ -78,13 +80,13 @@ export default function LoginScreen() {
         >
           <ThemedView style={styles.content}>
             <ThemedText type="title" style={styles.title}>
-              Bienvenido
+              {t('auth.login.title')}
             </ThemedText>
-            <ThemedText style={styles.subtitle}>Inicia sesion para continuar</ThemedText>
+            <ThemedText style={styles.subtitle}>{t('auth.login.subtitle')}</ThemedText>
 
             <View style={styles.form}>
               <View style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Correo electronico</ThemedText>
+                <ThemedText style={styles.label}>{t('auth.login.email')}</ThemedText>
                 <TextInput
                   style={[styles.input, errors.email && styles.inputError]}
                   placeholder="tu@email.com"
@@ -101,7 +103,7 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Contrasena</ThemedText>
+                <ThemedText style={styles.label}>{t('auth.login.password')}</ThemedText>
                 <View style={styles.passwordWrapper}>
                   <TextInput
                     style={[styles.passwordInput, errors.password && styles.inputError]}
@@ -120,7 +122,7 @@ export default function LoginScreen() {
                     style={styles.eyeButton}
                     onPress={() => setShowPassword((prev) => !prev)}
                     activeOpacity={0.7}
-                    accessibilityLabel={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+                    accessibilityLabel={showPassword ? t('auth.password.hide') : t('auth.password.show')}
                   >
                     <Ionicons
                       name={showPassword ? 'eye-off-outline' : 'eye-outline'}
@@ -141,7 +143,7 @@ export default function LoginScreen() {
                 {isLoggingIn ? (
                   <ActivityIndicator color={colors.onPrimary} />
                 ) : (
-                  <ThemedText style={styles.buttonText}>Iniciar sesion</ThemedText>
+                  <ThemedText style={styles.buttonText}>{t('auth.login.submit')}</ThemedText>
                 )}
               </TouchableOpacity>
             </View>

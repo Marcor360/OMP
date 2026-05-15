@@ -8,12 +8,11 @@ import {
 } from 'firebase/firestore';
 
 import { db } from '@/src/config/firebase/firebase';
-import { clearAllSessionCache } from '@/src/services/repositories/session-cache';
+import { clearLocalSessionData } from '@/src/services/session/session-cleanup';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
 const CACHE_CONTROL_DOC = doc(db, 'system', 'cacheControl');
 const CACHE_CONTROL_ACK_KEY = '@system_cache_control_ack_v1';
-const TEMP_ASYNC_STORAGE_KEYS = ['@cleaning_groups', '@cleaning_assignable_users'] as const;
 
 // Solo se eliminan llaves temporales conocidas.
 const WEB_LOCAL_STORAGE_TEMP_PREFIXES = ['@temp_', '@cache_', '@offline_', '@query_'] as const;
@@ -224,8 +223,7 @@ const clearNativeTemporaryFiles = async (): Promise<void> => {
 };
 
 const clearTemporaryApplicationCache = async (): Promise<void> => {
-  clearAllSessionCache();
-  await AsyncStorage.multiRemove([...TEMP_ASYNC_STORAGE_KEYS]);
+  await clearLocalSessionData();
   await clearWebTemporaryStorage();
   await clearFirestorePersistenceOnWeb();
   await clearNativeTemporaryFiles();

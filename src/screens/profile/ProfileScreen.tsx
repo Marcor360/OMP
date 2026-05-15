@@ -7,26 +7,36 @@ import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
 import { useAuth } from '@/src/context/auth-context';
+import { useI18n } from '@/src/i18n/index';
 import { getCongregationDisplayName } from '@/src/services/congregations/congregations-service';
 import {
-  PRIVILEGE_LABELS,
-  ROLE_LABELS,
-  STATUS_LABELS,
-  RESPONSIBILITY_LABELS,
+  UserRole,
+  UserStatus,
 } from '@/src/types/user';
 import { formatDate } from '@/src/utils/dates/dates';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
-const yesNo = (value?: boolean): string => (value ? 'Si' : 'No');
-
 const joinLabels = (items: (string | null | undefined)[]): string =>
   items.filter((item): item is string => Boolean(item)).join(', ') || '--';
+
+const roleKey: Record<UserRole, string> = {
+  admin: 'role.admin',
+  supervisor: 'role.supervisor',
+  user: 'role.user',
+};
+
+const statusKey: Record<UserStatus, string> = {
+  active: 'userStatus.active',
+  inactive: 'userStatus.inactive',
+  suspended: 'userStatus.suspended',
+};
 
 export function ProfileScreen() {
   const { appUser } = useUser();
   const { logout } = useAuth();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
   const [congregationName, setCongregationName] = useState('--');
 
   useEffect(() => {
@@ -37,29 +47,29 @@ export function ProfileScreen() {
     }
 
     let cancelled = false;
-    setCongregationName('Cargando...');
+    setCongregationName(t('profile.loadingCongregation'));
 
     getCongregationDisplayName(congregationId, { forceServer: true })
       .then((name) => {
         if (!cancelled) setCongregationName(name);
       })
       .catch(() => {
-        if (!cancelled) setCongregationName('Congregacion sin nombre');
+        if (!cancelled) setCongregationName(t('profile.unnamedCongregation'));
       });
 
     return () => {
       cancelled = true;
     };
-  }, [appUser?.congregationId]);
+  }, [appUser?.congregationId, t]);
 
   const handleLogout = async () => {
     const confirmed =
       Platform.OS === 'web'
-        ? window.confirm('Cerrar sesion?')
+        ? window.confirm(`${t('profile.logout.title')}?`)
         : await new Promise<boolean>((resolve) =>
-            Alert.alert('Cerrar sesion', 'Estas seguro?', [
-              { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
-              { text: 'Cerrar sesion', style: 'destructive', onPress: () => resolve(true) },
+            Alert.alert(t('profile.logout.title'), t('profile.logout.message'), [
+              { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+              { text: t('profile.logout.title'), style: 'destructive', onPress: () => resolve(true) },
             ])
           );
 
@@ -68,7 +78,7 @@ export function ProfileScreen() {
     try {
       await logout();
     } catch {
-      Alert.alert('Error', 'No se pudo cerrar sesion.');
+      Alert.alert(t('common.error'), t('profile.logout.error'));
     }
   };
 
@@ -86,21 +96,22 @@ export function ProfileScreen() {
     : appUser?.department ?? '--';
   const privilegesLabel = appUser
     ? joinLabels([
-        appUser.isElder || appUser.privileges?.isElder ? PRIVILEGE_LABELS.isElder : null,
+        appUser.isElder || appUser.privileges?.isElder ? t('privilege.elder') : null,
         appUser.isMinisterialServant || appUser.privileges?.isMinisterialServant
-          ? PRIVILEGE_LABELS.isMinisterialServant
+          ? t('privilege.ministerialServant')
           : null,
-        appUser.privileges?.isRegularPioneer ? PRIVILEGE_LABELS.isRegularPioneer : null,
-        appUser.privileges?.isAuxiliaryPioneer ? PRIVILEGE_LABELS.isAuxiliaryPioneer : null,
+        appUser.privileges?.isRegularPioneer ? t('privilege.regularPioneer') : null,
+        appUser.privileges?.isAuxiliaryPioneer ? t('privilege.auxiliaryPioneer') : null,
       ])
     : '--';
   const responsibilitiesLabel = appUser
     ? joinLabels([
         appUser.responsibilities?.isPreachingManager
-          ? RESPONSIBILITY_LABELS.isPreachingManager
+          ? t('responsibility.preachingManager')
           : null,
       ])
     : '--';
+  const yesNo = (value?: boolean): string => (value ? t('profile.yes') : t('profile.no'));
 
   return (
     <ScreenContainer scrollable={false}>
@@ -111,48 +122,48 @@ export function ProfileScreen() {
               {initials}
             </ThemedText>
           </View>
-          <ThemedText style={styles.name}>{appUser?.displayName ?? 'Usuario'}</ThemedText>
+          <ThemedText style={styles.name}>{appUser?.displayName ?? t('profile.defaultUser')}</ThemedText>
           <ThemedText style={styles.email}>{appUser?.email ?? '--'}</ThemedText>
           {appUser && (
             <View style={styles.badges}>
-              <StatusBadge label={ROLE_LABELS[appUser.role]} color={roleColor[appUser.role]} />
-              <StatusBadge label={STATUS_LABELS[appUser.status]} color={userStatusColor[appUser.status]} />
+              <StatusBadge label={t(roleKey[appUser.role])} color={roleColor[appUser.role]} />
+              <StatusBadge label={t(statusKey[appUser.status])} color={userStatusColor[appUser.status]} />
             </View>
           )}
         </View>
 
-        <ProfileSection title="Datos personales">
-          <InfoRow icon="person-outline" label="Nombre" value={appUser?.displayName ?? '--'} />
-          <InfoRow icon="mail-outline" label="Correo" value={appUser?.email ?? '--'} />
-          <InfoRow icon="call-outline" label="Telefono" value={appUser?.phone ?? '--'} />
-          <InfoRow icon="shield-checkmark-outline" label="Acceso en OMP" value={appUser ? ROLE_LABELS[appUser.role] : '--'} />
-          <InfoRow icon="pulse-outline" label="Estado" value={appUser ? STATUS_LABELS[appUser.status] : '--'} />
+        <ProfileSection title={t('profile.section.personal')}>
+          <InfoRow icon="person-outline" label={t('profile.field.name')} value={appUser?.displayName ?? '--'} />
+          <InfoRow icon="mail-outline" label={t('profile.field.email')} value={appUser?.email ?? '--'} />
+          <InfoRow icon="call-outline" label={t('profile.field.phone')} value={appUser?.phone ?? '--'} />
+          <InfoRow icon="shield-checkmark-outline" label={t('profile.field.ompAccess')} value={appUser ? t(roleKey[appUser.role]) : '--'} />
+          <InfoRow icon="pulse-outline" label={t('profile.field.status')} value={appUser ? t(statusKey[appUser.status]) : '--'} />
         </ProfileSection>
 
-        <ProfileSection title="Congregacion y funciones">
-          <InfoRow icon="home-outline" label="Congregacion" value={congregationName} multiline />
-          <InfoRow icon="business-outline" label="Funciones congregacionales" value={serviceAssignmentsLabel} multiline />
-          <InfoRow icon="bookmark-outline" label="Funcion principal" value={appUser?.department ?? '--'} multiline />
+        <ProfileSection title={t('profile.section.congregation')}>
+          <InfoRow icon="home-outline" label={t('profile.field.congregation')} value={congregationName} multiline />
+          <InfoRow icon="business-outline" label={t('profile.field.congregationFunctions')} value={serviceAssignmentsLabel} multiline />
+          <InfoRow icon="bookmark-outline" label={t('profile.field.mainFunction')} value={appUser?.department ?? '--'} multiline />
         </ProfileSection>
 
-        <ProfileSection title="Nombramientos">
-          <InfoRow icon="ribbon-outline" label="Nombramientos y privilegios" value={privilegesLabel} multiline />
-          <InfoRow icon="briefcase-outline" label="Encargos adicionales" value={responsibilitiesLabel} multiline />
+        <ProfileSection title={t('profile.section.appointments')}>
+          <InfoRow icon="ribbon-outline" label={t('profile.field.appointmentsPrivileges')} value={privilegesLabel} multiline />
+          <InfoRow icon="briefcase-outline" label={t('profile.field.additionalAssignments')} value={responsibilitiesLabel} multiline />
         </ProfileSection>
 
-        <ProfileSection title="Servicio y grupos">
-          <InfoRow icon="sparkles-outline" label="Puede apoyar en limpieza" value={yesNo(appUser?.cleaningEligible)} />
-          <InfoRow icon="people-outline" label="Grupo de limpieza" value={appUser?.cleaningGroupName ?? '--'} />
+        <ProfileSection title={t('profile.section.serviceGroups')}>
+          <InfoRow icon="sparkles-outline" label={t('profile.field.cleaningEligible')} value={yesNo(appUser?.cleaningEligible)} />
+          <InfoRow icon="people-outline" label={t('profile.field.cleaningGroup')} value={appUser?.cleaningGroupName ?? '--'} />
         </ProfileSection>
 
-        <ProfileSection title="Fechas de perfil">
-          <InfoRow icon="calendar-outline" label="Miembro desde" value={formatDate(appUser?.createdAt)} />
-          <InfoRow icon="time-outline" label="Ultima actualizacion" value={formatDate(appUser?.updatedAt)} />
+        <ProfileSection title={t('profile.section.profileDates')}>
+          <InfoRow icon="calendar-outline" label={t('profile.field.memberSince')} value={formatDate(appUser?.createdAt)} />
+          <InfoRow icon="time-outline" label={t('profile.field.lastUpdated')} value={formatDate(appUser?.updatedAt)} />
         </ProfileSection>
 
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
           <Ionicons name="log-out-outline" size={20} color={colors.error} />
-          <ThemedText style={styles.logoutText}>Cerrar sesion</ThemedText>
+          <ThemedText style={styles.logoutText}>{t('profile.logout.title')}</ThemedText>
         </TouchableOpacity>
       </ScrollView>
     </ScreenContainer>

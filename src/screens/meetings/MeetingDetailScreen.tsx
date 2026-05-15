@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, ScrollView, Share, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -22,6 +22,7 @@ import { deleteMeeting, getMeetingById } from '@/src/services/meetings/meetings-
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Meeting } from '@/src/types/meeting';
 import { MeetingColorToken } from '@/src/types/meeting/program';
+import { copyToClipboard } from '@/src/utils/clipboard/clipboard';
 import { formatDate } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
@@ -105,13 +106,8 @@ export function MeetingDetailScreen() {
     }
 
     try {
-      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(zoomSummary);
-        Alert.alert('Zoom', 'Datos de Zoom copiados al portapapeles.');
-        return;
-      }
-
-      await Share.share({ message: zoomSummary });
+      await copyToClipboard(zoomSummary);
+      Alert.alert('Zoom', 'Datos de Zoom copiados al portapapeles.');
     } catch (requestError) {
       Alert.alert('Error', formatFirestoreError(requestError));
     }

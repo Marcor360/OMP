@@ -201,21 +201,12 @@ export const registerExpoPushTokenForUser = async (params: {
   try {
     await ensureDefaultNotificationChannel();
 
-    const permission = await requestPushNotificationPermission();
+    const permission = await getPushNotificationPermissionStatus();
     if (permission !== 'granted') {
       return {
         ok: false,
         reason: 'PERMISSION_DENIED',
         message: 'No se otorgo permiso para notificaciones push.',
-      };
-    }
-
-    const projectId = resolveProjectId();
-    if (!projectId) {
-      return {
-        ok: false,
-        reason: 'MISSING_PROJECT_ID',
-        message: 'No se encontro projectId de EAS para Expo Push Token.',
       };
     }
 
@@ -228,9 +219,10 @@ export const registerExpoPushTokenForUser = async (params: {
       };
     }
 
-    const tokenResponse = await Notifications.getExpoPushTokenAsync({
-      projectId,
-    });
+    const projectId = resolveProjectId();
+    const tokenResponse = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
     const token = tokenResponse.data?.trim();
 
     if (!token) {

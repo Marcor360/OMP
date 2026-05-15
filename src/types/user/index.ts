@@ -93,6 +93,11 @@ export interface AppUser {
   updatedBy?: string;
   updatedByName?: string;
   updatedByEmail?: string;
+  protectedFromDeletion?: boolean;
+  isSystemUser?: boolean;
+  isPrimaryAdmin?: boolean;
+  isRootAdmin?: boolean;
+  systemProtected?: boolean;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }

@@ -7,6 +7,7 @@ import {
   AppNotification,
   NOTIFICATION_CATEGORY_LABELS,
 } from '@/src/features/notifications/types/notification.types';
+import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
 interface NotificationItemProps {
@@ -24,8 +25,8 @@ const categoryAccent = (
   return colors.info;
 };
 
-const formatTimestamp = (seconds: number): string => {
-  return new Date(seconds * 1000).toLocaleString('es-MX', {
+const formatTimestamp = (seconds: number, language: string): string => {
+  return new Date(seconds * 1000).toLocaleString(language === 'en' ? 'en-US' : 'es-MX', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -37,6 +38,7 @@ const formatTimestamp = (seconds: number): string => {
 function NotificationItemBase({ notification, onPress }: NotificationItemProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { language, t } = useI18n();
 
   const accent = useMemo(
     () => categoryAccent(colors, notification.category),
@@ -45,10 +47,10 @@ function NotificationItemBase({ notification, onPress }: NotificationItemProps) 
 
   const categoryLabel =
     notification.category && NOTIFICATION_CATEGORY_LABELS[notification.category]
-      ? NOTIFICATION_CATEGORY_LABELS[notification.category]
-      : 'Asignacion';
+      ? t(NOTIFICATION_CATEGORY_LABELS[notification.category])
+      : t('notifications.category.assignment');
 
-  const createdAtLabel = formatTimestamp(notification.createdAt.seconds);
+  const createdAtLabel = formatTimestamp(notification.createdAt.seconds, language);
 
   return (
     <TouchableOpacity

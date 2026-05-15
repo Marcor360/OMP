@@ -323,18 +323,9 @@ export async function registerForPushNotificationsAsync(): Promise<PushRegistrat
     await ensureAndroidChannels(Notifications);
 
     const projectId = resolveProjectId();
-    if (!projectId) {
-      return {
-        ok: false,
-        reason: 'MISSING_PROJECT_ID',
-        message:
-          'No se encontro projectId de EAS para registrar Expo Push Token.',
-      };
-    }
-
-    const tokenResponse = await Notifications.getExpoPushTokenAsync({
-      projectId,
-    });
+    const tokenResponse = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
     const token =
       typeof tokenResponse.data === 'string' &&
       tokenResponse.data.trim().length > 0

@@ -3,6 +3,7 @@ import { View, TouchableOpacity, StyleSheet, type ViewStyle } from 'react-native
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
+import { useOptionalI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
 interface ErrorStateProps {
@@ -12,24 +13,26 @@ interface ErrorStateProps {
 }
 
 export function ErrorState({
-  message = 'Ocurrio un error. Intenta nuevamente.',
+  message,
   onRetry,
   style,
 }: ErrorStateProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const i18n = useOptionalI18n();
+  const resolvedMessage = message ?? i18n?.t('common.unexpectedError') ?? 'Ocurrio un error. Intenta nuevamente.';
 
   return (
     <View style={[styles.container, style]}>
       <View style={styles.iconWrap}>
         <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
       </View>
-      <ThemedText style={styles.title}>Algo salio mal</ThemedText>
-      <ThemedText style={styles.message}>{message}</ThemedText>
+      <ThemedText style={styles.title}>{i18n?.t('common.somethingWentWrong') ?? 'Algo salio mal'}</ThemedText>
+      <ThemedText style={styles.message}>{resolvedMessage}</ThemedText>
       {onRetry ? (
         <TouchableOpacity style={styles.button} onPress={onRetry} activeOpacity={0.8}>
           <Ionicons name="refresh" size={16} color={colors.onPrimary} />
-          <ThemedText style={styles.buttonText}>Reintentar</ThemedText>
+          <ThemedText style={styles.buttonText}>{i18n?.t('common.retry') ?? 'Reintentar'}</ThemedText>
         </TouchableOpacity>
       ) : null}
     </View>

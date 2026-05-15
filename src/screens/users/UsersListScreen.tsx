@@ -16,12 +16,14 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
+import { useI18n } from '@/src/i18n/index';
 
 export function UsersListScreen() {
   const router = useRouter();
   const { congregationId, isAdmin, loadingProfile } = useUser();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
 
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +39,7 @@ export function UsersListScreen() {
 
     if (!congregationId || typeof congregationId !== 'string') {
       setUsers([]);
-      setError('No se encontro la congregacion del usuario actual.');
+      setError(t('users.error.noCongregation'));
       setLoading(false);
       setRefreshing(false);
       loadingRef.current = false;
@@ -64,7 +66,7 @@ export function UsersListScreen() {
       setRefreshing(false);
       loadingRef.current = false;
     }
-  }, [congregationId, loadingProfile]);
+  }, [congregationId, loadingProfile, t]);
 
   useEffect(() => {
     void loadUsers(true);
@@ -86,14 +88,14 @@ export function UsersListScreen() {
     await loadUsers(true);
   };
 
-  if (loading || loadingProfile) return <LoadingState message="Cargando usuarios..." />;
+  if (loading || loadingProfile) return <LoadingState message={t('users.loading')} />;
   if (error) return <ErrorState message={error} />;
 
   const header = (
     <>
       <View style={styles.toolbar}>
         <ThemedText style={styles.count}>
-          {users.length} usuario{users.length !== 1 ? 's' : ''}
+          {users.length} {users.length === 1 ? t('users.count.singular') : t('users.count.plural')}
         </ThemedText>
         <RoleGuard requiredRole="admin">
           <TouchableOpacity
@@ -102,7 +104,7 @@ export function UsersListScreen() {
             activeOpacity={0.8}
           >
             <Ionicons name="add" size={20} color={colors.onPrimary} />
-            <ThemedText style={styles.addButtonText}>Nuevo</ThemedText>
+            <ThemedText style={styles.addButtonText}>{t('users.action.new')}</ThemedText>
           </TouchableOpacity>
         </RoleGuard>
       </View>
@@ -110,7 +112,7 @@ export function UsersListScreen() {
       {!isAdmin ? (
         <View style={styles.permissionNotice}>
           <ThemedText style={styles.permissionText}>
-            Solo administradores pueden crear, editar o desactivar usuarios.
+            {t('users.permission.adminOnlyList')}
           </ThemedText>
         </View>
       ) : null}
@@ -130,9 +132,9 @@ export function UsersListScreen() {
           <View style={styles.emptyWrap}>
             <EmptyState
               icon="people-outline"
-              title="Sin usuarios"
-              description="Aun no hay usuarios registrados en esta congregacion."
-              actionLabel={isAdmin ? 'Crear usuario' : undefined}
+              title={t('users.empty.title')}
+              description={t('users.empty.description')}
+              actionLabel={isAdmin ? t('users.action.create') : undefined}
               onAction={isAdmin ? () => router.push('/(protected)/users/create') : undefined}
             />
           </View>

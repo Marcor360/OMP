@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useOptionalI18n } from '@/src/i18n/index';
 import { useAppColors } from '@/src/styles';
 import { PermissionStatus } from '@/src/types/permissions.types';
 
@@ -23,22 +24,22 @@ interface PermissionRowProps {
 
 const STATUS_CONFIG = {
   granted: {
-    label: 'Concedido',
+    labelKey: 'permission.status.granted',
     color: '#16A34A',
     icon: 'checkmark-circle' as const,
   },
   denied: {
-    label: 'Denegado',
+    labelKey: 'permission.status.denied',
     color: '#DC2626',
     icon: 'close-circle' as const,
   },
   undetermined: {
-    label: 'Sin definir',
+    labelKey: 'permission.status.undetermined',
     color: '#D97706',
     icon: 'help-circle' as const,
   },
   unavailable: {
-    label: 'No disponible',
+    labelKey: 'permission.status.unavailable',
     color: '#9CA3AF',
     icon: 'remove-circle-outline' as const,
   },
@@ -58,6 +59,7 @@ export function PermissionRow({
   loading = false,
 }: PermissionRowProps) {
   const colors = useAppColors();
+  const i18n = useOptionalI18n();
   const cfg = STATUS_CONFIG[status];
 
   const [requesting, setRequesting] = React.useState(false);
@@ -83,7 +85,15 @@ export function PermissionRow({
 
   const isInteractive = status === 'undetermined' || status === 'denied';
   const btnLabel =
-    status === 'denied' ? 'Abrir Ajustes' : status === 'granted' ? '' : 'Permitir';
+    status === 'denied'
+      ? i18n?.t('permission.action.openSettings') ?? 'Abrir Ajustes'
+      : status === 'granted'
+        ? ''
+        : i18n?.t('permission.action.allow') ?? 'Permitir';
+  const statusLabel = i18n?.t(cfg.labelKey) ?? cfg.labelKey;
+  const accessibilityLabel = (i18n?.t('permission.accessibilityLabel') ?? '{action} permiso de {title}')
+    .replace('{action}', btnLabel)
+    .replace('{title}', title);
 
   const styles = StyleSheet.create({
     row: {
@@ -157,7 +167,7 @@ export function PermissionRow({
         </Text>
         <View style={styles.statusRow}>
           <Ionicons name={cfg.icon} size={12} color={cfg.color} />
-          <Text style={[styles.statusLabel, { color: cfg.color }]}>{cfg.label}</Text>
+          <Text style={[styles.statusLabel, { color: cfg.color }]}>{statusLabel}</Text>
         </View>
       </View>
 
@@ -178,7 +188,7 @@ export function PermissionRow({
           onPress={handlePress}
           disabled={requesting || loading}
           accessibilityRole="button"
-          accessibilityLabel={`${btnLabel} permiso de ${title}`}
+          accessibilityLabel={accessibilityLabel}
         >
           {requesting ? (
             <ActivityIndicator

@@ -284,6 +284,12 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
     updatedBy: normalizeActorLabel(data.updatedBy),
     updatedByName: normalizeActorLabel(data.updatedByName),
     updatedByEmail: normalizeActorLabel(data.updatedByEmail),
+    protectedFromDeletion:
+      typeof data.protectedFromDeletion === 'boolean' ? data.protectedFromDeletion : undefined,
+    isSystemUser: typeof data.isSystemUser === 'boolean' ? data.isSystemUser : undefined,
+    isPrimaryAdmin: typeof data.isPrimaryAdmin === 'boolean' ? data.isPrimaryAdmin : undefined,
+    isRootAdmin: typeof data.isRootAdmin === 'boolean' ? data.isRootAdmin : undefined,
+    systemProtected: typeof data.systemProtected === 'boolean' ? data.systemProtected : undefined,
     createdAt: data.createdAt as AppUser['createdAt'],
     updatedAt: data.updatedAt as AppUser['updatedAt'],
   };

@@ -1,6 +1,7 @@
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { isSystemPrincipalUser, SYSTEM_ACTOR_LABEL } from './user-protection.js';
 
 type Role = 'admin' | 'supervisor' | 'user';
 type Gender = 'masculino' | 'femenino';
@@ -55,7 +56,7 @@ type CreateUserPayload = {
   congregationId: string;
   isActive: boolean;
   phone?: string;
-  gender: Gender;
+  gender?: Gender;
   password: string;
   servicePosition?: ServicePosition;
   serviceDepartment?: ServiceDepartment;
@@ -125,8 +126,6 @@ const normalizeText = (value: unknown): string | undefined => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 };
-
-const SYSTEM_ACTOR_LABEL = 'Sistema Sistema';
 
 const resolveActorName = (
   actor: Pick<RequesterProfile, 'displayName' | 'email'> | null | undefined,
@@ -635,14 +634,31 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
   const password = normalizeText(data.password);
   const gender = parseGender(data.gender);
 
-  if (!firstName || !lastName || !displayName || !congregationId || !password || !gender) {
-    throw new HttpsError('invalid-argument', 'Faltan datos requeridos para crear usuario.');
+  const missingFields = [
+    !firstName ? 'primer nombre' : undefined,
+    !lastName ? 'apellido paterno' : undefined,
+    !displayName ? 'nombre completo' : undefined,
+    !congregationId ? 'congregacion' : undefined,
+    !password ? 'contrasena' : undefined,
+  ].filter(Boolean);
+
+  if (missingFields.length > 0) {
+    throw new HttpsError(
+      'invalid-argument',
+      `Faltan datos requeridos para crear usuario: ${missingFields.join(', ')}.`
+    );
   }
+
+  const requiredFirstName = firstName as string;
+  const requiredLastName = lastName as string;
+  const requiredDisplayName = displayName as string;
+  const requiredCongregationId = congregationId as string;
+  const requiredPassword = password as string;
 
   const role = data.role;
   assertValidRole(role);
 
-  if (password.length < 6) {
+  if (requiredPassword.length < 6) {
     throw new HttpsError('invalid-argument', 'La contrasena debe tener al menos 6 caracteres.');
   }
 
@@ -656,17 +672,17 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
   const responsibilities = parseResponsibilities(data.responsibilities);
 
   return {
-    firstName,
+    firstName: requiredFirstName,
     middleName,
-    lastName,
+    lastName: requiredLastName,
     secondLastName,
-    displayName,
+    displayName: requiredDisplayName,
     role,
-    congregationId,
+    congregationId: requiredCongregationId,
     isActive: typeof data.isActive === 'boolean' ? data.isActive : true,
     phone: normalizeText(data.phone),
     gender,
-    password,
+    password: requiredPassword,
     servicePosition: primaryAssignment.position,
     serviceDepartment: primaryAssignment.department,
     departmentLabel: primaryAssignment.label,
@@ -903,7 +919,6 @@ export const createUserByAdmin = onCall(
         status: payload.isActive ? 'active' : 'inactive',
         congregationId: payload.congregationId,
         congregationDomain: requiredDomain,
-        gender: payload.gender,
         createdBy: request.auth.uid,
         createdByName: resolveActorName(requester, request.auth.uid),
         createdByEmail: resolveActorEmail(requester),
@@ -919,6 +934,7 @@ export const createUserByAdmin = onCall(
       if (payload.middleName) userDoc.middleName = payload.middleName;
       if (payload.secondLastName) userDoc.secondLastName = payload.secondLastName;
       if (payload.phone) userDoc.phone = payload.phone;
+      if (payload.gender) userDoc.gender = payload.gender;
       if (payload.servicePosition) userDoc.servicePosition = payload.servicePosition;
       if (payload.serviceDepartment) userDoc.serviceDepartment = payload.serviceDepartment;
       if (payload.departmentLabel) userDoc.department = payload.departmentLabel;
@@ -1233,6 +1249,13 @@ export const deleteUserByAdmin = onCall(
 
     if (target.congregationId !== requester.congregationId) {
       throw new HttpsError('permission-denied', 'No puedes eliminar usuarios de otra congregacion.');
+    }
+
+    if (isSystemPrincipalUser(target as Record<string, unknown>)) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Este usuario fue creado por el sistema principal y no se puede eliminar.'
+      );
     }
 
     await getAuth().deleteUser(uid);

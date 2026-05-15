@@ -33,35 +33,9 @@ const translations = {
   zh,
 } as const;
 
-// Simplified translation key type for compatibility
-export type AppTranslationKey =
-  | 'common.loading' | 'common.error' | 'common.cancel' | 'common.save' | 'common.delete' | 'common.edit' | 'common.view' | 'common.close' | 'common.back' | 'common.confirm' | 'common.yes' | 'common.no'
-  | 'tabs.home' | 'tabs.meetings' | 'tabs.assignments' | 'tabs.users' | 'tabs.cleaning' | 'tabs.profile' | 'tabs.settings'
-  | 'settings.title'
-  | 'settings.section.account' | 'settings.section.administration' | 'settings.section.organization' | 'settings.section.application' | 'settings.section.legal'
-  | 'settings.section.devicePermissions'
-  | 'settings.account.fullName' | 'settings.account.email' | 'settings.account.role'
-  | 'settings.admin.userManagement' | 'settings.admin.meetingManagement' | 'settings.admin.assignmentManagement' | 'settings.admin.cleaningGroups' | 'settings.admin.hospitalityGroups' | 'settings.admin.notifications'
-  | 'settings.organization.meetingCalendar' | 'settings.organization.myAssignments' | 'settings.organization.upcomingResponsibilities' | 'settings.organization.assignmentHistory'
-  | 'settings.app.theme' | 'settings.app.language' | 'settings.app.version'
-  | 'settings.legal.terms' | 'settings.legal.privacy' | 'settings.legal.about'
-  | 'settings.screen.theme' | 'settings.screen.language' | 'settings.screen.about'
-  | 'theme.title' | 'theme.option.system' | 'theme.option.light' | 'theme.option.dark' | 'theme.description'
-  | 'language.title' | 'language.option.es' | 'language.option.en' | 'language.option.fr' | 'language.option.ar' | 'language.option.hi' | 'language.option.zh' | 'language.description' | 'language.info' | 'language.onboarding.title' | 'language.onboarding.subtitle' | 'language.onboarding.continue'
-  | 'meetings.management.title' | 'meetings.management.subtitle' | 'meetings.management.loading' | 'meetings.management.noCongregation'
-  | 'meetings.management.action.newWeekend' | 'meetings.management.action.newMidweek'
-  | 'meetings.management.filter.all' | 'meetings.management.filter.draft' | 'meetings.management.filter.published'
-  | 'meetings.management.row.view' | 'meetings.management.row.edit' | 'meetings.management.row.publish' | 'meetings.management.row.unpublish' | 'meetings.management.row.delete'
-  | 'meetings.management.alert.validation' | 'meetings.management.alert.success' | 'meetings.management.alert.published' | 'meetings.management.alert.sentToDraft'
-  | 'meetings.management.alert.deleteTitle' | 'meetings.management.alert.deleteMessage' | 'meetings.management.alert.deleted'
-  | 'meetings.management.empty.title' | 'meetings.management.empty.description'
-  | 'meetings.list.loading' | 'meetings.list.noCongregation' | 'meetings.list.publishedCount' | 'meetings.list.manage' | 'meetings.list.empty.title' | 'meetings.list.empty.description'
-  | 'meeting.type.internal' | 'meeting.type.external' | 'meeting.type.review' | 'meeting.type.training' | 'meeting.type.midweek' | 'meeting.type.weekend'
-  | 'meeting.status.pending' | 'meeting.status.scheduled' | 'meeting.status.in_progress' | 'meeting.status.completed' | 'meeting.status.cancelled'
-  | 'about.title' | 'about.description' | 'about.version' | 'about.build'
-  | 'role.admin' | 'role.supervisor' | 'role.user'
-  | 'permission.notifications.title' | 'permission.notifications.description' | 'permission.status.granted' | 'permission.status.denied' | 'permission.status.undetermined' | 'permission.status.unavailable' | 'permission.action.allow' | 'permission.action.openSettings'
-  | 'operational.expired' | 'operational.current' | 'operational.upcoming' | 'operational.beyond';
+// Translation keys are intentionally open while the project migrates
+// hardcoded interface text into the locale files.
+export type AppTranslationKey = string;
 
 function getNestedValue<T extends object>(obj: T, path: string): unknown {
   return path.split('.').reduce<unknown>((acc, key) => {
@@ -158,11 +132,11 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         return value;
       }
 
-      // Fallback to Spanish if translation missing in current language
-      if (language !== 'es') {
-        let fallbackValue = (translations.es as any)[key];
+      // Fallback to English if translation missing in current language
+      if (language !== 'en') {
+        let fallbackValue = (translations.en as any)[key];
         if (fallbackValue === undefined) {
-          fallbackValue = getNestedValue(translations.es, key);
+          fallbackValue = getNestedValue(translations.en, key);
         }
         if (typeof fallbackValue === 'string') {
           return fallbackValue;

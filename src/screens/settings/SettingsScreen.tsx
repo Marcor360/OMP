@@ -137,15 +137,15 @@ export function SettingsScreen() {
         </Section>
 
         {canViewCongregationPlan ? (
-          <Section title="Plan de congregacion">
+          <Section title={t('settings.section.congregationPlan')}>
             <SettingRow
               icon="business-outline"
-              label="Plan actual"
-              value={loadingPlan ? 'Cargando...' : planUsage?.planLabel ?? '--'}
+              label={t('settings.plan.current')}
+              value={loadingPlan ? t('settings.plan.loading') : planUsage?.planLabel ?? '--'}
             />
             <SettingRow
               icon="people-outline"
-              label="Usuarios activos"
+              label={t('settings.plan.activeUsers')}
               value={
                 planUsage
                   ? `${planUsage.activeUsersCount}/${planUsage.activeUsersLimit}`
@@ -154,7 +154,7 @@ export function SettingsScreen() {
             />
             <SettingRow
               icon="person-add-outline"
-              label="Usuarios disponibles"
+              label={t('settings.plan.availableUsers')}
               value={planUsage ? String(planUsage.remainingActiveUsers) : '--'}
             />
           </Section>
@@ -233,7 +233,7 @@ export function SettingsScreen() {
             {isExpoGo ? (
               <View style={styles.infoBox}>
                 <ThemedText style={styles.infoText}>
-                  Las notificaciones push remotas no estan disponibles en Expo Go. Para probarlas usa una development build.
+                  {t('settings.permissions.expoGoUnavailable')}
                 </ThemedText>
               </View>
             ) : null}

@@ -78,7 +78,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     const loadProfile = async () => {
-      const forceServer = forceServerNextLoadRef.current;
+      const forceServer = forceServerNextLoadRef.current || isDifferentUser;
       forceServerNextLoadRef.current = false;
 
       try {

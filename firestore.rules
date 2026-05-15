@@ -492,6 +492,49 @@ service cloud.firestore {
         );
     }
 
+    function isSystemPrincipalUserData(data) {
+      return (
+          ('protectedFromDeletion' in data && data.protectedFromDeletion == true)
+          || ('isSystemUser' in data && data.isSystemUser == true)
+          || ('isPrimaryAdmin' in data && data.isPrimaryAdmin == true)
+          || ('isRootAdmin' in data && data.isRootAdmin == true)
+          || ('systemProtected' in data && data.systemProtected == true)
+        )
+        || (
+          ('createdBy' in data)
+          && data.createdBy in [
+            'system',
+            'sistema',
+            'System',
+            'Sistema',
+            'Sistema Sistema',
+            'tu_correo@gmail.com'
+          ]
+        )
+        || (
+          ('createdByName' in data)
+          && data.createdByName in [
+            'system',
+            'sistema',
+            'System',
+            'Sistema',
+            'Sistema Sistema',
+            'tu_correo@gmail.com'
+          ]
+        )
+        || (
+          ('createdByEmail' in data)
+          && data.createdByEmail in [
+            'system',
+            'sistema',
+            'System',
+            'Sistema',
+            'Sistema Sistema',
+            'tu_correo@gmail.com'
+          ]
+        );
+    }
+
     function validUserServiceAssignments(assignments) {
       return assignments is list
         && assignments.size() <= 20;
@@ -1214,7 +1257,9 @@ service cloud.firestore {
           validCleaningMembershipUserUpdate()
         );
 
-      allow delete: if isAdmin() && storedDocInMyCongregation();
+      allow delete: if isAdmin()
+        && storedDocInMyCongregation()
+        && !isSystemPrincipalUserData(resource.data);
 
       match /pushTokens/{tokenDocId} {
         allow get, list: if isSameUser(userId);

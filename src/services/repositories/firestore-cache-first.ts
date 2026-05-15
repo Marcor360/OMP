@@ -18,8 +18,19 @@ import {
 } from '@/src/services/repositories/session-cache';
 
 const CACHE_MISS = Symbol('CACHE_MISS');
+const SESSION_BOUNDARY_CACHE_BYPASS_MS = 15 * 1000;
 
 type CacheMiss = typeof CACHE_MISS;
+
+let localCacheBypassUntil = 0;
+
+export const markFirestoreCacheSessionBoundary = (
+  durationMs = SESSION_BOUNDARY_CACHE_BYPASS_MS
+): void => {
+  localCacheBypassUntil = Math.max(localCacheBypassUntil, Date.now() + durationMs);
+};
+
+const shouldBypassLocalCache = (): boolean => Date.now() < localCacheBypassUntil;
 
 interface CacheFirstDocumentOptions<T> {
   cacheKey: string;
@@ -55,9 +66,11 @@ export const getDocumentCacheFirst = async <T>(
     ref,
     mapSnapshot,
     maxAgeMs,
-    forceServer = false,
+    forceServer: requestedForceServer = false,
     isIncomplete,
   } = options;
+  const skipLocalCacheRead = shouldBypassLocalCache();
+  const forceServer = requestedForceServer || skipLocalCacheRead;
   const memoryCacheKey = `doc:${cacheKey}`;
   const requestKey = `request:${memoryCacheKey}`;
   const fallbackMemoryValue = getSessionCachedValue<T | null>(memoryCacheKey);
@@ -80,7 +93,7 @@ export const getDocumentCacheFirst = async <T>(
 
     // Siempre intentamos cache local como posible respaldo.
     // Si forceServer=true, NO retornamos desde cache; solo lo guardamos para fallback.
-    if (!forceServer || cachedValue === CACHE_MISS) {
+    if (!skipLocalCacheRead && (!forceServer || cachedValue === CACHE_MISS)) {
       try {
         const cacheSnapshot = await getDocFromCache(ref);
 
@@ -136,9 +149,11 @@ export const getQueryCacheFirst = async <T>(
     query,
     mapSnapshot,
     maxAgeMs,
-    forceServer = false,
+    forceServer: requestedForceServer = false,
     isIncomplete,
   } = options;
+  const skipLocalCacheRead = shouldBypassLocalCache();
+  const forceServer = requestedForceServer || skipLocalCacheRead;
   const memoryCacheKey = `query:${cacheKey}`;
   const requestKey = `request:${memoryCacheKey}`;
   const fallbackMemoryValue = getSessionCachedValue<T>(memoryCacheKey);
@@ -158,7 +173,7 @@ export const getQueryCacheFirst = async <T>(
 
     // Siempre intentamos cache local como posible respaldo.
     // Si forceServer=true, NO retornamos desde cache; solo lo guardamos para fallback.
-    if (!forceServer || cachedValue === CACHE_MISS) {
+    if (!skipLocalCacheRead && (!forceServer || cachedValue === CACHE_MISS)) {
       try {
         const cacheSnapshot = await getDocsFromCache(query);
         cachedValue = mapSnapshot(cacheSnapshot);

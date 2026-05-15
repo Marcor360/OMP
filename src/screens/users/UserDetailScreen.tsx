@@ -29,6 +29,14 @@ import {
 } from '@/src/types/user';
 import { formatDate } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { isSystemPrincipalUser } from '@/src/utils/users/user-protection';
+import { useI18n } from '@/src/i18n/index';
+
+const interpolate = (template: string, values: Record<string, string>): string =>
+  Object.entries(values).reduce(
+    (message, [key, value]) => message.replace(new RegExp(`\\{${key}\\}`, 'g'), value),
+    template
+  );
 
 export function UserDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -36,6 +44,7 @@ export function UserDetailScreen() {
   const { congregationId, isAdmin, loadingProfile, profileError, uid: currentUid } = useUser();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
 
   const [user, setUser] = useState<AppUser | null>(null);
   const [congregationName, setCongregationName] = useState<string>('--');
@@ -50,7 +59,7 @@ export function UserDetailScreen() {
     if (!id || !congregationId) {
       setUser(null);
       setCongregationName('--');
-      setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
+      setError(profileError ?? t('users.error.noCongregation'));
       setLoading(false);
       return;
     }
@@ -63,14 +72,14 @@ export function UserDetailScreen() {
       (loadedUser) => {
         if (!loadedUser) {
           setUser(null);
-          setError('Usuario no encontrado.');
+          setError(t('users.error.notFound'));
           setLoading(false);
           return;
         }
 
         if (loadedUser.congregationId !== congregationId) {
           setUser(null);
-          setError('No tienes permisos para ver este usuario.');
+          setError(t('users.error.noViewPermission'));
           setLoading(false);
           return;
         }
@@ -89,7 +98,7 @@ export function UserDetailScreen() {
     return () => {
       unsubscribe();
     };
-  }, [congregationId, id, loadingProfile, profileError]);
+  }, [congregationId, id, loadingProfile, profileError, t]);
 
   useEffect(() => {
     if (!user?.congregationId) {
@@ -118,20 +127,27 @@ export function UserDetailScreen() {
     if (!user) return;
 
     if (!isAdmin) {
-      Alert.alert('Permisos insuficientes', 'Solo administradores pueden cambiar el estado de usuarios.');
+      Alert.alert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyStatus'));
       return;
     }
 
     const newStatus: UserStatus = user.status === 'active' ? 'inactive' : 'active';
-    const action = newStatus === 'inactive' ? 'desactivar' : 'activar';
+    const action =
+      newStatus === 'inactive'
+        ? t('users.status.action.deactivate')
+        : t('users.status.action.activate');
+    const confirmMessage = interpolate(t('users.status.confirmMessage'), {
+      action,
+      name: user.displayName,
+    });
 
     const confirmed =
       Platform.OS === 'web'
-        ? window.confirm(`Deseas ${action} a ${user.displayName}?`)
+        ? window.confirm(confirmMessage)
         : await new Promise<boolean>((resolve) =>
-            Alert.alert('Confirmar', `Deseas ${action} a ${user.displayName}?`, [
-              { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
-              { text: 'Confirmar', style: 'destructive', onPress: () => resolve(true) },
+            Alert.alert(t('users.status.confirmTitle'), confirmMessage, [
+              { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+              { text: t('common.confirm'), style: 'destructive', onPress: () => resolve(true) },
             ])
           );
 
@@ -169,22 +185,30 @@ export function UserDetailScreen() {
     if (!user) return;
 
     if (!isAdmin) {
-      Alert.alert('Permisos insuficientes', 'Solo administradores pueden eliminar usuarios.');
+      Alert.alert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyDelete'));
       return;
     }
 
     if (user.uid === currentUid) {
-      Alert.alert('Accion no permitida', 'No puedes eliminar tu propio usuario.');
+      Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteSelf'));
+      return;
+    }
+
+    if (isSystemPrincipalUser(user)) {
+      Alert.alert(
+        t('users.error.actionNotAllowed'),
+        t('users.error.cannotDeleteSystemUser')
+      );
       return;
     }
 
     const confirmed =
       Platform.OS === 'web'
-        ? window.confirm(`Deseas eliminar de forma permanente a ${user.displayName}?`)
+        ? window.confirm(interpolate(t('users.delete.confirmMessage'), { name: user.displayName }))
         : await new Promise<boolean>((resolve) =>
-            Alert.alert('Confirmar eliminacion', `Deseas eliminar de forma permanente a ${user.displayName}?`, [
-              { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
-              { text: 'Eliminar', style: 'destructive', onPress: () => resolve(true) },
+            Alert.alert(t('users.delete.confirmTitle'), interpolate(t('users.delete.confirmMessage'), { name: user.displayName }), [
+              { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+              { text: t('common.delete'), style: 'destructive', onPress: () => resolve(true) },
             ])
           );
 
@@ -193,7 +217,10 @@ export function UserDetailScreen() {
     try {
       setDeleting(true);
       await deleteUserByAdmin({ uid: user.uid });
-      Alert.alert('Usuario eliminado', `${user.displayName} fue eliminado correctamente.`);
+      Alert.alert(
+        t('users.delete.successTitle'),
+        interpolate(t('users.delete.successMessage'), { name: user.displayName })
+      );
       router.replace('/(protected)/(tabs)/users');
     } catch (requestError) {
       Alert.alert('Error', formatFirestoreError(requestError));
@@ -203,7 +230,7 @@ export function UserDetailScreen() {
   };
 
   if (loading || loadingProfile) return <LoadingState />;
-  if (error || !user) return <ErrorState message={error ?? 'Usuario no encontrado.'} />;
+  if (error || !user) return <ErrorState message={error ?? t('users.error.notFound')} />;
 
   const initials = user.displayName
     .split(' ')
@@ -219,15 +246,16 @@ export function UserDetailScreen() {
   ].filter(Boolean).join(', ');
   const createdByLabel = user.createdByName ?? user.createdByEmail ?? user.createdBy ?? '--';
   const updatedByLabel = user.updatedByName ?? user.updatedByEmail ?? user.updatedBy ?? createdByLabel;
+  const isProtectedSystemUser = isSystemPrincipalUser(user);
   const genderLabels: Record<UserGender, string> = {
-    masculino: 'Masculino',
-    femenino: 'Femenino',
+    masculino: t('users.gender.male'),
+    femenino: t('users.gender.female'),
   };
 
   return (
     <ScreenContainer scrollable={false}>
       <PageHeader
-        title="Detalle de usuario"
+        title={t('users.detail.title')}
         showBack
         actions={
           <RoleGuard requiredRole="admin">
@@ -256,15 +284,15 @@ export function UserDetailScreen() {
         </View>
 
         <View style={styles.card}>
-          <InfoRow icon="call-outline" label="Telefono" value={user.phone ?? '--'} />
-          <InfoRow icon="person-outline" label="Genero" value={user.gender ? genderLabels[user.gender] : '--'} />
-          <InfoRow icon="business-outline" label="Departamento" value={user.department ?? '--'} />
-          <InfoRow icon="ribbon-outline" label="Privilegios" value={privilegesLabel || '--'} />
-          <InfoRow icon="home-outline" label="Congregacion" value={congregationName} />
-          <InfoRow icon="person-add-outline" label="Creado por" value={createdByLabel} />
-          <InfoRow icon="person-outline" label="Actualizado por" value={updatedByLabel} />
-          <InfoRow icon="calendar-outline" label="Creado" value={formatDate(user.createdAt)} />
-          <InfoRow icon="time-outline" label="Actualizado" value={formatDate(user.updatedAt)} />
+          <InfoRow icon="call-outline" label={t('users.field.phone')} value={user.phone ?? '--'} />
+          <InfoRow icon="person-outline" label={t('users.field.gender')} value={user.gender ? genderLabels[user.gender] : '--'} />
+          <InfoRow icon="business-outline" label={t('users.field.department')} value={user.department ?? '--'} />
+          <InfoRow icon="ribbon-outline" label={t('users.field.privileges')} value={privilegesLabel || '--'} />
+          <InfoRow icon="home-outline" label={t('users.field.congregation')} value={congregationName} />
+          <InfoRow icon="person-add-outline" label={t('users.field.createdBy')} value={createdByLabel} />
+          <InfoRow icon="person-outline" label={t('users.field.updatedBy')} value={updatedByLabel} />
+          <InfoRow icon="calendar-outline" label={t('users.field.created')} value={formatDate(user.createdAt)} />
+          <InfoRow icon="time-outline" label={t('users.field.updated')} value={formatDate(user.updatedAt)} />
         </View>
 
         <RoleGuard requiredRole="admin">
@@ -291,24 +319,33 @@ export function UserDetailScreen() {
               }}
             >
               {toggling
-                ? 'Actualizando...'
+                ? t('users.status.updating')
                 : user.status === 'active'
-                  ? 'Desactivar usuario'
-                  : 'Activar usuario'}
+                  ? t('users.status.deactivate')
+                  : t('users.status.activate')}
             </ThemedText>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
-            onPress={handleDeleteUser}
-            disabled={deleting}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="trash-outline" size={18} color={colors.error} />
-            <ThemedText style={styles.deleteBtnText}>
-              {deleting ? 'Eliminando...' : 'Eliminar usuario'}
-            </ThemedText>
-          </TouchableOpacity>
+          {isProtectedSystemUser ? (
+            <View style={styles.protectedNotice}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
+              <ThemedText style={styles.protectedNoticeText}>
+                {t('users.detail.systemProtected')}
+              </ThemedText>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
+              onPress={handleDeleteUser}
+              disabled={deleting}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="trash-outline" size={18} color={colors.error} />
+              <ThemedText style={styles.deleteBtnText}>
+                {deleting ? t('users.delete.deleting') : t('users.delete.action')}
+              </ThemedText>
+            </TouchableOpacity>
+          )}
         </RoleGuard>
       </ScrollView>
     </ScreenContainer>
@@ -429,6 +466,21 @@ const createStyles = (colors: AppColorSet) =>
     },
     deleteBtnText: {
       color: colors.error,
+      fontWeight: '600',
+    },
+    protectedNotice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.primary + '55',
+      backgroundColor: colors.primary + '12',
+    },
+    protectedNoticeText: {
+      flex: 1,
+      color: colors.primary,
       fontWeight: '600',
     },
   });

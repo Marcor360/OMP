@@ -49,6 +49,7 @@ function parseCreateUserPayload(raw: unknown): {
   role: Role;
   congregationId: string;
   password: string;
+  gender?: 'masculino' | 'femenino';
   isActive: boolean;
 } {
   if (typeof raw !== 'object' || raw === null) {
@@ -62,23 +63,44 @@ function parseCreateUserPayload(raw: unknown): {
   const congregationId = normalizeText(data.congregationId);
   const password = normalizeText(data.password);
   const displayName = normalizeText(data.displayName) ?? [firstName, lastName].filter(Boolean).join(' ');
+  const gender =
+    data.gender === 'masculino' || data.gender === 'femenino'
+      ? data.gender
+      : undefined;
 
-  if (!firstName || !lastName || !displayName || !congregationId || !password) {
-    throw new HttpsError('invalid-argument', 'Faltan datos requeridos para crear usuario.');
+  const missingFields = [
+    !firstName ? 'primer nombre' : undefined,
+    !lastName ? 'apellido paterno' : undefined,
+    !displayName ? 'nombre completo' : undefined,
+    !congregationId ? 'congregacion' : undefined,
+    !password ? 'contrasena' : undefined,
+  ].filter(Boolean);
+
+  if (missingFields.length > 0) {
+    throw new HttpsError(
+      'invalid-argument',
+      `Faltan datos requeridos para crear usuario: ${missingFields.join(', ')}.`
+    );
   }
+
+  const requiredFirstName = firstName as string;
+  const requiredLastName = lastName as string;
+  const requiredCongregationId = congregationId as string;
+  const requiredPassword = password as string;
 
   assertValidRole(data.role);
 
-  if (password.length < 6) {
+  if (requiredPassword.length < 6) {
     throw new HttpsError('invalid-argument', 'La contrasena debe tener al menos 6 caracteres.');
   }
 
   return {
-    firstName,
-    lastName,
+    firstName: requiredFirstName,
+    lastName: requiredLastName,
     role: data.role,
-    congregationId,
-    password,
+    congregationId: requiredCongregationId,
+    password: requiredPassword,
+    gender,
     isActive: typeof data.isActive === 'boolean' ? data.isActive : true,
   };
 }
@@ -140,13 +162,25 @@ describe('parseCreateUserPayload', () => {
     expect(result.isActive).toBe(true); // default
   });
 
+  it('acepta genero cuando se pasa desde clientes actuales', () => {
+    const result = parseCreateUserPayload({ ...valid, gender: 'masculino' });
+    expect(result.gender).toBe('masculino');
+  });
+
+  it('mantiene compatibilidad con clientes antiguos sin genero', () => {
+    const result = parseCreateUserPayload(valid);
+    expect(result.gender).toBeUndefined();
+  });
+
   it('respeta isActive:false cuando se pasa explícitamente', () => {
     const result = parseCreateUserPayload({ ...valid, isActive: false });
     expect(result.isActive).toBe(false);
   });
 
   it('lanza error si falta firstName', () => {
-    expect(() => parseCreateUserPayload({ ...valid, firstName: '' })).toThrow(HttpsError);
+    expect(() => parseCreateUserPayload({ ...valid, firstName: '' })).toThrow(
+      /primer nombre/
+    );
   });
 
   it('lanza error si falta congregationId', () => {

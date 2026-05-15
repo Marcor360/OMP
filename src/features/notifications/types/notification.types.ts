@@ -34,7 +34,7 @@ export interface AppNotification {
 }
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<Exclude<NotificationCategory, null>, string> = {
-  platform: 'Plataforma',
-  cleaning: 'Limpieza',
-  hospitality: 'Hospitalidad',
+  platform: 'notifications.category.platform',
+  cleaning: 'notifications.category.cleaning',
+  hospitality: 'notifications.category.hospitality',
 };

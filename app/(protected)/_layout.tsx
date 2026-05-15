@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { UserProvider, useUser } from '@/src/context/user-context';
 import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
+import { useStartupPermissionPrompt } from '@/src/hooks/use-startup-permission-prompt';
 import { useI18n } from '@/src/i18n/index';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { CongregationBlockedScreen } from '@/src/screens/errors/CongregationBlockedScreen';
@@ -9,6 +10,11 @@ function ProtectedNotificationSetup() {
   const { uid, congregationId, isSessionValid } = useUser();
 
   useNotificationSetup({
+    uid,
+    congregationId,
+    isAuthenticated: isSessionValid,
+  });
+  useStartupPermissionPrompt({
     uid,
     congregationId,
     isAuthenticated: isSessionValid,

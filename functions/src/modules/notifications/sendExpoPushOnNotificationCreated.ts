@@ -48,6 +48,21 @@ const getActivePushTokenDocs = async (
   return snap.docs;
 };
 
+const getProfileExpoTokens = async (userId: string): Promise<string[]> => {
+  const snap = await adminDb.collection('users').doc(userId).get();
+  if (!snap.exists) return [];
+
+  const data = snap.data() as Record<string, unknown>;
+  return [
+    ...asStringArray(data.notificationTokens),
+    ...asStringArray(data.expoPushTokens),
+    ...asStringArray(data.pushTokens),
+    asNonEmptyString(data.expoPushToken),
+    asNonEmptyString(data.pushToken),
+    asNonEmptyString(data.notificationToken),
+  ].filter((token): token is string => Boolean(token) && Expo.isExpoPushToken(token));
+};
+
 const deactivateTokenDoc = async (
   userId: string,
   tokenDocId: string,
@@ -127,6 +142,16 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
               tokenDocId: tokenDoc.id,
             });
           });
+
+          const profileTokens = await getProfileExpoTokens(userId);
+          profileTokens.forEach((token) => {
+            if (!tokenDocsByToken.has(token)) {
+              tokenDocsByToken.set(token, {
+                userId,
+                tokenDocId: '',
+              });
+            }
+          });
         } catch (error) {
           logger.error('Failed to read Expo push tokens for user', {
             congregationId,
@@ -181,7 +206,7 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
             if (isDeviceNotRegisteredTicket(ticket)) {
               const tokenDoc = tokenDocsByToken.get(tokenValue);
 
-              if (tokenDoc) {
+              if (tokenDoc?.tokenDocId) {
                 await deactivateTokenDoc(
                   tokenDoc.userId,
                   tokenDoc.tokenDocId,

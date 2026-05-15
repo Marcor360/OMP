@@ -3,7 +3,7 @@ import { AppState, AppStateStatus, Platform } from 'react-native';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/src/config/firebase/firebase';
 import { loginWithEmail, logout } from '@/src/services/auth-service';
-import { clearAllSessionCache } from '@/src/services/repositories/session-cache';
+import { clearLocalSessionData } from '@/src/services/session/session-cleanup';
 import { AuthContextType } from '@/src/types/auth.types';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     inactivityTimer.current = setTimeout(async () => {
       // Cerrar sesión por inactividad
+      await clearLocalSessionData();
       await logout();
     }, INACTIVITY_TIMEOUT);
   };
@@ -102,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         console.log('[AuthProvider] Sin sesión activa');
         clearInactivityTimer();
-        clearAllSessionCache();
+        void clearLocalSessionData();
       }
     });
 
@@ -178,12 +179,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
+    await clearLocalSessionData();
     await loginWithEmail({ email, password });
   };
 
   const handleLogout = async () => {
     clearInactivityTimer();
-    clearAllSessionCache();
+    await clearLocalSessionData();
     await logout();
   };
 

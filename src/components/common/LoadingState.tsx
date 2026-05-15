@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet, type ViewStyle } from 'react-native';
 import { ThemedText } from '@/src/components/themed-text';
+import { useOptionalI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
 interface LoadingStateProps {
@@ -10,18 +11,20 @@ interface LoadingStateProps {
 }
 
 export function LoadingState({
-  message = 'Cargando...',
+  message,
   style,
   size = 'large',
 }: LoadingStateProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const i18n = useOptionalI18n();
+  const resolvedMessage = message ?? i18n?.t('common.loading') ?? 'Cargando...';
 
   return (
     <View style={[styles.container, style]}>
       <ActivityIndicator size={size} color={colors.primary} />
-      {message ? (
-        <ThemedText style={styles.message}>{message}</ThemedText>
+      {resolvedMessage ? (
+        <ThemedText style={styles.message}>{resolvedMessage}</ThemedText>
       ) : null}
     </View>
   );

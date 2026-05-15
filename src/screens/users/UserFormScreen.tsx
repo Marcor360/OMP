@@ -7,7 +7,6 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,6 +44,7 @@ import {
   UserGender,
   UserRole,
 } from '@/src/types/user';
+import { copyToClipboard } from '@/src/utils/clipboard/clipboard';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { hasErrors, validateMinLength, validateRequired } from '@/src/utils/validation/validation';
 
@@ -87,27 +87,18 @@ const buildGeneratedEmailPreview = (
   return `${(primary || fallback)}@${domain.toLowerCase()}`;
 };
 
-const copyToClipboard = async (value: string): Promise<boolean> => {
-  if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return true;
-  }
-
-  return false;
-};
-
 const parseLegacyAssignment = (
   value: string | undefined
 ): { position: ServiceSelection; department: UserServiceDepartment | '' } => {
   if (!value) return { position: 'none', department: '' };
-  if (value === 'Coordinador') return { position: 'coordinador', department: '' };
-  if (value === 'Secretario') return { position: 'secretario', department: '' };
-  if (value.startsWith('Encargado de ')) {
-    const label = value.replace('Encargado de ', '').trim();
+  if (value === 'Coordinador' || value === 'Coordinator') return { position: 'coordinador', department: '' };
+  if (value === 'Secretario' || value === 'Secretary') return { position: 'secretario', department: '' };
+  if (value.startsWith('Encargado de ') || value.startsWith('Overseer of ')) {
+    const label = value.replace('Encargado de ', '').replace('Overseer of ', '').trim();
     return { position: 'encargado', department: DEPARTMENT_LABEL_TO_KEY[label] ?? '' };
   }
-  if (value.startsWith('Auxiliar de ')) {
-    const label = value.replace('Auxiliar de ', '').trim();
+  if (value.startsWith('Auxiliar de ') || value.startsWith('Assistant of ')) {
+    const label = value.replace('Auxiliar de ', '').replace('Assistant of ', '').trim();
     return { position: 'auxiliar', department: DEPARTMENT_LABEL_TO_KEY[label] ?? '' };
   }
   return { position: 'none', department: '' };
@@ -300,13 +291,8 @@ export function UserFormScreen() {
     }
 
     try {
-      const copied = await copyToClipboard(value);
-      Alert.alert(
-        copied ? 'Copiado' : 'No disponible',
-        copied
-          ? `${label} copiado al portapapeles.`
-          : 'El portapapeles automatico solo esta disponible en la version web compatible.'
-      );
+      await copyToClipboard(value);
+      Alert.alert('Copiado', `${label} copiado al portapapeles.`);
     } catch {
       Alert.alert('No se pudo copiar', 'Intenta seleccionar el texto manualmente.');
     }
@@ -521,6 +507,10 @@ export function UserFormScreen() {
       }
 
       const normalizedMiddle = middleName.trim() || undefined;
+      const normalizedFirstName = firstName.trim();
+      const normalizedLastName = lastName.trim();
+      const normalizedSecondLastName = secondLastName.trim() || undefined;
+      const normalizedPhone = phone.trim() || undefined;
       const primaryAssignment = serviceAssignments[0];
       const normalizedServicePosition = primaryAssignment?.position;
       const normalizedServiceDepartment = primaryAssignment?.department;
@@ -528,17 +518,20 @@ export function UserFormScreen() {
 
       if (mode === 'create') {
         const createdUser = await createUserByAdmin({
-          firstName,
+          firstName: normalizedFirstName,
           middleName: normalizedMiddle,
-          lastName,
-          secondLastName: secondLastName.trim() || undefined,
-          password,
-          displayName: [firstName, normalizedMiddle, lastName, secondLastName.trim()].filter(Boolean).join(' ').trim(),
+          lastName: normalizedLastName,
+          secondLastName: normalizedSecondLastName,
+          password: password.trim(),
+          displayName: [normalizedFirstName, normalizedMiddle, normalizedLastName, normalizedSecondLastName]
+            .filter(Boolean)
+            .join(' ')
+            .trim(),
           email: generatedEmailPreview,
           role,
           congregationId,
           gender: selectedGender,
-          phone,
+          phone: normalizedPhone,
           department: departmentLabel,
           servicePosition: normalizedServicePosition,
           serviceDepartment: normalizedServiceDepartment,
@@ -571,10 +564,10 @@ export function UserFormScreen() {
         return;
       } else if (id) {
         const payload: UpdateUserDTO = {
-          displayName,
+          displayName: displayName.trim(),
           role,
           gender: selectedGender,
-          phone,
+          phone: normalizedPhone,
           department: departmentLabel,
           servicePosition: normalizedServicePosition,
           serviceDepartment: normalizedServiceDepartment,
@@ -629,7 +622,7 @@ export function UserFormScreen() {
           <View style={styles.planNotice}>
             <ThemedText style={styles.planTitle}>{planUsage.planLabel}</ThemedText>
             <ThemedText style={styles.hintText}>
-              Usuarios activos: {planUsage.activeUsersCount}/{planUsage.activeUsersLimit}. Disponibles: {planUsage.remainingActiveUsers}.
+              Active users: {planUsage.activeUsersCount}/{planUsage.activeUsersLimit}. Available: {planUsage.remainingActiveUsers}.
             </ThemedText>
           </View>
         ) : null}

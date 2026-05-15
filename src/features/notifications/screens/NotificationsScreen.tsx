@@ -12,6 +12,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { NotificationItem } from '@/src/features/notifications/components/NotificationItem';
 import { AppNotification } from '@/src/features/notifications/types/notification.types';
 import { useNotifications } from '@/src/hooks/useNotifications';
+import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
 const resolveAssignmentHref = (notification: AppNotification) => {
@@ -42,6 +43,7 @@ export function NotificationsScreen() {
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
 
   const {
     notifications,
@@ -71,7 +73,7 @@ export function NotificationsScreen() {
   }, [markAllRead]);
 
   if (loading) {
-    return <LoadingState message="Cargando notificaciones..." />;
+    return <LoadingState message={t('notifications.loading')} />;
   }
 
   if (error) {
@@ -81,14 +83,14 @@ export function NotificationsScreen() {
   return (
     <ScreenContainer scrollable={false} padded={false}>
       <PageHeader
-        title="Notificaciones"
-        subtitle="Asignaciones recientes"
+        title={t('notifications.title')}
+        subtitle={t('notifications.subtitle')}
         showBack
         actions={
           unreadCount > 0 ? (
             <TouchableOpacity style={styles.markAllButton} onPress={onMarkAll} activeOpacity={0.8}>
               <Ionicons name="checkmark-done-outline" size={14} color={colors.primary} />
-              <ThemedText style={styles.markAllText}>Marcar todas</ThemedText>
+              <ThemedText style={styles.markAllText}>{t('notifications.markAll')}</ThemedText>
             </TouchableOpacity>
           ) : undefined
         }
@@ -106,12 +108,15 @@ export function NotificationsScreen() {
           <View style={styles.summaryRow}>
             <View style={styles.summaryPill}>
               <ThemedText style={styles.summaryText}>
-                {notifications.length} notificacion{notifications.length === 1 ? '' : 'es'}
+                {notifications.length}{' '}
+                {notifications.length === 1
+                  ? t('notifications.count.singular')
+                  : t('notifications.count.plural')}
               </ThemedText>
             </View>
             <View style={styles.summaryPillUnread}>
               <ThemedText style={styles.summaryTextUnread}>
-                {unreadCount} sin leer
+                {unreadCount} {t('notifications.unread')}
               </ThemedText>
             </View>
           </View>
@@ -120,8 +125,8 @@ export function NotificationsScreen() {
           <View style={styles.emptyWrap}>
             <EmptyState
               icon="notifications-off-outline"
-              title="No tienes notificaciones"
-              description="Cuando te asignen una responsabilidad aparecera aqui."
+              title={t('notifications.empty.title')}
+              description={t('notifications.empty.description')}
             />
           </View>
         }
