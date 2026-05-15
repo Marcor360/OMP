@@ -26,6 +26,12 @@ service cloud.firestore {
       return get(currentUserPath()).data;
     }
 
+    function isSuperAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/superAdmins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/superAdmins/$(request.auth.uid)).data.isActive == true;
+    }
+
     // =========================================================================
     // VALIDACIONES BASE
     // =========================================================================
@@ -1214,6 +1220,15 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // REGLAS: SUPER ADMINS
+    // =========================================================================
+
+    match /superAdmins/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update, delete: if false;
+    }
+
+    // =========================================================================
     // REGLAS: USERS
     // =========================================================================
 
@@ -1228,20 +1243,22 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if isSameUser(userId)
+      allow get: if isSuperAdmin() 
+        || isSameUser(userId)
         || (canListCongregationUsers() && storedDocInMyCongregation());
 
       // list sólo dentro de la propia congregación.
       // Firestore Security Rules no permiten inspeccionar filtros de query,
       // por lo que la restricción real se aplica en la app (siempre filtra por congregationId).
       // myCongregationId() != null garantiza que el solicitante tiene perfil activo con congregación.
-      allow list: if canListCongregationUsers() && myCongregationId() != null;
+      allow list: if isSuperAdmin() 
+        || (canListCongregationUsers() && myCongregationId() != null);
 
-      allow create: if isAdmin()
+      allow create: if isSuperAdmin() || (isAdmin()
         && validUserCreate(userId)
-        && targetDocInMyCongregation();
+        && targetDocInMyCongregation());
 
-      allow update: if (
+      allow update: if isSuperAdmin() || (
           isAdmin()
           && storedDocInMyCongregation()
           && targetDocInMyCongregation()
@@ -1257,9 +1274,11 @@ service cloud.firestore {
           validCleaningMembershipUserUpdate()
         );
 
-      allow delete: if isAdmin()
-        && storedDocInMyCongregation()
-        && !isSystemPrincipalUserData(resource.data);
+      allow delete: if isSuperAdmin() || (
+          isAdmin()
+          && storedDocInMyCongregation()
+          && !isSystemPrincipalUserData(resource.data)
+        );
 
       match /pushTokens/{tokenDocId} {
         allow get, list: if isSameUser(userId);
@@ -1273,17 +1292,17 @@ service cloud.firestore {
     // =========================================================================
 
     match /congregations/{congregationId} {
-      allow get: if sameCongregation(congregationId);
-      allow list: if false;
+      allow get: if isSuperAdmin() || sameCongregation(congregationId);
+      allow list: if isSuperAdmin();
 
-      allow create: if isAdmin()
+      allow create: if isSuperAdmin() || (isAdmin()
         && canAccessCongregationData(congregationId)
-        && validCongregationData(request.resource.data);
+        && validCongregationData(request.resource.data));
 
-      allow update: if isAdmin()
+      allow update: if isSuperAdmin() || (isAdmin()
         && canAccessCongregationData(congregationId)
         && validCongregationData(request.resource.data)
-        && preservesCreatedAt();
+        && preservesCreatedAt());
 
       allow delete: if false;
 
@@ -1499,7 +1518,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /dashboardSummary/{congregationId} {
-      allow read: if canAccessCongregationData(congregationId);
+      allow read: if isSuperAdmin() || canAccessCongregationData(congregationId);
       allow write: if false;
     }
 
@@ -1538,20 +1557,20 @@ service cloud.firestore {
     // =========================================================================
 
     match /notifications/{notificationId} {
-      allow read: if isAuthenticated()
+      allow read: if isSuperAdmin() || (isAuthenticated()
         && (
           !('userId' in resource.data)
           || resource.data.userId == currentUid()
           || isAdminOrSupervisor()
-        );
+        ));
 
-      allow create: if isAdminOrSupervisor();
+      allow create: if isSuperAdmin() || isAdminOrSupervisor();
 
-      allow update: if isAuthenticated()
+      allow update: if isSuperAdmin() || (isAuthenticated()
         && resource.data.userId == currentUid()
-        && sameKeysOnUpdate(['isRead', 'readAt']);
+        && sameKeysOnUpdate(['isRead', 'readAt']));
 
-      allow delete: if isAdmin();
+      allow delete: if isSuperAdmin() || isAdmin();
     }
   }
 }
