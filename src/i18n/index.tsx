@@ -51,7 +51,7 @@ interface I18nContextType {
   setLanguage: (lang: SupportedLanguage) => Promise<void>;
   hasCompletedLanguageOnboarding: boolean;
   completeLanguageOnboarding: () => Promise<void>;
-  t: (key: AppTranslationKey) => string;
+  t: (key: AppTranslationKey, vars?: Record<string, string | number>) => string;
   isReady: boolean;
 }
 
@@ -122,29 +122,47 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const t = useCallback(
-    (key: AppTranslationKey): string => {
-      let value = (translations[language] as any)[key];
-      if (value === undefined) {
-        value = getNestedValue(translations[language], key);
-      }
-
-      if (typeof value === 'string') {
-        return value;
-      }
-
-      // Fallback to English if translation missing in current language
-      if (language !== 'en') {
-        let fallbackValue = (translations.en as any)[key];
-        if (fallbackValue === undefined) {
-          fallbackValue = getNestedValue(translations.en, key);
+    (key: AppTranslationKey, vars?: Record<string, string | number>): string => {
+      // Pluralization: if vars.count is provided, try key + '_plural' first when count != 1
+      const resolveKey = (k: string): string | undefined => {
+        let value = (translations[language] as any)[k];
+        if (value === undefined) {
+          value = getNestedValue(translations[language], k);
         }
-        if (typeof fallbackValue === 'string') {
-          return fallbackValue;
+        if (typeof value === 'string') return value;
+
+        // Fallback to English
+        if (language !== 'en') {
+          let fallback = (translations.en as any)[k];
+          if (fallback === undefined) {
+            fallback = getNestedValue(translations.en, k);
+          }
+          if (typeof fallback === 'string') return fallback;
         }
+        return undefined;
+      };
+
+      let resolved: string | undefined;
+
+      if (vars && typeof vars.count === 'number' && vars.count !== 1) {
+        resolved = resolveKey(key + '_plural') ?? resolveKey(key);
+      } else {
+        resolved = resolveKey(key);
       }
 
-      // Return key as last resort
-      return key;
+      if (resolved === undefined) {
+        return key;
+      }
+
+      // Interpolate {{variable}} placeholders
+      if (vars) {
+        resolved = resolved.replace(/\{\{(\w+)\}\}/g, (_match, varName) => {
+          const val = vars[varName];
+          return val !== undefined ? String(val) : `{{${varName}}}`;
+        });
+      }
+
+      return resolved;
     },
     [language]
   );

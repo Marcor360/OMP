@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import { useCleaningAssignableUsers } from '@/src/modules/cleaning/hooks/use-cleaning-assignable-users';
@@ -48,6 +49,7 @@ export function AddMembersToCleaningGroupModal({
 }: AddMembersToCleaningGroupModalProps) {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(preSelectedIds);
 
@@ -248,7 +250,7 @@ export function AddMembersToCleaningGroupModal({
           <View style={styles.handle} />
 
           <View style={styles.header}>
-            <Text style={styles.title}>Agregar integrantes</Text>
+            <Text style={styles.title}>{t('cleaning.addMembersModalTitle')}</Text>
             <TouchableOpacity
               style={styles.closeBtn}
               onPress={onClose}
@@ -266,11 +268,11 @@ export function AddMembersToCleaningGroupModal({
               style={styles.searchInput}
               value={search}
               onChangeText={setSearch}
-              placeholder="Buscar usuario..."
+              placeholder={t('cleaning.searchUser')}
               placeholderTextColor={colors.textDisabled}
               returnKeyType="search"
               clearButtonMode="while-editing"
-              accessibilityLabel="Buscar usuario"
+              accessibilityLabel={t('cleaning.searchUser')}
             />
           </View>
 
@@ -278,14 +280,14 @@ export function AddMembersToCleaningGroupModal({
           {loading ? (
             <View style={styles.center}>
               <ActivityIndicator color={colors.primary} size="large" />
-              <Text style={styles.centerText}>Cargando usuarios...</Text>
+              <Text style={styles.centerText}>{t('cleaning.loadingUsers')}</Text>
             </View>
           ) : error ? (
             <View style={styles.center}>
               <Ionicons name="alert-circle-outline" size={32} color={colors.error} />
               <Text style={styles.centerText}>{error}</Text>
               <TouchableOpacity style={styles.retryBtn} onPress={refresh}>
-                <Text style={styles.retryText}>Reintentar</Text>
+                <Text style={styles.retryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -296,8 +298,8 @@ export function AddMembersToCleaningGroupModal({
               ListEmptyComponent={
                 <Text style={styles.emptyText}>
                   {search.length > 0
-                    ? 'No se encontraron usuarios con ese nombre.'
-                    : 'No hay usuarios disponibles en la congregación.'}
+                    ? t('cleaning.emptySearchUser')
+                    : t('cleaning.emptyUsers')}
                 </Text>
               }
               keyboardShouldPersistTaps="handled"
@@ -312,7 +314,7 @@ export function AddMembersToCleaningGroupModal({
               onPress={onClose}
               disabled={confirming}
             >
-              <Text style={styles.cancelText}>Cancelar</Text>
+              <Text style={styles.cancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -324,8 +326,8 @@ export function AddMembersToCleaningGroupModal({
               accessibilityRole="button"
               accessibilityLabel={
                 isCreateMode
-                  ? 'Guardar seleccion de integrantes'
-                  : `Agregar ${newSelections.length} usuario${newSelections.length !== 1 ? 's' : ''}`
+                  ? t('cleaning.saveSelection')
+                  : t(newSelections.length === 1 ? 'cleaning.addUsersCount' : 'cleaning.addUsersCount_plural', { count: newSelections.length })
               }
             >
               {confirming ? (
@@ -333,10 +335,10 @@ export function AddMembersToCleaningGroupModal({
               ) : (
                 <Text style={styles.confirmText}>
                   {isCreateMode
-                    ? 'Guardar seleccion'
+                    ? t('cleaning.saveSelection')
                     : newSelections.length === 0
-                      ? 'Seleccionar usuarios'
-                      : `Agregar ${newSelections.length} usuario${newSelections.length !== 1 ? 's' : ''}`}
+                      ? t('cleaning.selectMembersBtn')
+                      : t(newSelections.length === 1 ? 'cleaning.addUsersCount' : 'cleaning.addUsersCount_plural', { count: newSelections.length })}
                 </Text>
               )}
             </TouchableOpacity>

@@ -17,6 +17,7 @@ import {
   CongregationAccessState,
   CongregationDeactivationReason,
 } from '@/src/types/congregation-access';
+import { getActiveUsers } from '@/src/services/users/users-service';
 import { resolveCongregationEmailDomain } from '@/src/utils/congregations/domain';
 
 const CONGREGATION_DOMAIN_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -388,20 +389,14 @@ export const getCongregationPlanUsage = async (
     mapSnapshot: (snapshot) => snapshot.data() as Record<string, unknown>,
   });
 
-  const usersSnap = await getDocs(
-    query(
-      usersCollectionRef(),
-      where('congregationId', '==', congregationId),
-      where('isActive', '==', true)
-    )
-  );
+  const activeUsers = await getActiveUsers(congregationId);
 
   const planId = normalizePlanId(planData?.planId);
   const activeUsersLimit =
     typeof planData?.activeUsersLimit === 'number' && Number.isFinite(planData.activeUsersLimit)
       ? Math.max(0, Math.floor(planData.activeUsersLimit))
       : CONGREGATION_PLAN_LIMITS[planId];
-  const activeUsersCount = usersSnap.size;
+  const activeUsersCount = activeUsers.length;
 
   return {
     congregationId,

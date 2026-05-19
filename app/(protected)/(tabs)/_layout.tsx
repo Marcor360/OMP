@@ -10,12 +10,12 @@ import { useAppColors } from '@/src/styles';
 import { getVisibleTabs } from '@/src/utils/permissions/permissions';
 
 export default function TabsLayout() {
-  const { uid, role, servicePosition, serviceDepartment, serviceAssignments, isSessionValid } = useUser();
+  const { uid, role, servicePosition, serviceDepartment, serviceAssignments, isSessionValid, isElder } = useUser();
   const { t } = useI18n();
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const visible = getVisibleTabs(role, servicePosition, serviceDepartment, serviceAssignments);
+  const visible = getVisibleTabs(role, servicePosition, serviceDepartment, serviceAssignments, isElder);
   const bottomInset = Math.max(insets.bottom, 10);
   const isCompactWeb = Platform.OS === 'web' && width < 560;
   const showTabLabels = !isCompactWeb;

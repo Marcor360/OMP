@@ -1,15 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
+  View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
@@ -20,7 +20,6 @@ import {
   getCongregationEmailDomain,
   getCongregationPlanUsage,
 } from '@/src/services/congregations/congregations-service';
-import { CongregationPlanUsage } from '@/src/types/congregation-plan';
 import {
   createUserByAdmin,
   updateUserByAdmin,
@@ -28,21 +27,22 @@ import {
 } from '@/src/services/users/admin-users-service';
 import { getAllUsers, getUserById } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { CongregationPlanUsage } from '@/src/types/congregation-plan';
 import {
   type AppUser,
-  ROLE_LABELS,
   PRIVILEGE_LABELS,
+  ROLE_LABELS,
   USER_SERVICE_DEPARTMENTS,
   USER_SERVICE_DEPARTMENT_LABELS,
   USER_SERVICE_POSITION_LABELS,
   UpdateUserDTO,
+  UserGender,
   UserPrivileges,
   UserResponsibilities,
+  UserRole,
   UserServiceAssignment,
   UserServiceDepartment,
   UserServicePosition,
-  UserGender,
-  UserRole,
 } from '@/src/types/user';
 import { copyToClipboard } from '@/src/utils/clipboard/clipboard';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -130,15 +130,15 @@ const resolveServiceAssignmentFromUser = (
 
   const legacy = user.servicePosition
     ? {
-        position: user.servicePosition,
-        department:
-          user.serviceDepartment ??
-          (
-            user.servicePosition === 'encargado' || user.servicePosition === 'auxiliar'
-              ? parseLegacyAssignment(user.department).department || undefined
-              : undefined
-          ),
-      }
+      position: user.servicePosition,
+      department:
+        user.serviceDepartment ??
+        (
+          user.servicePosition === 'encargado' || user.servicePosition === 'auxiliar'
+            ? parseLegacyAssignment(user.department).department || undefined
+            : undefined
+        ),
+    }
     : parseLegacyAssignment(user.department);
   const label = buildDepartmentLabel(legacy.position ?? 'none', legacy.department ?? '');
   return legacy.position && legacy.position !== 'none' && label
@@ -163,7 +163,9 @@ export function UserFormScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
 
-  const { congregationId, isAdmin, loadingProfile, profileError } = useUser();
+  const { congregationId, isAdmin, isElder, loadingProfile, profileError } = useUser();
+  // Los ancianos pueden EDITAR usuarios existentes, pero NO crear nuevos.
+  const canEdit = isAdmin || (isElder && mode === 'edit');
 
   const [displayName, setDisplayName] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -350,10 +352,10 @@ export function UserFormScreen() {
     const label = buildDepartmentLabel(servicePositionDraft, department);
     return label
       ? {
-          position: servicePositionDraft,
-          department: department || undefined,
-          label,
-        }
+        position: servicePositionDraft,
+        department: department || undefined,
+        label,
+      }
       : null;
   }, [serviceDepartmentDraft, servicePositionDraft]);
 
@@ -396,8 +398,33 @@ export function UserFormScreen() {
     );
   };
 
+  // Sincroniza privilegios de nombramiento cuando cambia el rol.
+  // Anciano → isElder fijo; Siervo ministerial → isMinisterialServant fijo;
+  // Publicador → ninguno marcado (no se pueden asignar manualmente).
+  useEffect(() => {
+    setPrivileges((current) => {
+      const next = { ...current };
+      if (role === 'admin') {
+        // Anciano
+        next.isElder = true;
+        next.isMinisterialServant = false;
+      } else if (role === 'supervisor') {
+        // Siervo ministerial
+        next.isElder = false;
+        next.isMinisterialServant = true;
+      } else {
+        // Publicador: ningún nombramiento
+        next.isElder = false;
+        next.isMinisterialServant = false;
+      }
+      return next;
+    });
+  }, [role]);
+
   const togglePrivilege = (key: keyof UserPrivileges) => {
     if (!isAdmin) return;
+    // Anciano y Siervo Ministerial son controlados por el Rol — no se pueden tocar directamente.
+    if (key === 'isElder' || key === 'isMinisterialServant') return;
 
     setPrivileges((current) => {
       const nextValue = !current[key];
@@ -406,18 +433,10 @@ export function UserFormScreen() {
         [key]: nextValue,
       };
 
-      if (key === 'isElder' && nextValue) {
-        next.isMinisterialServant = false;
-      }
-
-      if (key === 'isMinisterialServant' && nextValue) {
-        next.isElder = false;
-      }
-
+      // Precursor Regular y Auxiliar son mutuamente excluyentes.
       if (key === 'isRegularPioneer' && nextValue) {
         next.isAuxiliaryPioneer = false;
       }
-
       if (key === 'isAuxiliaryPioneer' && nextValue) {
         next.isRegularPioneer = false;
       }
@@ -454,38 +473,38 @@ export function UserFormScreen() {
         ? 'Un usuario no puede ser Precursor Regular y Auxiliar al mismo tiempo.'
         : privileges.isElder && privileges.isMinisterialServant
           ? 'Un usuario no puede ser Anciano y Siervo Ministerial al mismo tiempo.'
-        : undefined;
+          : undefined;
 
     const nextErrors: FormErrors =
       mode === 'create'
         ? {
-            firstName: validateRequired(firstName, 'El primer nombre'),
-            lastName: validateRequired(lastName, 'El apellido paterno'),
-            password:
-              validateRequired(password, 'La contrasena') ??
-              validateMinLength(password, 6, 'La contrasena'),
-            gender: gender ? undefined : 'El genero es requerido.',
-            assignment: assignmentError,
-            privileges: privilegesError,
-          }
+          firstName: validateRequired(firstName, 'El primer nombre'),
+          lastName: validateRequired(lastName, 'El apellido paterno'),
+          password:
+            validateRequired(password, 'La contrasena') ??
+            validateMinLength(password, 6, 'La contrasena'),
+          gender: gender ? undefined : 'El genero es requerido.',
+          assignment: assignmentError,
+          privileges: privilegesError,
+        }
         : {
-            displayName: validateRequired(displayName, 'El nombre'),
-            newPassword:
-              newPassword.trim().length > 0
-                ? validateMinLength(newPassword, 6, 'La nueva contrasena')
-                : undefined,
-            gender: gender ? undefined : 'El genero es requerido.',
-            assignment: assignmentError,
-            privileges: privilegesError,
-          };
+          displayName: validateRequired(displayName, 'El nombre'),
+          newPassword:
+            newPassword.trim().length > 0
+              ? validateMinLength(newPassword, 6, 'La nueva contrasena')
+              : undefined,
+          gender: gender ? undefined : 'El genero es requerido.',
+          assignment: assignmentError,
+          privileges: privilegesError,
+        };
 
     setErrors(nextErrors);
     return !hasErrors(nextErrors as Record<string, string | undefined>);
   };
 
   const handleSave = async () => {
-    if (!isAdmin) {
-      Alert.alert('Permisos insuficientes', 'Solo administradores pueden crear o editar usuarios.');
+    if (!canEdit) {
+      Alert.alert('Permisos insuficientes', mode === 'edit' ? 'Solo administradores y ancianos pueden editar usuarios.' : 'Solo administradores pueden crear usuarios.');
       return;
     }
 
@@ -610,10 +629,10 @@ export function UserFormScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {!isAdmin ? (
+        {!canEdit ? (
           <View style={styles.permissionNotice}>
             <ThemedText style={styles.permissionText}>
-              Solo administradores pueden guardar cambios en usuarios.
+              {mode === 'edit' ? 'Solo administradores y ancianos pueden editar usuarios.' : 'Solo administradores pueden crear usuarios.'}
             </ThemedText>
           </View>
         ) : null}
@@ -716,7 +735,7 @@ export function UserFormScreen() {
                 onChangeText={setDisplayName}
                 placeholder="Ej: Juan Perez"
                 placeholderTextColor={colors.textDisabled}
-                editable={isAdmin}
+                editable={canEdit}
               />
             </Field>
 
@@ -761,7 +780,7 @@ export function UserFormScreen() {
                 style={[styles.roleChip, gender === item && styles.roleChipActive]}
                 onPress={() => setGender(item)}
                 activeOpacity={0.8}
-                disabled={!isAdmin}
+                disabled={!canEdit}
               >
                 <ThemedText style={[styles.roleChipText, gender === item && styles.roleChipTextActive]}>
                   {GENDER_LABELS[item]}
@@ -779,7 +798,7 @@ export function UserFormScreen() {
             placeholder="10 digitos"
             placeholderTextColor={colors.textDisabled}
             keyboardType="phone-pad"
-            editable={isAdmin}
+            editable={canEdit}
           />
         </Field>
 
@@ -823,15 +842,15 @@ export function UserFormScreen() {
                   activeOpacity={0.8}
                   disabled={disabled}
                 >
-                <ThemedText
-                  style={[
-                    styles.departmentChipText,
-                    servicePositionDraft === item && styles.departmentChipTextActive,
-                    disabledByAssignment && styles.departmentChipTextDisabled,
-                  ]}
-                >
-                  {item === 'none' ? 'Sin asignacion' : USER_SERVICE_POSITION_LABELS[item]}
-                </ThemedText>
+                  <ThemedText
+                    style={[
+                      styles.departmentChipText,
+                      servicePositionDraft === item && styles.departmentChipTextActive,
+                      disabledByAssignment && styles.departmentChipTextDisabled,
+                    ]}
+                  >
+                    {item === 'none' ? 'Sin asignacion' : USER_SERVICE_POSITION_LABELS[item]}
+                  </ThemedText>
                 </TouchableOpacity>
               );
             })}
@@ -860,15 +879,15 @@ export function UserFormScreen() {
                     activeOpacity={0.8}
                     disabled={disabled}
                   >
-                  <ThemedText
-                    style={[
-                      styles.departmentChipText,
-                      serviceDepartmentDraft === item && styles.departmentChipTextActive,
-                      disabledByAssignment && styles.departmentChipTextDisabled,
-                    ]}
-                  >
-                    {USER_SERVICE_DEPARTMENT_LABELS[item]}
-                  </ThemedText>
+                    <ThemedText
+                      style={[
+                        styles.departmentChipText,
+                        serviceDepartmentDraft === item && styles.departmentChipTextActive,
+                        disabledByAssignment && styles.departmentChipTextDisabled,
+                      ]}
+                    >
+                      {USER_SERVICE_DEPARTMENT_LABELS[item]}
+                    </ThemedText>
                   </TouchableOpacity>
                 );
               })}
@@ -876,10 +895,10 @@ export function UserFormScreen() {
             <TouchableOpacity
               style={[
                 styles.addAssignmentButton,
-                (!selectedDraftAssignment || !isAdmin) && styles.addAssignmentButtonDisabled,
+                (!selectedDraftAssignment || !canEdit) && styles.addAssignmentButtonDisabled,
               ]}
               onPress={addServiceAssignment}
-              disabled={!selectedDraftAssignment || !isAdmin}
+              disabled={!selectedDraftAssignment || !canEdit}
               activeOpacity={0.8}
             >
               <Ionicons name="add-outline" size={16} color={colors.primary} />
@@ -890,10 +909,10 @@ export function UserFormScreen() {
           <TouchableOpacity
             style={[
               styles.addAssignmentButton,
-              (!selectedDraftAssignment || !isAdmin) && styles.addAssignmentButtonDisabled,
+              (!selectedDraftAssignment || !canEdit) && styles.addAssignmentButtonDisabled,
             ]}
             onPress={addServiceAssignment}
-            disabled={!selectedDraftAssignment || !isAdmin}
+            disabled={!selectedDraftAssignment || !canEdit}
             activeOpacity={0.8}
           >
             <Ionicons name="add-outline" size={16} color={colors.primary} />
@@ -902,38 +921,43 @@ export function UserFormScreen() {
         ) : null}
 
         <Field label="Privilegios / nombramientos" error={errors.privileges}>
+          <ThemedText style={styles.hintText}>
+            El nombramiento de Anciano o Siervo Ministerial se asigna automaticamente segun el Rol seleccionado.
+          </ThemedText>
           <View style={styles.departmentRow}>
+            {/* Anciano y Siervo Ministerial: bloqueados, derivados del Rol */}
             <ToggleChip
               label={PRIVILEGE_LABELS.isElder}
               selected={Boolean(privileges.isElder)}
-              disabled={!isAdmin}
-              onPress={() => togglePrivilege('isElder')}
+              disabled={true}
+              onPress={() => { }}
             />
             <ToggleChip
               label={PRIVILEGE_LABELS.isMinisterialServant}
               selected={Boolean(privileges.isMinisterialServant)}
-              disabled={!isAdmin}
-              onPress={() => togglePrivilege('isMinisterialServant')}
+              disabled={true}
+              onPress={() => { }}
             />
+            {/* Precursor: libre, mutuamente excluyente */}
             <ToggleChip
               label={PRIVILEGE_LABELS.isRegularPioneer}
               selected={Boolean(privileges.isRegularPioneer)}
-              disabled={!isAdmin}
+              disabled={!canEdit}
               onPress={() => togglePrivilege('isRegularPioneer')}
             />
             <ToggleChip
               label={PRIVILEGE_LABELS.isAuxiliaryPioneer}
               selected={Boolean(privileges.isAuxiliaryPioneer)}
-              disabled={!isAdmin}
+              disabled={!canEdit}
               onPress={() => togglePrivilege('isAuxiliaryPioneer')}
             />
           </View>
         </Field>
 
         <TouchableOpacity
-          style={[styles.saveButton, (saving || !isAdmin) && styles.saveButtonDisabled]}
+          style={[styles.saveButton, (saving || !canEdit) && styles.saveButtonDisabled]}
           onPress={handleSave}
-          disabled={saving || !isAdmin}
+          disabled={saving || !canEdit}
           activeOpacity={0.8}
         >
           {saving ? (

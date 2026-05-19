@@ -189,6 +189,7 @@ service cloud.firestore {
           || isPreachingManager()
           || isOutgoingTalksManager()
           || isAdminOrSupervisor()
+          || isElder()
         );
     }
 
@@ -1264,10 +1265,18 @@ service cloud.firestore {
           && targetDocInMyCongregation()
           && validUserUpdateByAdmin(userId)
         ) || (
+          // Ancianos pueden editar usuarios de su congregacion
+          // incluyendo otros administradores, EXCEPTO usuarios protegidos del sistema.
+          isElder()
+          && storedDocInMyCongregation()
+          && targetDocInMyCongregation()
+          && validUserUpdateByAdmin(userId)
+          && !isSystemPrincipalUserData(resource.data)
+          && !isSystemPrincipalUserData(request.resource.data)
+        ) || (
           validSelfUserUpdate(userId)
         ) || (
           // Registro de token push: el propio usuario actualiza SOLO su token.
-          // Llamado desde registerPushTokenForUser() en notifications-service.ts.
           validPushTokenUpdate(userId)
         ) || (
           // Gestion de grupos de limpieza: solo campos de membresia de limpieza.
@@ -1275,8 +1284,9 @@ service cloud.firestore {
         );
 
       allow delete: if isSuperAdmin() || (
-          isAdmin()
+          (isAdmin() || isElder())
           && storedDocInMyCongregation()
+          && resource.data.role != 'admin'
           && !isSystemPrincipalUserData(resource.data)
         );
 

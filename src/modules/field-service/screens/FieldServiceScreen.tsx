@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import { LoadingState } from '@/src/components/common/LoadingState';
@@ -43,6 +44,7 @@ import type { SaveDayInput } from '@/src/modules/field-service/types/field-servi
 function WebOnlyNotice() {
   const colors = useAppColors();
   const router = useRouter();
+  const { t } = useI18n();
 
   return (
     <SafeAreaView
@@ -72,7 +74,7 @@ function WebOnlyNotice() {
           marginBottom: 10,
         }}
       >
-        Solo disponible en la app
+        {t('fieldService.webOnly')}
       </Text>
       <Text
         style={{
@@ -84,9 +86,7 @@ function WebOnlyNotice() {
           maxWidth: 320,
         }}
       >
-        El contador de horas de predicación utiliza almacenamiento local del
-        dispositivo y no está disponible en la versión web. Descarga la app
-        para iOS o Android para usar esta funcionalidad.
+        {t('fieldService.webOnlyDesc')}
       </Text>
 
       <TouchableOpacity
@@ -104,7 +104,7 @@ function WebOnlyNotice() {
       >
         <Ionicons name="arrow-back" size={18} color={colors.onPrimary} />
         <Text style={{ color: colors.onPrimary, fontWeight: '700', fontSize: 15 }}>
-          Volver al inicio
+          {t('fieldService.backToHome')}
         </Text>
       </TouchableOpacity>
     </SafeAreaView>
@@ -118,6 +118,7 @@ export function FieldServiceScreen() {
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
+  const { t } = useI18n();
 
   // Estado local de navegación del calendario
   const now = new Date();
@@ -243,7 +244,7 @@ export function FieldServiceScreen() {
     if (result.ok) {
       setReportFeedback({
         type: 'success',
-        message: `Informe de ${reportMonthLabel} enviado correctamente.`,
+        message: t('fieldService.successSent', { month: reportMonthLabel }),
       });
       return;
     }
@@ -251,14 +252,14 @@ export function FieldServiceScreen() {
     if (result.reason === 'ALREADY_SENT') {
       setReportFeedback({
         type: 'error',
-        message: 'Este informe mensual ya fue enviado.',
+        message: t('fieldService.errorAlreadySent'),
       });
       return;
     }
 
     setReportFeedback({
       type: 'error',
-      message: `Fuera de ventana. Solo se puede enviar durante los primeros ${result.status.window.graceDays} dias del mes.`,
+      message: t('fieldService.errorOutsideWindow', { days: result.status.window.graceDays }),
     });
   }, [submitMonthlyReport, reportMonthLabel]);
 
@@ -267,7 +268,7 @@ export function FieldServiceScreen() {
   // Funcionalidad solo disponible en iOS/Android (usa almacenamiento local del dispositivo)
   if (Platform.OS === 'web') return <WebOnlyNotice />;
 
-  if (loading) return <LoadingState message="Cargando contador de horas..." />;
+  if (loading) return <LoadingState message={t('common.loading')} />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
 
   const visibleMonthLabel = formatMonthHeader(calYear, calMonth);
@@ -294,8 +295,8 @@ export function FieldServiceScreen() {
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Predicación</Text>
-          <Text style={styles.headerSub}>Contador de horas</Text>
+          <Text style={styles.headerTitle}>{t('fieldService.title')}</Text>
+          <Text style={styles.headerSub}>{t('fieldService.subtitle')}</Text>
         </View>
         <View style={styles.headerRight} />
       </View>
@@ -310,7 +311,7 @@ export function FieldServiceScreen() {
           <View style={[styles.purgeBanner, { backgroundColor: colors.warning + '20', borderColor: colors.warning + '44' }]}>
             <Ionicons name="refresh-circle-outline" size={18} color={colors.warning} />
             <Text style={[styles.purgeText, { color: colors.warning }]}>
-              Los registros se reiniciaron automáticamente (ciclo semestral).
+              {t('fieldService.purgeNotice')}
             </Text>
           </View>
         )}
@@ -323,7 +324,7 @@ export function FieldServiceScreen() {
             </View>
             <View style={styles.monthCardInfo}>
               <Text style={styles.monthCardLabel}>
-                {isCurrentMonth ? 'Este mes' : visibleMonthLabel}
+                {isCurrentMonth ? t('fieldService.thisMonth') : visibleMonthLabel}
               </Text>
               <Text style={styles.monthCardTotal}>
                 {formatMinutes(visibleMonthSummary.totalMinutes)}
@@ -333,7 +334,7 @@ export function FieldServiceScreen() {
               <Text style={styles.monthCardDaysNum}>
                 {visibleMonthSummary.daysWithEntries}
               </Text>
-              <Text style={styles.monthCardDaysLabel}>días</Text>
+              <Text style={styles.monthCardDaysLabel}>{t('fieldService.days')}</Text>
             </View>
           </View>
         </View>
@@ -341,14 +342,14 @@ export function FieldServiceScreen() {
         {/* ── Resumen semanal ── */}
         {weekSummary.weekStart ? (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Semana actual</Text>
+            <Text style={styles.sectionLabel}>{t('fieldService.currentWeek')}</Text>
             <FieldServiceWeekSummary summary={weekSummary} />
           </View>
         ) : null}
 
         {/* ── Calendario ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Calendario</Text>
+          <Text style={styles.sectionLabel}>{t('fieldService.calendar')}</Text>
           <FieldServiceCalendar
             calendar={calendar}
             selectedDate={selectedDate}
@@ -384,7 +385,7 @@ export function FieldServiceScreen() {
                   styles.selectedDayMinutes,
                   { color: selectedDayMinutes > 0 ? colors.success : colors.textMuted }
                 ]}>
-                  {selectedDayMinutes > 0 ? formatMinutes(selectedDayMinutes) : 'Sin registro — toca para agregar'}
+                  {selectedDayMinutes > 0 ? formatMinutes(selectedDayMinutes) : t('fieldService.noRecordTapToAdd')}
                 </Text>
               </View>
               <Ionicons name="create-outline" size={18} color={colors.textMuted} />
@@ -400,26 +401,26 @@ export function FieldServiceScreen() {
                 <Ionicons name="send-outline" size={18} color={colors.accent} />
               </View>
               <View style={styles.reportHeaderText}>
-                <Text style={styles.reportTitle}>Informe mensual</Text>
+                <Text style={styles.reportTitle}>{t('fieldService.monthlyReport')}</Text>
                 <Text style={styles.reportMonthText}>{reportMonthLabel}</Text>
               </View>
             </View>
 
             <Text style={styles.reportHoursText}>
-              Horas registradas: {formatMinutes(reportMonthSummary.totalMinutes)}
+              {t('fieldService.recordedHours', { hours: formatMinutes(reportMonthSummary.totalMinutes) })}
             </Text>
 
             {monthlyReportStatus.alreadySent ? (
               <Text style={[styles.reportStatusText, { color: colors.success }]}>
-                Informe enviado {sentAtLabel ? `el ${sentAtLabel}` : ''}.
+                {sentAtLabel ? t('fieldService.reportSentOn', { date: sentAtLabel }) : t('fieldService.reportSent')}
               </Text>
             ) : monthlyReportStatus.canSubmit ? (
               <Text style={[styles.reportStatusText, { color: colors.primary }]}>
-                Disponible para enviar hasta el {reportDeadlineLabel}.
+                {t('fieldService.availableUntil', { date: reportDeadlineLabel })}
               </Text>
             ) : (
               <Text style={[styles.reportStatusText, { color: colors.warning }]}>
-                Ventana cerrada. Se habilita del 1 al {monthlyReportStatus.window.graceDays} de cada mes.
+                {t('fieldService.windowClosed', { graceDays: monthlyReportStatus.window.graceDays })}
               </Text>
             )}
 
@@ -451,7 +452,7 @@ export function FieldServiceScreen() {
                   { color: monthlyReportStatus.canSubmit ? '#fff' : colors.textDisabled },
                 ]}
               >
-                {monthlyReportStatus.alreadySent ? 'Enviado' : 'Enviar informe'}
+                {monthlyReportStatus.alreadySent ? t('fieldService.sent') : t('fieldService.sendReport')}
               </Text>
             </TouchableOpacity>
 
@@ -499,7 +500,7 @@ export function FieldServiceScreen() {
         <View style={styles.infoNote}>
           <Ionicons name="information-circle-outline" size={14} color={colors.textDisabled} />
           <Text style={styles.infoNoteText}>
-            Los registros se almacenan solo en este dispositivo y se reinician automáticamente cada 6 meses.
+            {t('fieldService.infoNote')}
           </Text>
         </View>
       </ScrollView>

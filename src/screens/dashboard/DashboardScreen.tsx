@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, useWindowDimensions, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useI18n } from '@/src/i18n/index';
 
 import { AssignmentCard } from '@/src/components/cards/AssignmentCard';
 import { MeetingCard } from '@/src/components/cards/MeetingCard';
@@ -51,11 +52,12 @@ export function DashboardScreen() {
   const colors = useAppColors();
   const isCompact = width < 520;
   const styles = createStyles(colors, isCompact);
+  const { t } = useI18n();
 
   const [metrics, setMetrics] = useState<Partial<DashboardMetrics>>({});
   const [recentMeetings, setRecentMeetings] = useState<Meeting[]>([]);
   const [pendingAssignments, setPendingAssignments] = useState<Assignment[]>([]);
-  const [congregationName, setCongregationName] = useState<string>('Sin congregacion');
+  const [congregationName, setCongregationName] = useState<string>(t('dashboard.noCongregation'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -102,7 +104,7 @@ export function DashboardScreen() {
       setMetrics({});
       setRecentMeetings([]);
       setPendingAssignments([]);
-      setError('No hay una sesion activa.');
+      setError(t('dashboard.noActiveSession'));
       setLoading(false);
       setRefreshing(false);
       loadingRef.current = false;
@@ -113,7 +115,7 @@ export function DashboardScreen() {
       setMetrics({});
       setRecentMeetings([]);
       setPendingAssignments([]);
-      setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
+      setError(profileError ?? t('dashboard.noCongregationFound'));
       setLoading(false);
       setRefreshing(false);
       loadingRef.current = false;
@@ -172,7 +174,7 @@ export function DashboardScreen() {
 
   useEffect(() => {
     if (!congregationId) {
-      setCongregationName('Sin congregacion');
+      setCongregationName(t('dashboard.noCongregation'));
       return;
     }
 
@@ -200,16 +202,16 @@ export function DashboardScreen() {
     void refreshEvents();
   };
 
-  if (loading || loadingProfile) return <LoadingState message="Cargando dashboard..." />;
+  if (loading || loadingProfile) return <LoadingState message={t('dashboard.loading')} />;
   if (error) return <ErrorState message={error} onRetry={() => void loadData(true)} />;
 
   return (
     <ScreenContainer refreshing={refreshing} onRefresh={onRefresh}>
       <View style={styles.greeting}>
         <View style={styles.greetingMain}>
-          <ThemedText style={styles.greetingLabel}>Bienvenido,</ThemedText>
+          <ThemedText style={styles.greetingLabel}>{t('dashboard.welcome')}</ThemedText>
           <ThemedText style={styles.greetingName} numberOfLines={1}>
-            {appUser?.displayName?.split(' ')[0] ?? 'Usuario'}
+            {appUser?.displayName?.split(' ')[0] ?? t('dashboard.user')}
           </ThemedText>
           <View style={styles.congregationPill}>
             <Ionicons name="home-outline" size={14} color={colors.textMuted} />
@@ -230,14 +232,14 @@ export function DashboardScreen() {
       </View>
 
       <View style={styles.statsRow}>
-        <StatCard title="Asignaciones" value={metrics.totalAssignments ?? 0} icon="checkmark-done-outline" color={colors.primary} />
-        <StatCard title="Pendientes" value={metrics.pendingAssignments ?? 0} icon="time-outline" color={colors.warning} />
+        <StatCard title={t('dashboard.assignments')} value={metrics.totalAssignments ?? 0} icon="checkmark-done-outline" color={colors.primary} />
+        <StatCard title={t('dashboard.pending')} value={metrics.pendingAssignments ?? 0} icon="time-outline" color={colors.warning} />
       </View>
 
       {isAdmin && (
         <View style={styles.statsRow}>
-          <StatCard title="Reuniones" value={metrics.totalMeetings ?? 0} icon="calendar-outline" color={colors.accent} />
-          <StatCard title="Usuarios" value={metrics.totalUsers ?? 0} icon="people-outline" color={colors.secondary} />
+          <StatCard title={t('dashboard.meetings')} value={metrics.totalMeetings ?? 0} icon="calendar-outline" color={colors.accent} />
+          <StatCard title={t('dashboard.users')} value={metrics.totalUsers ?? 0} icon="people-outline" color={colors.secondary} />
         </View>
       )}
 
@@ -245,7 +247,7 @@ export function DashboardScreen() {
         <View style={styles.alertBanner}>
           <Ionicons name="warning-outline" size={16} color={colors.error} />
           <ThemedText style={styles.alertText}>
-            {metrics.overdueAssignments} asignacion{metrics.overdueAssignments > 1 ? 'es vencidas' : ' vencida'}
+            {t(metrics.overdueAssignments === 1 ? 'dashboard.overdueCount' : 'dashboard.overdueCount_plural', { count: metrics.overdueAssignments })}
           </ThemedText>
         </View>
       ) : null}
@@ -262,9 +264,9 @@ export function DashboardScreen() {
           <Ionicons name="document-text-outline" size={20} color={colors.primary} />
         </View>
         <View style={styles.preachingText}>
-          <ThemedText style={styles.preachingTitle}>Predicacion</ThemedText>
+          <ThemedText style={styles.preachingTitle}>{t('dashboard.preaching')}</ThemedText>
           <ThemedText style={styles.preachingSubtitle}>
-            Enviar informe mensual
+            {t('dashboard.preachingSubtitle')}
           </ThemedText>
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
@@ -288,13 +290,13 @@ export function DashboardScreen() {
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <ThemedText style={styles.sectionTitle}>Proximas reuniones</ThemedText>
+          <ThemedText style={styles.sectionTitle}>{t('dashboard.upcomingMeetings')}</ThemedText>
           <TouchableOpacity onPress={() => router.push('/(protected)/(tabs)/meetings' as any)}>
-            <ThemedText style={styles.seeAll}>Ver todas</ThemedText>
+            <ThemedText style={styles.seeAll}>{t('dashboard.seeAll')}</ThemedText>
           </TouchableOpacity>
         </View>
         {recentMeetings.length === 0 ? (
-          <ThemedText style={styles.emptyText}>No hay reuniones programadas.</ThemedText>
+          <ThemedText style={styles.emptyText}>{t('dashboard.noUpcomingMeetings')}</ThemedText>
         ) : (
           <View style={styles.list}>
             {recentMeetings.map((meeting) => (
@@ -306,13 +308,13 @@ export function DashboardScreen() {
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <ThemedText style={styles.sectionTitle}>Asignaciones pendientes</ThemedText>
+          <ThemedText style={styles.sectionTitle}>{t('dashboard.pendingAssignments')}</ThemedText>
           <TouchableOpacity onPress={() => router.push('/(protected)/(tabs)/assignments' as any)}>
-            <ThemedText style={styles.seeAll}>Ver todas</ThemedText>
+            <ThemedText style={styles.seeAll}>{t('dashboard.seeAll')}</ThemedText>
           </TouchableOpacity>
         </View>
         {pendingAssignments.length === 0 ? (
-          <ThemedText style={styles.emptyText}>Sin asignaciones pendientes.</ThemedText>
+          <ThemedText style={styles.emptyText}>{t('dashboard.noPendingAssignments')}</ThemedText>
         ) : (
           <View style={styles.list}>
             {pendingAssignments.map((assignment, index) => (

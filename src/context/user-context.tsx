@@ -29,6 +29,7 @@ interface UserContextType {
   isAdmin: boolean;
   isSupervisor: boolean;
   isAdminOrSupervisor: boolean;
+  isElder: boolean;
   isSessionValid: boolean;
   loadingProfile: boolean;
   profileError: string | null;
@@ -164,6 +165,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const isAdmin = role === 'admin';
     const isSupervisor = role === 'supervisor';
     const isAdminOrSupervisor = isAdmin || isSupervisor;
+    const isElder =
+      appUser?.privileges?.isElder === true || appUser?.isElder === true;
 
     const isSessionValid = Boolean(
       uid && appUser && isActive && congregationId && !congregationBlocked
@@ -183,6 +186,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       isAdmin,
       isSupervisor,
       isAdminOrSupervisor,
+      isElder,
       isSessionValid,
       loadingProfile,
       profileError,

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Platform, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { useI18n } from '@/src/i18n/index';
 
 import { ThemedText } from '@/src/components/themed-text';
 import {
@@ -45,6 +46,7 @@ export function AssignmentFilters({
 }: AssignmentFiltersProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
 
   const showSubType = useMemo(
     () => activeTab === 'midweek' || activeTab === 'weekend',
@@ -54,13 +56,13 @@ export function AssignmentFilters({
   return (
     <View style={styles.container}>
       <View style={styles.rowBetween}>
-        <ThemedText style={styles.title}>Filtros</ThemedText>
+        <ThemedText style={styles.title}>{t('assignments.filtersTitle')}</ThemedText>
         <TouchableOpacity style={styles.resetButton} onPress={onReset} activeOpacity={0.8}>
-          <ThemedText style={styles.resetText}>Limpiar</ThemedText>
+          <ThemedText style={styles.resetText}>{t('assignments.filtersClear')}</ThemedText>
         </TouchableOpacity>
       </View>
 
-      <Field label="Fecha exacta (AAAA-MM-DD)">
+      <Field label={t('assignments.filtersDateExact')}>
         <DateFieldInput
           value={filters.exactDate}
           onChangeText={(value) => onUpdate('exactDate', value)}
@@ -70,7 +72,7 @@ export function AssignmentFilters({
 
       <View style={styles.inlineFields}>
         <View style={styles.inlineItem}>
-          <Field label="Desde">
+          <Field label={t('assignments.filtersDateFrom')}>
             <DateFieldInput
               value={filters.rangeStart}
               onChangeText={(value) => onUpdate('rangeStart', value)}
@@ -80,7 +82,7 @@ export function AssignmentFilters({
         </View>
 
         <View style={styles.inlineItem}>
-          <Field label="Hasta">
+          <Field label={t('assignments.filtersDateTo')}>
             <DateFieldInput
               value={filters.rangeEnd}
               onChangeText={(value) => onUpdate('rangeEnd', value)}
@@ -90,7 +92,7 @@ export function AssignmentFilters({
         </View>
       </View>
 
-      <Field label="Categoria">
+      <Field label={t('assignments.filtersCategory')}>
         <View style={styles.chipRow}>
           {CATEGORY_FILTERS.map((category) => {
             const selected = activeTab === category;
@@ -112,12 +114,12 @@ export function AssignmentFilters({
       </Field>
 
       {showSubType ? (
-        <Field label="Subtipo (solo reuniones)">
+        <Field label={t('assignments.filtersSubtype')}>
           <View style={styles.chipRow}>
             {SUBTYPE_FILTERS.map((subType) => {
               const selected = filters.subType === subType;
               const label =
-                subType === 'all' ? 'Todos' : ASSIGNMENT_SUBTYPE_LABELS[subType];
+                subType === 'all' ? t('assignments.filtersAll') : ASSIGNMENT_SUBTYPE_LABELS[subType];
 
               return (
                 <TouchableOpacity
@@ -136,17 +138,17 @@ export function AssignmentFilters({
         </Field>
       ) : null}
 
-      <Field label="Persona asignada">
+      <Field label={t('assignments.filtersPerson')}>
         <TextInput
           style={styles.input}
           value={filters.assignedPerson}
           onChangeText={(value) => onUpdate('assignedPerson', value)}
-          placeholder="Buscar por nombre"
+          placeholder={t('assignments.filtersSearchPerson')}
           placeholderTextColor={colors.textDisabled}
         />
       </Field>
 
-      <Field label="Congregacion">
+      <Field label={t('assignments.filtersCongregation')}>
         <TextInput
           style={[styles.input, styles.readOnlyInput]}
           value={congregationName}
@@ -159,12 +161,12 @@ export function AssignmentFilters({
         />
       </Field>
 
-      <Field label="Estado (opcional)">
+      <Field label={t('assignments.filtersStatus')}>
         <View style={styles.chipRow}>
           {STATUS_FILTERS.map((status) => {
             const selected = filters.status === status;
             const label =
-              status === 'all' ? 'Todos' : ASSIGNMENT_STATUS_LABELS[status];
+              status === 'all' ? t('assignments.filtersAll') : ASSIGNMENT_STATUS_LABELS[status];
 
             return (
               <TouchableOpacity

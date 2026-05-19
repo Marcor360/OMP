@@ -13,6 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning-permission';
@@ -33,6 +34,7 @@ export function CleaningDashboardScreen() {
   const router = useRouter();
   const { congregationId, loading: permLoading } = useCleaningPermission();
   const { groups, loading, error, refresh } = useCleaningGroups(congregationId);
+  const { t } = useI18n();
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
@@ -197,13 +199,13 @@ export function CleaningDashboardScreen() {
   });
 
   const filterOptions: { label: string; value: FilterType }[] = [
-    { label: 'Todos', value: 'all' },
-    { label: 'Activos', value: 'active' },
-    { label: 'Familias', value: 'family' },
-    { label: 'Inactivos', value: 'inactive' },
+    { label: t('cleaning.filterAll'), value: 'all' },
+    { label: t('cleaning.filterActive'), value: 'active' },
+    { label: t('cleaning.filterFamily'), value: 'family' },
+    { label: t('cleaning.filterInactive'), value: 'inactive' },
   ];
 
-  if (permLoading || loading) return <LoadingState message="Cargando módulo de limpieza..." />;
+  if (permLoading || loading) return <LoadingState message={t('cleaning.loading')} />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   return (
@@ -215,10 +217,9 @@ export function CleaningDashboardScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTextBlock}>
-          <Text style={styles.headerTitle}>Limpieza</Text>
+          <Text style={styles.headerTitle}>{t('cleaning.title')}</Text>
           <Text style={styles.headerSub}>
-            {stats.totalGroups} grupo{stats.totalGroups !== 1 ? 's' : ''} registrado
-            {stats.totalGroups !== 1 ? 's' : ''}
+            {t(stats.totalGroups === 1 ? 'cleaning.groupsRegistered' : 'cleaning.groupsRegistered_plural', { count: stats.totalGroups })}
           </Text>
         </View>
         <TouchableOpacity
@@ -231,23 +232,22 @@ export function CleaningDashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Estadísticas */}
       <View style={styles.statsRow}>
         <CleaningStatsCard
           icon="layers-outline"
-          label="Total grupos"
+          label={t('cleaning.statsTotal')}
           value={stats.totalGroups}
           color={colors.primary}
         />
         <CleaningStatsCard
           icon="checkmark-circle-outline"
-          label="Activos"
+          label={t('cleaning.statsActive')}
           value={stats.activeGroups}
           color={colors.success}
         />
         <CleaningStatsCard
           icon="people-outline"
-          label="Asignados"
+          label={t('cleaning.statsAssigned')}
           value={stats.totalAssigned}
           color={colors.info}
         />
@@ -260,7 +260,7 @@ export function CleaningDashboardScreen() {
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Buscar grupo..."
+          placeholder={t('cleaning.searchPlaceholder')}
           placeholderTextColor={colors.textDisabled}
           returnKeyType="search"
           clearButtonMode="while-editing"
@@ -300,7 +300,7 @@ export function CleaningDashboardScreen() {
       </View>
 
       {/* Lista de grupos */}
-      <Text style={styles.sectionLabel}>Grupos de limpieza</Text>
+      <Text style={styles.sectionLabel}>{t('cleaning.groupsListTitle')}</Text>
 
       <FlatList
         data={filtered}
@@ -321,13 +321,13 @@ export function CleaningDashboardScreen() {
             <EmptyState
               title={
                 search || filter !== 'all'
-                  ? 'Sin resultados'
-                  : 'Sin grupos de limpieza'
+                  ? t('cleaning.emptySearchTitle')
+                  : t('cleaning.emptyGroupsTitle')
               }
               description={
                 search || filter !== 'all'
-                  ? 'Prueba ajustando el filtro o la búsqueda.'
-                  : 'Crea el primer grupo usando el botón +.'
+                  ? t('cleaning.emptySearchDesc')
+                  : t('cleaning.emptyGroupsDesc')
               }
               icon="sparkles-outline"
             />

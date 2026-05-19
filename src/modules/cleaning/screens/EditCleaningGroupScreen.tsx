@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning-permission';
@@ -42,6 +43,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
     congregationId
   );
   const { refreshAll } = useCleaningCache();
+  const { t } = useI18n();
 
   const [formValues, setFormValues] = useState<CleaningGroupFormValues>({
     name: '',
@@ -93,7 +95,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
       if (err instanceof CleaningServiceError) {
         setGlobalError(err.message);
       } else {
-        setGlobalError('Error al guardar los cambios. Intenta de nuevo.');
+        setGlobalError(t('cleaning.errorUpdate'));
       }
     } finally {
       setSubmitting(false);
@@ -181,8 +183,8 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
     },
   });
 
-  if (permLoading || loading) return <LoadingState message="Cargando grupo..." />;
-  if (error || !group) return <ErrorState message={error ?? 'Grupo no encontrado.'} onRetry={refresh} />;
+  if (permLoading || loading) return <LoadingState message={t('cleaning.loadingGroup')} />;
+  if (error || !group) return <ErrorState message={error ?? t('cleaning.groupNotFound')} onRetry={refresh} />;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -199,7 +201,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
         >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Editar grupo</Text>
+        <Text style={styles.headerTitle}>{t('cleaning.editTitle')}</Text>
       </View>
 
       <ScrollView
@@ -209,7 +211,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       >
         <View style={styles.formContainer}>
-          <Text style={styles.sectionTitle}>Información del grupo</Text>
+          <Text style={styles.sectionTitle}>{t('cleaning.groupInfoSection')}</Text>
           <CleaningGroupForm
             values={formValues}
             onChange={setFormValues}
@@ -232,12 +234,12 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
           onPress={handleSubmit}
           disabled={submitting}
           accessibilityRole="button"
-          accessibilityLabel="Guardar cambios"
+          accessibilityLabel={t('cleaning.saveChangesBtn')}
         >
           {submitting ? (
             <ActivityIndicator color={colors.onPrimary} size="small" />
           ) : (
-            <Text style={styles.saveText}>Guardar cambios</Text>
+            <Text style={styles.saveText}>{t('cleaning.saveChangesBtn')}</Text>
           )}
         </TouchableOpacity>
       </View>

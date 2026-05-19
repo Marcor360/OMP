@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useI18n } from '@/src/i18n/index';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
@@ -45,10 +46,10 @@ type FormErrors = {
   duplicate?: string;
 };
 
-const STATUS_LABELS: Record<OutgoingTalkStatus, string> = {
-  scheduled: 'Programada',
-  cancelled: 'Cancelada',
-  completed: 'Completada',
+const getStatusLabel = (status: OutgoingTalkStatus, t: any): string => {
+  if (status === 'scheduled') return t('assignments.statusScheduled');
+  if (status === 'cancelled') return t('assignments.statusCancelled');
+  return t('assignments.statusCompleted');
 };
 
 const initialDate = (): string => {
@@ -63,6 +64,7 @@ export function OutgoingTalksScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { appUser, congregationId, loadingProfile, profileError } = useUser();
+  const { t } = useI18n();
 
   const [talks, setTalks] = useState<OutgoingTalk[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -115,7 +117,7 @@ export function OutgoingTalksScreen() {
       .catch(() => {
         if (!cancelled) {
           setUsers([]);
-          setUsersError('No se pudo cargar la lista de usuarios de la congregacion.');
+          setUsersError(t('assignments.errorLoadUsers'));
         }
       });
 
@@ -194,23 +196,23 @@ export function OutgoingTalksScreen() {
 
     const nextErrors: FormErrors = {
       speakerUserId: !speakerUserId
-        ? 'El hermano es obligatorio.'
+        ? t('assignments.errorSpeakerRequired')
         : !selectedSpeaker
-          ? 'Solo ancianos y siervos ministeriales pueden ser asignados para salir a discursar.'
+          ? t('assignments.errorSpeakerRole')
           : undefined,
       destinationCongregationName:
         destinationCongregationName.trim().length === 0
-          ? 'La congregacion destino es obligatoria.'
+          ? t('assignments.errorDestCongRequired')
           : undefined,
       talkDate:
         talkDate.trim().length === 0
-          ? 'La fecha es obligatoria.'
+          ? t('assignments.errorDateRequired')
           : !isWeekendDateKey(talkDate)
-            ? 'La fecha debe ser sabado o domingo.'
+            ? t('assignments.errorDateWeekend')
             : undefined,
-      talkTime: talkTime.trim().length === 0 ? 'La hora es obligatoria.' : undefined,
+      talkTime: talkTime.trim().length === 0 ? t('assignments.errorTimeRequired') : undefined,
       duplicate: duplicate
-        ? 'Este hermano ya tiene una salida activa en esa misma semana.'
+        ? t('assignments.errorDuplicate')
         : undefined,
     };
 
@@ -237,14 +239,14 @@ export function OutgoingTalksScreen() {
 
       if (editingTalk) {
         await updateOutgoingTalkByManager(payload);
-        Alert.alert('Exito', 'Salida actualizada.');
+        Alert.alert(t('common.success'), t('assignments.successUpdate'));
       } else {
         await createOutgoingTalkByManager(payload);
-        Alert.alert('Exito', 'Salida registrada.');
+        Alert.alert(t('common.success'), t('assignments.successRegister'));
       }
       resetForm();
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'No se pudo guardar la salida.');
+      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('assignments.errorSave'));
     } finally {
       setSaving(false);
     }
@@ -268,26 +270,26 @@ export function OutgoingTalksScreen() {
         await completeOutgoingTalkByManager(payload);
       }
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'No se pudo actualizar la salida.');
+      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('assignments.errorUpdate'));
     }
   };
 
   if (loadingProfile || loading) {
-    return <LoadingState message="Cargando salidas a discursar..." />;
+    return <LoadingState message={t('assignments.loadingOutgoing')} />;
   }
 
   if (!congregationId) {
-    return <ErrorState message={profileError ?? 'No hay congregacion activa.'} />;
+    return <ErrorState message={profileError ?? t('assignments.noActiveCongregation')} />;
   }
 
   if (!canManage) {
     return (
       <ScreenContainer scrollable={false} padded={false}>
-        <PageHeader title="Salidas a discursar" showBack />
+        <PageHeader title={t('assignments.outgoingTalksTitle')} showBack />
         <View style={styles.form}>
           <View style={styles.notice}>
             <ThemedText style={styles.noticeText}>
-              No tienes permisos para gestionar salidas a discursar.
+              {t('assignments.noPermissionManage')}
             </ThemedText>
           </View>
         </View>
@@ -297,12 +299,12 @@ export function OutgoingTalksScreen() {
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
-      <PageHeader title="Salidas a discursar" subtitle="Asignaciones" showBack />
+      <PageHeader title={t('assignments.outgoingTalksTitle')} subtitle={t('assignments.assignmentsSubtitle')} showBack />
       <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <ThemedText style={styles.sectionTitle}>
-              {editingTalk ? 'Editar salida' : 'Registrar salida'}
+              {editingTalk ? t('assignments.editOutgoingTalk') : t('assignments.registerOutgoingTalk')}
             </ThemedText>
             {editingTalk ? (
               <TouchableOpacity style={styles.iconButton} onPress={resetForm}>
@@ -311,7 +313,7 @@ export function OutgoingTalksScreen() {
             ) : null}
           </View>
 
-          <Field label="Hermano *" error={errors.speakerUserId}>
+          <Field label={t('assignments.speakerLabel')} error={errors.speakerUserId}>
             <TouchableOpacity
               style={[styles.selectTrigger, errors.speakerUserId && styles.inputError]}
               onPress={() => {
@@ -324,7 +326,7 @@ export function OutgoingTalksScreen() {
                 style={selectedSpeaker ? styles.selectText : styles.selectPlaceholder}
                 numberOfLines={1}
               >
-                {selectedSpeaker?.displayName ?? 'Seleccionar anciano o siervo ministerial'}
+                {selectedSpeaker?.displayName ?? t('assignments.selectElderMs')}
               </ThemedText>
               <Ionicons
                 name={speakerExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
@@ -339,7 +341,7 @@ export function OutgoingTalksScreen() {
                   style={styles.input}
                   value={speakerSearch}
                   onChangeText={setSpeakerSearch}
-                  placeholder="Buscar por nombre o correo"
+                  placeholder={t('assignments.searchNameEmail')}
                   placeholderTextColor={colors.textDisabled}
                 />
                 <ScrollView
@@ -367,15 +369,15 @@ export function OutgoingTalksScreen() {
                         <ThemedText style={styles.userOptionEmail}>{user.email}</ThemedText>
                         <ThemedText style={styles.userOptionMeta}>
                           {user.isElder || user.privileges?.isElder
-                            ? 'Anciano'
-                            : 'Siervo ministerial'}
+                            ? t('assignments.elder')
+                            : t('assignments.ms')}
                         </ThemedText>
                       </TouchableOpacity>
                     );
                   })}
                   {filteredEligibleSpeakers.length === 0 ? (
                     <ThemedText style={styles.emptyDropdownText}>
-                      No hay coincidencias entre los ancianos y siervos ministeriales activos.
+                      {t('assignments.noActiveEldersMs')}
                     </ThemedText>
                   ) : null}
                 </ScrollView>
@@ -385,27 +387,27 @@ export function OutgoingTalksScreen() {
             {usersError ? <ThemedText style={styles.errorText}>{usersError}</ThemedText> : null}
             {eligibleSpeakers.length === 0 && !usersError ? (
               <ThemedText style={styles.hintText}>
-                No hay ancianos o siervos ministeriales activos marcados en esta congregacion. Un admin debe marcar el nombramiento en Usuarios.
+                {t('assignments.noEldersMsHint')}
               </ThemedText>
             ) : null}
             <ThemedText style={styles.hintText}>
-              Los roles admin, supervisor o precursor no cuentan para esta lista si no estan marcados tambien como anciano o siervo ministerial.
+              {t('assignments.adminRoleHint')}
             </ThemedText>
           </Field>
 
-          <Field label="Congregacion destino *" error={errors.destinationCongregationName}>
+          <Field label={t('assignments.destCongLabel')} error={errors.destinationCongregationName}>
             <TextInput
               style={[styles.input, errors.destinationCongregationName && styles.inputError]}
               value={destinationCongregationName}
               onChangeText={setDestinationCongregationName}
-              placeholder="Nombre de la congregacion"
+              placeholder={t('assignments.destCongPlaceholder')}
               placeholderTextColor={colors.textDisabled}
             />
           </Field>
 
           <View style={styles.row}>
             <View style={styles.col}>
-              <Field label="Fecha (YYYY-MM-DD) *" error={errors.talkDate}>
+              <Field label={t('assignments.dateLabel')} error={errors.talkDate}>
                 <TextInput
                   style={[styles.input, errors.talkDate && styles.inputError]}
                   value={talkDate}
@@ -416,7 +418,7 @@ export function OutgoingTalksScreen() {
               </Field>
             </View>
             <View style={styles.col}>
-              <Field label="Hora (HH:mm) *" error={errors.talkTime}>
+              <Field label={t('assignments.timeLabel')} error={errors.talkTime}>
                 <TextInput
                   style={[styles.input, errors.talkTime && styles.inputError]}
                   value={talkTime}
@@ -428,19 +430,19 @@ export function OutgoingTalksScreen() {
             </View>
           </View>
 
-          <Field label="Notas">
+          <Field label={t('assignments.notesLabel')}>
             <TextInput
               style={[styles.input, styles.textarea]}
               value={notes}
               onChangeText={setNotes}
               multiline
-              placeholder="Opcional"
+              placeholder={t('assignments.optional')}
               placeholderTextColor={colors.textDisabled}
             />
           </Field>
 
           {editingTalk ? (
-            <Field label="Estado">
+            <Field label={t('assignments.statusLabel')}>
               <View style={styles.chips}>
                 {(['scheduled', 'cancelled', 'completed'] as OutgoingTalkStatus[]).map((option) => {
                   const selected = status === option;
@@ -451,7 +453,7 @@ export function OutgoingTalksScreen() {
                       onPress={() => setStatus(option)}
                     >
                       <ThemedText style={[styles.chipText, selected && styles.chipTextActive]}>
-                        {STATUS_LABELS[option]}
+                        {getStatusLabel(option, t)}
                       </ThemedText>
                     </TouchableOpacity>
                   );
@@ -471,16 +473,16 @@ export function OutgoingTalksScreen() {
               <ActivityIndicator color={colors.onPrimary} />
             ) : (
               <ThemedText style={styles.primaryText}>
-                {editingTalk ? 'Guardar cambios' : 'Registrar salida'}
+                {editingTalk ? t('assignments.saveChanges') : t('assignments.registerOutgoingTalk')}
               </ThemedText>
             )}
           </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Salidas programadas</ThemedText>
+          <ThemedText style={styles.sectionTitle}>{t('assignments.scheduledTalks')}</ThemedText>
           {talks.length === 0 ? (
-            <ThemedText style={styles.hintText}>No hay salidas registradas.</ThemedText>
+            <ThemedText style={styles.hintText}>{t('assignments.noTalks')}</ThemedText>
           ) : (
             <View style={styles.list}>
               {talks.map((talk) => (
@@ -492,12 +494,12 @@ export function OutgoingTalksScreen() {
                         {talk.destinationCongregationName} - {talk.talkDate} {talk.talkTime}
                       </ThemedText>
                     </View>
-                    <ThemedText style={styles.statusText}>{STATUS_LABELS[talk.status]}</ThemedText>
+                    <ThemedText style={styles.statusText}>{getStatusLabel(talk.status, t)}</ThemedText>
                   </View>
                   {talk.notes ? <ThemedText style={styles.hintText}>{talk.notes}</ThemedText> : null}
                   <View style={styles.actions}>
                     <TouchableOpacity style={styles.secondaryButton} onPress={() => startEdit(talk)}>
-                      <ThemedText style={styles.secondaryText}>Editar</ThemedText>
+                      <ThemedText style={styles.secondaryText}>{t('assignments.editBtn')}</ThemedText>
                     </TouchableOpacity>
                     {talk.status === 'scheduled' ? (
                       <>
@@ -505,13 +507,13 @@ export function OutgoingTalksScreen() {
                           style={styles.secondaryButton}
                           onPress={() => void updateStatus(talk, 'cancelled')}
                         >
-                          <ThemedText style={styles.secondaryText}>Cancelar</ThemedText>
+                          <ThemedText style={styles.secondaryText}>{t('assignments.cancelBtn')}</ThemedText>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.secondaryButton}
                           onPress={() => void updateStatus(talk, 'completed')}
                         >
-                          <ThemedText style={styles.secondaryText}>Completar</ThemedText>
+                          <ThemedText style={styles.secondaryText}>{t('assignments.completeBtn')}</ThemedText>
                         </TouchableOpacity>
                       </>
                     ) : null}

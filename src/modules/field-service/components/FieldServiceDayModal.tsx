@@ -22,6 +22,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import {
@@ -57,6 +58,7 @@ export function FieldServiceDayModal({
 }: FieldServiceDayModalProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
 
   const [hoursText, setHoursText] = useState('');
   const [minutesText, setMinutesText] = useState('');
@@ -187,9 +189,9 @@ export function FieldServiceDayModal({
               <Text style={styles.modalTitle}>
                 {hasExisting
                   ? saveMode === 'add'
-                    ? 'Sumar horas'
-                    : 'Editar horas'
-                  : 'Registrar horas'}
+                    ? t('fieldService.modalAddHours')
+                    : t('fieldService.modalEditHours')
+                  : t('fieldService.modalAddRecord')}
               </Text>
               <Text style={styles.modalDateLabel}>{dayLabel}</Text>
             </View>
@@ -208,7 +210,7 @@ export function FieldServiceDayModal({
             <View style={styles.sundayMsg}>
               <Ionicons name="ban-outline" size={28} color={colors.textMuted} />
               <Text style={styles.sundayText}>
-                Los domingos no se registran en esta versión.
+                {t('fieldService.modalSundayMsg')}
               </Text>
             </View>
           ) : (
@@ -218,7 +220,7 @@ export function FieldServiceDayModal({
                 <View style={[styles.existingBanner, { backgroundColor: colors.success + '18', borderColor: colors.success + '44' }]}>
                   <Ionicons name="checkmark-circle-outline" size={16} color={colors.success} />
                   <Text style={[styles.existingText, { color: colors.success }]}>
-                    Registrado: {formatMinutes(existingMinutes)}
+                    {t('fieldService.modalRecorded', { hours: formatMinutes(existingMinutes) })}
                   </Text>
                 </View>
               )}
@@ -226,7 +228,7 @@ export function FieldServiceDayModal({
               {/* Selector de modo: sumar o reemplazar */}
               {hasExisting && (
                 <View style={styles.modeSection}>
-                  <Text style={styles.modeLabel}>¿Qué deseas hacer?</Text>
+                  <Text style={styles.modeLabel}>{t('fieldService.modalWhatToDo')}</Text>
                   <View style={styles.modeRow}>
                     <TouchableOpacity
                       style={[
@@ -245,7 +247,7 @@ export function FieldServiceDayModal({
                           saveMode === 'add' ? { color: colors.primary } : null,
                         ]}
                       >
-                        Sumar
+                        {t('fieldService.modalModeAdd')}
                       </Text>
                     </TouchableOpacity>
 
@@ -266,7 +268,7 @@ export function FieldServiceDayModal({
                           saveMode === 'replace' ? { color: colors.primary } : null,
                         ]}
                       >
-                        Reemplazar
+                        {t('fieldService.modalModeReplace')}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -276,7 +278,7 @@ export function FieldServiceDayModal({
               {/* ── Inputs ── */}
               <View style={styles.inputsRow}>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Horas</Text>
+                  <Text style={styles.inputLabel}>{t('fieldService.modalHours')}</Text>
                   <TextInput
                     style={[styles.input, validationError ? styles.inputError : null]}
                     value={hoursText}
@@ -289,14 +291,14 @@ export function FieldServiceDayModal({
                     placeholderTextColor={colors.textDisabled}
                     maxLength={2}
                     returnKeyType="next"
-                    accessibilityLabel="Horas"
+                    accessibilityLabel={t('fieldService.modalHours')}
                   />
                 </View>
 
                 <Text style={styles.separator}>:</Text>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Minutos</Text>
+                  <Text style={styles.inputLabel}>{t('fieldService.modalMinutes')}</Text>
                   <TextInput
                     style={[styles.input, validationError ? styles.inputError : null]}
                     value={minutesText}
@@ -310,7 +312,7 @@ export function FieldServiceDayModal({
                     maxLength={2}
                     returnKeyType="done"
                     onSubmitEditing={handleSave}
-                    accessibilityLabel="Minutos"
+                    accessibilityLabel={t('fieldService.modalMinutes')}
                   />
                 </View>
               </View>
@@ -336,14 +338,14 @@ export function FieldServiceDayModal({
                   const resultingTotal = Math.min(1440, existingMinutes + total);
                   return (
                     <Text style={styles.previewText}>
-                      Se sumará: {formatMinutes(total)} (nuevo total: {formatMinutes(resultingTotal)})
+                      {t('fieldService.modalWillAdd', { added: formatMinutes(total), total: formatMinutes(resultingTotal) })}
                     </Text>
                   );
                 }
 
                 return (
                   <Text style={styles.previewText}>
-                    Total: {formatMinutes(total)}
+                    {t('fieldService.modalTotal', { total: formatMinutes(total) })}
                   </Text>
                 );
               })()}
@@ -379,7 +381,7 @@ export function FieldServiceDayModal({
                         { color: showDeleteConfirm ? '#fff' : colors.error },
                       ]}
                     >
-                      {showDeleteConfirm ? 'Confirmar' : 'Borrar'}
+                      {showDeleteConfirm ? t('fieldService.modalConfirmDelete') : t('fieldService.modalDelete')}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -392,10 +394,10 @@ export function FieldServiceDayModal({
                   <Ionicons name="checkmark" size={18} color={colors.onPrimary} />
                   <Text style={styles.saveBtnText}>
                     {!hasExisting
-                      ? 'Guardar'
+                      ? t('fieldService.modalSave')
                       : saveMode === 'add'
-                        ? 'Sumar'
-                        : 'Reemplazar'}
+                        ? t('fieldService.modalModeAdd')
+                        : t('fieldService.modalModeReplace')}
                   </Text>
                 </TouchableOpacity>
               </View>

@@ -14,6 +14,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, AppState, AppStateStatus, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import {
@@ -38,6 +39,7 @@ function FieldServiceDashboardCardNative() {
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
+  const { t } = useI18n();
 
   const now = new Date();
   const [monthSummary, setMonthSummary] = useState<MonthSummary>({
@@ -88,7 +90,7 @@ function FieldServiceDashboardCardNative() {
       onPress={handlePress}
       activeOpacity={0.8}
       accessibilityRole="button"
-      accessibilityLabel="Contador de horas de predicación"
+      accessibilityLabel={t('fieldService.subtitle')}
     >
       {/* ── Ícono + título ── */}
       <View style={styles.headerRow}>
@@ -96,7 +98,7 @@ function FieldServiceDashboardCardNative() {
           <Ionicons name="hourglass-outline" size={20} color={colors.primary} />
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.cardTitle}>Predicación</Text>
+          <Text style={styles.cardTitle}>{t('fieldService.title')}</Text>
           <Text style={styles.cardSubtitle}>{monthLabel}</Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -114,7 +116,7 @@ function FieldServiceDashboardCardNative() {
             {monthSummary.daysWithEntries > 0 && (
               <View style={[styles.badge, { backgroundColor: colors.primary + '20' }]}>
                 <Text style={[styles.badgeText, { color: colors.primary }]}>
-                  {monthSummary.daysWithEntries} día{monthSummary.daysWithEntries !== 1 ? 's' : ''}
+                  {t(monthSummary.daysWithEntries === 1 ? 'fieldService.daysCount' : 'fieldService.daysCount_plural', { count: monthSummary.daysWithEntries })}
                 </Text>
               </View>
             )}

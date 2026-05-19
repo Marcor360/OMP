@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning-permission';
@@ -36,6 +37,7 @@ export function CreateCleaningGroupScreen() {
   const router = useRouter();
   const { congregationId, uid, loading: permLoading } = useCleaningPermission();
   const { refreshAll } = useCleaningCache();
+  const { t } = useI18n();
 
   const [formValues, setFormValues] = useState<CleaningGroupFormValues>(DEFAULT_FORM);
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof CleaningGroupFormValues, string>>>({});
@@ -79,7 +81,7 @@ export function CreateCleaningGroupScreen() {
       if (err instanceof CleaningServiceError) {
         setGlobalError(err.message);
       } else {
-        setGlobalError('Ocurrió un error al crear el grupo. Intenta de nuevo.');
+        setGlobalError(t('cleaning.errorCreate'));
       }
     } finally {
       setSubmitting(false);
@@ -200,7 +202,7 @@ export function CreateCleaningGroupScreen() {
     },
   });
 
-  if (permLoading) return <LoadingState message="Verificando permisos..." />;
+  if (permLoading) return <LoadingState message={t('cleaning.verifyingPermissions')} />;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -218,7 +220,7 @@ export function CreateCleaningGroupScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Nuevo grupo de limpieza</Text>
+        <Text style={styles.headerTitle}>{t('cleaning.createTitle')}</Text>
       </View>
 
       <ScrollView
@@ -230,7 +232,7 @@ export function CreateCleaningGroupScreen() {
         <View style={styles.formContainer}>
           {/* Información del grupo */}
           <View>
-            <Text style={styles.sectionTitle}>Información del grupo</Text>
+            <Text style={styles.sectionTitle}>{t('cleaning.groupInfoSection')}</Text>
           </View>
           <CleaningGroupForm
             values={formValues}
@@ -241,7 +243,7 @@ export function CreateCleaningGroupScreen() {
 
           {/* Integrantes iniciales */}
           <View>
-            <Text style={styles.sectionTitle}>Integrantes iniciales (opcional)</Text>
+            <Text style={styles.sectionTitle}>{t('cleaning.initialMembersSection')}</Text>
           </View>
           <TouchableOpacity
             style={styles.membersBtn}
@@ -253,11 +255,11 @@ export function CreateCleaningGroupScreen() {
             <View style={styles.membersBtnLeft}>
               <Ionicons name="people-outline" size={20} color={colors.primary} />
               <View>
-                <Text style={styles.membersBtnText}>Seleccionar integrantes</Text>
+                <Text style={styles.membersBtnText}>{t('cleaning.selectMembersBtn')}</Text>
                 <Text style={styles.membersBtnCount}>
                   {selectedMemberIds.length === 0
-                    ? 'Ninguno seleccionado'
-                    : `${selectedMemberIds.length} seleccionado${selectedMemberIds.length !== 1 ? 's' : ''}`}
+                    ? t('cleaning.noneSelected')
+                    : t(selectedMemberIds.length === 1 ? 'cleaning.selectedCount' : 'cleaning.selectedCount_plural', { count: selectedMemberIds.length })}
                 </Text>
               </View>
             </View>
@@ -281,12 +283,12 @@ export function CreateCleaningGroupScreen() {
           onPress={handleSubmit}
           disabled={submitting}
           accessibilityRole="button"
-          accessibilityLabel="Crear grupo de limpieza"
+          accessibilityLabel={t('cleaning.createTitle')}
         >
           {submitting ? (
             <ActivityIndicator color={colors.onPrimary} size="small" />
           ) : (
-            <Text style={styles.submitText}>Crear grupo</Text>
+            <Text style={styles.submitText}>{t('cleaning.createGroupBtn')}</Text>
           )}
         </TouchableOpacity>
       </View>

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import { CleaningGroupType } from '@/src/modules/cleaning/types/cleaning-group.types';
@@ -36,6 +37,7 @@ export function CleaningGroupForm({
   disabled = false,
 }: CleaningGroupFormProps) {
   const colors = useAppColors();
+  const { t } = useI18n();
 
   const set = <K extends keyof CleaningGroupFormValues>(
     key: K,
@@ -122,11 +124,11 @@ export function CleaningGroupForm({
   return (
     <View style={styles.container}>
       <View style={styles.field}>
-        <Text style={styles.label}>Tipo de grupo</Text>
+        <Text style={styles.label}>{t('cleaning.typeLabel')}</Text>
         <View style={styles.typeOptionRow}>
           {([
-            { value: 'standard' as const, label: 'Normal' },
-            { value: 'family' as const, label: 'Familiar' },
+            { value: 'standard' as const, label: t('cleaning.typeOptionStandard') },
+            { value: 'family' as const, label: t('cleaning.typeOptionFamily') },
           ]).map((option) => {
             const selected = values.groupType === option.value;
             return (
@@ -161,51 +163,51 @@ export function CleaningGroupForm({
       {/* Nombre */}
       <View style={styles.field}>
         <Text style={styles.label}>
-          {values.groupType === 'family' ? 'Nombre de la familia *' : 'Nombre del grupo *'}
+          {values.groupType === 'family' ? t('cleaning.nameLabelFamily') : t('cleaning.nameLabelGroup')}
         </Text>
         <TextInput
           style={[styles.input, errors.name ? styles.inputError : undefined]}
           value={values.name}
           onChangeText={(text) => set('name', text)}
-          placeholder={values.groupType === 'family' ? 'Ej. Familia Garcia' : 'Ej. Grupo Martes'}
+          placeholder={values.groupType === 'family' ? t('cleaning.namePlaceholderFamily') : t('cleaning.namePlaceholderGroup')}
           placeholderTextColor={colors.textDisabled}
           editable={!disabled}
           maxLength={60}
           returnKeyType="next"
-          accessibilityLabel="Nombre del grupo de limpieza"
+          accessibilityLabel={t('cleaning.nameLabelGroup')}
         />
-        {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+        {errors.name && <Text style={styles.errorText}>{t(errors.name as any)}</Text>}
       </View>
 
       {/* Descripción */}
       <View style={styles.field}>
-        <Text style={styles.label}>Descripción</Text>
+        <Text style={styles.label}>{t('cleaning.descLabel')}</Text>
         <TextInput
           style={[styles.input, styles.textarea, errors.description ? styles.inputError : undefined]}
           value={values.description}
           onChangeText={(text) => set('description', text)}
-          placeholder="Breve descripción del grupo..."
+          placeholder={t('cleaning.descPlaceholder')}
           placeholderTextColor={colors.textDisabled}
           editable={!disabled}
           maxLength={200}
           multiline
           numberOfLines={3}
           returnKeyType="done"
-          accessibilityLabel="Descripción del grupo de limpieza"
+          accessibilityLabel={t('cleaning.descLabel')}
         />
         {errors.description && (
-          <Text style={styles.errorText}>{errors.description}</Text>
+          <Text style={styles.errorText}>{t(errors.description as any)}</Text>
         )}
       </View>
 
       {/* Estado activo */}
       <View style={styles.field}>
-        <Text style={styles.label}>Estado</Text>
+        <Text style={styles.label}>{t('cleaning.statusLabel')}</Text>
         <View style={styles.switchRow}>
           <View>
-            <Text style={styles.switchLabel}>Grupo activo</Text>
+            <Text style={styles.switchLabel}>{t('cleaning.statusActiveLabel')}</Text>
             <Text style={styles.switchHint}>
-              {values.isActive ? 'Visible y operativo' : 'Desactivado'}
+              {values.isActive ? t('cleaning.statusActiveHint') : t('cleaning.statusInactiveHint')}
             </Text>
           </View>
           <Switch
@@ -229,9 +231,9 @@ export const validateCleaningGroupForm = (
 ): Partial<Record<keyof CleaningGroupFormValues, string>> => {
   const errors: Partial<Record<keyof CleaningGroupFormValues, string>> = {};
   if (!values.name.trim()) {
-    errors.name = 'El nombre del grupo es requerido.';
+    errors.name = 'cleaning.errorNameRequired';
   } else if (values.name.trim().length < 2) {
-    errors.name = 'El nombre debe tener al menos 2 caracteres.';
+    errors.name = 'cleaning.errorNameMinLength';
   }
   return errors;
 };

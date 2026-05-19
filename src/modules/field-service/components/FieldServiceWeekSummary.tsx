@@ -6,6 +6,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import { formatMinutes, parseLocalDate } from '@/src/modules/field-service/utils/field-service-dates';
@@ -18,6 +19,7 @@ interface FieldServiceWeekSummaryProps {
 export function FieldServiceWeekSummary({ summary }: FieldServiceWeekSummaryProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
 
   const weekStartDate = summary.weekStart
     ? parseLocalDate(summary.weekStart).toLocaleDateString('es-MX', {
@@ -39,7 +41,7 @@ export function FieldServiceWeekSummary({ summary }: FieldServiceWeekSummaryProp
       </View>
       <View style={styles.info}>
         <Text style={styles.label}>
-          Semana {weekStartDate} – {weekEndDate}
+          {t('fieldService.weekLabel', { start: weekStartDate, end: weekEndDate })}
         </Text>
         <Text style={styles.total}>
           {formatMinutes(summary.totalMinutes)}
@@ -47,7 +49,7 @@ export function FieldServiceWeekSummary({ summary }: FieldServiceWeekSummaryProp
       </View>
       <View style={styles.daysInfo}>
         <Text style={styles.daysCount}>
-          {summary.days.length} día{summary.days.length !== 1 ? 's' : ''}
+          {t(summary.days.length === 1 ? 'fieldService.daysCount' : 'fieldService.daysCount_plural', { count: summary.days.length })}
         </Text>
       </View>
     </View>

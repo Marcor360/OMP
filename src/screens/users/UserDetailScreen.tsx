@@ -41,7 +41,7 @@ const interpolate = (template: string, values: Record<string, string>): string =
 export function UserDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { congregationId, isAdmin, loadingProfile, profileError, uid: currentUid } = useUser();
+  const { congregationId, isAdmin, isElder, loadingProfile, profileError, uid: currentUid } = useUser();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { t } = useI18n();
@@ -126,7 +126,7 @@ export function UserDetailScreen() {
   const handleToggleStatus = async () => {
     if (!user) return;
 
-    if (!isAdmin) {
+    if (!isAdmin && !isElder) {
       Alert.alert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyStatus'));
       return;
     }
@@ -184,13 +184,18 @@ export function UserDetailScreen() {
   const handleDeleteUser = async () => {
     if (!user) return;
 
-    if (!isAdmin) {
+    if (!isAdmin && !isElder) {
       Alert.alert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyDelete'));
       return;
     }
 
     if (user.uid === currentUid) {
       Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteSelf'));
+      return;
+    }
+
+    if (user.role === 'admin') {
+      Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteAdmin'));
       return;
     }
 
@@ -238,6 +243,13 @@ export function UserDetailScreen() {
     .slice(0, 2)
     .join('')
     .toUpperCase();
+
+  // Un anciano puede gestionar usuarios de su congregacion que NO sean del sistema protegido.
+  // Un admin puede gestionar a cualquier usuario (Firestore ya impone las restricciones finales).
+  const isProtectedSystemUser = isSystemPrincipalUser(user);
+  const canManageThisUser =
+    isAdmin || (isElder && !isProtectedSystemUser);
+
   const privilegesLabel = [
     user.privileges?.isElder ? PRIVILEGE_LABELS.isElder : null,
     user.privileges?.isMinisterialServant ? PRIVILEGE_LABELS.isMinisterialServant : null,
@@ -246,8 +258,8 @@ export function UserDetailScreen() {
   ].filter(Boolean).join(', ');
   const createdByLabel = user.createdByName ?? user.createdByEmail ?? user.createdBy ?? '--';
   const updatedByLabel = user.updatedByName ?? user.updatedByEmail ?? user.updatedBy ?? createdByLabel;
-  const isProtectedSystemUser = isSystemPrincipalUser(user);
   const genderLabels: Record<UserGender, string> = {
+
     masculino: t('users.gender.male'),
     femenino: t('users.gender.female'),
   };
@@ -258,7 +270,7 @@ export function UserDetailScreen() {
         title={t('users.detail.title')}
         showBack
         actions={
-          <RoleGuard requiredRole="admin">
+          canManageThisUser ? (
             <TouchableOpacity
               style={styles.editBtn}
               onPress={() => router.push(`/(protected)/users/edit/${user.uid}` as any)}
@@ -266,7 +278,7 @@ export function UserDetailScreen() {
             >
               <Ionicons name="pencil-outline" size={18} color={colors.primary} />
             </TouchableOpacity>
-          </RoleGuard>
+          ) : null
         }
       />
 
@@ -295,18 +307,19 @@ export function UserDetailScreen() {
           <InfoRow icon="time-outline" label={t('users.field.updated')} value={formatDate(user.updatedAt)} />
         </View>
 
-        <RoleGuard requiredRole="admin">
-          <TouchableOpacity
+        {canManageThisUser ? (
+          <>
+            <TouchableOpacity
             style={[
               styles.toggleBtn,
               {
                 backgroundColor: user.status === 'active' ? colors.error + '22' : colors.success + '22',
               },
             ]}
-            onPress={handleToggleStatus}
-            disabled={toggling}
-            activeOpacity={0.8}
-          >
+              onPress={handleToggleStatus}
+              disabled={toggling}
+              activeOpacity={0.8}
+            >
             <Ionicons
               name={user.status === 'active' ? 'ban-outline' : 'checkmark-circle-outline'}
               size={18}
@@ -324,29 +337,30 @@ export function UserDetailScreen() {
                   ? t('users.status.deactivate')
                   : t('users.status.activate')}
             </ThemedText>
-          </TouchableOpacity>
-
-          {isProtectedSystemUser ? (
-            <View style={styles.protectedNotice}>
-              <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
-              <ThemedText style={styles.protectedNoticeText}>
-                {t('users.detail.systemProtected')}
-              </ThemedText>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
-              onPress={handleDeleteUser}
-              disabled={deleting}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="trash-outline" size={18} color={colors.error} />
-              <ThemedText style={styles.deleteBtnText}>
-                {deleting ? t('users.delete.deleting') : t('users.delete.action')}
-              </ThemedText>
             </TouchableOpacity>
-          )}
-        </RoleGuard>
+
+            {isProtectedSystemUser ? (
+              <View style={styles.protectedNotice}>
+                <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
+                <ThemedText style={styles.protectedNoticeText}>
+                  {t('users.detail.systemProtected')}
+                </ThemedText>
+              </View>
+            ) : (isAdmin || user.role !== 'admin') ? (
+              <TouchableOpacity
+                style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
+                onPress={handleDeleteUser}
+                disabled={deleting}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="trash-outline" size={18} color={colors.error} />
+                <ThemedText style={styles.deleteBtnText}>
+                  {deleting ? t('users.delete.deleting') : t('users.delete.action')}
+                </ThemedText>
+              </TouchableOpacity>
+            ) : null}
+          </>
+        ) : null}
       </ScrollView>
     </ScreenContainer>
   );

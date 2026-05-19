@@ -21,6 +21,7 @@ import {
   invalidateCacheEntry,
 } from '@/src/services/repositories/firestore-cache-first';
 import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
+import { isSystemPrincipalUser } from '@/src/utils/users/user-protection';
 import {
   userDocRef,
   usersCollectionRef,
@@ -351,7 +352,11 @@ export const getAllUsers = async (
     maxAgeMs: USERS_QUERY_CACHE_TTL_MS,
     forceServer: options?.forceServer,
     mapSnapshot: (snapshot) =>
-      sortUsers(snapshot.docs.map((docSnapshot) => normalizeUser(docSnapshot.id, docSnapshot.data()))),
+      sortUsers(
+        snapshot.docs
+          .map((docSnapshot) => normalizeUser(docSnapshot.id, docSnapshot.data()))
+          .filter((user) => !isSystemPrincipalUser(user))
+      ),
   });
 };
 
@@ -364,7 +369,9 @@ export const getActiveUsers = async (congregationId: string): Promise<AppUser[]>
     orderBy('displayName', 'asc')
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => normalizeUser(d.id, d.data()));
+  return snap.docs
+    .map((d) => normalizeUser(d.id, d.data()))
+    .filter((user) => !isSystemPrincipalUser(user));
 };
 
 /** Crea o actualiza el perfil de usuario en Firestore */
@@ -425,11 +432,9 @@ export const deleteUser = async (uid: string): Promise<void> => {
   clearSessionCacheByPrefix('query:users/');
 };
 
-/** Cuenta total de usuarios por congregacion */
 export const getUsersCount = async (congregationId: string): Promise<number> => {
-  const q = query(usersCollectionRef(), where('congregationId', '==', congregationId));
-  const snap = await getDocs(q);
-  return snap.size;
+  const users = await getAllUsers(congregationId);
+  return users.length;
 };
 
 /** Suscripcion en tiempo real a usuarios por congregacion */
@@ -450,7 +455,11 @@ export const subscribeToUsers = (
   const unsubscribe = onSnapshot(
     q,
     (snap) => {
-      const users = sortUsers(snap.docs.map((d) => normalizeUser(d.id, d.data())));
+      const users = sortUsers(
+        snap.docs
+          .map((d) => normalizeUser(d.id, d.data()))
+          .filter((user) => !isSystemPrincipalUser(user))
+      );
       callback(users);
     },
     (error) => {

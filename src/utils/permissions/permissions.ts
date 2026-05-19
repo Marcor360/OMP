@@ -49,15 +49,18 @@ export const canManageOutgoingTalks = (
       )
   );
 
-/** ¿Puede ver la sección de usuarios? */
-export const canViewUsers = (role: UserRole | undefined): boolean =>
-  role === 'admin' || role === 'supervisor';
+/** ¿Puede ver la sección de usuarios? (admin, supervisor o anciano) */
+export const canViewUsers = (
+  role: UserRole | undefined,
+  isElder?: boolean
+): boolean =>
+  role === 'admin' || role === 'supervisor' || isElder === true;
 
 /** ¿Puede acceder a configuración avanzada? */
 export const canAccessSettings = (role: UserRole | undefined): boolean =>
   role === 'admin' || role === 'supervisor';
 
-/** ¿Puede gestionar grupos de limpieza? (admin, supervisor o encargado de servicio) */
+/** ¿ Puede gestionar grupos de limpieza? (admin, supervisor o encargado de servicio) */
 export const canManageCleaning = (
   role: UserRole | undefined,
   servicePosition?: string | undefined,
@@ -87,7 +90,8 @@ export const getVisibleTabs = (
   role: UserRole | undefined,
   servicePosition?: string | undefined,
   serviceDepartment?: string | undefined,
-  serviceAssignments?: Pick<AppUser, 'serviceAssignments'>['serviceAssignments']
+  serviceAssignments?: Pick<AppUser, 'serviceAssignments'>['serviceAssignments'],
+  isElder?: boolean
 ): ('index' | 'users' | 'meetings' | 'assignments' | 'profile' | 'settings' | 'cleaning' | 'preaching')[] => {
   const base = ['index', 'meetings', 'assignments', 'preaching', 'profile'] as const;
   if (role === 'admin') {
@@ -96,12 +100,14 @@ export const getVisibleTabs = (
   if (role === 'supervisor') {
     return [...base, 'settings', 'cleaning'];
   }
+  if (isElder) {
+    return [...base, 'users', 'cleaning'];
+  }
   if (canManageCleaning(role, servicePosition, serviceDepartment, serviceAssignments)) {
     return [...base, 'cleaning'];
   }
   return [...base];
 };
-
 /** Mensaje de error para acceso denegado */
 export const UNAUTHORIZED_MESSAGE =
   'No tienes permisos para realizar esta acción.';
