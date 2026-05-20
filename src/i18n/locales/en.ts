@@ -107,7 +107,7 @@ export const en = {
 
   // Meetings management
   'meetings.management.title': 'Meetings management',
-  'meetings.management.subtitle': 'Elder and Ministerial servant',
+  'meetings.management.subtitle': 'Administrator, supervisor, or meetings manager',
   'meetings.management.loading': 'Loading meetings management...',
   'meetings.management.noCongregation': 'The current profile congregation was not found.',
   'meetings.management.action.newWeekend': 'New weekend',
@@ -158,9 +158,9 @@ export const en = {
   'about.build': 'Build',
 
   // Roles
-  'role.admin': 'Elder',
-  'role.supervisor': 'Ministerial servant',
-  'role.user': 'Publisher',
+  'role.admin': 'Administrator',
+  'role.supervisor': 'Supervisor',
+  'role.user': 'User',
   'userStatus.active': 'Active',
   'userStatus.inactive': 'Inactive',
   'userStatus.suspended': 'Suspended',
@@ -218,8 +218,8 @@ export const en = {
   'users.error.noEditPermission': 'You do not have permission to edit this user.',
   'users.error.insufficientPermissions': 'Insufficient permissions',
   'users.error.adminOnlyEdit': 'Only administrators can create or edit users.',
-  'users.error.adminOnlyStatus': 'Only administrators or elders can change user status.',
-  'users.error.adminOnlyDelete': 'Only administrators or elders can delete users.',
+  'users.error.adminOnlyStatus': 'Only administrators can change user status.',
+  'users.error.adminOnlyDelete': 'Only administrators can delete users.',
   'users.error.actionNotAllowed': 'Action not allowed',
   'users.error.cannotDeleteSelf': 'You cannot delete your own user account.',
   'users.error.cannotDeleteSystemUser': 'This user was created by the main system and cannot be deleted.',

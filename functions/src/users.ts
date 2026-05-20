@@ -12,7 +12,9 @@ type ServiceDepartment =
   | 'tesoreria'
   | 'mantenimiento'
   | 'discursos'
+  | 'reuniones'
   | 'predicacion'
+  | 'audio_video'
   | 'acomodadores_microfonos';
 
 type UserPrivileges = {
@@ -25,6 +27,28 @@ type UserPrivileges = {
 type UserResponsibilities = {
   isPreachingManager?: boolean;
 };
+
+type PermissionDepartment =
+  | 'usuarios'
+  | 'reuniones'
+  | 'limpieza'
+  | 'predicacion'
+  | 'tesoreria'
+  | 'pagos'
+  | 'configuracion'
+  | 'avisos'
+  | 'asignaciones';
+
+type PermissionAction =
+  | 'view'
+  | 'create'
+  | 'edit'
+  | 'delete'
+  | 'manage'
+  | 'approve'
+  | 'export';
+
+type UserPermissions = Partial<Record<PermissionDepartment, Partial<Record<PermissionAction, boolean>>>>;
 
 type ServiceAssignment = {
   position?: ServicePosition;
@@ -44,6 +68,7 @@ type RequesterProfile = {
   congregationId: string;
   displayName?: string;
   email?: string;
+  permissions?: UserPermissions;
 };
 
 type CreateUserPayload = {
@@ -64,6 +89,7 @@ type CreateUserPayload = {
   serviceAssignments: StoredServiceAssignment[];
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
+  permissions?: UserPermissions;
 };
 
 type UpdateUserPayload = {
@@ -84,8 +110,10 @@ type UpdateUserPayload = {
   serviceAssignmentsProvided: boolean;
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
+  permissions?: UserPermissions;
   privilegesProvided: boolean;
   responsibilitiesProvided: boolean;
+  permissionsProvided: boolean;
 };
 
 type UpdatePasswordPayload = {
@@ -99,7 +127,9 @@ const SERVICE_DEPARTMENT_LABELS: Record<ServiceDepartment, string> = {
   tesoreria: 'Tesoreria',
   mantenimiento: 'Mantenimiento',
   discursos: 'Discursos',
+  reuniones: 'Reuniones',
   predicacion: 'Predicacion',
+  audio_video: 'Audio y Video',
   acomodadores_microfonos: 'Acomodadores y Microfonos',
 };
 
@@ -114,6 +144,28 @@ const PLAN_LIMITS: Record<CongregationPlanId, number> = {
   intermediate: 120,
   complete: 200,
 };
+
+const PERMISSION_DEPARTMENTS: PermissionDepartment[] = [
+  'usuarios',
+  'reuniones',
+  'limpieza',
+  'predicacion',
+  'tesoreria',
+  'pagos',
+  'configuracion',
+  'avisos',
+  'asignaciones',
+];
+
+const PERMISSION_ACTIONS: PermissionAction[] = [
+  'view',
+  'create',
+  'edit',
+  'delete',
+  'manage',
+  'approve',
+  'export',
+];
 
 function assertValidRole(role: unknown): asserts role is Role {
   if (role !== 'admin' && role !== 'supervisor' && role !== 'user') {
@@ -178,7 +230,9 @@ const parseServiceDepartment = (value: unknown): ServiceDepartment | undefined =
     text === 'tesoreria' ||
     text === 'mantenimiento' ||
     text === 'discursos' ||
+    text === 'reuniones' ||
     text === 'predicacion' ||
+    text === 'audio_video' ||
     text === 'acomodadores_microfonos'
   ) {
     return text;
@@ -247,6 +301,57 @@ const parseResponsibilities = (value: unknown): UserResponsibilities | undefined
     ['isPreachingManager'] as const,
     'Responsabilidades'
   ) as UserResponsibilities | undefined;
+
+const parsePermissions = (value: unknown): UserPermissions | undefined => {
+  if (value === undefined) return undefined;
+
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new HttpsError('invalid-argument', 'Permisos invalidos.');
+  }
+
+  const source = value as Record<string, unknown>;
+  const invalidDepartment = Object.keys(source).find(
+    (department) => !PERMISSION_DEPARTMENTS.includes(department as PermissionDepartment)
+  );
+  if (invalidDepartment) {
+    throw new HttpsError('invalid-argument', 'Permisos contienen departamentos no permitidos.');
+  }
+
+  const permissions = PERMISSION_DEPARTMENTS.reduce<UserPermissions>((acc, department) => {
+    const rawDepartment = source[department];
+    if (rawDepartment === undefined) return acc;
+
+    if (typeof rawDepartment !== 'object' || rawDepartment === null || Array.isArray(rawDepartment)) {
+      throw new HttpsError('invalid-argument', 'Permisos por departamento invalidos.');
+    }
+
+    const rawActions = rawDepartment as Record<string, unknown>;
+    const invalidAction = Object.keys(rawActions).find(
+      (action) => !PERMISSION_ACTIONS.includes(action as PermissionAction)
+    );
+    if (invalidAction) {
+      throw new HttpsError('invalid-argument', 'Permisos contienen acciones no permitidas.');
+    }
+
+    const actions = PERMISSION_ACTIONS.reduce<Partial<Record<PermissionAction, boolean>>>((normalized, action) => {
+      if (rawActions[action] !== undefined) {
+        if (typeof rawActions[action] !== 'boolean') {
+          throw new HttpsError('invalid-argument', 'Los permisos deben ser booleanos.');
+        }
+        normalized[action] = rawActions[action] as boolean;
+      }
+      return normalized;
+    }, {});
+
+    if (Object.keys(actions).length > 0) {
+      acc[department] = actions;
+    }
+
+    return acc;
+  }, {});
+
+  return Object.keys(permissions).length > 0 ? permissions : {};
+};
 
 const parseLegacyAssignmentLabel = (
   label: string | undefined
@@ -608,7 +713,10 @@ async function getRequesterProfile(uid: string): Promise<RequesterProfile> {
     throw new HttpsError('permission-denied', 'El usuario autenticado esta inactivo.');
   }
 
-  return data as RequesterProfile;
+  return {
+    ...(data as RequesterProfile),
+    permissions: parsePermissions(data.permissions),
+  };
 }
 
 function assertAdmin(profile: { role: Role }) {
@@ -616,6 +724,62 @@ function assertAdmin(profile: { role: Role }) {
     throw new HttpsError('permission-denied', 'Solo un administrador puede realizar esta operacion.');
   }
 }
+
+const requesterHasPermission = (
+  profile: Pick<RequesterProfile, 'role' | 'permissions'>,
+  department: PermissionDepartment,
+  action: PermissionAction
+): boolean =>
+  profile.role === 'admin' ||
+  profile.permissions?.[department]?.[action] === true ||
+  profile.permissions?.[department]?.manage === true;
+
+function assertUserPermission(
+  profile: RequesterProfile,
+  action: PermissionAction
+) {
+  if (!requesterHasPermission(profile, 'usuarios', action)) {
+    throw new HttpsError('permission-denied', 'No tienes permisos para gestionar usuarios.');
+  }
+}
+
+const assertDelegatedCreateIsSafe = (requester: RequesterProfile, payload: CreateUserPayload) => {
+  if (requester.role === 'admin') return;
+
+  if (
+    payload.role !== 'user' ||
+    (payload.privileges && Object.keys(payload.privileges).length > 0) ||
+    (payload.responsibilities && Object.keys(payload.responsibilities).length > 0) ||
+    (payload.permissions && Object.keys(payload.permissions).length > 0) ||
+    payload.serviceAssignments.length > 0
+  ) {
+    throw new HttpsError(
+      'permission-denied',
+      'Los permisos delegados no permiten asignar rol, privilegios ni funciones.'
+    );
+  }
+};
+
+const assertDelegatedUpdateIsSafe = (
+  requester: RequesterProfile,
+  payload: UpdateUserPayload
+) => {
+  if (requester.role === 'admin') return;
+
+  if (
+    payload.role ||
+    payload.privilegesProvided ||
+    payload.responsibilitiesProvided ||
+    payload.permissionsProvided ||
+    payload.serviceAssignmentsProvided ||
+    payload.serviceAssignmentProvided
+  ) {
+    throw new HttpsError(
+      'permission-denied',
+      'Los permisos delegados no permiten cambiar rol, permisos, privilegios ni funciones.'
+    );
+  }
+};
 
 const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
   if (typeof raw !== 'object' || raw === null) {
@@ -670,6 +834,7 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
   const primaryAssignment = serviceAssignments[0] ?? assignment;
   const privileges = parsePrivileges(data.privileges);
   const responsibilities = parseResponsibilities(data.responsibilities);
+  const permissions = parsePermissions(data.permissions);
 
   return {
     firstName: requiredFirstName,
@@ -689,6 +854,7 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
     serviceAssignments,
     privileges,
     responsibilities,
+    permissions,
   };
 };
 
@@ -752,10 +918,12 @@ const parseUpdateUserPayload = (raw: unknown): UpdateUserPayload => {
   const privilegesProvided = Object.prototype.hasOwnProperty.call(nested, 'privileges');
   const serviceAssignmentsProvided = Object.prototype.hasOwnProperty.call(nested, 'serviceAssignments');
   const responsibilitiesProvided = Object.prototype.hasOwnProperty.call(nested, 'responsibilities');
+  const permissionsProvided = Object.prototype.hasOwnProperty.call(nested, 'permissions');
   const privileges = privilegesProvided ? parsePrivileges(nested.privileges) : undefined;
   const responsibilities = responsibilitiesProvided
     ? parseResponsibilities(nested.responsibilities)
     : undefined;
+  const permissions = permissionsProvided ? parsePermissions(nested.permissions) : undefined;
 
   return {
     uid,
@@ -775,8 +943,10 @@ const parseUpdateUserPayload = (raw: unknown): UpdateUserPayload => {
     serviceAssignmentsProvided,
     privileges,
     responsibilities,
+    permissions,
     privilegesProvided,
     responsibilitiesProvided,
+    permissionsProvided,
   };
 };
 
@@ -869,9 +1039,10 @@ export const createUserByAdmin = onCall(
     }
 
     const requester = await getRequesterProfile(request.auth.uid);
-    assertAdmin(requester);
+    assertUserPermission(requester, 'create');
 
     const payload = parseCreateUserPayload(request.data);
+    assertDelegatedCreateIsSafe(requester, payload);
 
     if (payload.congregationId !== requester.congregationId) {
       throw new HttpsError('permission-denied', 'No puedes crear usuarios en otra congregacion.');
@@ -947,6 +1118,9 @@ export const createUserByAdmin = onCall(
       if (payload.responsibilities && Object.keys(payload.responsibilities).length > 0) {
         userDoc.responsibilities = payload.responsibilities;
       }
+      if (payload.permissions && Object.keys(payload.permissions).length > 0) {
+        userDoc.permissions = payload.permissions;
+      }
 
       await db.collection('users').doc(userRecord.uid).set(userDoc);
 
@@ -973,6 +1147,7 @@ export const updateUserByAdmin = onCall(
     assertAdmin(requester);
 
     const payload = parseUpdateUserPayload(request.data);
+    assertDelegatedUpdateIsSafe(requester, payload);
 
     const db = getFirestore();
     const targetRef = db.collection('users').doc(payload.uid);
@@ -1130,6 +1305,13 @@ export const updateUserByAdmin = onCall(
           : FieldValue.delete();
     }
 
+    if (payload.permissionsProvided) {
+      docUpdates.permissions =
+        payload.permissions && Object.keys(payload.permissions).length > 0
+          ? payload.permissions
+          : FieldValue.delete();
+    }
+
     await targetRef.update(docUpdates);
 
     return { ok: true };
@@ -1144,7 +1326,7 @@ export const updateUserPasswordByAdmin = onCall(
     }
 
     const requester = await getRequesterProfile(request.auth.uid);
-    assertAdmin(requester);
+    assertUserPermission(requester, 'edit');
 
     const payload = parseUpdatePasswordPayload(request.data);
 
@@ -1185,7 +1367,7 @@ export const disableUserByAdmin = onCall(
     }
 
     const requester = await getRequesterProfile(request.auth.uid);
-    assertAdmin(requester);
+    assertUserPermission(requester, 'edit');
 
     const uid = parseUidFromPayload(request.data ?? {});
 
@@ -1229,7 +1411,7 @@ export const deleteUserByAdmin = onCall(
     }
 
     const requester = await getRequesterProfile(request.auth.uid);
-    assertAdmin(requester);
+    assertUserPermission(requester, 'delete');
 
     const uid = parseUidFromPayload(request.data ?? {});
 

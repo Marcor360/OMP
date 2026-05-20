@@ -18,9 +18,9 @@ Campos recomendados:
 
 Planes:
 
-- `basic`: OMP Basico, hasta 70 usuarios activos.
-- `intermediate`: OMP Intermedio, hasta 120 usuarios activos.
-- `complete`: OMP Completo, hasta 200 usuarios activos.
+- `basic`: OMP Basico, hasta 70 usuarios activos, $69 MXN/mes.
+- `intermediate`: OMP Intermedio, hasta 120 usuarios activos, $109 MXN/mes.
+- `complete`: OMP Completo, hasta 200 usuarios activos, $159 MXN/mes.
 
 Reglas actuales:
 

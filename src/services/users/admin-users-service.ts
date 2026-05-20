@@ -11,6 +11,7 @@ import {
   UserServiceAssignment,
   UserServicePosition,
   UserGender,
+  UserPermissions,
 } from '@/src/types/user';
 import { AppError } from '@/src/utils/errors/errors';
 
@@ -33,6 +34,7 @@ export type CreateUserByAdminPayload = {
   serviceAssignments?: UserServiceAssignment[];
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
+  permissions?: UserPermissions;
   isElder?: boolean;
   isMinisterialServant?: boolean;
 };

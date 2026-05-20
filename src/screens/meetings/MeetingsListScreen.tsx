@@ -16,6 +16,7 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Meeting } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
+import { canManageMeetings } from '@/src/utils/permissions/permissions';
 
 interface MeetingDayGroup {
   id: string;
@@ -67,11 +68,12 @@ const toGroupLabel = (meeting: Meeting, locale: string): string => {
 
 export function MeetingsListScreen() {
   const router = useRouter();
-  const { congregationId, loadingProfile, isAdminOrSupervisor } = useUser();
+  const { appUser, congregationId, loadingProfile } = useUser();
   const { t, language } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const locale = LOCALE_BY_LANGUAGE[language];
+  const canManage = canManageMeetings(appUser);
 
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -182,7 +184,7 @@ export function MeetingsListScreen() {
                 {meetings.length} {t('meetings.list.publishedCount')}
               </ThemedText>
               <View style={styles.headerActions}>
-                {isAdminOrSupervisor ? (
+                {canManage ? (
                   <TouchableOpacity style={styles.manageButton} onPress={() => router.push('/(protected)/meetings/manage')}>
                     <Ionicons name="shield-checkmark-outline" size={16} color={colors.primary} />
                     <ThemedText style={styles.manageButtonText}>

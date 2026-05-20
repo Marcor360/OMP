@@ -42,10 +42,6 @@ export function DashboardScreen() {
   const {
     appUser,
     congregationId,
-    role,
-    servicePosition,
-    serviceDepartment,
-    serviceAssignments,
     loadingProfile,
     profileError,
   } = useUser();
@@ -76,14 +72,9 @@ export function DashboardScreen() {
     enabled: !loadingProfile,
   });
 
-  const isAdmin = canManageUsers(role);
-  const canManage = canManageAssignments(role);
-  const canManageCleaningGroups = canManageCleaning(
-    role,
-    servicePosition,
-    serviceDepartment,
-    serviceAssignments
-  );
+  const isAdmin = canManageUsers(appUser);
+  const canManage = canManageAssignments(appUser);
+  const canManageCleaningGroups = canManageCleaning(appUser);
   const {
     events,
     loading: eventsLoading,

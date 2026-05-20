@@ -25,6 +25,7 @@ import { MeetingColorToken } from '@/src/types/meeting/program';
 import { copyToClipboard } from '@/src/utils/clipboard/clipboard';
 import { formatDate } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { canManageMeetings } from '@/src/utils/permissions/permissions';
 
 const SECTION_COLOR_MAP: Record<MeetingColorToken, string> = {
   blue: '#3E7FA3',
@@ -45,7 +46,7 @@ const normalizeText = (value: string | undefined): string | undefined => {
 export function MeetingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { congregationId, loadingProfile, profileError, isAdminOrSupervisor } = useUser();
+  const { appUser, congregationId, loadingProfile, profileError } = useUser();
   const colors = useAppColors();
   const styles = createStyles(colors);
 
@@ -53,6 +54,7 @@ export function MeetingDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const canManage = canManageMeetings(appUser);
 
   useEffect(() => {
     if (loadingProfile) return;
@@ -70,7 +72,7 @@ export function MeetingDetailScreen() {
           return;
         }
 
-        if (!isAdminOrSupervisor && doc.publicationStatus === 'draft') {
+        if (!canManage && doc.publicationStatus === 'draft') {
           setError('No tienes acceso a esta reunion.');
           return;
         }
@@ -79,7 +81,7 @@ export function MeetingDetailScreen() {
       })
       .catch((requestError) => setError(formatFirestoreError(requestError)))
       .finally(() => setLoading(false));
-  }, [congregationId, id, isAdminOrSupervisor, loadingProfile, profileError]);
+  }, [canManage, congregationId, id, loadingProfile, profileError]);
 
   const sections = useMemo(() => (meeting ? buildMeetingProgramFromMeeting(meeting) : []), [meeting]);
   const weekendSessions = useMemo(
@@ -156,7 +158,7 @@ export function MeetingDetailScreen() {
         title={meeting.type === 'midweek' ? 'Reunion Vida y Ministerio Cristianos' : 'Reunion del fin de semana'}
         showBack
         actions={
-          isAdminOrSupervisor ? (
+          canManage ? (
             <View style={styles.headerActions}>
               <TouchableOpacity style={styles.editBtn} onPress={() => router.push(`/(protected)/meetings/edit/${meeting.id}` as never)}>
                 <Ionicons name="pencil-outline" size={18} color={colors.primary} />

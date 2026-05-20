@@ -12,6 +12,11 @@ import {
 } from './modules/meetings/meeting-sections.js';
 
 type UserRole = 'admin' | 'supervisor' | 'user';
+type ServiceAssignment = {
+  position?: string;
+  department?: string;
+};
+type UserPermissions = Record<string, Record<string, boolean> | undefined>;
 type MeetingStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 type MeetingPublicationStatus = 'draft' | 'published';
 type MeetingProgramKind = 'midweek' | 'weekend';
@@ -22,6 +27,10 @@ type RequesterProfile = {
   congregationId: string;
   displayName?: string;
   email?: string;
+  servicePosition?: string;
+  serviceDepartment?: string;
+  serviceAssignments?: ServiceAssignment[];
+  permissions?: UserPermissions;
 };
 
 type CreateMeetingByManagerPayload = {
@@ -133,6 +142,47 @@ const toStringArray = (value: unknown): string[] => {
     .map((item) => normalizeText(item))
     .filter((item): item is string => Boolean(item));
 };
+
+const toServiceAssignments = (value: unknown): ServiceAssignment[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value.reduce<ServiceAssignment[]>((items, item) => {
+    const record = asRecord(item);
+    const position = normalizeText(record?.position);
+    if (!position) return items;
+
+    items.push({
+      position,
+      department: normalizeText(record?.department),
+    });
+    return items;
+  }, []);
+};
+
+const hasServiceAssignment = (
+  user: Pick<RequesterProfile, 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>,
+  position: string,
+  department: string
+): boolean =>
+  (
+    user.servicePosition === position &&
+    user.serviceDepartment === department
+  ) ||
+  user.serviceAssignments?.some(
+    (assignment) =>
+      assignment.position === position &&
+      assignment.department === department
+  ) === true;
+
+const isMeetingsManager = (requester: RequesterProfile): boolean =>
+  requester.role === 'admin' ||
+  requester.role === 'supervisor' ||
+  requester.permissions?.reuniones?.manage === true ||
+  (
+    requester.permissions?.reuniones?.create === true &&
+    requester.permissions?.reuniones?.edit === true
+  ) ||
+  hasServiceAssignment(requester, 'encargado', 'reuniones');
 
 const toCleaningMode = (value: unknown): 'none' | 'selected' | 'all' => {
   if (value === 'selected' || value === 'all') return value;
@@ -329,6 +379,10 @@ const getRequesterProfile = async (uid: string): Promise<RequesterProfile> => {
     congregationId,
     displayName: normalizeText(data.displayName),
     email: normalizeText(data.email),
+    servicePosition: normalizeText(data.servicePosition),
+    serviceDepartment: normalizeText(data.serviceDepartment),
+    serviceAssignments: toServiceAssignments(data.serviceAssignments),
+    permissions: data.permissions as UserPermissions | undefined,
   };
 };
 
@@ -340,10 +394,10 @@ const assertMeetingManager = (params: {
     throw new HttpsError('permission-denied', 'Tu usuario esta inactivo.');
   }
 
-  if (params.requester.role !== 'admin' && params.requester.role !== 'supervisor') {
+  if (!isMeetingsManager(params.requester)) {
     throw new HttpsError(
       'permission-denied',
-      'Solo admin y supervisor pueden crear, editar o eliminar reuniones.'
+      'Solo admin, supervisor o encargado de reuniones pueden crear, editar o eliminar reuniones.'
     );
   }
 

@@ -10,7 +10,9 @@ export type UserServiceDepartment =
   | 'tesoreria'
   | 'mantenimiento'
   | 'discursos'
+  | 'reuniones'
   | 'predicacion'
+  | 'audio_video'
   | 'acomodadores_microfonos';
 
 export const USER_SERVICE_POSITION_LABELS: Record<UserServicePosition, string> = {
@@ -26,7 +28,9 @@ export const USER_SERVICE_DEPARTMENT_LABELS: Record<UserServiceDepartment, strin
   tesoreria: 'Tesoreria',
   mantenimiento: 'Mantenimiento',
   discursos: 'Discursos',
+  reuniones: 'Reuniones',
   predicacion: 'Predicacion',
+  audio_video: 'Audio y Video',
   acomodadores_microfonos: 'Acomodadores y Microfonos',
 };
 
@@ -36,7 +40,9 @@ export const USER_SERVICE_DEPARTMENTS: UserServiceDepartment[] = [
   'tesoreria',
   'mantenimiento',
   'discursos',
+  'reuniones',
   'predicacion',
+  'audio_video',
   'acomodadores_microfonos',
 ];
 
@@ -50,6 +56,29 @@ export interface UserPrivileges {
 export interface UserResponsibilities {
   isPreachingManager?: boolean;
 }
+
+export type PermissionDepartment =
+  | 'usuarios'
+  | 'reuniones'
+  | 'limpieza'
+  | 'predicacion'
+  | 'tesoreria'
+  | 'pagos'
+  | 'configuracion'
+  | 'avisos'
+  | 'asignaciones';
+
+export type PermissionAction =
+  | 'view'
+  | 'create'
+  | 'edit'
+  | 'delete'
+  | 'manage'
+  | 'approve'
+  | 'export';
+
+export type DepartmentPermissions = Partial<Record<PermissionAction, boolean>>;
+export type UserPermissions = Partial<Record<PermissionDepartment, DepartmentPermissions>>;
 
 export interface UserServiceAssignment {
   position: UserServicePosition;
@@ -73,6 +102,7 @@ export interface AppUser {
   serviceAssignments?: UserServiceAssignment[];
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
+  permissions?: UserPermissions;
   isElder: boolean;
   isMinisterialServant: boolean;
   avatarUrl?: string;
@@ -117,6 +147,7 @@ export interface CreateUserDTO {
   serviceAssignments?: UserServiceAssignment[];
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
+  permissions?: UserPermissions;
   isElder?: boolean;
   isMinisterialServant?: boolean;
   createdBy?: string;
@@ -142,6 +173,7 @@ export interface UpdateUserDTO {
   serviceAssignments?: UserServiceAssignment[];
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
+  permissions?: UserPermissions;
   isElder?: boolean;
   isMinisterialServant?: boolean;
   // Campos de modulo de limpieza
@@ -157,9 +189,9 @@ export interface UpdateUserDTO {
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
-  admin: 'Anciano',
-  supervisor: 'Siervo ministerial',
-  user: 'Publicador',
+  admin: 'Administrador',
+  supervisor: 'Supervisor',
+  user: 'Usuario',
 };
 
 export const STATUS_LABELS: Record<UserStatus, string> = {

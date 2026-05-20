@@ -12,11 +12,11 @@ interface MeetingsManagementPermission {
 }
 
 export function useMeetingsManagementPermission(): MeetingsManagementPermission {
-  const { role, congregationId, uid, loadingProfile } = useUser();
+  const { appUser, congregationId, uid, loadingProfile } = useUser();
   const router = useRouter();
   const redirectedRef = useRef(false);
 
-  const canManage = canManageMeetings(role);
+  const canManage = canManageMeetings(appUser);
 
   useEffect(() => {
     if (loadingProfile) return;

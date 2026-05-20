@@ -30,6 +30,8 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { CongregationPlanUsage } from '@/src/types/congregation-plan';
 import {
   type AppUser,
+  PermissionAction,
+  PermissionDepartment,
   PRIVILEGE_LABELS,
   ROLE_LABELS,
   USER_SERVICE_DEPARTMENTS,
@@ -38,6 +40,7 @@ import {
   UpdateUserDTO,
   UserGender,
   UserPrivileges,
+  UserPermissions,
   UserResponsibilities,
   UserRole,
   UserServiceAssignment,
@@ -46,6 +49,13 @@ import {
 } from '@/src/types/user';
 import { copyToClipboard } from '@/src/utils/clipboard/clipboard';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import {
+  ACTION_LABELS,
+  DEPARTMENT_LABELS,
+  getEffectivePermissions,
+  hasPermission,
+  SUPERVISOR_PERMISSION_TEMPLATE,
+} from '@/src/utils/permissions/permissions';
 import { hasErrors, validateMinLength, validateRequired } from '@/src/utils/validation/validation';
 
 type Mode = 'create' | 'edit';
@@ -163,9 +173,11 @@ export function UserFormScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
 
-  const { congregationId, isAdmin, isElder, loadingProfile, profileError } = useUser();
-  // Los ancianos pueden EDITAR usuarios existentes, pero NO crear nuevos.
-  const canEdit = isAdmin || (isElder && mode === 'edit');
+  const { appUser, congregationId, isAdmin, loadingProfile, profileError } = useUser();
+  const canEdit =
+    mode === 'create'
+      ? hasPermission(appUser, 'usuarios', 'create') || hasPermission(appUser, 'usuarios', 'manage')
+      : hasPermission(appUser, 'usuarios', 'edit') || hasPermission(appUser, 'usuarios', 'manage');
 
   const [displayName, setDisplayName] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -185,6 +197,7 @@ export function UserFormScreen() {
   const [serviceAssignments, setServiceAssignments] = useState<UserServiceAssignment[]>([]);
   const [privileges, setPrivileges] = useState<UserPrivileges>({});
   const [responsibilities, setResponsibilities] = useState<UserResponsibilities>({});
+  const [permissions, setPermissions] = useState<UserPermissions>({});
   const [allowedEmailDomain, setAllowedEmailDomain] = useState('congregacion.com');
   const [planUsage, setPlanUsage] = useState<CongregationPlanUsage | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -273,6 +286,7 @@ export function UserFormScreen() {
 
         setPrivileges(loadedUser.privileges ?? {});
         setResponsibilities(loadedUser.responsibilities ?? {});
+        setPermissions(loadedUser.permissions ?? {});
       })
       .catch((requestError) => {
         Alert.alert('Error', formatFirestoreError(requestError));
@@ -398,33 +412,8 @@ export function UserFormScreen() {
     );
   };
 
-  // Sincroniza privilegios de nombramiento cuando cambia el rol.
-  // Anciano → isElder fijo; Siervo ministerial → isMinisterialServant fijo;
-  // Publicador → ninguno marcado (no se pueden asignar manualmente).
-  useEffect(() => {
-    setPrivileges((current) => {
-      const next = { ...current };
-      if (role === 'admin') {
-        // Anciano
-        next.isElder = true;
-        next.isMinisterialServant = false;
-      } else if (role === 'supervisor') {
-        // Siervo ministerial
-        next.isElder = false;
-        next.isMinisterialServant = true;
-      } else {
-        // Publicador: ningún nombramiento
-        next.isElder = false;
-        next.isMinisterialServant = false;
-      }
-      return next;
-    });
-  }, [role]);
-
   const togglePrivilege = (key: keyof UserPrivileges) => {
     if (!isAdmin) return;
-    // Anciano y Siervo Ministerial son controlados por el Rol — no se pueden tocar directamente.
-    if (key === 'isElder' || key === 'isMinisterialServant') return;
 
     setPrivileges((current) => {
       const nextValue = !current[key];
@@ -433,7 +422,12 @@ export function UserFormScreen() {
         [key]: nextValue,
       };
 
-      // Precursor Regular y Auxiliar son mutuamente excluyentes.
+      if (key === 'isElder' && nextValue) {
+        next.isMinisterialServant = false;
+      }
+      if (key === 'isMinisterialServant' && nextValue) {
+        next.isElder = false;
+      }
       if (key === 'isRegularPioneer' && nextValue) {
         next.isAuxiliaryPioneer = false;
       }
@@ -444,6 +438,46 @@ export function UserFormScreen() {
       return next;
     });
   };
+
+  const togglePermission = (department: PermissionDepartment, action: PermissionAction) => {
+    if (!isAdmin || role !== 'supervisor') return;
+
+    setPermissions((current) => ({
+      ...current,
+      [department]: {
+        ...(current[department] ?? {}),
+        [action]: !(current[department]?.[action] === true),
+      },
+    }));
+  };
+
+  const effectivePermissions = useMemo(
+    () =>
+      getEffectivePermissions({
+        role,
+        permissions: role === 'supervisor' ? permissions : undefined,
+        servicePosition: serviceAssignments[0]?.position,
+        serviceDepartment: serviceAssignments[0]?.department,
+        serviceAssignments,
+      }),
+    [permissions, role, serviceAssignments]
+  );
+
+  const allowedPermissionLabels = useMemo(
+    () =>
+      Object.entries(effectivePermissions)
+        .map(([department, actions]) => {
+          const enabledActions = Object.entries(actions ?? {})
+            .filter(([, enabled]) => enabled === true)
+            .map(([action]) => ACTION_LABELS[action as PermissionAction]);
+
+          return enabledActions.length > 0
+            ? `${DEPARTMENT_LABELS[department as PermissionDepartment]}: ${enabledActions.join(', ')}`
+            : null;
+        })
+        .filter((item): item is string => Boolean(item)),
+    [effectivePermissions]
+  );
 
   useEffect(() => {
     if (!positionOptions.includes(servicePositionDraft)) {
@@ -504,7 +538,7 @@ export function UserFormScreen() {
 
   const handleSave = async () => {
     if (!canEdit) {
-      Alert.alert('Permisos insuficientes', mode === 'edit' ? 'Solo administradores y ancianos pueden editar usuarios.' : 'Solo administradores pueden crear usuarios.');
+      Alert.alert('Permisos insuficientes', 'Solo administradores pueden crear o editar usuarios.');
       return;
     }
 
@@ -557,6 +591,7 @@ export function UserFormScreen() {
           serviceAssignments,
           privileges,
           responsibilities,
+          permissions: role === 'supervisor' ? permissions : undefined,
           isElder: privileges.isElder === true,
           isMinisterialServant: privileges.isMinisterialServant === true,
           isActive: true,
@@ -582,7 +617,7 @@ export function UserFormScreen() {
         );
         return;
       } else if (id) {
-        const payload: UpdateUserDTO = {
+        const payload: UpdateUserDTO = isAdmin ? {
           displayName: displayName.trim(),
           role,
           gender: selectedGender,
@@ -593,13 +628,18 @@ export function UserFormScreen() {
           serviceAssignments,
           privileges,
           responsibilities,
+          permissions: role === 'supervisor' ? permissions : {},
           isElder: privileges.isElder === true,
           isMinisterialServant: privileges.isMinisterialServant === true,
+        } : {
+          displayName: displayName.trim(),
+          gender: selectedGender,
+          phone: normalizedPhone,
         };
 
         await updateUserByAdmin({ uid: id, data: payload });
 
-        if (newPassword.trim().length > 0) {
+        if (isAdmin && newPassword.trim().length > 0) {
           await updateUserPasswordByAdmin({
             uid: id,
             newPassword: newPassword.trim(),
@@ -632,7 +672,7 @@ export function UserFormScreen() {
         {!canEdit ? (
           <View style={styles.permissionNotice}>
             <ThemedText style={styles.permissionText}>
-              {mode === 'edit' ? 'Solo administradores y ancianos pueden editar usuarios.' : 'Solo administradores pueden crear usuarios.'}
+              Solo administradores pueden crear o editar usuarios.
             </ThemedText>
           </View>
         ) : null}
@@ -920,35 +960,75 @@ export function UserFormScreen() {
           </TouchableOpacity>
         ) : null}
 
+        {role === 'supervisor' ? (
+          <Field label="Funciones permitidas para este supervisor">
+            <ThemedText style={styles.hintText}>
+              Activa solo las acciones que este supervisor podra realizar. Las asignaciones de servicio tambien pueden sumar permisos.
+            </ThemedText>
+            <View style={styles.permissionGroups}>
+              {Object.entries(SUPERVISOR_PERMISSION_TEMPLATE).map(([department, actions]) => (
+                <View key={department} style={styles.permissionGroup}>
+                  <ThemedText style={styles.permissionGroupTitle}>
+                    {DEPARTMENT_LABELS[department as PermissionDepartment]}
+                  </ThemedText>
+                  <View style={styles.departmentRow}>
+                    {actions.map((action) => (
+                      <ToggleChip
+                        key={`${department}:${action}`}
+                        label={ACTION_LABELS[action]}
+                        selected={permissions[department as PermissionDepartment]?.[action] === true}
+                        disabled={!isAdmin}
+                        onPress={() => togglePermission(department as PermissionDepartment, action)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </View>
+          </Field>
+        ) : null}
+
+        <Field label="Permisos asignados">
+          {allowedPermissionLabels.length > 0 ? (
+            <View style={styles.permissionSummary}>
+              {allowedPermissionLabels.map((item) => (
+                <ThemedText key={item} style={styles.permissionSummaryText}>
+                  {item}
+                </ThemedText>
+              ))}
+            </View>
+          ) : (
+            <ThemedText style={styles.hintText}>Sin permisos adicionales registrados.</ThemedText>
+          )}
+        </Field>
+
         <Field label="Privilegios / nombramientos" error={errors.privileges}>
           <ThemedText style={styles.hintText}>
-            El nombramiento de Anciano o Siervo Ministerial se asigna automaticamente segun el Rol seleccionado.
+            Selecciona los privilegios o nombramientos del usuario. Estos no dependen del rol de acceso al sistema.
           </ThemedText>
           <View style={styles.departmentRow}>
-            {/* Anciano y Siervo Ministerial: bloqueados, derivados del Rol */}
             <ToggleChip
               label={PRIVILEGE_LABELS.isElder}
               selected={Boolean(privileges.isElder)}
-              disabled={true}
-              onPress={() => { }}
+              disabled={!isAdmin}
+              onPress={() => togglePrivilege('isElder')}
             />
             <ToggleChip
               label={PRIVILEGE_LABELS.isMinisterialServant}
               selected={Boolean(privileges.isMinisterialServant)}
-              disabled={true}
-              onPress={() => { }}
+              disabled={!isAdmin}
+              onPress={() => togglePrivilege('isMinisterialServant')}
             />
-            {/* Precursor: libre, mutuamente excluyente */}
             <ToggleChip
               label={PRIVILEGE_LABELS.isRegularPioneer}
               selected={Boolean(privileges.isRegularPioneer)}
-              disabled={!canEdit}
+              disabled={!isAdmin}
               onPress={() => togglePrivilege('isRegularPioneer')}
             />
             <ToggleChip
               label={PRIVILEGE_LABELS.isAuxiliaryPioneer}
               selected={Boolean(privileges.isAuxiliaryPioneer)}
-              disabled={!canEdit}
+              disabled={!isAdmin}
               onPress={() => togglePrivilege('isAuxiliaryPioneer')}
             />
           </View>
@@ -1303,6 +1383,35 @@ const createStyles = (colors: AppColorSet) =>
     permissionText: {
       fontSize: 13,
       color: colors.warning,
+      fontWeight: '600',
+    },
+    permissionGroups: {
+      gap: 12,
+    },
+    permissionGroup: {
+      gap: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 10,
+      backgroundColor: colors.surface,
+    },
+    permissionGroupTitle: {
+      color: colors.textPrimary,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    permissionSummary: {
+      gap: 6,
+      borderWidth: 1,
+      borderColor: colors.primary + '44',
+      backgroundColor: colors.primary + '10',
+      borderRadius: 8,
+      padding: 10,
+    },
+    permissionSummaryText: {
+      color: colors.textSecondary,
+      fontSize: 12,
       fontWeight: '600',
     },
     planNotice: {

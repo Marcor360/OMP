@@ -20,8 +20,7 @@ import {
 } from '@/src/modules/assignments/types/assignment.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { useUser } from '@/src/context/user-context';
-import { RoleGuard } from '@/src/components/common/RoleGuard';
-import { canManageOutgoingTalks } from '@/src/utils/permissions/permissions';
+import { canManageAssignments, canManageOutgoingTalks } from '@/src/utils/permissions/permissions';
 
 export function AssignmentsScreen() {
   const router = useRouter();
@@ -29,6 +28,7 @@ export function AssignmentsScreen() {
   const styles = createStyles(colors);
   const { appUser, congregationId, loadingProfile, profileError, uid } = useUser();
   const showOutgoingTalks = canManageOutgoingTalks(appUser);
+  const canCreateAssignments = canManageAssignments(appUser);
 
   const {
     activeTab,
@@ -108,7 +108,7 @@ export function AssignmentsScreen() {
                 <ThemedText style={styles.createButtonText}>Salidas</ThemedText>
               </TouchableOpacity>
             ) : null}
-            <RoleGuard allowedRoles={['admin', 'supervisor']}>
+            {canCreateAssignments ? (
               <TouchableOpacity
                 style={styles.createButton}
                 onPress={() => router.push('/(protected)/assignments/create' as never)}
@@ -117,7 +117,7 @@ export function AssignmentsScreen() {
                 <Ionicons name="add" size={16} color={colors.primary} />
                 <ThemedText style={styles.createButtonText}>Nuevo</ThemedText>
               </TouchableOpacity>
-            </RoleGuard>
+            ) : null}
           </View>
         }
       />

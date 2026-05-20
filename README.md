@@ -349,9 +349,9 @@ Todos los planes deben incluir las mismas funcionalidades. La única diferencia 
 
 | Plan | Usuarios activos máximos | Precio mensual sugerido |
 |---|---:|---:|
-| 🟢 OMP Básico | 70 usuarios | $60 MXN/mes |
-| 🟡 OMP Intermedio | 120 usuarios | $100 MXN/mes |
-| 🔵 OMP Completo | 200 usuarios | $150 MXN/mes |
+| 🟢 OMP Básico | 70 usuarios | $69 MXN/mes |
+| 🟡 OMP Intermedio | 120 usuarios | $109 MXN/mes |
+| 🔵 OMP Completo | 200 usuarios | $159 MXN/mes |
 
 ### Criterio de estos precios
 

@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
-import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common/StatusBadge';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
@@ -31,6 +30,7 @@ import { formatDate } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { isSystemPrincipalUser } from '@/src/utils/users/user-protection';
 import { useI18n } from '@/src/i18n/index';
+import { hasPermission } from '@/src/utils/permissions/permissions';
 
 const interpolate = (template: string, values: Record<string, string>): string =>
   Object.entries(values).reduce(
@@ -41,7 +41,7 @@ const interpolate = (template: string, values: Record<string, string>): string =
 export function UserDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { congregationId, isAdmin, isElder, loadingProfile, profileError, uid: currentUid } = useUser();
+  const { appUser, congregationId, isAdmin, loadingProfile, profileError, uid: currentUid } = useUser();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { t } = useI18n();
@@ -60,6 +60,14 @@ export function UserDetailScreen() {
       setUser(null);
       setCongregationName('--');
       setError(profileError ?? t('users.error.noCongregation'));
+      setLoading(false);
+      return;
+    }
+
+    if (!hasPermission(appUser, 'usuarios', 'view') && id !== currentUid) {
+      setUser(null);
+      setCongregationName('--');
+      setError(t('users.error.noViewPermission'));
       setLoading(false);
       return;
     }
@@ -98,7 +106,7 @@ export function UserDetailScreen() {
     return () => {
       unsubscribe();
     };
-  }, [congregationId, id, loadingProfile, profileError, t]);
+  }, [appUser, congregationId, currentUid, id, loadingProfile, profileError, t]);
 
   useEffect(() => {
     if (!user?.congregationId) {
@@ -126,7 +134,7 @@ export function UserDetailScreen() {
   const handleToggleStatus = async () => {
     if (!user) return;
 
-    if (!isAdmin && !isElder) {
+    if (!hasPermission(appUser, 'usuarios', 'edit') && !hasPermission(appUser, 'usuarios', 'manage')) {
       Alert.alert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyStatus'));
       return;
     }
@@ -184,7 +192,7 @@ export function UserDetailScreen() {
   const handleDeleteUser = async () => {
     if (!user) return;
 
-    if (!isAdmin && !isElder) {
+    if (!hasPermission(appUser, 'usuarios', 'delete') && !hasPermission(appUser, 'usuarios', 'manage')) {
       Alert.alert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyDelete'));
       return;
     }
@@ -244,11 +252,12 @@ export function UserDetailScreen() {
     .join('')
     .toUpperCase();
 
-  // Un anciano puede gestionar usuarios de su congregacion que NO sean del sistema protegido.
-  // Un admin puede gestionar a cualquier usuario (Firestore ya impone las restricciones finales).
   const isProtectedSystemUser = isSystemPrincipalUser(user);
-  const canManageThisUser =
-    isAdmin || (isElder && !isProtectedSystemUser);
+  const canEditThisUser =
+    hasPermission(appUser, 'usuarios', 'edit') || hasPermission(appUser, 'usuarios', 'manage');
+  const canDeleteThisUser =
+    hasPermission(appUser, 'usuarios', 'delete') || hasPermission(appUser, 'usuarios', 'manage');
+  const canManageThisUser = canEditThisUser || canDeleteThisUser;
 
   const privilegesLabel = [
     user.privileges?.isElder ? PRIVILEGE_LABELS.isElder : null,
@@ -270,7 +279,7 @@ export function UserDetailScreen() {
         title={t('users.detail.title')}
         showBack
         actions={
-          canManageThisUser ? (
+          canEditThisUser ? (
             <TouchableOpacity
               style={styles.editBtn}
               onPress={() => router.push(`/(protected)/users/edit/${user.uid}` as any)}
@@ -309,35 +318,37 @@ export function UserDetailScreen() {
 
         {canManageThisUser ? (
           <>
-            <TouchableOpacity
-            style={[
-              styles.toggleBtn,
-              {
-                backgroundColor: user.status === 'active' ? colors.error + '22' : colors.success + '22',
-              },
-            ]}
-              onPress={handleToggleStatus}
-              disabled={toggling}
-              activeOpacity={0.8}
-            >
-            <Ionicons
-              name={user.status === 'active' ? 'ban-outline' : 'checkmark-circle-outline'}
-              size={18}
-              color={user.status === 'active' ? colors.error : colors.success}
-            />
-            <ThemedText
-              style={{
-                color: user.status === 'active' ? colors.error : colors.success,
-                fontWeight: '600',
-              }}
-            >
-              {toggling
-                ? t('users.status.updating')
-                : user.status === 'active'
-                  ? t('users.status.deactivate')
-                  : t('users.status.activate')}
-            </ThemedText>
-            </TouchableOpacity>
+            {canEditThisUser ? (
+              <TouchableOpacity
+                style={[
+                  styles.toggleBtn,
+                  {
+                    backgroundColor: user.status === 'active' ? colors.error + '22' : colors.success + '22',
+                  },
+                ]}
+                onPress={handleToggleStatus}
+                disabled={toggling}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={user.status === 'active' ? 'ban-outline' : 'checkmark-circle-outline'}
+                  size={18}
+                  color={user.status === 'active' ? colors.error : colors.success}
+                />
+                <ThemedText
+                  style={{
+                    color: user.status === 'active' ? colors.error : colors.success,
+                    fontWeight: '600',
+                  }}
+                >
+                  {toggling
+                    ? t('users.status.updating')
+                    : user.status === 'active'
+                      ? t('users.status.deactivate')
+                      : t('users.status.activate')}
+                </ThemedText>
+              </TouchableOpacity>
+            ) : null}
 
             {isProtectedSystemUser ? (
               <View style={styles.protectedNotice}>
@@ -346,7 +357,7 @@ export function UserDetailScreen() {
                   {t('users.detail.systemProtected')}
                 </ThemedText>
               </View>
-            ) : (isAdmin || user.role !== 'admin') ? (
+            ) : canDeleteThisUser && (isAdmin || user.role !== 'admin') ? (
               <TouchableOpacity
                 style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
                 onPress={handleDeleteUser}

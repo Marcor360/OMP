@@ -12,7 +12,6 @@ import { MidweekMeetingCard } from '@/src/components/cards/MidweekMeetingCard';
 import { EmptyState } from '@/src/components/common/EmptyState';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
-import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
@@ -125,7 +124,7 @@ export function MidweekMeetingsListScreen() {
           {filteredMeetings.length} reunion{filteredMeetings.length === 1 ? '' : 'es'}
         </ThemedText>
 
-        <RoleGuard allowedRoles={['admin', 'supervisor']}>
+        {canManage ? (
           <View style={styles.toolbarActions}>
             <TouchableOpacity
               style={styles.addButton}
@@ -136,7 +135,7 @@ export function MidweekMeetingsListScreen() {
               <ThemedText style={styles.addButtonText}>Nueva VyMC</ThemedText>
             </TouchableOpacity>
           </View>
-        </RoleGuard>
+        ) : null}
       </View>
 
       <View style={styles.weekNavRow}>

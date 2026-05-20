@@ -107,7 +107,7 @@ export const es = {
 
   // Meetings management
   'meetings.management.title': 'Gestion de reuniones',
-  'meetings.management.subtitle': 'Anciano y Siervo ministerial',
+  'meetings.management.subtitle': 'Administrador, supervisor o encargado de reuniones',
   'meetings.management.loading': 'Cargando gestion de reuniones...',
   'meetings.management.noCongregation': 'No se encontro la congregacion del perfil actual.',
   'meetings.management.action.newWeekend': 'Nueva fin de semana',
@@ -158,9 +158,9 @@ export const es = {
   'about.build': 'Compilacion',
 
   // Roles
-  'role.admin': 'Anciano',
-  'role.supervisor': 'Siervo ministerial',
-  'role.user': 'Publicador',
+  'role.admin': 'Administrador',
+  'role.supervisor': 'Supervisor',
+  'role.user': 'Usuario',
   'userStatus.active': 'Activo',
   'userStatus.inactive': 'Inactivo',
   'userStatus.suspended': 'Suspendido',
@@ -218,8 +218,8 @@ export const es = {
   'users.error.noEditPermission': 'No tienes permisos para editar este usuario.',
   'users.error.insufficientPermissions': 'Permisos insuficientes',
   'users.error.adminOnlyEdit': 'Solo administradores pueden crear o editar usuarios.',
-  'users.error.adminOnlyStatus': 'Solo administradores o ancianos pueden cambiar el estado de usuarios.',
-  'users.error.adminOnlyDelete': 'Solo administradores o ancianos pueden eliminar usuarios.',
+  'users.error.adminOnlyStatus': 'Solo administradores pueden cambiar el estado de usuarios.',
+  'users.error.adminOnlyDelete': 'Solo administradores pueden eliminar usuarios.',
   'users.error.actionNotAllowed': 'Accion no permitida',
   'users.error.cannotDeleteSelf': 'No puedes eliminar tu propio usuario.',
   'users.error.cannotDeleteSystemUser': 'Este usuario fue creado por el sistema principal y no se puede eliminar.',

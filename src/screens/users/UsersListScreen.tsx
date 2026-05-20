@@ -7,7 +7,6 @@ import { UserCard } from '@/src/components/cards/UserCard';
 import { EmptyState } from '@/src/components/common/EmptyState';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
-import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
@@ -17,10 +16,11 @@ import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 import { useI18n } from '@/src/i18n/index';
+import { hasPermission } from '@/src/utils/permissions/permissions';
 
 export function UsersListScreen() {
   const router = useRouter();
-  const { congregationId, isAdmin, loadingProfile } = useUser();
+  const { appUser, congregationId, loadingProfile } = useUser();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { t } = useI18n();
@@ -36,6 +36,15 @@ export function UsersListScreen() {
 
     if (loadingRef.current) return;
     loadingRef.current = true;
+
+    if (!hasPermission(appUser, 'usuarios', 'view')) {
+      setUsers([]);
+      setError(t('users.permission.adminOnlyList'));
+      setLoading(false);
+      setRefreshing(false);
+      loadingRef.current = false;
+      return;
+    }
 
     if (!congregationId || typeof congregationId !== 'string') {
       setUsers([]);
@@ -66,7 +75,7 @@ export function UsersListScreen() {
       setRefreshing(false);
       loadingRef.current = false;
     }
-  }, [congregationId, loadingProfile, t]);
+  }, [appUser, congregationId, loadingProfile, t]);
 
   useEffect(() => {
     void loadUsers(true);
@@ -91,13 +100,15 @@ export function UsersListScreen() {
   if (loading || loadingProfile) return <LoadingState message={t('users.loading')} />;
   if (error) return <ErrorState message={error} />;
 
+  const canCreateUsers = hasPermission(appUser, 'usuarios', 'create') || hasPermission(appUser, 'usuarios', 'manage');
+
   const header = (
     <>
       <View style={styles.toolbar}>
         <ThemedText style={styles.count}>
           {users.length} {users.length === 1 ? t('users.count.singular') : t('users.count.plural')}
         </ThemedText>
-        <RoleGuard requiredRole="admin">
+        {canCreateUsers ? (
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => router.push('/(protected)/users/create')}
@@ -106,10 +117,10 @@ export function UsersListScreen() {
             <Ionicons name="add" size={20} color={colors.onPrimary} />
             <ThemedText style={styles.addButtonText}>{t('users.action.new')}</ThemedText>
           </TouchableOpacity>
-        </RoleGuard>
+        ) : null}
       </View>
 
-      {!isAdmin ? (
+      {!canCreateUsers ? (
         <View style={styles.permissionNotice}>
           <ThemedText style={styles.permissionText}>
             {t('users.permission.adminOnlyList')}
@@ -134,8 +145,8 @@ export function UsersListScreen() {
               icon="people-outline"
               title={t('users.empty.title')}
               description={t('users.empty.description')}
-              actionLabel={isAdmin ? t('users.action.create') : undefined}
-              onAction={isAdmin ? () => router.push('/(protected)/users/create') : undefined}
+              actionLabel={canCreateUsers ? t('users.action.create') : undefined}
+              onAction={canCreateUsers ? () => router.push('/(protected)/users/create') : undefined}
             />
           </View>
         }

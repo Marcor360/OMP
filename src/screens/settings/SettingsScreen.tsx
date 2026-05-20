@@ -3,7 +3,6 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-import { RoleGuard } from '@/src/components/common/RoleGuard';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { PermissionRow } from '@/src/components/common/PermissionRow';
@@ -17,6 +16,7 @@ import { CongregationPlanUsage } from '@/src/types/congregation-plan';
 import { getCongregationPlanUsage } from '@/src/services/congregations/congregations-service';
 import { type AppColors, useAppColors } from '@/src/styles';
 import { isExpoGo } from '@/src/utils/runtime';
+import { hasPermission } from '@/src/utils/permissions/permissions';
 
 export function SettingsScreen() {
   const router = useRouter();
@@ -29,7 +29,13 @@ export function SettingsScreen() {
   const [planUsage, setPlanUsage] = useState<CongregationPlanUsage | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const canViewCongregationPlan =
-    appUser?.isElder === true || appUser?.privileges?.isElder === true;
+    hasPermission(appUser, 'configuracion', 'view') ||
+    hasPermission(appUser, 'configuracion', 'manage');
+  const canViewAdministration =
+    hasPermission(appUser, 'usuarios', 'view') ||
+    hasPermission(appUser, 'reuniones', 'manage') ||
+    hasPermission(appUser, 'asignaciones', 'manage') ||
+    hasPermission(appUser, 'limpieza', 'view');
 
   useEffect(() => {
     if (!congregationId || !canViewCongregationPlan) {
@@ -160,32 +166,40 @@ export function SettingsScreen() {
           </Section>
         ) : null}
 
-        <RoleGuard requiredRole="admin">
+        {canViewAdministration ? (
           <Section title={t('settings.section.administration')}>
-            <SettingRow
+            {hasPermission(appUser, 'usuarios', 'view') ? (
+              <SettingRow
               icon="people-outline"
               label={t('settings.admin.userManagement')}
               showArrow
               onPress={() => router.push('/(protected)/(tabs)/users' as any)}
             />
-            <SettingRow
+            ) : null}
+            {hasPermission(appUser, 'reuniones', 'manage') ? (
+              <SettingRow
               icon="calendar-outline"
               label={t('settings.admin.meetingManagement')}
               showArrow
               onPress={() => router.push('/(protected)/(tabs)/meetings' as any)}
             />
-            <SettingRow
+            ) : null}
+            {hasPermission(appUser, 'asignaciones', 'manage') ? (
+              <SettingRow
               icon="checkmark-done-outline"
               label={t('settings.admin.assignmentManagement')}
               showArrow
               onPress={() => router.push('/(protected)/(tabs)/assignments' as any)}
             />
-            <SettingRow
+            ) : null}
+            {hasPermission(appUser, 'limpieza', 'view') ? (
+              <SettingRow
               icon="sparkles-outline"
               label={t('settings.admin.cleaningGroups')}
               showArrow
               onPress={() => router.push('/(protected)/(tabs)/cleaning' as any)}
             />
+            ) : null}
             <SettingRow
               icon="notifications-outline"
               label={t('settings.admin.notifications')}
@@ -195,7 +209,7 @@ export function SettingsScreen() {
               }}
             />
           </Section>
-        </RoleGuard>
+        ) : null}
 
         <Section title={t('settings.section.organization')}>
           <SettingRow

@@ -35,9 +35,11 @@ import {
   UserServiceAssignment,
   UserServicePosition,
   UserGender,
+  UserPermissions,
   UserRole,
   UserStatus,
 } from '@/src/types/user';
+import { PERMISSION_ACTIONS, PERMISSION_DEPARTMENTS } from '@/src/utils/permissions/permissions';
 
 const isUserRole = (value: unknown): value is UserRole =>
   value === 'admin' || value === 'supervisor' || value === 'user';
@@ -88,7 +90,9 @@ const isUserServiceDepartment = (value: unknown): value is UserServiceDepartment
     value === 'tesoreria' ||
     value === 'mantenimiento' ||
     value === 'discursos' ||
+    value === 'reuniones' ||
     value === 'predicacion' ||
+    value === 'audio_video' ||
     value === 'acomodadores_microfonos'
   );
 };
@@ -175,6 +179,34 @@ const normalizeBooleanMap = <TKeys extends string>(
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
 
+const normalizePermissions = (value: unknown): UserPermissions | undefined => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+
+  const source = value as Record<string, unknown>;
+  const permissions = PERMISSION_DEPARTMENTS.reduce<UserPermissions>((acc, department) => {
+    const rawDepartment = source[department];
+    if (typeof rawDepartment !== 'object' || rawDepartment === null || Array.isArray(rawDepartment)) {
+      return acc;
+    }
+
+    const rawActions = rawDepartment as Record<string, unknown>;
+    const normalized = PERMISSION_ACTIONS.reduce<Record<string, boolean>>((actions, action) => {
+      if (typeof rawActions[action] === 'boolean') {
+        actions[action] = rawActions[action] as boolean;
+      }
+      return actions;
+    }, {});
+
+    if (Object.keys(normalized).length > 0) {
+      acc[department] = normalized;
+    }
+
+    return acc;
+  }, {});
+
+  return Object.keys(permissions).length > 0 ? permissions : undefined;
+};
+
 const SYSTEM_ACTOR_LABEL = 'Sistema Sistema';
 
 const normalizeActorLabel = (value: unknown): string | undefined => {
@@ -234,6 +266,7 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
   const responsibilities = normalizeBooleanMap(data.responsibilities, [
     'isPreachingManager',
   ] as const);
+  const permissions = normalizePermissions(data.permissions);
 
   return {
     uid,
@@ -260,6 +293,7 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
     serviceAssignments,
     privileges,
     responsibilities,
+    permissions,
     isElder,
     isMinisterialServant,
     avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : undefined,
