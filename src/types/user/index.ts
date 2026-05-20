@@ -77,7 +77,11 @@ export type PermissionAction =
   | 'approve'
   | 'export';
 
-export type DepartmentPermissions = Partial<Record<PermissionAction, boolean>>;
+export type TerritoryPermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'assign';
+
+export type DepartmentPermissions = Partial<Record<PermissionAction, boolean>> & {
+  territories?: Partial<Record<TerritoryPermissionAction, boolean>>;
+};
 export type UserPermissions = Partial<Record<PermissionDepartment, DepartmentPermissions>>;
 
 export interface UserServiceAssignment {

@@ -1,0 +1,11 @@
+[debug] [2026-05-20T05:33:15.974Z] ----------------------------------------------------------------------
+[debug] [2026-05-20T05:33:15.976Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Local\npm-cache\_npx\ba4f1959e38407b5\node_modules\firebase-tools\lib\bin\firebase.js use
+[debug] [2026-05-20T05:33:15.976Z] CLI Version:   15.18.0
+[debug] [2026-05-20T05:33:15.976Z] Platform:      win32
+[debug] [2026-05-20T05:33:15.976Z] Node Version:  v24.14.0
+[debug] [2026-05-20T05:33:15.976Z] Time:          Tue May 19 2026 23:33:15 GMT-0600 (hora estándar central)
+[debug] [2026-05-20T05:33:15.976Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-20T05:33:16.105Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-20T05:33:16.105Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[info] ormeprassig-public

@@ -48,7 +48,13 @@ type PermissionAction =
   | 'approve'
   | 'export';
 
-type UserPermissions = Partial<Record<PermissionDepartment, Partial<Record<PermissionAction, boolean>>>>;
+type TerritoryPermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'assign';
+
+type DepartmentPermissions = Partial<Record<PermissionAction, boolean>> & {
+  territories?: Partial<Record<TerritoryPermissionAction, boolean>>;
+};
+
+type UserPermissions = Partial<Record<PermissionDepartment, DepartmentPermissions>>;
 
 type ServiceAssignment = {
   position?: ServicePosition;
@@ -165,6 +171,14 @@ const PERMISSION_ACTIONS: PermissionAction[] = [
   'manage',
   'approve',
   'export',
+];
+
+const TERRITORY_PERMISSION_ACTIONS: TerritoryPermissionAction[] = [
+  'view',
+  'create',
+  'edit',
+  'delete',
+  'assign',
 ];
 
 function assertValidRole(role: unknown): asserts role is Role {
@@ -327,13 +341,15 @@ const parsePermissions = (value: unknown): UserPermissions | undefined => {
 
     const rawActions = rawDepartment as Record<string, unknown>;
     const invalidAction = Object.keys(rawActions).find(
-      (action) => !PERMISSION_ACTIONS.includes(action as PermissionAction)
+      (action) =>
+        !PERMISSION_ACTIONS.includes(action as PermissionAction) &&
+        !(department === 'predicacion' && action === 'territories')
     );
     if (invalidAction) {
       throw new HttpsError('invalid-argument', 'Permisos contienen acciones no permitidas.');
     }
 
-    const actions = PERMISSION_ACTIONS.reduce<Partial<Record<PermissionAction, boolean>>>((normalized, action) => {
+    const actions = PERMISSION_ACTIONS.reduce<DepartmentPermissions>((normalized, action) => {
       if (rawActions[action] !== undefined) {
         if (typeof rawActions[action] !== 'boolean') {
           throw new HttpsError('invalid-argument', 'Los permisos deben ser booleanos.');
@@ -342,6 +358,41 @@ const parsePermissions = (value: unknown): UserPermissions | undefined => {
       }
       return normalized;
     }, {});
+
+    if (department === 'predicacion' && rawActions.territories !== undefined) {
+      if (
+        typeof rawActions.territories !== 'object' ||
+        rawActions.territories === null ||
+        Array.isArray(rawActions.territories)
+      ) {
+        throw new HttpsError('invalid-argument', 'Permisos de territorios invalidos.');
+      }
+
+      const rawTerritories = rawActions.territories as Record<string, unknown>;
+      const invalidTerritoryAction = Object.keys(rawTerritories).find(
+        (action) => !TERRITORY_PERMISSION_ACTIONS.includes(action as TerritoryPermissionAction)
+      );
+      if (invalidTerritoryAction) {
+        throw new HttpsError('invalid-argument', 'Permisos de territorios contienen acciones no permitidas.');
+      }
+
+      const territories = TERRITORY_PERMISSION_ACTIONS.reduce<Partial<Record<TerritoryPermissionAction, boolean>>>(
+        (normalized, action) => {
+          if (rawTerritories[action] !== undefined) {
+            if (typeof rawTerritories[action] !== 'boolean') {
+              throw new HttpsError('invalid-argument', 'Los permisos de territorios deben ser booleanos.');
+            }
+            normalized[action] = rawTerritories[action] as boolean;
+          }
+          return normalized;
+        },
+        {}
+      );
+
+      if (Object.keys(territories).length > 0) {
+        actions.territories = territories;
+      }
+    }
 
     if (Object.keys(actions).length > 0) {
       acc[department] = actions;

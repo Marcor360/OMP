@@ -46,6 +46,7 @@ import {
   UserServiceAssignment,
   UserServiceDepartment,
   UserServicePosition,
+  TerritoryPermissionAction,
 } from '@/src/types/user';
 import { copyToClipboard } from '@/src/utils/clipboard/clipboard';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -55,6 +56,8 @@ import {
   getEffectivePermissions,
   hasPermission,
   SUPERVISOR_PERMISSION_TEMPLATE,
+  TERRITORY_ACTION_LABELS,
+  TERRITORY_PERMISSION_ACTIONS,
 } from '@/src/utils/permissions/permissions';
 import { hasErrors, validateMinLength, validateRequired } from '@/src/utils/validation/validation';
 
@@ -451,6 +454,21 @@ export function UserFormScreen() {
     }));
   };
 
+  const toggleTerritoryPermission = (action: TerritoryPermissionAction) => {
+    if (!isAdmin || role !== 'supervisor') return;
+
+    setPermissions((current) => ({
+      ...current,
+      predicacion: {
+        ...(current.predicacion ?? {}),
+        territories: {
+          ...(current.predicacion?.territories ?? {}),
+          [action]: !(current.predicacion?.territories?.[action] === true),
+        },
+      },
+    }));
+  };
+
   const effectivePermissions = useMemo(
     () =>
       getEffectivePermissions({
@@ -468,11 +486,15 @@ export function UserFormScreen() {
       Object.entries(effectivePermissions)
         .map(([department, actions]) => {
           const enabledActions = Object.entries(actions ?? {})
-            .filter(([, enabled]) => enabled === true)
+            .filter(([action, enabled]) => action !== 'territories' && enabled === true)
             .map(([action]) => ACTION_LABELS[action as PermissionAction]);
+          const territoryActions = Object.entries(actions?.territories ?? {})
+            .filter(([, enabled]) => enabled === true)
+            .map(([action]) => TERRITORY_ACTION_LABELS[action as TerritoryPermissionAction]);
+          const labels = [...enabledActions, ...territoryActions];
 
-          return enabledActions.length > 0
-            ? `${DEPARTMENT_LABELS[department as PermissionDepartment]}: ${enabledActions.join(', ')}`
+          return labels.length > 0
+            ? `${DEPARTMENT_LABELS[department as PermissionDepartment]}: ${labels.join(', ')}`
             : null;
         })
         .filter((item): item is string => Boolean(item)),
@@ -982,6 +1004,19 @@ export function UserFormScreen() {
                       />
                     ))}
                   </View>
+                  {department === 'predicacion' ? (
+                    <View style={styles.departmentRow}>
+                      {TERRITORY_PERMISSION_ACTIONS.map((action) => (
+                        <ToggleChip
+                          key={`predicacion:territories:${action}`}
+                          label={TERRITORY_ACTION_LABELS[action]}
+                          selected={permissions.predicacion?.territories?.[action] === true}
+                          disabled={!isAdmin}
+                          onPress={() => toggleTerritoryPermission(action)}
+                        />
+                      ))}
+                    </View>
+                  ) : null}
                 </View>
               ))}
             </View>

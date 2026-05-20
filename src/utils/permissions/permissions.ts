@@ -2,6 +2,7 @@ import {
   AppUser,
   PermissionAction,
   PermissionDepartment,
+  TerritoryPermissionAction,
   UserPermissions,
   UserRole,
   UserServiceAssignment,
@@ -35,6 +36,14 @@ export const PERMISSION_ACTIONS: PermissionAction[] = [
   'export',
 ];
 
+export const TERRITORY_PERMISSION_ACTIONS: TerritoryPermissionAction[] = [
+  'view',
+  'create',
+  'edit',
+  'delete',
+  'assign',
+];
+
 const FULL_DEPARTMENT_PERMISSIONS = {
   view: true,
   create: true,
@@ -65,6 +74,14 @@ export const ACTION_LABELS: Record<PermissionAction, string> = {
   manage: 'Gestionar',
   approve: 'Aprobar',
   export: 'Exportar',
+};
+
+export const TERRITORY_ACTION_LABELS: Record<TerritoryPermissionAction, string> = {
+  view: 'Ver territorios',
+  create: 'Crear territorios',
+  edit: 'Editar territorios',
+  delete: 'Desactivar territorios',
+  assign: 'Asignar territorios',
 };
 
 export const SUPERVISOR_PERMISSION_TEMPLATE: Partial<Record<PermissionDepartment, PermissionAction[]>> = {
@@ -114,6 +131,15 @@ export const mergePermissions = (...permissionSets: (UserPermissions | null | un
           target[action] = true;
         }
       });
+      if (department === 'predicacion' && departmentPermissions.territories) {
+        const currentTerritories = target.territories ?? {};
+        TERRITORY_PERMISSION_ACTIONS.forEach((action) => {
+          if (departmentPermissions.territories?.[action] === true) {
+            currentTerritories[action] = true;
+          }
+        });
+        target.territories = currentTerritories;
+      }
       merged[department] = target;
     });
 
@@ -294,6 +320,49 @@ export const canManageCleaning = (
 export const canManageHospitality = (
   user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
 ): boolean => canManageCleaning(user);
+
+const hasPreachingAssignment = (
+  user:
+    | Pick<AppUser, 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | null
+    | undefined,
+  position: 'encargado' | 'auxiliar'
+): boolean =>
+  Boolean(
+    (
+      user?.servicePosition === position &&
+      user.serviceDepartment === 'predicacion'
+    ) ||
+      user?.serviceAssignments?.some(
+        (assignment) => assignment.position === position && assignment.department === 'predicacion'
+      )
+  );
+
+export const hasTerritoryPermission = (
+  user:
+    | Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | null
+    | undefined,
+  action: TerritoryPermissionAction
+): boolean => {
+  if (!user) return false;
+  if (action === 'view') return true;
+  if (user.role === 'admin') return true;
+  if (hasPreachingAssignment(user, 'encargado')) return true;
+
+  return getEffectivePermissions(user).predicacion?.territories?.[action] === true;
+};
+
+export const canManageTerritories = (
+  user:
+    | Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | null
+    | undefined
+): boolean =>
+  hasTerritoryPermission(user, 'create') ||
+  hasTerritoryPermission(user, 'edit') ||
+  hasTerritoryPermission(user, 'delete') ||
+  hasTerritoryPermission(user, 'assign');
 
 export const getVisibleTabs = (
   user:

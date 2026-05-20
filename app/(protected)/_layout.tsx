@@ -5,6 +5,7 @@ import { useStartupPermissionPrompt } from '@/src/hooks/use-startup-permission-p
 import { useI18n } from '@/src/i18n/index';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { CongregationBlockedScreen } from '@/src/screens/errors/CongregationBlockedScreen';
+import { SystemAnnouncementGate } from '@/src/components/announcements/SystemAnnouncementGate';
 
 function ProtectedNotificationSetup() {
   const { uid, congregationId, isSessionValid } = useUser();
@@ -46,6 +47,7 @@ function ProtectedContent() {
   return (
     <>
       <ProtectedNotificationSetup />
+      <SystemAnnouncementGate />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="users/[id]" options={{ headerShown: false }} />
@@ -72,6 +74,8 @@ function ProtectedContent() {
         {/* Módulo: Contador de Horas de Predicación (100% local, sin Firebase) */}
         <Stack.Screen name="field-service" options={{ headerShown: false }} />
         <Stack.Screen name="preaching/manager" options={{ headerShown: false }} />
+        <Stack.Screen name="preaching/territories" options={{ headerShown: false }} />
+        <Stack.Screen name="preaching/territories/manage" options={{ headerShown: false }} />
         <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
         <Stack.Screen name="unauthorized" options={{ headerShown: false }} />
         {/* Settings */}

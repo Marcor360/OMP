@@ -219,6 +219,51 @@ service cloud.firestore {
         && currentUserData().permissions[department][action] == true;
     }
 
+    function hasTerritoryPermission(action) {
+      return isActive()
+        && currentUserData().permissions is map
+        && currentUserData().permissions.predicacion is map
+        && currentUserData().permissions.predicacion.territories is map
+        && currentUserData().permissions.predicacion.territories[action] == true;
+    }
+
+    function hasPreachingAssignment(position) {
+      return isActive()
+        && (
+          (
+            currentUserData().servicePosition == position
+            && currentUserData().serviceDepartment == 'predicacion'
+          )
+          || (
+            currentUserData().serviceAssignments is list
+            && (
+              currentUserData().serviceAssignments.hasAny([
+                { 'position': position, 'department': 'predicacion', 'label': 'Encargado de Predicacion' }
+              ])
+              || currentUserData().serviceAssignments.hasAny([
+                { 'position': position, 'department': 'predicacion', 'label': 'Auxiliar de Predicacion' }
+              ])
+            )
+          )
+        );
+    }
+
+    function canCreateTerritories() {
+      return isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('create');
+    }
+
+    function canEditTerritories() {
+      return isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('edit');
+    }
+
+    function canDeactivateTerritories() {
+      return isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('delete');
+    }
+
+    function canAssignTerritories() {
+      return isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('assign');
+    }
+
     function canReadUsers() {
       return isAdmin() || hasPermission('usuarios', 'view') || hasPermission('usuarios', 'manage');
     }
@@ -668,14 +713,25 @@ service cloud.firestore {
 
     function validPermissionActions(actions) {
       return actions is map
-        && actions.keys().hasOnly(['view', 'create', 'edit', 'delete', 'manage', 'approve', 'export'])
+        && actions.keys().hasOnly(['view', 'create', 'edit', 'delete', 'manage', 'approve', 'export', 'territories'])
         && (!('view' in actions) || actions.view is bool)
         && (!('create' in actions) || actions.create is bool)
         && (!('edit' in actions) || actions.edit is bool)
         && (!('delete' in actions) || actions.delete is bool)
         && (!('manage' in actions) || actions.manage is bool)
         && (!('approve' in actions) || actions.approve is bool)
-        && (!('export' in actions) || actions.export is bool);
+        && (!('export' in actions) || actions.export is bool)
+        && (!('territories' in actions) || validTerritoryPermissions(actions.territories));
+    }
+
+    function validTerritoryPermissions(territories) {
+      return territories is map
+        && territories.keys().hasOnly(['view', 'create', 'edit', 'delete', 'assign'])
+        && (!('view' in territories) || territories.view is bool)
+        && (!('create' in territories) || territories.create is bool)
+        && (!('edit' in territories) || territories.edit is bool)
+        && (!('delete' in territories) || territories.delete is bool)
+        && (!('assign' in territories) || territories.assign is bool);
     }
 
     function validUserPermissions(permissions) {
@@ -842,6 +898,15 @@ service cloud.firestore {
         )
         && request.resource.data.isActive is bool
         && request.resource.data.updatedAt is timestamp;
+    }
+
+    function validViewedAnnouncementData(announcementId) {
+      return hasOnlyKeys(request.resource.data, [
+          'announcementId',
+          'viewedAt'
+        ])
+        && request.resource.data.announcementId == announcementId
+        && request.resource.data.viewedAt is timestamp;
     }
 
     function validCleaningMembershipUserUpdate() {
@@ -1079,6 +1144,121 @@ service cloud.firestore {
         && (!('durationMinutes' in data) || data.durationMinutes is int)
         && (!('status' in data) || data.status is string)
         && (!('notes' in data) || data.notes is string);
+    }
+
+    function isValidTerritoryDay(day) {
+      return day in [
+        'monday',
+        'tuesday',
+        'wednesday',
+        'thursday',
+        'friday',
+        'saturday',
+        'sunday'
+      ];
+    }
+
+    function validTerritoryData(data, congregationId) {
+      return hasOnlyKeys(data, [
+          'congregationId',
+          'number',
+          'name',
+          'description',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'number',
+          'name',
+          'description',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && (data.number == null || data.number is number)
+        && isNonEmptyString(data.name)
+        && data.name.size() <= 50
+        && data.description is string
+        && data.description.size() <= 160
+        && data.status in ['active', 'inactive']
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validTerritoryCreate(data, congregationId) {
+      return validTerritoryData(data, congregationId)
+        && data.status == 'active'
+        && data.createdBy == currentUid()
+        && data.updatedBy == currentUid();
+    }
+
+    function validTerritoryUpdate(data, congregationId) {
+      return validTerritoryData(data, congregationId)
+        && data.congregationId == resource.data.congregationId
+        && data.createdBy == resource.data.createdBy
+        && data.createdAt == resource.data.createdAt
+        && data.updatedBy == currentUid();
+    }
+
+    function validTerritoryScheduleData(data, congregationId, scheduleId) {
+      return hasOnlyKeys(data, [
+          'congregationId',
+          'dayOfWeek',
+          'territoryIds',
+          'note',
+          'isActive',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'dayOfWeek',
+          'territoryIds',
+          'note',
+          'isActive',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && data.dayOfWeek == scheduleId
+        && isValidTerritoryDay(data.dayOfWeek)
+        && data.territoryIds is list
+        && data.territoryIds.size() <= 50
+        && data.note is string
+        && data.note.size() <= 300
+        && data.isActive is bool
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validTerritoryScheduleCreate(data, congregationId, scheduleId) {
+      return validTerritoryScheduleData(data, congregationId, scheduleId)
+        && data.createdBy == currentUid()
+        && data.updatedBy == currentUid();
+    }
+
+    function validTerritoryScheduleUpdate(data, congregationId, scheduleId) {
+      return validTerritoryScheduleData(data, congregationId, scheduleId)
+        && data.congregationId == resource.data.congregationId
+        && data.dayOfWeek == resource.data.dayOfWeek
+        && data.createdBy == resource.data.createdBy
+        && data.createdAt == resource.data.createdAt
+        && data.updatedBy == currentUid();
     }
 
     // =========================================================================
@@ -1354,6 +1534,16 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // REGLAS: SYSTEM ANNOUNCEMENTS
+    // Avisos globales administrados desde la app administrativa.
+    // =========================================================================
+
+    match /systemAnnouncements/{announcementId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // =========================================================================
     // REGLAS: SUPER ADMINS
     // =========================================================================
 
@@ -1421,6 +1611,13 @@ service cloud.firestore {
         allow get, list: if isSameUser(userId);
         allow create, update: if validExpoPushTokenDoc(userId);
         allow delete: if isSameUser(userId);
+      }
+
+      match /viewedAnnouncements/{announcementId} {
+        allow get, list: if isSameUser(userId);
+        allow create, update: if isSameUser(userId)
+          && validViewedAnnouncementData(announcementId);
+        allow delete: if false;
       }
     }
 
@@ -1513,6 +1710,45 @@ service cloud.firestore {
           && preservesCreatedAt();
 
         allow delete: if isAdmin();
+      }
+
+      // -----------------------------------------------------------------------
+      // TERRITORIES
+      // -----------------------------------------------------------------------
+      match /territories/{territoryId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canCreateTerritories()
+          && canAccessCongregationData(congregationId)
+          && validTerritoryCreate(request.resource.data, congregationId);
+
+        allow update: if (
+            (resource.data.status == 'active' && request.resource.data.status == 'inactive' && canDeactivateTerritories())
+            || (
+              request.resource.data.status == resource.data.status
+              && canEditTerritories()
+            )
+          )
+          && canAccessCongregationData(congregationId)
+          && resource.data.congregationId == congregationId
+          && validTerritoryUpdate(request.resource.data, congregationId);
+
+        allow delete: if false;
+      }
+
+      match /territorySchedule/{scheduleId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canAssignTerritories()
+          && canAccessCongregationData(congregationId)
+          && validTerritoryScheduleCreate(request.resource.data, congregationId, scheduleId);
+
+        allow update: if canAssignTerritories()
+          && canAccessCongregationData(congregationId)
+          && resource.data.congregationId == congregationId
+          && validTerritoryScheduleUpdate(request.resource.data, congregationId, scheduleId);
+
+        allow delete: if false;
       }
 
       // -----------------------------------------------------------------------

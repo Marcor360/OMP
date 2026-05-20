@@ -19,6 +19,7 @@ import {
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { isPioneer, isPreachingManager } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { canManageTerritories } from '@/src/utils/permissions/permissions';
 
 export function PreachingScreen() {
   const router = useRouter();
@@ -88,6 +89,7 @@ export function PreachingScreen() {
 
   const userIsPioneer = isPioneer(appUser);
   const userIsPreachingManager = isPreachingManager(appUser);
+  const userCanManageTerritories = canManageTerritories(appUser);
 
   return (
     <ScreenContainer refreshing={loading} onRefresh={refresh}>
@@ -147,6 +149,15 @@ export function PreachingScreen() {
         </ThemedText>
       </TouchableOpacity>
 
+      <TouchableOpacity
+        style={styles.secondaryButton}
+        onPress={() => router.push('/(protected)/preaching/territories' as any)}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="map-outline" size={18} color={colors.primary} />
+        <ThemedText style={styles.secondaryButtonText}>Territorios</ThemedText>
+      </TouchableOpacity>
+
       {userIsPreachingManager ? (
         <TouchableOpacity
           style={styles.secondaryButton}
@@ -155,6 +166,17 @@ export function PreachingScreen() {
         >
           <Ionicons name="stats-chart-outline" size={18} color={colors.primary} />
           <ThemedText style={styles.secondaryButtonText}>Panel de informes</ThemedText>
+        </TouchableOpacity>
+      ) : null}
+
+      {userCanManageTerritories ? (
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => router.push('/(protected)/preaching/territories/manage' as any)}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="settings-outline" size={18} color={colors.primary} />
+          <ThemedText style={styles.secondaryButtonText}>Administrar territorios</ThemedText>
         </TouchableOpacity>
       ) : null}
 
@@ -317,6 +339,7 @@ const createStyles = (colors: AppColorSet) =>
       borderWidth: 1,
       borderColor: colors.primary + '55',
       borderRadius: 12,
+      marginBottom: 10,
     },
     secondaryButtonText: {
       color: colors.primary,
