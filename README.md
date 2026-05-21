@@ -1,6 +1,6 @@
 # 📘 OMP — Organization, Ministry & Programs
 
-**OMP** es una aplicación multiplataforma desarrollada con **Expo**, **React Native**, **TypeScript** y **Firebase** para ayudar a organizar actividades internas de una congregación: usuarios, reuniones, asignaciones, limpieza, hospitalidad, notificaciones y control administrativo.
+**OMP** es una aplicación multiplataforma desarrollada con **Expo**, **React Native**, **TypeScript** y **Firebase** para ayudar a organizar actividades internas de una congregación: usuarios, reuniones, asignaciones, limpieza, hospitalidad, predicación, territorios, notificaciones y control administrativo.
 
 > ⚠️ **Aviso importante:** OMP no es una aplicación oficial de los Testigos de Jehová. No está afiliada, respaldada ni relacionada con JW.ORG ni con ninguna entidad oficial de los Testigos de Jehová. Es una herramienta independiente creada con respeto, cuidado y enfoque técnico para facilitar la organización interna.
 
@@ -10,16 +10,30 @@
 
 | Área | Estado |
 |---|---|
-| 📱 App Android/iOS | En desarrollo avanzado |
+| 📱 App Android | Release `1.0.1` generado en formato AAB |
+| 🍎 App iOS | Base preparada por Expo, pendiente de distribución |
 | 🌐 Web con Expo | Disponible mediante `expo start --web` |
 | 🔐 Firebase Auth | Integrado |
 | 🗄️ Cloud Firestore | Integrado |
 | ⚙️ Cloud Functions | Integradas |
-| 🔔 Notificaciones push | Integradas con Expo Notifications y Firebase |
+| 🔔 Notificaciones push | Integradas con Expo Notifications, permisos Android y Firebase |
 | 🛡️ Reglas de seguridad Firestore | Integradas |
 | 💾 Caché local / cache-first | Integrado |
+| 🌎 Internacionalización | Español e inglés activos, estructura extendida para más idiomas |
+| 📦 Build Android | `android/app/build/outputs/bundle/release/app-release.aab` |
 | 🧩 Panel administrativo externo | Pendiente / en planeación |
-| 📊 Límites por plan de congregación | Pendiente / en planeación |
+| 📊 Límites por plan de congregación | Base visible en ajustes, reglas de negocio en evolución |
+
+### Versión actual
+
+| Campo | Valor |
+|---|---|
+| Versión de app | `1.0.1` |
+| Android `versionName` | `1.0.1` |
+| Android `versionCode` | `101` |
+| Paquete Android | `com.marcor360.omp` |
+| Formato de publicación Android | Android App Bundle (`.aab`) |
+| Firma release | `android/app/my-upload-key.keystore` |
 
 ---
 
@@ -29,11 +43,14 @@
 
 - Creación de usuarios por administradores.
 - Roles principales: `admin`, `supervisor` y `user`.
+- Permisos por áreas internas: usuarios, reuniones, asignaciones, limpieza, predicación y configuración.
 - Activación, desactivación y eliminación controlada de usuarios.
 - Cambio de contraseña por administrador.
 - Generación de correo interno por congregación.
 - Validación de cargos y responsabilidades internas.
 - Protección para evitar que un administrador se elimine o desactive a sí mismo desde flujos sensibles.
+- Sincronización entre Firebase Authentication y Firestore mediante Cloud Functions.
+- Limpieza automática de perfiles cuando un usuario de autenticación se elimina.
 
 ### 🏛️ Congregaciones y aislamiento de datos
 
@@ -41,6 +58,9 @@
 - Las reglas de Firestore restringen lecturas y escrituras por congregación.
 - Las operaciones sensibles validan que el usuario autenticado esté activo y pertenezca a la misma congregación.
 - La estructura está preparada para operar varias congregaciones dentro del mismo proyecto Firebase.
+- Pantalla de acceso bloqueado cuando una congregación no está habilitada.
+- Consulta de plan de congregación desde ajustes, incluyendo usuarios activos y cupos disponibles.
+- Referencias Firestore centralizadas para reducir errores al trabajar con rutas de datos.
 
 ### 📅 Reuniones y asignaciones
 
@@ -50,6 +70,13 @@
 - Publicación de reuniones.
 - Notificaciones al publicar, actualizar o recordar asignaciones.
 - Importación de reuniones desde PDF mediante Cloud Functions.
+- Creación, edición, detalle y administración de reuniones protegidas por permisos.
+- Soporte para reuniones de Vida y Ministerio Cristiano con secciones, participantes y asignaciones.
+- Gestión de reuniones de fin de semana y responsabilidades relacionadas.
+- Sincronización de asignaciones de limpieza desde reuniones cuando corresponde.
+- Filtros de asignaciones por fecha, categoría, subtipo, persona, congregación y estado.
+- Sección de discursos salientes dentro del módulo de asignaciones.
+- Invalidación de caché al crear, actualizar, publicar o eliminar reuniones.
 
 ### 🧹 Limpieza y grupos
 
@@ -58,6 +85,12 @@
 - Soporte para grupos estándar o familiares.
 - Validación de membresía y conteo de miembros.
 - Compatibilidad con nombres de colección actuales y legacy.
+- Dashboard de limpieza con tarjetas, estadísticas y acceso rápido a grupos.
+- Creación, edición, detalle y eliminación de grupos según permisos.
+- Selección de usuarios asignables a grupos de limpieza.
+- Vista de “mi limpieza” para mostrar responsabilidades cercanas del usuario.
+- Caché local específico para grupos y usuarios asignables.
+- Integración con asignaciones y notificaciones de categoría `cleaning`.
 
 ### 🔔 Notificaciones
 
@@ -66,6 +99,16 @@
 - Notificaciones internas en Firestore.
 - Notificaciones push para asignaciones, reuniones y recordatorios.
 - Limpieza programada de notificaciones antiguas.
+- Solicitud de permiso `POST_NOTIFICATIONS` en Android.
+- Aviso inicial propio antes de abrir el diálogo nativo de permisos.
+- Registro de Expo Push Token por usuario y congregación.
+- Subcolección `/users/{uid}/pushTokens` para tokens activos por dispositivo.
+- Desactivación de tokens cuando Expo reporta `DeviceNotRegistered`.
+- Canales Android para notificaciones generales y limpieza.
+- Notificaciones visibles en la barra del dispositivo aunque la app no esté abierta.
+- Navegación profunda desde una notificación hacia la ruta interna indicada.
+- Sincronización de contador/badge con notificaciones no leídas.
+- Pantalla de notificaciones con listado, conteo de no leídas, marcar una o marcar todas como leídas.
 
 ### 💾 Caché y control de lecturas
 
@@ -74,12 +117,48 @@
 - Caché en memoria por sesión.
 - Fallback al servidor cuando los datos locales no existen o están incompletos.
 - Control `singleFlight` para evitar solicitudes duplicadas simultáneas.
+- Limpieza controlada de cachés temporales al iniciar sesión o cambiar de contexto.
+- Repositorios cache-first para datos de dashboard y consultas frecuentes.
+- Invalidación por prefijo para mantener consistencia después de cambios importantes.
+- Uso de listeners en tiempo real solo donde aportan valor funcional.
+
+### 🧭 Dashboard y navegación
+
+- Dashboard protegido para usuarios autenticados.
+- Resumen de próximas reuniones, asignaciones y responsabilidades.
+- Tarjeta local del contador de horas de predicación en dispositivos móviles.
+- Navegación por pestañas con visibilidad según permisos.
+- Rutas protegidas por sesión usando Expo Router.
+- Pantallas de error para acceso no autorizado y rutas no encontradas.
+
+### 🧑‍💼 Predicación, informes y territorios
+
+- Módulo de predicación con acceso desde pestañas.
+- Registro de informes de predicación del usuario.
+- Panel de encargado de predicación con resumen de publicadores, enviados, faltantes, horas, estudios y cursos.
+- Gestión de territorios con listado y administración.
+- Contador local de horas de predicación usando almacenamiento del dispositivo.
+- Calendario mensual y resumen semanal para horas de predicación.
+- Separación entre datos locales de contador y datos remotos de informes/congregación.
 
 ### 🌎 Internacionalización
 
 - Estructura preparada para soporte multiidioma.
 - Flujo inicial de selección/configuración de idioma.
-- Base actual enfocada principalmente en español, con estructura para crecer.
+- Español e inglés disponibles en las pantallas principales.
+- Archivos base para francés, árabe, hindi y chino.
+- Persistencia de idioma seleccionado.
+- Pantalla de cambio de idioma desde ajustes.
+
+### ⚙️ Ajustes y experiencia de aplicación
+
+- Pantalla de ajustes con información de cuenta, rol y correo.
+- Sección de plan de congregación con usuarios activos y usuarios disponibles.
+- Accesos administrativos a usuarios, reuniones, asignaciones, limpieza y notificaciones.
+- Control de permisos del dispositivo, incluyendo estado de notificaciones.
+- Selector de tema claro/oscuro.
+- Pantalla “Acerca de” con versión y build nativo.
+- Enrutamiento a términos, privacidad y descripción del proyecto cuando estén disponibles.
 
 ---
 
@@ -126,7 +205,7 @@
 │   ├── modules/                 # Módulos por dominio
 │   │   ├── assignments/         # Asignaciones
 │   │   ├── cleaning/            # Limpieza
-│   │   └── field-service/       # Servicio / contador local
+│   │   └── field-service/       # Contador local de horas de predicación
 │   ├── screens/                 # Pantallas principales
 │   ├── services/                # Servicios de Auth, Firestore, notificaciones y repositorios
 │   ├── styles/                  # Estilos globales
@@ -147,6 +226,7 @@
 │
 ├── docs/                        # Documentación técnica extendida
 ├── assets/images/               # Iconos, splash y recursos visuales
+├── android/                     # Proyecto Android nativo generado por Expo prebuild
 ├── firestore.rules              # Reglas de seguridad Firestore
 ├── firestore.indexes.json       # Índices Firestore
 ├── firebase.json                # Configuración de Firebase deploy
@@ -168,7 +248,11 @@
 | `/congregations/{congregationId}/meetings/{meetingId}/assignments/{assignmentId}` | Asignaciones vinculadas a una reunión |
 | `/congregations/{congregationId}/assignments/{assignmentId}` | Asignaciones independientes: limpieza, hospitalidad u otras |
 | `/congregations/{congregationId}/cleaningGroups/{groupId}` | Grupos de limpieza por congregación |
+| `/congregations/{congregationId}/outgoingTalks/{outgoingTalkId}` | Discursos salientes |
+| `/congregations/{congregationId}/changeLogs/{changeLogId}` | Bitácora de cambios de congregación |
 | `/congregations/{congregationId}/notifications/{notificationId}` | Notificaciones internas por congregación |
+| `/users/{uid}/pushTokens/{tokenDocId}` | Tokens Expo Push activos por usuario y dispositivo |
+| `/congregations/{congregationId}/preachingReports/{monthId}/submissions/{userId}` | Informes mensuales de predicación |
 | `/dashboardSummary/{congregationId}` | Resumen precalculado para dashboard |
 | `/system/{docId}` | Documentos internos de control, por ejemplo cache control |
 
@@ -189,6 +273,28 @@ Principios actuales:
 - Las escrituras sensibles requieren `admin`, `supervisor` o encargado autorizado, según el módulo.
 - `dashboardSummary` es solo lectura desde cliente; la escritura queda reservada para procesos backend.
 - Los documentos de sistema son de solo lectura para usuarios autenticados y escritura bloqueada desde cliente.
+- Las rutas protegidas se renderizan solo después de validar sesión y perfil.
+- Las pestañas visibles se calculan según permisos efectivos del usuario.
+- Las reglas validan listas, tipos de datos esperados y campos permitidos en actualizaciones sensibles.
+- Los tokens push se escriben de forma controlada y se asocian al usuario autenticado.
+
+### Permisos Android declarados
+
+| Permiso | Motivo |
+|---|---|
+| `android.permission.POST_NOTIFICATIONS` | Mostrar notificaciones en Android 13+ después de autorización del usuario |
+| `android.permission.VIBRATE` | Vibración en avisos y notificaciones |
+
+Permisos bloqueados en Android:
+
+- `READ_EXTERNAL_STORAGE`
+- `WRITE_EXTERNAL_STORAGE`
+- `RECORD_AUDIO`
+- `SYSTEM_ALERT_WINDOW`
+- `RECEIVE_BOOT_COMPLETED`
+- `SCHEDULE_EXACT_ALARM`
+
+Estos bloqueos reducen la superficie de permisos y ayudan a mantener una revisión más clara en tiendas.
 
 ---
 
@@ -214,8 +320,20 @@ Las funciones exportadas actualmente cubren:
 - `notifyMeetingAssignmentUsers`
 - `notifyMeetingPublicationAndChanges`
 - `sendMeetingReminderThreeDaysBefore`
+- `sendExpoPushOnNotificationCreated`
 - `scheduledDataCleanup`
 - `scheduledNotificationsCleanup`
+
+### Cobertura funcional de backend
+
+- Administración segura de usuarios usando Firebase Admin SDK.
+- Sincronización entre Auth y documentos de usuario.
+- Importación y administración de reuniones.
+- Publicación de reuniones y generación de avisos.
+- Procesamiento de notificaciones por asignaciones y cambios de reunión.
+- Envío de push mediante Expo Push Service.
+- Limpieza programada de datos temporales y notificaciones antiguas.
+- Pruebas unitarias para flujos críticos de usuarios, notificaciones, publicaciones y limpieza.
 
 ---
 
@@ -395,9 +513,61 @@ Atajos comunes desde Expo:
 
 ```bash
 npm run android
+npm run android:release
 npm run ios
 npm run web
 ```
+
+### Generar Android App Bundle (AAB)
+
+El archivo para Google Play se genera con Gradle desde la carpeta `android`:
+
+```bash
+cd android
+./gradlew :app:bundleRelease
+```
+
+En Windows PowerShell:
+
+```powershell
+cd android
+.\gradlew.bat :app:bundleRelease
+```
+
+Salida esperada:
+
+```text
+android/app/build/outputs/bundle/release/app-release.aab
+```
+
+### Firma Android release
+
+El proyecto está configurado para firmar release con:
+
+```text
+android/app/my-upload-key.keystore
+```
+
+Propiedades usadas por Gradle:
+
+```properties
+MYAPP_UPLOAD_STORE_FILE=my-upload-key.keystore
+MYAPP_UPLOAD_KEY_ALIAS=my-key-alias
+MYAPP_UPLOAD_STORE_PASSWORD=...
+MYAPP_UPLOAD_KEY_PASSWORD=...
+```
+
+El archivo `.keystore` debe respaldarse fuera del repositorio y conservarse de forma segura. Si se pierde, puede complicar futuras actualizaciones de la app en Google Play.
+
+### Nota sobre `expo run:android`
+
+Para ejecutar una variante release con Expo CLI se usa:
+
+```bash
+npm run android -- --variant release
+```
+
+No se usa `--mode=release` en esta versión de Expo CLI.
 
 ### Instalar dependencias de Cloud Functions
 
@@ -450,6 +620,59 @@ También puede ejecutarse desde la carpeta `functions`:
 npm run deploy
 ```
 
+### Servicios Firebase usados
+
+| Servicio | Uso en OMP |
+|---|---|
+| Firebase Authentication | Inicio de sesión y usuarios administrados |
+| Cloud Firestore | Datos principales de usuarios, congregaciones, reuniones, asignaciones y notificaciones |
+| Cloud Functions | Procesos administrativos, publicaciones, notificaciones y limpiezas programadas |
+| Firebase Admin SDK | Operaciones de backend sobre Auth y Firestore |
+| Firestore Rules | Control real de acceso por sesión, rol, estado y congregación |
+
+### Flujo resumido de notificaciones
+
+1. El usuario inicia sesión en una build real o release.
+2. La app revisa si puede usar notificaciones remotas.
+3. Si el permiso está sin definir, se muestra un aviso propio.
+4. Al aceptar, Android/iOS muestra el permiso nativo.
+5. Si el permiso queda concedido, la app obtiene el Expo Push Token.
+6. El token se guarda en `/users/{uid}/pushTokens`.
+7. Cuando se crea una notificación en Firestore, Cloud Functions envía el push.
+8. Si Expo indica que el dispositivo ya no está registrado, el token se marca como inactivo.
+
+---
+
+## 📝 Notas de versión
+
+### 1.0.1
+
+Primera versión Android preparada para distribución interna o publicación inicial en Google Play.
+
+Incluye:
+
+- Autenticación con Firebase.
+- Dashboard protegido por sesión.
+- Gestión de usuarios, roles y permisos.
+- Gestión de reuniones de entre semana y fin de semana.
+- Asignaciones por reunión e independientes.
+- Módulo de limpieza con grupos y responsabilidades.
+- Módulo de predicación, informes y territorios.
+- Contador local de horas de predicación en dispositivo móvil.
+- Notificaciones internas y push.
+- Solicitud de permiso de notificaciones en Android.
+- Canales de notificación para avisos generales y limpieza.
+- Soporte de temas claro/oscuro.
+- Selección de idioma.
+- Caché local/cache-first para reducir lecturas.
+- Build Android App Bundle firmado.
+
+Texto sugerido para Google Play:
+
+```text
+Primera versión de OMP para Android. Incluye inicio de sesión, reuniones, asignaciones, grupos de limpieza, predicación, territorios, usuarios y notificaciones push con solicitud de permiso en el dispositivo.
+```
+
 ---
 
 ## 📜 Scripts disponibles
@@ -460,10 +683,19 @@ npm run deploy
 |---|---|
 | `npm start` | Inicia Expo / Metro Bundler |
 | `npm run android` | Ejecuta la app en Android |
+| `npm run android:release` | Ejecuta `expo run:android --variant release` |
 | `npm run ios` | Ejecuta la app en iOS |
 | `npm run web` | Ejecuta la app en web |
 | `npm run lint` | Ejecuta validación ESLint |
 | `npm run reset-project` | Ejecuta el script local de reset del proyecto |
+
+### Comandos Android nativos
+
+| Comando | Uso |
+|---|---|
+| `cd android && ./gradlew :app:assembleRelease` | Genera APK release local |
+| `cd android && ./gradlew :app:bundleRelease` | Genera AAB release para Google Play |
+| `cd android && ./gradlew clean` | Limpia artefactos de build nativo |
 
 ### Cloud Functions
 
@@ -492,6 +724,11 @@ Antes de agregar o modificar una funcionalidad:
 7. No cargar colecciones completas si solo se necesita un resumen.
 8. Probar reglas de Firestore antes de desplegar cambios sensibles.
 9. No subir logs, llaves privadas, archivos `.env`, certificados o builds generados.
+10. Actualizar `app.json`, `package.json`, `package-lock.json`, `versionName` y `versionCode` en cada release.
+11. Regenerar el AAB después de cambios de versión o permisos Android.
+12. Validar notificaciones en dispositivo físico, no en Expo Go.
+13. Revisar permisos Android antes de subir una nueva versión a Play Console.
+14. Mantener respaldado el keystore de release.
 
 ---
 
@@ -502,6 +739,11 @@ Antes de agregar o modificar una funcionalidad:
 - Los listeners en tiempo real pueden aumentar lecturas si se montan varias veces o no se limpian correctamente.
 - Las funciones con memoria alta o muchos `maxInstances` pueden generar costos si el uso crece.
 - Es recomendable auditar periódicamente Firestore Reads, Functions Invocations y Storage.
+- Las notificaciones push remotas no funcionan en Expo Go; se requiere development build o release build.
+- La publicación en Google Play requiere conservar la firma de app y el keystore de upload.
+- Los cambios de reglas Firestore pueden bloquear flujos reales si no se prueban con usuarios de distintos roles.
+- El contador local de horas depende del almacenamiento del dispositivo y no debe tratarse como dato remoto sincronizado.
+- Los permisos de Android pueden cambiar por versión del sistema operativo; Android 13+ requiere permiso explícito para notificaciones.
 
 ---
 

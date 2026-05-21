@@ -2,7 +2,7 @@
   "expo": {
     "name": "OMP",
     "slug": "omp",
-    "version": "1.4.1",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ormeprassig",
@@ -37,7 +37,7 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.SCHEDULE_EXACT_ALARM"
       ],
-      "package": "com.mrdev360.omp"
+      "package": "com.marcor360.omp"
     },
     "web": {
       "bundler": "metro",

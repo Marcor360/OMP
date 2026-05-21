@@ -249,6 +249,8 @@ export async function requestNotificationPermission(): Promise<PermissionStatus>
   }
 
   try {
+    await ensureAndroidChannels(Notifications);
+
     const { status } = await Notifications.requestPermissionsAsync({
       ios: {
         allowAlert: true,

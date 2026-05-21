@@ -281,7 +281,7 @@ export function SettingsScreen() {
           <SettingRow
             icon="information-circle-outline"
             label={t('settings.app.version')}
-            value="1.4.1"
+            value="1.0.1"
             showArrow
             onPress={handleNavigateToAbout}
           />

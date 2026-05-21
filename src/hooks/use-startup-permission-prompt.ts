@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 
 import {
@@ -24,9 +24,16 @@ export function useStartupPermissionPrompt({
   isAuthenticated,
 }: StartupPermissionPromptOptions): void {
   const { t } = useI18n();
+  const promptedThisSession = useRef(false);
 
   useEffect(() => {
-    if (!canUseRemotePushNotifications || !isAuthenticated || !uid || !congregationId) {
+    if (
+      promptedThisSession.current ||
+      !canUseRemotePushNotifications ||
+      !isAuthenticated ||
+      !uid ||
+      !congregationId
+    ) {
       return;
     }
 
@@ -40,6 +47,8 @@ export function useStartupPermissionPrompt({
         return;
       }
 
+      promptedThisSession.current = true;
+
       Alert.alert(
         t('permission.startup.title'),
         t('permission.startup.description'),
@@ -47,19 +56,21 @@ export function useStartupPermissionPrompt({
           {
             text: t('permission.startup.notNow'),
             style: 'cancel',
-            onPress: () => {
-              void AsyncStorage.setItem(STARTUP_PERMISSION_PROMPT_KEY, '1');
-            },
           },
           {
             text: t('permission.action.allow'),
             onPress: () => {
               void (async () => {
-                await AsyncStorage.setItem(STARTUP_PERMISSION_PROMPT_KEY, '1');
                 const result = await requestNotificationPermission();
 
                 if (result === 'granted') {
+                  await AsyncStorage.setItem(STARTUP_PERMISSION_PROMPT_KEY, '1');
                   await registerExpoPushTokenForUser({ userId: uid, congregationId });
+                  return;
+                }
+
+                if (result === 'denied') {
+                  await AsyncStorage.setItem(STARTUP_PERMISSION_PROMPT_KEY, '1');
                 }
               })();
             },

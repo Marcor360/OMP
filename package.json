@@ -1,11 +1,12 @@
 {
   "name": "omp",
   "main": "expo-router/entry",
-  "version": "1.4.1",
+  "version": "1.0.1",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
+    "android:release": "expo run:android --variant release",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:web": "expo export --platform web",
