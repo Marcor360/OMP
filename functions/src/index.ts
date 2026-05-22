@@ -60,3 +60,7 @@ export {
 export {
   scheduledNotificationsCleanup,
 } from "./maintenance/scheduled-notifications-cleanup.js";
+
+export {
+  listCleaningGroupsForCurrentUser,
+} from './cleaning.js';

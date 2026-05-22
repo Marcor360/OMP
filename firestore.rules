@@ -2014,6 +2014,26 @@ service cloud.firestore {
       allow delete: if isAdmin() && storedDocInMyCongregation();
     }
 
+    match /cleaning_groups/{groupId} {
+      allow get: if isActive()
+        && resource.data.congregationId is string
+        && canAccessCongregationData(resource.data.congregationId);
+
+      allow list: if isActive() && canAccessCongregationData(myCongregationId());
+
+      allow create: if isCleaningManager()
+        && targetDocInMyCongregation()
+        && validCleaningGroupData(request.resource.data, request.resource.data.congregationId);
+
+      allow update: if isCleaningManager()
+        && storedDocInMyCongregation()
+        && targetDocInMyCongregation()
+        && validCleaningGroupData(request.resource.data, request.resource.data.congregationId)
+        && preservesCreatedAt();
+
+      allow delete: if isAdmin() && storedDocInMyCongregation();
+    }
+
     // =========================================================================
     // REGLAS: NOTIFICATIONS (colección raíz)
     // Nota: las notificaciones de congregación están en

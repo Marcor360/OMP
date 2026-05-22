@@ -15,8 +15,9 @@ import {
   where,
   getDoc,
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
-import { db } from '@/src/lib/firebase/app';
+import { db, functions } from '@/src/lib/firebase/app';
 import {
   userDocRef,
   usersCollectionRef,
@@ -60,6 +61,27 @@ const isPermissionDeniedError = (error: unknown): boolean => {
   if (typeof error !== 'object' || error === null) return false;
   if (!('code' in error)) return false;
   return String((error as { code?: unknown }).code) === 'permission-denied';
+};
+
+type ListCleaningGroupsResponse = {
+  groups?: (Record<string, unknown> & { id?: string })[];
+};
+
+const listCleaningGroupsViaFunction = async (
+  congregationId: string
+): Promise<CleaningGroup[]> => {
+  const callable = httpsCallable<Record<string, never>, ListCleaningGroupsResponse>(
+    functions,
+    'listCleaningGroupsForCurrentUser'
+  );
+  const result = await callable({});
+  const groups = Array.isArray(result.data.groups) ? result.data.groups : [];
+
+  return groups.map((group) => {
+    const id = typeof group.id === 'string' ? group.id : '';
+    const normalized = normalizeCleaningGroup(id, group);
+    return normalized.congregationId ? normalized : { ...normalized, congregationId };
+  });
 };
 
 const cleaningGroupsCollectionRefByName = (collectionName: CleaningGroupCollectionName) =>
@@ -330,7 +352,7 @@ export const getCleaningGroups = async (
     return [];
   }
   if (permissionError) {
-    throw permissionError;
+    return listCleaningGroupsViaFunction(congregationId);
   }
 
   return [];
