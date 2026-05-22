@@ -694,8 +694,10 @@ const isAuthUserNotFoundError = (error: unknown): boolean => {
 };
 
 const isEmailTaken = async (email: string): Promise<boolean> => {
+  const normalizedEmail = email.trim().toLowerCase();
+
   try {
-    await getAuth().getUserByEmail(email);
+    await getAuth().getUserByEmail(normalizedEmail);
     return true;
   } catch (error) {
     if (!isAuthUserNotFoundError(error)) {
@@ -704,8 +706,11 @@ const isEmailTaken = async (email: string): Promise<boolean> => {
   }
 
   const db = getFirestore();
-  const snap = await db.collection('users').where('email', '==', email).limit(1).get();
-  return !snap.empty;
+  const [emailSnap, emailKeySnap] = await Promise.all([
+    db.collection('users').where('email', '==', normalizedEmail).limit(1).get(),
+    db.collection('users').where('emailKey', '==', normalizedEmail).limit(1).get(),
+  ]);
+  return !emailSnap.empty || !emailKeySnap.empty;
 };
 
 const resolveGeneratedEmail = async (
@@ -1135,6 +1140,7 @@ export const createUserByAdmin = onCall(
       const userDoc: Record<string, unknown> = {
         uid: userRecord.uid,
         email: generatedEmail,
+        emailKey: generatedEmail.trim().toLowerCase(),
         displayName: payload.displayName,
         role: payload.role,
         isActive: payload.isActive,

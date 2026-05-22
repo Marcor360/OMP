@@ -66,7 +66,6 @@ service cloud.firestore {
 
     function currentUserHasRequiredShape() {
       return hasCurrentUserDoc()
-        && isNonEmptyString(currentUserData().email)
         && isValidRole(currentUserData().role)
         && isNonEmptyString(currentUserData().congregationId)
         && currentUserData().isActive is bool;
@@ -88,6 +87,53 @@ service cloud.firestore {
 
     function isAdminOrSupervisor() {
       return isAdmin() || isSupervisor();
+    }
+
+    function hasServicePosition(position) {
+      return isActive()
+        && (
+          currentUserData().servicePosition == position
+          || (
+            currentUserData().serviceAssignments is list
+            && (
+              currentUserData().serviceAssignments.hasAny([
+                { 'position': position, 'label': 'Coordinador' },
+                { 'position': position, 'label': 'Secretario' }
+              ])
+              || currentUserData().serviceAssignments.hasAny([
+                { 'position': position, 'department': 'limpieza', 'label': 'Encargado de Limpieza' },
+                { 'position': position, 'department': 'limpieza', 'label': 'Auxiliar de Limpieza' },
+                { 'position': position, 'department': 'tesoreria', 'label': 'Encargado de Tesoreria' },
+                { 'position': position, 'department': 'tesoreria', 'label': 'Auxiliar de Tesoreria' },
+                { 'position': position, 'department': 'predicacion', 'label': 'Encargado de Predicacion' },
+                { 'position': position, 'department': 'predicacion', 'label': 'Auxiliar de Predicacion' },
+                { 'position': position, 'department': 'reuniones', 'label': 'Encargado de Reuniones' },
+                { 'position': position, 'department': 'reuniones', 'label': 'Auxiliar de Reuniones' },
+                { 'position': position, 'department': 'discursos', 'label': 'Encargado de Discursos' },
+                { 'position': position, 'department': 'discursos', 'label': 'Auxiliar de Discursos' }
+              ])
+            )
+          )
+        );
+    }
+
+    function isCoordinatorOrSecretary() {
+      return hasServicePosition('coordinador') || hasServicePosition('secretario');
+    }
+
+    function isGlobalScreenAccess() {
+      return isSuperAdmin()
+        || isCoordinatorOrSecretary()
+        || (
+          isActive()
+          && (
+            currentUserData().protectedFromDeletion == true
+            || currentUserData().isSystemUser == true
+            || currentUserData().isPrimaryAdmin == true
+            || currentUserData().isRootAdmin == true
+            || currentUserData().systemProtected == true
+          )
+        );
     }
 
     function isElder() {
@@ -180,7 +226,8 @@ service cloud.firestore {
     }
 
     function isMeetingsManager() {
-      return isAdminOrSupervisor()
+      return isAdmin()
+        || isGlobalScreenAccess()
         || hasPermission('reuniones', 'manage')
         || (
           hasPermission('reuniones', 'create')
@@ -216,7 +263,13 @@ service cloud.firestore {
       return isActive()
         && currentUserData().permissions is map
         && currentUserData().permissions[department] is map
-        && currentUserData().permissions[department][action] == true;
+        && (
+          currentUserData().permissions[department][action] == true
+          || (
+            action != 'manage'
+            && currentUserData().permissions[department].manage == true
+          )
+        );
     }
 
     function hasTerritoryPermission(action) {
@@ -265,7 +318,11 @@ service cloud.firestore {
     }
 
     function canReadUsers() {
-      return isAdmin() || hasPermission('usuarios', 'view') || hasPermission('usuarios', 'manage');
+      return isAdmin()
+        || isSupervisor()
+        || isGlobalScreenAccess()
+        || hasPermission('usuarios', 'view')
+        || hasPermission('usuarios', 'manage');
     }
 
     function canCreateUsers() {
@@ -278,6 +335,36 @@ service cloud.firestore {
 
     function canDeleteUsers() {
       return isAdmin() || hasPermission('usuarios', 'delete') || hasPermission('usuarios', 'manage');
+    }
+
+    function canManageEvents() {
+      return isAdmin()
+        || isGlobalScreenAccess()
+        || hasPermission('avisos', 'manage')
+        || (
+          hasPermission('avisos', 'create')
+          && hasPermission('avisos', 'edit')
+        );
+    }
+
+    function canManagePersons() {
+      return isAdmin()
+        || isGlobalScreenAccess()
+        || hasPermission('usuarios', 'manage')
+        || (
+          hasPermission('usuarios', 'create')
+          && hasPermission('usuarios', 'edit')
+        );
+    }
+
+    function canManageAssignments() {
+      return isAdmin()
+        || isGlobalScreenAccess()
+        || hasPermission('asignaciones', 'manage')
+        || (
+          hasPermission('asignaciones', 'create')
+          && hasPermission('asignaciones', 'edit')
+        );
     }
 
     function safeDelegatedUserCreate() {
@@ -863,13 +950,13 @@ service cloud.firestore {
     }
 
     function validEventCreate() {
-      return isAdminOrSupervisor()
+      return canManageEvents()
         && validEventData(request.resource.data)
         && request.resource.data.createdBy == currentUid();
     }
 
     function validEventUpdate() {
-      return isAdminOrSupervisor()
+      return canManageEvents()
         && resource.data.congregationId == myCongregationId()
         && validEventData(request.resource.data)
         && request.resource.data.createdBy == resource.data.createdBy
@@ -1562,7 +1649,7 @@ service cloud.firestore {
         && canAccessCongregationData(resource.data.congregationId);
       allow create: if validEventCreate();
       allow update: if validEventUpdate();
-      allow delete: if isAdminOrSupervisor()
+      allow delete: if canManageEvents()
         && resource.data.congregationId == myCongregationId();
     }
 
@@ -1653,11 +1740,11 @@ service cloud.firestore {
       match /persons/{personId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if isAdminOrSupervisor()
+        allow create: if canManagePersons()
           && canAccessCongregationData(congregationId)
           && validPersonData(request.resource.data, congregationId);
 
-        allow update: if isAdminOrSupervisor()
+        allow update: if canManagePersons()
           && canAccessCongregationData(congregationId)
           && validPersonData(request.resource.data, congregationId)
           && preservesCreatedAt();
@@ -1700,11 +1787,11 @@ service cloud.firestore {
       match /assignments/{assignmentId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if (isAdminOrSupervisor() || hasPermission('asignaciones', 'create') || hasPermission('asignaciones', 'manage'))
+        allow create: if canManageAssignments()
           && canAccessCongregationData(congregationId)
           && validStandaloneAssignmentData(request.resource.data, congregationId);
 
-        allow update: if (isAdminOrSupervisor() || hasPermission('asignaciones', 'edit') || hasPermission('asignaciones', 'manage'))
+        allow update: if canManageAssignments()
           && canAccessCongregationData(congregationId)
           && validStandaloneAssignmentData(request.resource.data, congregationId)
           && preservesCreatedAt();
@@ -1816,16 +1903,18 @@ service cloud.firestore {
             !('userId' in resource.data)
             || resource.data.userId == currentUid()
             || isAdminOrSupervisor()
+            || isGlobalScreenAccess()
           );
 
-        allow list: if canAccessCongregationData(congregationId) && isAdminOrSupervisor();
+        allow list: if canAccessCongregationData(congregationId)
+          && (isAdminOrSupervisor() || isGlobalScreenAccess());
 
-        allow create: if isAdminOrSupervisor()
+        allow create: if (isAdmin() || isGlobalScreenAccess() || hasPermission('avisos', 'create') || hasPermission('avisos', 'manage'))
           && canAccessCongregationData(congregationId)
           && validNotificationData(request.resource.data, congregationId);
 
         allow update: if (
-            isAdminOrSupervisor()
+            (isAdmin() || isGlobalScreenAccess() || hasPermission('avisos', 'edit') || hasPermission('avisos', 'manage'))
             && canAccessCongregationData(congregationId)
             && validNotificationData(request.resource.data, congregationId)
           ) || (
@@ -1854,12 +1943,14 @@ service cloud.firestore {
             isSameUser(userId)
             || isPreachingManager()
             || isAdminOrSupervisor()
+            || isGlobalScreenAccess()
           );
 
         allow list: if canAccessCongregationData(congregationId)
           && (
             isPreachingManager()
             || isAdminOrSupervisor()
+            || isGlobalScreenAccess()
           );
 
         allow create, update: if canAccessCongregationData(congregationId)
@@ -1873,7 +1964,8 @@ service cloud.firestore {
       // CHANGE LOGS
       // -----------------------------------------------------------------------
       match /changeLogs/{logId} {
-        allow get, list: if isAdminOrSupervisor() && canAccessCongregationData(congregationId);
+        allow get, list: if (isAdminOrSupervisor() || isGlobalScreenAccess())
+          && canAccessCongregationData(congregationId);
 
         allow create: if isActive()
           && canAccessCongregationData(congregationId)

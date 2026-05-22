@@ -34,6 +34,7 @@ import {
 } from '@/src/types/event';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { canManageEvents } from '@/src/utils/permissions/permissions';
 
 interface EventFormScreenProps {
   mode?: 'create' | 'edit';
@@ -53,7 +54,7 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const eventId = typeof params.id === 'string' ? params.id : null;
-  const { uid, congregationId, isAdminOrSupervisor, loadingProfile, profileError } = useUser();
+  const { uid, congregationId, appUser, loadingProfile, profileError } = useUser();
   const { width } = useWindowDimensions();
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -74,6 +75,7 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
   const hasOptionalEndDate = OPTIONAL_END_DATE_EVENT_TYPES.includes(values.type);
   const isSuperintendentVisit = values.type === 'visita_superintendente';
   const selectedTypeLabel = EVENT_TYPE_LABELS[values.type];
+  const canManage = canManageEvents(appUser);
 
   const subtitle = useMemo(
     () => (mode === 'create' ? 'Crear evento' : 'Editar evento'),
@@ -137,8 +139,8 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
   };
 
   const handleSubmit = async () => {
-    if (!isAdminOrSupervisor) {
-      Alert.alert('Permisos insuficientes', 'Solo administradores y supervisores pueden administrar eventos.');
+    if (!canManage) {
+      Alert.alert('Permisos insuficientes', 'No tienes permisos para administrar eventos.');
       return;
     }
 
@@ -190,13 +192,13 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
     return <LoadingState message="Cargando evento..." />;
   }
 
-  if (!isAdminOrSupervisor) {
+  if (!canManage) {
     return (
       <ScreenContainer padded={false}>
         <PageHeader title="Eventos" subtitle="Sin permisos" showBack />
         <View style={styles.center}>
           <ThemedText style={styles.errorText}>
-            Solo administradores y supervisores pueden administrar eventos.
+            No tienes permisos para administrar eventos.
           </ThemedText>
         </View>
       </ScreenContainer>

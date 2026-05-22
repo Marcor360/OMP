@@ -30,7 +30,7 @@ import { formatDate } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { isSystemPrincipalUser } from '@/src/utils/users/user-protection';
 import { useI18n } from '@/src/i18n/index';
-import { hasPermission } from '@/src/utils/permissions/permissions';
+import { canViewUsers, hasPermission } from '@/src/utils/permissions/permissions';
 
 const interpolate = (template: string, values: Record<string, string>): string =>
   Object.entries(values).reduce(
@@ -64,7 +64,7 @@ export function UserDetailScreen() {
       return;
     }
 
-    if (!hasPermission(appUser, 'usuarios', 'view') && id !== currentUid) {
+    if (!canViewUsers(appUser) && id !== currentUid) {
       setUser(null);
       setCongregationName('--');
       setError(t('users.error.noViewPermission'));

@@ -73,15 +73,6 @@ function RootLayoutNav() {
   // Controlled cleanup for temporary cache.
   useCacheControlCleanup();
 
-  // Timeout de seguridad: si auth tarda más de 3s, forzamos appReady sin importar loading
-  useEffect(() => {
-    if (!i18nReady) return;
-    const timer = setTimeout(() => {
-      console.warn('[RootLayoutNav] Timeout de seguridad alcanzado (3s). Forzando appReady=true');
-      setAppReady(true);
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [i18nReady]);
 
   // Determinar si la app está lista para navegar
   useEffect(() => {

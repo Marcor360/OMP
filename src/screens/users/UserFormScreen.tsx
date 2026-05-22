@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -49,7 +50,7 @@ import {
   TerritoryPermissionAction,
 } from '@/src/types/user';
 import { copyToClipboard } from '@/src/utils/clipboard/clipboard';
-import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { AppError, formatFirestoreError } from '@/src/utils/errors/errors';
 import {
   ACTION_LABELS,
   DEPARTMENT_LABELS,
@@ -560,7 +561,7 @@ export function UserFormScreen() {
 
   const handleSave = async () => {
     if (!canEdit) {
-      Alert.alert('Permisos insuficientes', 'Solo administradores pueden crear o editar usuarios.');
+      Alert.alert('Permisos insuficientes', 'Necesitas permiso para crear o editar usuarios.');
       return;
     }
 
@@ -620,6 +621,24 @@ export function UserFormScreen() {
         });
         const assignedEmail = createdUser.email ?? generatedEmailPreview;
         const credentialsText = `Correo: ${assignedEmail}\nContrasena: ${password}`;
+        const verifiedUser = await getUserById(createdUser.uid, { forceServer: true });
+
+        if (!verifiedUser || verifiedUser.congregationId !== congregationId) {
+          throw new AppError(
+            'La funcion respondio, pero el perfil no quedo guardado en Firestore. Intenta de nuevo.'
+          );
+        }
+
+        const goToUsersList = () => router.replace('/(protected)/(tabs)/users' as any);
+
+        if (Platform.OS === 'web') {
+          Alert.alert(
+            'Usuario creado',
+            `Correo asignado: ${assignedEmail}\nContrasena inicial: ${password}\nDominio: @${createdUser.requiredDomain ?? allowedEmailDomain}`
+          );
+          goToUsersList();
+          return;
+        }
 
         Alert.alert(
           'Usuario creado',
@@ -628,12 +647,12 @@ export function UserFormScreen() {
             {
               text: 'Copiar credenciales',
               onPress: () => {
-                void copyToClipboard(credentialsText).finally(() => router.back());
+                void copyToClipboard(credentialsText).finally(goToUsersList);
               },
             },
             {
               text: 'Cerrar',
-              onPress: () => router.back(),
+              onPress: goToUsersList,
             },
           ]
         );
@@ -694,7 +713,7 @@ export function UserFormScreen() {
         {!canEdit ? (
           <View style={styles.permissionNotice}>
             <ThemedText style={styles.permissionText}>
-              Solo administradores pueden crear o editar usuarios.
+              Necesitas permiso para crear o editar usuarios.
             </ThemedText>
           </View>
         ) : null}
@@ -717,7 +736,7 @@ export function UserFormScreen() {
                 onChangeText={setFirstName}
                 placeholder="Ej: Juan"
                 placeholderTextColor={colors.textDisabled}
-                editable={isAdmin}
+                editable={canEdit}
               />
             </Field>
 
@@ -728,7 +747,7 @@ export function UserFormScreen() {
                 onChangeText={setMiddleName}
                 placeholder="Ej: Carlos"
                 placeholderTextColor={colors.textDisabled}
-                editable={isAdmin}
+                editable={canEdit}
               />
             </Field>
 
@@ -739,7 +758,7 @@ export function UserFormScreen() {
                 onChangeText={setLastName}
                 placeholder="Ej: Perez"
                 placeholderTextColor={colors.textDisabled}
-                editable={isAdmin}
+                editable={canEdit}
               />
             </Field>
 
@@ -750,7 +769,7 @@ export function UserFormScreen() {
                 onChangeText={setSecondLastName}
                 placeholder="Ej: Silva"
                 placeholderTextColor={colors.textDisabled}
-                editable={isAdmin}
+                editable={canEdit}
               />
             </Field>
 
@@ -763,7 +782,7 @@ export function UserFormScreen() {
                 onToggleVisibility={() => setShowPassword((value) => !value)}
                 onCopy={() => void handleCopyValue('Contrasena', password)}
                 hasError={Boolean(errors.password)}
-                editable={isAdmin}
+                editable={canEdit}
               />
             </Field>
 

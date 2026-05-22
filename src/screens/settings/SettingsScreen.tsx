@@ -16,7 +16,14 @@ import { CongregationPlanUsage } from '@/src/types/congregation-plan';
 import { getCongregationPlanUsage } from '@/src/services/congregations/congregations-service';
 import { type AppColors, useAppColors } from '@/src/styles';
 import { isExpoGo } from '@/src/utils/runtime';
-import { hasPermission } from '@/src/utils/permissions/permissions';
+import {
+  canAccessSettings,
+  canManageAssignments,
+  canManageCleaning,
+  canManageMeetings,
+  canViewCongregationModule,
+  canViewUsers,
+} from '@/src/utils/permissions/permissions';
 
 export function SettingsScreen() {
   const router = useRouter();
@@ -28,14 +35,13 @@ export function SettingsScreen() {
   const permissions = usePermissions();
   const [planUsage, setPlanUsage] = useState<CongregationPlanUsage | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
-  const canViewCongregationPlan =
-    hasPermission(appUser, 'configuracion', 'view') ||
-    hasPermission(appUser, 'configuracion', 'manage');
+  const canViewCongregationPlan = canAccessSettings(appUser);
   const canViewAdministration =
-    hasPermission(appUser, 'usuarios', 'view') ||
-    hasPermission(appUser, 'reuniones', 'manage') ||
-    hasPermission(appUser, 'asignaciones', 'manage') ||
-    hasPermission(appUser, 'limpieza', 'view');
+    canAccessSettings(appUser) ||
+    canViewUsers(appUser) ||
+    canManageMeetings(appUser) ||
+    canManageAssignments(appUser) ||
+    canViewCongregationModule(appUser);
 
   useEffect(() => {
     if (!congregationId || !canViewCongregationPlan) {
@@ -168,7 +174,7 @@ export function SettingsScreen() {
 
         {canViewAdministration ? (
           <Section title={t('settings.section.administration')}>
-            {hasPermission(appUser, 'usuarios', 'view') ? (
+            {canViewUsers(appUser) ? (
               <SettingRow
               icon="people-outline"
               label={t('settings.admin.userManagement')}
@@ -176,7 +182,7 @@ export function SettingsScreen() {
               onPress={() => router.push('/(protected)/(tabs)/users' as any)}
             />
             ) : null}
-            {hasPermission(appUser, 'reuniones', 'manage') ? (
+            {canManageMeetings(appUser) ? (
               <SettingRow
               icon="calendar-outline"
               label={t('settings.admin.meetingManagement')}
@@ -184,7 +190,7 @@ export function SettingsScreen() {
               onPress={() => router.push('/(protected)/(tabs)/meetings' as any)}
             />
             ) : null}
-            {hasPermission(appUser, 'asignaciones', 'manage') ? (
+            {canManageAssignments(appUser) ? (
               <SettingRow
               icon="checkmark-done-outline"
               label={t('settings.admin.assignmentManagement')}
@@ -192,7 +198,7 @@ export function SettingsScreen() {
               onPress={() => router.push('/(protected)/(tabs)/assignments' as any)}
             />
             ) : null}
-            {hasPermission(appUser, 'limpieza', 'view') ? (
+            {canManageCleaning(appUser) || canViewCongregationModule(appUser) ? (
               <SettingRow
               icon="sparkles-outline"
               label={t('settings.admin.cleaningGroups')}

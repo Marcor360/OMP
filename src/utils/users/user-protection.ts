@@ -22,6 +22,8 @@ const normalizeMarker = (value: unknown): string | null => {
 export const isSystemPrincipalUser = (
   user: Pick<
     AppUser,
+    | 'email'
+    | 'displayName'
     | 'createdBy'
     | 'createdByName'
     | 'createdByEmail'
@@ -44,7 +46,7 @@ export const isSystemPrincipalUser = (
     return true;
   }
 
-  return [user.createdBy, user.createdByName, user.createdByEmail].some((value) => {
+  return [user.email, user.displayName].some((value) => {
     const marker = normalizeMarker(value);
     return marker !== null && SYSTEM_ACTOR_VALUES.has(marker);
   });

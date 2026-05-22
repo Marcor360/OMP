@@ -37,6 +37,12 @@ interface UserContextType {
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
+const PROFILE_LOAD_RETRY_DELAYS_MS = [0, 600, 1500] as const;
+
+const wait = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -79,13 +85,36 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     const loadProfile = async () => {
-      const forceServer = forceServerNextLoadRef.current || isDifferentUser;
       forceServerNextLoadRef.current = false;
 
       try {
-        const profile = await getCurrentUserProfile(user.uid, {
-          forceServer,
-        });
+        let profile: AppUser | null = null;
+        let lastError: unknown = null;
+
+        for (const delayMs of PROFILE_LOAD_RETRY_DELAYS_MS) {
+          if (cancelled) return;
+          if (delayMs > 0) {
+            await wait(delayMs);
+          }
+
+          try {
+            profile = await getCurrentUserProfile(user.uid, {
+              forceServer: true,
+            });
+            lastError = null;
+          } catch (error) {
+            lastError = error;
+            profile = null;
+          }
+
+          if (profile) {
+            break;
+          }
+        }
+
+        if (!profile && lastError) {
+          throw lastError;
+        }
 
         if (cancelled) return;
 

@@ -7,18 +7,20 @@ describe('isSystemPrincipalUser', () => {
     expect(isSystemPrincipalUser({ isRootAdmin: true })).toBe(true);
   });
 
-  it('protege usuarios creados por el sistema principal', () => {
-    expect(isSystemPrincipalUser({ createdBy: 'system' })).toBe(true);
-    expect(isSystemPrincipalUser({ createdByName: 'Sistema Sistema' })).toBe(true);
-    expect(isSystemPrincipalUser({ createdByEmail: 'tu_correo@gmail.com' })).toBe(true);
+  it('protege al usuario principal por identidad propia', () => {
+    expect(isSystemPrincipalUser({ email: 'tu_correo@gmail.com' })).toBe(true);
+    expect(isSystemPrincipalUser({ displayName: 'Sistema Sistema' })).toBe(true);
   });
 
-  it('no protege usuarios creados desde la app por otro administrador', () => {
+  it('no protege usuarios normales aunque los haya creado el sistema principal', () => {
     expect(
       isSystemPrincipalUser({
         role: 'admin',
-        createdBy: 'admin_uid',
-        createdByName: 'Administrador Local',
+        email: 'usuario@congregacion.com',
+        displayName: 'Usuario Normal',
+        createdBy: 'system',
+        createdByName: 'Sistema Sistema',
+        createdByEmail: 'tu_correo@gmail.com',
       })
     ).toBe(false);
   });

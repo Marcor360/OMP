@@ -338,6 +338,37 @@ const sortUsers = (items: AppUser[]): AppUser[] => {
   });
 };
 
+const canonicalUserKey = (user: AppUser): string => {
+  const email = user.email.trim().toLowerCase();
+  return email || `uid:${user.uid}`;
+};
+
+const preferUserRecord = (current: AppUser, candidate: AppUser): AppUser => {
+  if (candidate.isActive !== current.isActive) {
+    return candidate.isActive ? candidate : current;
+  }
+
+  const currentHasService = (current.serviceAssignments?.length ?? 0) > 0 || Boolean(current.department);
+  const candidateHasService = (candidate.serviceAssignments?.length ?? 0) > 0 || Boolean(candidate.department);
+  if (candidateHasService !== currentHasService) {
+    return candidateHasService ? candidate : current;
+  }
+
+  return current;
+};
+
+const dedupeUsersByEmail = (items: AppUser[]): AppUser[] => {
+  const byKey = new Map<string, AppUser>();
+
+  items.forEach((user) => {
+    const key = canonicalUserKey(user);
+    const existing = byKey.get(key);
+    byKey.set(key, existing ? preferUserRecord(existing, user) : user);
+  });
+
+  return Array.from(byKey.values());
+};
+
 const isIncompleteProfile = (user: AppUser): boolean =>
   user.uid.trim().length === 0 || user.congregationId.trim().length === 0;
 
@@ -387,9 +418,11 @@ export const getAllUsers = async (
     forceServer: options?.forceServer,
     mapSnapshot: (snapshot) =>
       sortUsers(
-        snapshot.docs
-          .map((docSnapshot) => normalizeUser(docSnapshot.id, docSnapshot.data()))
-          .filter((user) => !isSystemPrincipalUser(user))
+        dedupeUsersByEmail(
+          snapshot.docs
+            .map((docSnapshot) => normalizeUser(docSnapshot.id, docSnapshot.data()))
+            .filter((user) => !isSystemPrincipalUser(user))
+        )
       ),
   });
 };
@@ -403,9 +436,13 @@ export const getActiveUsers = async (congregationId: string): Promise<AppUser[]>
     orderBy('displayName', 'asc')
   );
   const snap = await getDocs(q);
-  return snap.docs
-    .map((d) => normalizeUser(d.id, d.data()))
-    .filter((user) => !isSystemPrincipalUser(user));
+  return sortUsers(
+    dedupeUsersByEmail(
+      snap.docs
+        .map((d) => normalizeUser(d.id, d.data()))
+        .filter((user) => !isSystemPrincipalUser(user))
+    )
+  );
 };
 
 /** Crea o actualiza el perfil de usuario en Firestore */
@@ -417,6 +454,7 @@ export const createUserProfile = async (
 
   await setDoc(userDocRef(uid), {
     ...data,
+    emailKey: data.email.trim().toLowerCase(),
     isElder: data.isElder ?? (data.privileges?.isElder === true),
     isMinisterialServant:
       data.isMinisterialServant ?? (data.privileges?.isMinisterialServant === true),
@@ -490,9 +528,11 @@ export const subscribeToUsers = (
     q,
     (snap) => {
       const users = sortUsers(
-        snap.docs
-          .map((d) => normalizeUser(d.id, d.data()))
-          .filter((user) => !isSystemPrincipalUser(user))
+        dedupeUsersByEmail(
+          snap.docs
+            .map((d) => normalizeUser(d.id, d.data()))
+            .filter((user) => !isSystemPrincipalUser(user))
+        )
       );
       callback(users);
     },

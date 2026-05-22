@@ -32,7 +32,7 @@ type FilterType = 'all' | 'active' | 'family' | 'inactive';
 export function CleaningDashboardScreen() {
   const colors = useAppColors();
   const router = useRouter();
-  const { congregationId, loading: permLoading } = useCleaningPermission();
+  const { canManage, congregationId, loading: permLoading } = useCleaningPermission();
   const { groups, loading, error, refresh } = useCleaningGroups(congregationId);
   const { t } = useI18n();
 
@@ -222,14 +222,16 @@ export function CleaningDashboardScreen() {
             {t(stats.totalGroups === 1 ? 'cleaning.groupsRegistered' : 'cleaning.groupsRegistered_plural', { count: stats.totalGroups })}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.createBtn}
-          onPress={handleCreate}
-          accessibilityRole="button"
-          accessibilityLabel="Crear nuevo grupo de limpieza"
-        >
-          <Ionicons name="add" size={26} color={colors.onPrimary} />
-        </TouchableOpacity>
+        {canManage ? (
+          <TouchableOpacity
+            style={styles.createBtn}
+            onPress={handleCreate}
+            accessibilityRole="button"
+            accessibilityLabel="Crear nuevo grupo de limpieza"
+          >
+            <Ionicons name="add" size={26} color={colors.onPrimary} />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.statsRow}>

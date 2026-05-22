@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 
 import { useUser } from '@/src/context/user-context';
-import { canManageMeetings } from '@/src/utils/permissions/permissions';
+import { canManageMeetings, canViewCongregationModule } from '@/src/utils/permissions/permissions';
 
 interface MeetingsManagementPermission {
   canManage: boolean;
@@ -11,21 +11,22 @@ interface MeetingsManagementPermission {
   loading: boolean;
 }
 
-export function useMeetingsManagementPermission(): MeetingsManagementPermission {
+export function useMeetingsManagementPermission(requireManage = true): MeetingsManagementPermission {
   const { appUser, congregationId, uid, loadingProfile } = useUser();
   const router = useRouter();
   const redirectedRef = useRef(false);
 
   const canManage = canManageMeetings(appUser);
+  const canOpen = requireManage ? canManage : canViewCongregationModule(appUser);
 
   useEffect(() => {
     if (loadingProfile) return;
 
-    if (!canManage && !redirectedRef.current) {
+    if (!canOpen && !redirectedRef.current) {
       redirectedRef.current = true;
       router.replace('/(protected)/unauthorized');
     }
-  }, [canManage, loadingProfile, router]);
+  }, [canOpen, loadingProfile, router]);
 
   return {
     canManage,

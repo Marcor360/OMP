@@ -2,6 +2,7 @@ import { httpsCallable } from 'firebase/functions';
 
 import { functions } from '@/src/lib/firebase/app';
 import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
+import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
 import { deleteUser, updateUser } from '@/src/services/users/users-service';
 import {
   UpdateUserDTO,
@@ -86,6 +87,8 @@ export const createUserByAdmin = async (
         'No se pudo confirmar la creacion del usuario. Verifica que Cloud Functions este desplegado.'
       );
     }
+
+    clearSessionCacheByPrefix('query:users/');
 
     return {
       uid: result.uid,

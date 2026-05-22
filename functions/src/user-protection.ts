@@ -19,10 +19,10 @@ const PROTECTION_FLAG_KEYS = [
   'systemProtected',
 ] as const;
 
-const SYSTEM_ACTOR_KEYS = [
-  'createdBy',
-  'createdByName',
-  'createdByEmail',
+const SYSTEM_IDENTITY_KEYS = [
+  'email',
+  'displayName',
+  'name',
 ] as const;
 
 const normalizeMarker = (value: unknown): string | null => {
@@ -34,11 +34,11 @@ const normalizeMarker = (value: unknown): string | null => {
 const hasProtectionFlag = (data: Record<string, unknown>): boolean =>
   PROTECTION_FLAG_KEYS.some((key) => data[key] === true);
 
-const hasSystemCreatorMarker = (data: Record<string, unknown>): boolean =>
-  SYSTEM_ACTOR_KEYS.some((key) => {
+const hasSystemIdentityMarker = (data: Record<string, unknown>): boolean =>
+  SYSTEM_IDENTITY_KEYS.some((key) => {
     const marker = normalizeMarker(data[key]);
     return marker !== null && SYSTEM_ACTOR_VALUES.has(marker);
   });
 
 export const isSystemPrincipalUser = (data: Record<string, unknown>): boolean =>
-  hasProtectionFlag(data) || hasSystemCreatorMarker(data);
+  hasProtectionFlag(data) || hasSystemIdentityMarker(data);

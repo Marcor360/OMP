@@ -39,6 +39,7 @@ import { AssignmentPriority, UpdateAssignmentDTO } from '@/src/types/assignment'
 import { Meeting } from '@/src/types/meeting';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { canManageAssignments } from '@/src/utils/permissions/permissions';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
 type Mode = 'create' | 'edit';
@@ -109,7 +110,8 @@ export function AssignmentFormScreen() {
   const styles = createStyles(colors);
 
   const { user } = useAuth();
-  const { appUser, congregationId, isAdminOrSupervisor, loadingProfile, profileError } = useUser();
+  const { appUser, congregationId, loadingProfile, profileError } = useUser();
+  const canManage = canManageAssignments(appUser);
 
   const mode: Mode = id ? 'edit' : 'create';
   const today = useMemo(() => startOfDay(new Date()), []);
@@ -151,11 +153,11 @@ export function AssignmentFormScreen() {
       try {
         const meetingsPromise = getAllMeetings(congregationId);
         const cleaningGroupsPromise =
-          isAdminOrSupervisor
+          canManage
             ? getCleaningGroups(congregationId)
             : Promise.resolve<CleaningGroup[]>([]);
         const usersPromise =
-          isAdminOrSupervisor
+          canManage
             ? getAllUsers(congregationId, { forceServer: true })
             : Promise.resolve<AppUser[]>([]);
         const assignmentPromise =
@@ -236,7 +238,7 @@ export function AssignmentFormScreen() {
     appUser?.displayName,
     congregationId,
     id,
-    isAdminOrSupervisor,
+    canManage,
     loadingProfile,
     meetingIdParam,
     mode,
@@ -301,7 +303,7 @@ export function AssignmentFormScreen() {
   };
 
   const handleSave = async () => {
-    if (!isAdminOrSupervisor) {
+    if (!canManage) {
       Alert.alert('Permisos insuficientes', 'No tienes permisos para crear o editar asignaciones.');
       return;
     }
@@ -436,7 +438,7 @@ export function AssignmentFormScreen() {
 
   if (loading || loadingProfile) return <LoadingState />;
 
-  if (!isAdminOrSupervisor) {
+  if (!canManage) {
     return (
       <ScreenContainer scrollable={false} padded={false}>
         <PageHeader title={mode === 'create' ? 'Nueva asignacion' : 'Editar asignacion'} showBack />
@@ -446,7 +448,7 @@ export function AssignmentFormScreen() {
               No tienes permisos para crear o editar asignaciones.
             </ThemedText>
             <ThemedText style={styles.hintText}>
-              Esta accion solo esta disponible para administradores y supervisores.
+              Esta accion solo esta disponible para quienes tienen permiso de asignaciones.
             </ThemedText>
           </View>
         </View>
@@ -454,23 +456,23 @@ export function AssignmentFormScreen() {
     );
   }
 
-  const canEditForm = isAdminOrSupervisor;
+  const canEditForm = canManage;
   const hasAssignableUsers = mode !== 'create' || users.length > 0;
   const hasCleaningGroups = mode !== 'create' || cleaningGroups.length > 0;
   const canSave =
-    isAdminOrSupervisor &&
+    canManage &&
     (targetMode === 'cleaningGroup'
       ? hasCleaningGroups
       : meetings.length > 0 && (personAssignmentMode === 'manual' || hasAssignableUsers));
   const noMeetings = meetings.length === 0;
   const noAssignableUsers =
     mode === 'create' &&
-    isAdminOrSupervisor &&
+    canManage &&
     users.length === 0 &&
     personAssignmentMode === 'user';
   const noCleaningGroups =
     mode === 'create' &&
-    isAdminOrSupervisor &&
+    canManage &&
     targetMode === 'cleaningGroup' &&
     cleaningGroups.length === 0;
   const visibleMonthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
@@ -710,7 +712,7 @@ export function AssignmentFormScreen() {
           </Field>
         )}
 
-        {mode === 'create' && isAdminOrSupervisor && targetMode === 'person' && (
+        {mode === 'create' && canManage && targetMode === 'person' && (
           <Field label="Asignar a (usuarios de la congregacion)" error={errors.assignedTo}>
             <View style={styles.chipRow}>
               <TouchableOpacity

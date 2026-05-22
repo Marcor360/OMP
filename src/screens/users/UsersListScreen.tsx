@@ -10,13 +10,12 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { getAllUsers } from '@/src/services/users/users-service';
+import { getAllUsers, subscribeToUsers } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 import { useI18n } from '@/src/i18n/index';
-import { hasPermission } from '@/src/utils/permissions/permissions';
+import { canViewUsers, hasPermission } from '@/src/utils/permissions/permissions';
 
 export function UsersListScreen() {
   const router = useRouter();
@@ -29,20 +28,15 @@ export function UsersListScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const loadingRef = React.useRef(false);
 
   const loadUsers = useCallback(async (forceServer = false) => {
     if (loadingProfile) return;
 
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-
-    if (!hasPermission(appUser, 'usuarios', 'view')) {
+    if (!canViewUsers(appUser)) {
       setUsers([]);
       setError(t('users.permission.adminOnlyList'));
       setLoading(false);
       setRefreshing(false);
-      loadingRef.current = false;
       return;
     }
 
@@ -51,7 +45,6 @@ export function UsersListScreen() {
       setError(t('users.error.noCongregation'));
       setLoading(false);
       setRefreshing(false);
-      loadingRef.current = false;
       return;
     }
 
@@ -73,22 +66,43 @@ export function UsersListScreen() {
     } finally {
       setLoading(false);
       setRefreshing(false);
-      loadingRef.current = false;
     }
   }, [appUser, congregationId, loadingProfile, t]);
 
   useEffect(() => {
-    void loadUsers(true);
-  }, [loadUsers]);
+    if (loadingProfile) return;
 
-  const handleFocusRefresh = useCallback(() => {
-    void loadUsers(true);
-  }, [loadUsers]);
+    if (!canViewUsers(appUser)) {
+      setUsers([]);
+      setError(t('users.permission.adminOnlyList'));
+      setLoading(false);
+      return;
+    }
 
-  useRefreshOnFocus(handleFocusRefresh, !loadingProfile, {
-    refreshOnAppActive: false,
-    skipInitialFocus: false,
-  });
+    if (!congregationId || typeof congregationId !== 'string') {
+      setUsers([]);
+      setError(t('users.error.noCongregation'));
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    return subscribeToUsers(
+      congregationId,
+      (data) => {
+        setUsers(data);
+        setError(null);
+        setLoading(false);
+        setRefreshing(false);
+      },
+      (requestError) => {
+        console.error('UsersListScreen subscription error:', requestError);
+        void loadUsers(true);
+      }
+    );
+  }, [appUser, congregationId, loadUsers, loadingProfile, t]);
 
   const onRefresh = async () => {
     if (!congregationId) return;

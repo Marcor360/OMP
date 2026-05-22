@@ -110,6 +110,53 @@ export const isAdmin = (user: Pick<AppUser, 'role'> | null | undefined): boolean
 export const isSupervisor = (user: Pick<AppUser, 'role'> | null | undefined): boolean =>
   user?.role === 'supervisor';
 
+export const hasServiceAssignment = (
+  user:
+    | Pick<AppUser, 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | null
+    | undefined,
+  position: UserServiceAssignment['position'],
+  department?: UserServiceAssignment['department']
+): boolean =>
+  Boolean(
+    (
+      user?.servicePosition === position &&
+      (department === undefined || user.serviceDepartment === department)
+    ) ||
+      user?.serviceAssignments?.some(
+        (assignment) =>
+          assignment.position === position &&
+          (department === undefined || assignment.department === department)
+      )
+  );
+
+export const hasGlobalScreenAccess = (
+  user:
+    | Pick<
+        AppUser,
+        | 'role'
+        | 'servicePosition'
+        | 'serviceDepartment'
+        | 'serviceAssignments'
+        | 'protectedFromDeletion'
+        | 'isSystemUser'
+        | 'isPrimaryAdmin'
+        | 'isRootAdmin'
+        | 'systemProtected'
+      >
+    | null
+    | undefined
+): boolean =>
+  Boolean(
+    user?.protectedFromDeletion === true ||
+      user?.isSystemUser === true ||
+      user?.isPrimaryAdmin === true ||
+      user?.isRootAdmin === true ||
+      user?.systemProtected === true ||
+      hasServiceAssignment(user, 'coordinador') ||
+      hasServiceAssignment(user, 'secretario')
+  );
+
 const fullPermissions = (): UserPermissions =>
   PERMISSION_DEPARTMENTS.reduce<UserPermissions>((permissions, department) => {
     if (department === 'pagos') return permissions;
@@ -267,6 +314,7 @@ export const hasPermission = (
 };
 
 export const canManageUsers = (user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined): boolean =>
+  isAdmin(user) ||
   hasPermission(user, 'usuarios', 'manage') ||
   (
     hasPermission(user, 'usuarios', 'view') &&
@@ -277,6 +325,7 @@ export const canManageUsers = (user: Pick<AppUser, 'role' | 'permissions' | 'ser
 export const canManageMeetings = (
   user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
 ): boolean =>
+  isAdmin(user) ||
   hasPermission(user, 'reuniones', 'manage') ||
   (
     hasPermission(user, 'reuniones', 'create') &&
@@ -286,10 +335,21 @@ export const canManageMeetings = (
 export const canManageAssignments = (
   user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
 ): boolean =>
+  isAdmin(user) ||
   hasPermission(user, 'asignaciones', 'manage') ||
   (
     hasPermission(user, 'asignaciones', 'create') &&
     hasPermission(user, 'asignaciones', 'edit')
+  );
+
+export const canManageEvents = (
+  user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
+): boolean =>
+  isAdmin(user) ||
+  hasPermission(user, 'avisos', 'manage') ||
+  (
+    hasPermission(user, 'avisos', 'create') &&
+    hasPermission(user, 'avisos', 'edit')
   );
 
 export const canManageOutgoingTalks = (
@@ -300,17 +360,61 @@ export const canManageOutgoingTalks = (
 ): boolean => Boolean(profile?.isActive && canManageAssignments(profile));
 
 export const canViewUsers = (
-  user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
-): boolean => hasPermission(user, 'usuarios', 'view');
+  user:
+    | Pick<
+        AppUser,
+        | 'role'
+        | 'permissions'
+        | 'servicePosition'
+        | 'serviceDepartment'
+        | 'serviceAssignments'
+        | 'protectedFromDeletion'
+        | 'isSystemUser'
+        | 'isPrimaryAdmin'
+        | 'isRootAdmin'
+        | 'systemProtected'
+      >
+    | null
+    | undefined
+): boolean =>
+  isAdmin(user) ||
+  isSupervisor(user) ||
+  hasGlobalScreenAccess(user) ||
+  hasPermission(user, 'usuarios', 'view') ||
+  hasPermission(user, 'usuarios', 'manage');
 
 export const canAccessSettings = (
-  user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
+  user:
+    | Pick<
+        AppUser,
+        | 'role'
+        | 'permissions'
+        | 'servicePosition'
+        | 'serviceDepartment'
+        | 'serviceAssignments'
+        | 'protectedFromDeletion'
+        | 'isSystemUser'
+        | 'isPrimaryAdmin'
+        | 'isRootAdmin'
+        | 'systemProtected'
+      >
+    | null
+    | undefined
 ): boolean =>
-  hasPermission(user, 'configuracion', 'view') || hasPermission(user, 'configuracion', 'manage');
+  isAdmin(user) ||
+  isSupervisor(user) ||
+  hasGlobalScreenAccess(user) ||
+  hasPermission(user, 'configuracion', 'view') ||
+  hasPermission(user, 'configuracion', 'manage');
+
+export const canViewCongregationModule = (
+  user: Pick<AppUser, 'role' | 'isActive'> | null | undefined
+): boolean => user?.isActive === true;
 
 export const canManageCleaning = (
   user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
 ): boolean =>
+  isAdmin(user) ||
   hasPermission(user, 'limpieza', 'manage') ||
   (
     hasPermission(user, 'limpieza', 'create') &&
@@ -366,17 +470,30 @@ export const canManageTerritories = (
 
 export const getVisibleTabs = (
   user:
-    | Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | Pick<
+        AppUser,
+        | 'role'
+        | 'isActive'
+        | 'permissions'
+        | 'servicePosition'
+        | 'serviceDepartment'
+        | 'serviceAssignments'
+        | 'protectedFromDeletion'
+        | 'isSystemUser'
+        | 'isPrimaryAdmin'
+        | 'isRootAdmin'
+        | 'systemProtected'
+      >
     | null
     | undefined,
-  isElder?: boolean
+  _isElder?: boolean
 ): ('index' | 'users' | 'meetings' | 'assignments' | 'profile' | 'settings' | 'cleaning' | 'preaching')[] => {
   const base = ['index', 'meetings', 'assignments', 'preaching', 'profile'] as const;
   const visible = new Set<typeof base[number] | 'users' | 'settings' | 'cleaning'>(base);
 
   if (canViewUsers(user)) visible.add('users');
   if (canAccessSettings(user)) visible.add('settings');
-  if (hasPermission(user, 'limpieza', 'view') || canManageCleaning(user) || isElder) {
+  if (canViewCongregationModule(user)) {
     visible.add('cleaning');
   }
 

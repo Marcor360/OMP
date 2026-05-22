@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 
 import { useUser } from '@/src/context/user-context';
-import { canManageCleaning } from '@/src/utils/permissions/permissions';
+import { canManageCleaning, canViewCongregationModule, hasPermission } from '@/src/utils/permissions/permissions';
 
 interface CleaningPermission {
   canManage: boolean;
@@ -16,19 +16,20 @@ interface CleaningPermission {
  * Solo retorna valores cuando el permiso está confirmado.
  */
 export function useCleaningPermission(): CleaningPermission & { loading: boolean } {
-  const { appUser, congregationId, uid, loadingProfile } = useUser();
+  const { appUser, congregationId, uid, loadingProfile, isElder } = useUser();
   const router = useRouter();
   const redirectedRef = useRef(false);
 
   const canManage = canManageCleaning(appUser);
+  const canView = canViewCongregationModule(appUser) || canManage || hasPermission(appUser, 'limpieza', 'view') || isElder;
 
   useEffect(() => {
     if (loadingProfile) return;
-    if (!canManage && !redirectedRef.current) {
+    if (!canView && !redirectedRef.current) {
       redirectedRef.current = true;
       router.replace('/(protected)/unauthorized');
     }
-  }, [canManage, loadingProfile, router]);
+  }, [canView, loadingProfile, router]);
 
   return {
     loading: loadingProfile,

@@ -29,27 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   // Referencia a usuario para poder accederla desde event listeners sin closures stale
   const userRef = useRef<User | null>(null);
-  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Timeout de seguridad: si auth tarda más de 5s, forzamos loading=false
-  useEffect(() => {
-    loadingTimeoutRef.current = setTimeout(() => {
-      setLoading((prev) => {
-        if (prev) {
-          console.warn('[AuthProvider] Timeout de auth alcanzado (5s). Forzando loading=false');
-          setAuthError('Tiempo de espera agotado. Verifica tu conexión.');
-          return false;
-        }
-        return prev;
-      });
-    }, 5000);
-
-    return () => {
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // Mantener userRef sincronizado con el state
   useEffect(() => {
@@ -91,11 +71,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       setAuthError(null);
 
-      // Cancelar timeout de seguridad si auth respondió
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-        loadingTimeoutRef.current = null;
-      }
 
       if (firebaseUser) {
         console.log('[AuthProvider] Usuario autenticado:', firebaseUser.uid);
@@ -110,9 +85,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       console.log('[AuthProvider] Limpiando onAuthStateChanged listener');
       unsubscribe();
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
     };
   }, []);
 

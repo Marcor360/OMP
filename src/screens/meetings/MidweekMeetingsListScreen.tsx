@@ -36,7 +36,7 @@ const STATUS_FILTERS: { label: string; value: MeetingStatus | 'all' }[] = [
 
 export function MidweekMeetingsListScreen() {
   const router = useRouter();
-  const { congregationId, loading: permLoading, canManage } = useMeetingsManagementPermission();
+  const { congregationId, loading: permLoading, canManage } = useMeetingsManagementPermission(false);
   const colors = useAppColors();
   const styles = createStyles(colors);
 
