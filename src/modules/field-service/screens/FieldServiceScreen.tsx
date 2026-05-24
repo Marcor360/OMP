@@ -261,7 +261,7 @@ export function FieldServiceScreen() {
       type: 'error',
       message: t('fieldService.errorOutsideWindow', { days: result.status.window.graceDays }),
     });
-  }, [submitMonthlyReport, reportMonthLabel]);
+  }, [submitMonthlyReport, reportMonthLabel, t]);
 
   // ── Renderizado ──────────────────────────────────────────────────────────────
 

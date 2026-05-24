@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { EmptyState } from '@/src/components/common/EmptyState';
@@ -10,66 +9,51 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { useTerritories, useTerritorySchedule } from '@/src/hooks/use-territories';
+import { useI18n } from '@/src/i18n/index';
+import { useTerritorySchedule } from '@/src/hooks/use-territories';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { TERRITORY_DAY_LABELS, TERRITORY_DAYS, type Territory } from '@/src/types/territory';
+import { TERRITORY_DAY_LABELS, TERRITORY_DAYS } from '@/src/types/territory';
 import { canManageTerritories } from '@/src/utils/permissions/permissions';
-
-const formatDate = (territory: Territory) => {
-  const date = territory.updatedAt?.toDate?.();
-  if (!date) return null;
-
-  return new Intl.DateTimeFormat('es', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
-};
 
 export function TerritoriesScreen() {
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
   const { appUser, congregationId, loadingProfile, profileError } = useUser();
-  const territoriesState = useTerritories(congregationId);
-  const scheduleState = useTerritorySchedule(congregationId);
+  const { schedule, scheduleByDay, loading, error } = useTerritorySchedule(congregationId);
   const canManage = canManageTerritories(appUser);
-
-  const territoriesById = useMemo(
-    () => new Map(territoriesState.activeTerritories.map((territory) => [territory.id, territory])),
-    [territoriesState.activeTerritories]
+  const totalTerritories = schedule.reduce(
+    (total, day) => total + day.territories.filter((territory) => territory.enabled).length,
+    0
   );
 
-  const scheduleByDay = useMemo(
-    () => new Map(scheduleState.schedule.map((item) => [item.dayOfWeek, item])),
-    [scheduleState.schedule]
-  );
-
-  if (loadingProfile || territoriesState.loading || scheduleState.loading) {
-    return <LoadingState message="Cargando territorios..." />;
+  if (loadingProfile || loading) {
+    return <LoadingState message={t('territories.loading')} />;
   }
 
   if (!appUser || !appUser.isActive || !congregationId) {
     return (
-      <ErrorState message={profileError ?? 'Necesitas una cuenta activa con congregacion.'} />
+      <ErrorState message={profileError ?? t('territories.activeAccountRequired')} />
     );
   }
 
-  const error = territoriesState.error ?? scheduleState.error;
   if (error) return <ErrorState message={error} />;
 
   return (
     <ScreenContainer>
       <PageHeader
-        title="Territorios"
-        subtitle="Predicacion semanal"
+        title={t('territories.title')}
+        subtitle={t('territories.weekSubtitle')}
         showBack
         actions={
           canManage ? (
             <TouchableOpacity
               style={styles.headerButton}
-              onPress={() => router.push('/(protected)/preaching/territories/manage' as never)}
+              onPress={() => router.push('/(protected)/territories/manage' as never)}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={t('territories.manageTitle')}
             >
               <Ionicons name="settings-outline" size={18} color={colors.onPrimary} />
             </TouchableOpacity>
@@ -77,67 +61,48 @@ export function TerritoriesScreen() {
         }
       />
 
-      {territoriesState.territories.length === 0 ? (
+      {totalTerritories === 0 ? (
         <EmptyState
           icon="map-outline"
-          title="Sin territorios"
-          description="Todavia no hay territorios registrados para esta congregacion."
+          title={t('territories.emptyTitle')}
+          description={t('territories.empty')}
         />
       ) : (
         <View style={styles.dayList}>
           {TERRITORY_DAYS.map((day) => {
-            const schedule = scheduleByDay.get(day);
-            const territories = (schedule?.territoryIds ?? [])
-              .map((territoryId) => territoriesById.get(territoryId))
-              .filter((territory): territory is Territory => Boolean(territory));
+            const territories = scheduleByDay
+              .get(day)
+              ?.territories.filter((territory) => territory.enabled) ?? [];
 
             return (
               <View key={day} style={styles.dayCard}>
                 <View style={styles.dayHeader}>
                   <ThemedText style={styles.dayTitle}>{TERRITORY_DAY_LABELS[day]}</ThemedText>
                   <ThemedText style={styles.countLabel}>
-                    {territories.length} {territories.length === 1 ? 'territorio' : 'territorios'}
+                    {territories.length} {territories.length === 1 ? t('territories.countOne') : t('territories.countMany')}
                   </ThemedText>
                 </View>
 
-                {schedule?.note ? (
-                  <View style={styles.noteBox}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.warning} />
-                    <ThemedText style={styles.noteText}>{schedule.note}</ThemedText>
-                  </View>
-                ) : null}
-
                 {territories.length > 0 ? (
                   <View style={styles.territoryList}>
-                    {territories.map((territory) => {
-                      const updatedAt = formatDate(territory);
-                      return (
-                        <View key={territory.id} style={styles.territoryRow}>
-                          <View style={styles.territoryIcon}>
-                            <Ionicons name="location-outline" size={18} color={colors.primary} />
-                          </View>
-                          <View style={styles.territoryBody}>
-                            <ThemedText style={styles.territoryName}>
-                              {territory.number ? `${territory.number}. ` : ''}
-                              {territory.name}
-                            </ThemedText>
-                            {territory.description ? (
-                              <ThemedText style={styles.territoryDescription}>
-                                {territory.description}
-                              </ThemedText>
-                            ) : null}
-                            {updatedAt ? (
-                              <ThemedText style={styles.updatedText}>
-                                Actualizado: {updatedAt}
-                              </ThemedText>
-                            ) : null}
-                          </View>
+                    {territories.map((territory) => (
+                      <View key={`${day}:${territory.number}`} style={styles.territoryRow}>
+                        <View style={styles.territoryIcon}>
+                          <Ionicons name="map-outline" size={18} color={colors.primary} />
                         </View>
-                      );
-                    })}
+                        <View style={styles.territoryBody}>
+                          <ThemedText style={styles.territoryName}>
+                            {t('territories.itemTitle', { number: territory.number })}
+                          </ThemedText>
+                          <ThemedText style={styles.territoryDescription}>
+                            {territory.description}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    ))}
                   </View>
                 ) : (
-                  <ThemedText style={styles.emptyDay}>Sin territorios asignados</ThemedText>
+                  <ThemedText style={styles.emptyDay}>{t('territories.emptyDay')}</ThemedText>
                 )}
               </View>
             );
@@ -185,19 +150,6 @@ const createStyles = (colors: AppColorSet) =>
       fontSize: 12,
       fontWeight: '700',
     },
-    noteBox: {
-      flexDirection: 'row',
-      gap: 8,
-      padding: 10,
-      borderRadius: 10,
-      backgroundColor: colors.warningLight,
-    },
-    noteText: {
-      flex: 1,
-      color: colors.textSecondary,
-      fontSize: 13,
-      lineHeight: 18,
-    },
     territoryList: {
       gap: 8,
     },
@@ -230,12 +182,6 @@ const createStyles = (colors: AppColorSet) =>
       fontSize: 13,
       lineHeight: 18,
       marginTop: 3,
-    },
-    updatedText: {
-      color: colors.textMuted,
-      fontSize: 11,
-      marginTop: 5,
-      fontWeight: '600',
     },
     emptyDay: {
       color: colors.textMuted,

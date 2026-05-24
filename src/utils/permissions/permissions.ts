@@ -18,6 +18,7 @@ export const PERMISSION_DEPARTMENTS: PermissionDepartment[] = [
   'usuarios',
   'reuniones',
   'limpieza',
+  'departments',
   'predicacion',
   'tesoreria',
   'pagos',
@@ -42,6 +43,7 @@ export const TERRITORY_PERMISSION_ACTIONS: TerritoryPermissionAction[] = [
   'edit',
   'delete',
   'assign',
+  'manage',
 ];
 
 const FULL_DEPARTMENT_PERMISSIONS = {
@@ -58,6 +60,7 @@ export const DEPARTMENT_LABELS: Record<PermissionDepartment, string> = {
   usuarios: 'Usuarios',
   reuniones: 'Reuniones',
   limpieza: 'Limpieza',
+  departments: 'Organigrama',
   predicacion: 'Predicacion',
   tesoreria: 'Tesoreria',
   pagos: 'Pagos',
@@ -82,12 +85,14 @@ export const TERRITORY_ACTION_LABELS: Record<TerritoryPermissionAction, string> 
   edit: 'Editar territorios',
   delete: 'Desactivar territorios',
   assign: 'Asignar territorios',
+  manage: 'Administrar territorios',
 };
 
 export const SUPERVISOR_PERMISSION_TEMPLATE: Partial<Record<PermissionDepartment, PermissionAction[]>> = {
   usuarios: ['view', 'create', 'edit', 'delete'],
   reuniones: ['view', 'create', 'edit', 'delete', 'manage'],
   limpieza: ['view', 'create', 'edit', 'delete', 'manage'],
+  departments: ['view', 'create', 'edit', 'delete', 'manage'],
   predicacion: ['view', 'approve', 'export', 'manage'],
   tesoreria: ['view', 'create', 'edit', 'delete', 'manage'],
   pagos: ['view', 'create', 'approve', 'manage'],
@@ -380,6 +385,7 @@ export const canViewUsers = (
   isAdmin(user) ||
   isSupervisor(user) ||
   hasGlobalScreenAccess(user) ||
+  user?.permissions?.departments?.manage === true ||
   hasPermission(user, 'usuarios', 'view') ||
   hasPermission(user, 'usuarios', 'manage');
 
@@ -410,6 +416,28 @@ export const canAccessSettings = (
 export const canViewCongregationModule = (
   user: Pick<AppUser, 'role' | 'isActive'> | null | undefined
 ): boolean => user?.isActive === true;
+
+export const canViewOrgChart = (
+  user: Pick<AppUser, 'isActive' | 'congregationId'> | null | undefined
+): boolean =>
+  Boolean(user?.isActive === true && typeof user.congregationId === 'string' && user.congregationId.trim().length > 0);
+
+export const canManageDepartments = (
+  user:
+    | Pick<AppUser, 'role' | 'isActive' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | null
+    | undefined
+): boolean =>
+  Boolean(
+    user?.isActive === true &&
+      (
+        hasServiceAssignment(user, 'coordinador') ||
+        hasServiceAssignment(user, 'secretario') ||
+        user.permissions?.departments?.manage === true
+      )
+  );
+
+export const canManageOrgChart = canManageDepartments;
 
 export const canManageCleaning = (
   user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
@@ -454,7 +482,10 @@ export const hasTerritoryPermission = (
   if (user.role === 'admin') return true;
   if (hasPreachingAssignment(user, 'encargado')) return true;
 
-  return getEffectivePermissions(user).predicacion?.territories?.[action] === true;
+  const preachingPermissions = getEffectivePermissions(user).predicacion;
+  if (preachingPermissions?.manageTerritories === true) return true;
+  if (preachingPermissions?.territories?.manage === true) return true;
+  return preachingPermissions?.territories?.[action] === true;
 };
 
 export const canManageTerritories = (
@@ -463,6 +494,10 @@ export const canManageTerritories = (
     | null
     | undefined
 ): boolean =>
+  isAdmin(user) ||
+  hasPermission(user, 'predicacion', 'manage') ||
+  getEffectivePermissions(user).predicacion?.manageTerritories === true ||
+  getEffectivePermissions(user).predicacion?.territories?.manage === true ||
   hasTerritoryPermission(user, 'create') ||
   hasTerritoryPermission(user, 'edit') ||
   hasTerritoryPermission(user, 'delete') ||
@@ -487,8 +522,8 @@ export const getVisibleTabs = (
     | null
     | undefined,
   _isElder?: boolean
-): ('index' | 'users' | 'meetings' | 'assignments' | 'profile' | 'settings' | 'cleaning' | 'preaching')[] => {
-  const base = ['index', 'meetings', 'assignments', 'preaching', 'profile'] as const;
+): ('index' | 'users' | 'meetings' | 'assignments' | 'profile' | 'settings' | 'cleaning' | 'preaching' | 'org-chart')[] => {
+  const base = ['index', 'meetings', 'assignments', 'preaching', 'org-chart', 'profile'] as const;
   const visible = new Set<typeof base[number] | 'users' | 'settings' | 'cleaning'>(base);
 
   if (canViewUsers(user)) visible.add('users');

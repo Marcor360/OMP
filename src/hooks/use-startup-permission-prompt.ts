@@ -3,10 +3,10 @@ import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 
 import {
-  getNotificationPermissionStatus,
-  requestNotificationPermission,
-} from '@/src/services/notifications/notifications-service';
-import { registerExpoPushTokenForUser } from '@/src/services/notifications/push-notifications.service';
+  getPushNotificationPermissionStatus,
+  registerExpoPushTokenForUser,
+  requestPushNotificationPermission,
+} from '@/src/services/notifications/push-notifications.service';
 import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 import { useI18n } from '@/src/i18n/index';
 
@@ -40,11 +40,16 @@ export function useStartupPermissionPrompt({
     let cancelled = false;
 
     const maybePrompt = async () => {
-      const alreadyExplained = await AsyncStorage.getItem(STARTUP_PERMISSION_PROMPT_KEY);
-      const status = await getNotificationPermissionStatus();
+      const userPromptKey = `${STARTUP_PERMISSION_PROMPT_KEY}:${uid}`;
+      const alreadyExplained = await AsyncStorage.getItem(userPromptKey);
+      const status = await getPushNotificationPermissionStatus();
 
-      if (cancelled || alreadyExplained === '1' || status !== 'undetermined') {
+      if (cancelled || status !== 'undetermined') {
         return;
+      }
+
+      if (alreadyExplained === '1') {
+        await AsyncStorage.removeItem(userPromptKey);
       }
 
       promptedThisSession.current = true;
@@ -61,16 +66,16 @@ export function useStartupPermissionPrompt({
             text: t('permission.action.allow'),
             onPress: () => {
               void (async () => {
-                const result = await requestNotificationPermission();
+                const result = await requestPushNotificationPermission();
 
                 if (result === 'granted') {
-                  await AsyncStorage.setItem(STARTUP_PERMISSION_PROMPT_KEY, '1');
+                  await AsyncStorage.setItem(userPromptKey, '1');
                   await registerExpoPushTokenForUser({ userId: uid, congregationId });
                   return;
                 }
 
                 if (result === 'denied') {
-                  await AsyncStorage.setItem(STARTUP_PERMISSION_PROMPT_KEY, '1');
+                  await AsyncStorage.setItem(userPromptKey, '1');
                 }
               })();
             },

@@ -69,7 +69,6 @@
 - Asignaciones independientes para áreas como limpieza u hospitalidad.
 - Publicación de reuniones.
 - Notificaciones al publicar, actualizar o recordar asignaciones.
-- Importación de reuniones desde PDF mediante Cloud Functions.
 - Creación, edición, detalle y administración de reuniones protegidas por permisos.
 - Soporte para reuniones de Vida y Ministerio Cristiano con secciones, participantes y asignaciones.
 - Gestión de reuniones de fin de semana y responsabilidades relacionadas.
@@ -248,9 +247,12 @@
 | `/congregations/{congregationId}/meetings/{meetingId}/assignments/{assignmentId}` | Asignaciones vinculadas a una reunión |
 | `/congregations/{congregationId}/assignments/{assignmentId}` | Asignaciones independientes: limpieza, hospitalidad u otras |
 | `/congregations/{congregationId}/cleaningGroups/{groupId}` | Grupos de limpieza por congregación |
+| `/congregations/{congregationId}/departments/{departmentId}` | Departamentos activos del organigrama congregacional |
+| `/congregations/{congregationId}/departmentAssignments/{assignmentId}` | Responsables y auxiliares activos por departamento |
 | `/congregations/{congregationId}/outgoingTalks/{outgoingTalkId}` | Discursos salientes |
 | `/congregations/{congregationId}/changeLogs/{changeLogId}` | Bitácora de cambios de congregación |
 | `/congregations/{congregationId}/notifications/{notificationId}` | Notificaciones internas por congregación |
+| `/congregations/{congregationId}/territorySchedule/{scheduleId}` | Territorios de predicación asignados por día |
 | `/users/{uid}/pushTokens/{tokenDocId}` | Tokens Expo Push activos por usuario y dispositivo |
 | `/congregations/{congregationId}/preachingReports/{monthId}/submissions/{userId}` | Informes mensuales de predicación |
 | `/dashboardSummary/{congregationId}` | Resumen precalculado para dashboard |
@@ -309,7 +311,6 @@ Las funciones exportadas actualmente cubren:
 - `deleteUserByAdmin`
 - `deleteAuthUserOnProfileDelete`
 - `deleteUserProfileOnAuthDelete`
-- `importMidweekMeetingsFromPdf`
 - `setMeetingPublicationStatus`
 - `createMeetingByManager`
 - `updateMeetingByManager`
@@ -394,7 +395,6 @@ Firebase puede operar con costo muy bajo al inicio si la app está bien optimiza
 - Consultas repetidas.
 - Cloud Functions ejecutadas por cambios de documentos.
 - Notificaciones.
-- Storage si en el futuro se agregan imágenes, PDFs o archivos.
 
 
 

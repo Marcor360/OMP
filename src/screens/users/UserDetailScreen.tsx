@@ -208,7 +208,7 @@ export function UserDetailScreen() {
       return;
     }
 
-    if (user.role === 'admin') {
+    if (user.role === 'admin' && !isAdmin) {
       Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteAdmin'));
       return;
     }

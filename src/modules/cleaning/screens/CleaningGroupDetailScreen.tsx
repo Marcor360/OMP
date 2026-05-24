@@ -104,7 +104,7 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
         ]
       );
     },
-    [congregationId, groupId, syncCaches]
+    [congregationId, groupId, syncCaches, t]
   );
 
   const handleAddMembers = async (selectedIds: string[]) => {

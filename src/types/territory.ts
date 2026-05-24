@@ -1,8 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 
-export type TerritoryStatus = 'active' | 'inactive';
-
-export type TerritoryDayOfWeek =
+export type TerritoryDay =
   | 'monday'
   | 'tuesday'
   | 'wednesday'
@@ -11,45 +9,35 @@ export type TerritoryDayOfWeek =
   | 'saturday'
   | 'sunday';
 
-export interface Territory {
-  id: string;
-  congregationId: string;
-  number: number | null;
-  name: string;
+export type TerritoryDayOfWeek = TerritoryDay;
+
+export interface TerritoryItem {
+  number: number;
   description: string;
-  status: TerritoryStatus;
-  createdBy: string;
-  updatedBy: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  enabled: boolean;
 }
 
 export interface TerritorySchedule {
   id: string;
   congregationId: string;
-  dayOfWeek: TerritoryDayOfWeek;
-  territoryIds: string[];
-  note: string;
-  isActive: boolean;
+  dayOfWeek: TerritoryDay;
+  territories: TerritoryItem[];
+  active: boolean;
   createdBy: string;
   updatedBy: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: Timestamp | null;
+  updatedAt: Timestamp | null;
 }
 
-export type TerritoryFormValues = {
-  number: number | null;
-  name: string;
-  description: string;
+export type CreateTerritoryScheduleInput = {
+  dayOfWeek: TerritoryDay;
+  territories: TerritoryItem[];
+  active?: boolean;
 };
 
-export type TerritoryScheduleFormValues = {
-  dayOfWeek: TerritoryDayOfWeek;
-  territoryIds: string[];
-  note: string;
-};
+export type UpdateTerritoryScheduleInput = Partial<CreateTerritoryScheduleInput>;
 
-export const TERRITORY_DAYS: TerritoryDayOfWeek[] = [
+export const TERRITORY_DAYS: TerritoryDay[] = [
   'monday',
   'tuesday',
   'wednesday',
@@ -59,7 +47,7 @@ export const TERRITORY_DAYS: TerritoryDayOfWeek[] = [
   'sunday',
 ];
 
-export const TERRITORY_DAY_LABELS: Record<TerritoryDayOfWeek, string> = {
+export const TERRITORY_DAY_LABELS: Record<TerritoryDay, string> = {
   monday: 'Lunes',
   tuesday: 'Martes',
   wednesday: 'Miercoles',
@@ -69,6 +57,5 @@ export const TERRITORY_DAY_LABELS: Record<TerritoryDayOfWeek, string> = {
   sunday: 'Domingo',
 };
 
-export const TERRITORY_NAME_MAX_LENGTH = 50;
-export const TERRITORY_DESCRIPTION_MAX_LENGTH = 160;
-export const TERRITORY_DAY_NOTE_MAX_LENGTH = 300;
+export const TERRITORY_DESCRIPTION_MAX_LENGTH = 100;
+export const TERRITORIES_PER_DAY_MAX = 12;

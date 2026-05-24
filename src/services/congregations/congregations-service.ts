@@ -1,8 +1,7 @@
-import { doc, getDocFromServer, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDocFromServer } from 'firebase/firestore';
 import {
   congregationDocRef,
   congregationPrivatePlanDocRef,
-  usersCollectionRef,
 } from '@/src/lib/firebase/refs';
 import { db } from '@/src/lib/firebase/app';
 import { getDocumentCacheFirst } from '@/src/services/repositories/firestore-cache-first';

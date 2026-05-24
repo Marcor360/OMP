@@ -61,6 +61,7 @@ export type PermissionDepartment =
   | 'usuarios'
   | 'reuniones'
   | 'limpieza'
+  | 'departments'
   | 'predicacion'
   | 'tesoreria'
   | 'pagos'
@@ -77,10 +78,11 @@ export type PermissionAction =
   | 'approve'
   | 'export';
 
-export type TerritoryPermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'assign';
+export type TerritoryPermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'assign' | 'manage';
 
 export type DepartmentPermissions = Partial<Record<PermissionAction, boolean>> & {
   territories?: Partial<Record<TerritoryPermissionAction, boolean>>;
+  manageTerritories?: boolean;
 };
 export type UserPermissions = Partial<Record<PermissionDepartment, DepartmentPermissions>>;
 

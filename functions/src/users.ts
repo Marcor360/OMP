@@ -1484,10 +1484,14 @@ export const deleteUserByAdmin = onCall(
       throw new HttpsError('not-found', 'Usuario no encontrado.');
     }
 
-    const target = targetSnap.data() as { congregationId: string };
+    const target = targetSnap.data() as { congregationId: string; role?: Role };
 
     if (target.congregationId !== requester.congregationId) {
       throw new HttpsError('permission-denied', 'No puedes eliminar usuarios de otra congregacion.');
+    }
+
+    if (target.role === 'admin' && requester.role !== 'admin') {
+      throw new HttpsError('permission-denied', 'Solo un administrador puede eliminar a otro administrador.');
     }
 
     if (isSystemPrincipalUser(target as Record<string, unknown>)) {

@@ -3,10 +3,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -27,7 +27,7 @@ export function FirstLoginWelcomeModal({ uid, enabled }: FirstLoginWelcomeModalP
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const availableCardHeight = Math.max(320, height - insets.top - insets.bottom - 48);
+  const availableCardHeight = Math.max(320, height - insets.top - insets.bottom - 72);
   const cardHeight = Math.min(availableCardHeight, 720);
   const styles = useMemo(
     () => createStyles(colors, insets, cardHeight),
@@ -149,17 +149,15 @@ export function FirstLoginWelcomeModal({ uid, enabled }: FirstLoginWelcomeModalP
           </ScrollView>
 
           <View style={styles.footer}>
-            <Pressable
+            <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Aceptar mensaje de bienvenida"
+              activeOpacity={0.8}
               onPress={handleAccept}
-              style={({ pressed }) => [
-                styles.acceptButton,
-                pressed && styles.acceptButtonPressed,
-              ]}
+              style={styles.acceptButton}
             >
               <ThemedText style={styles.acceptButtonText}>Aceptar</ThemedText>
-            </Pressable>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -285,26 +283,26 @@ const createStyles = (colors: AppColorSet, insets: EdgeInsets, cardHeight: numbe
     },
     footer: {
       paddingHorizontal: 18,
-      paddingTop: 12,
-      paddingBottom: Math.max(insets.bottom, 8) + 10,
+      paddingTop: 14,
+      paddingBottom: Math.max(insets.bottom, 8) + 14,
       borderTopWidth: 1,
       borderTopColor: colors.border,
       backgroundColor: colors.surface,
     },
     acceptButton: {
-      minHeight: 50,
+      width: '100%',
+      minHeight: 52,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 14,
+      paddingHorizontal: 14,
+      borderRadius: 10,
       backgroundColor: colors.primary,
-    },
-    acceptButtonPressed: {
-      opacity: 0.85,
     },
     acceptButtonText: {
       color: colors.onPrimary,
-      fontSize: 16,
+      fontSize: 18,
       fontWeight: '800',
-      lineHeight: 22,
+      lineHeight: 23,
+      textAlign: 'center',
     },
   });

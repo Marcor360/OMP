@@ -138,7 +138,7 @@ export function DashboardScreen() {
       setRefreshing(false);
       loadingRef.current = false;
     }
-  }, [canManage, congregationId, isAdmin, profileError, user?.uid]);
+  }, [canManage, congregationId, isAdmin, profileError, t, user?.uid]);
 
   useEffect(() => {
     if (loadingProfile) {
@@ -184,7 +184,7 @@ export function DashboardScreen() {
     return () => {
       cancelled = true;
     };
-  }, [congregationId]);
+  }, [congregationId, t]);
 
   const onRefresh = () => {
     setRefreshing(true);

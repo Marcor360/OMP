@@ -1,55 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
-  assignTerritoriesToDay,
-  createTerritory,
-  deactivateTerritory,
-  subscribeToTerritories,
-  subscribeToTerritorySchedule,
-  updateTerritory,
+  createTerritorySchedule,
+  deleteTerritorySchedule,
+  subscribeTerritorySchedule,
+  updateTerritorySchedule,
 } from '@/src/services/territories/territories-service';
 import type {
-  Territory,
-  TerritoryDayOfWeek,
-  TerritoryFormValues,
+  CreateTerritoryScheduleInput,
+  TerritoryDay,
   TerritorySchedule,
+  UpdateTerritoryScheduleInput,
 } from '@/src/types/territory';
-
-export function useTerritories(congregationId: string | null) {
-  const [territories, setTerritories] = useState<Territory[]>([]);
-  const [loading, setLoading] = useState(Boolean(congregationId));
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!congregationId) {
-      setTerritories([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
-    setLoading(true);
-    return subscribeToTerritories(
-      congregationId,
-      (nextTerritories) => {
-        setTerritories(nextTerritories);
-        setLoading(false);
-        setError(null);
-      },
-      (snapshotError) => {
-        setError(snapshotError.message);
-        setLoading(false);
-      }
-    );
-  }, [congregationId]);
-
-  const activeTerritories = useMemo(
-    () => territories.filter((territory) => territory.status === 'active'),
-    [territories]
-  );
-
-  return { territories, activeTerritories, loading, error };
-}
 
 export function useTerritorySchedule(congregationId: string | null) {
   const [schedule, setSchedule] = useState<TerritorySchedule[]>([]);
@@ -65,7 +27,7 @@ export function useTerritorySchedule(congregationId: string | null) {
     }
 
     setLoading(true);
-    return subscribeToTerritorySchedule(
+    return subscribeTerritorySchedule(
       congregationId,
       (nextSchedule) => {
         setSchedule(nextSchedule);
@@ -79,7 +41,12 @@ export function useTerritorySchedule(congregationId: string | null) {
     );
   }, [congregationId]);
 
-  return { schedule, loading, error };
+  const scheduleByDay = useMemo(
+    () => new Map(schedule.map((item) => [item.dayOfWeek, item])),
+    [schedule]
+  );
+
+  return { schedule, scheduleByDay, loading, error };
 }
 
 export function useTerritoryMutations(congregationId: string | null, actorUid: string | null) {
@@ -94,11 +61,11 @@ export function useTerritoryMutations(congregationId: string | null, actorUid: s
   }, [actorUid, congregationId]);
 
   const create = useCallback(
-    async (values: TerritoryFormValues) => {
+    async (input: CreateTerritoryScheduleInput) => {
       const context = requireContext();
       setSaving(true);
       try {
-        await createTerritory(context.congregationId, context.actorUid, values);
+        await createTerritorySchedule(context.congregationId, context.actorUid, input);
       } finally {
         setSaving(false);
       }
@@ -107,43 +74,29 @@ export function useTerritoryMutations(congregationId: string | null, actorUid: s
   );
 
   const update = useCallback(
-    async (territoryId: string, values: TerritoryFormValues) => {
+    async (scheduleId: TerritoryDay, input: UpdateTerritoryScheduleInput) => {
       const context = requireContext();
       setSaving(true);
       try {
-        await updateTerritory(context.congregationId, territoryId, context.actorUid, values);
-      } finally {
-        setSaving(false);
-      }
-    },
-    [requireContext]
-  );
-
-  const deactivate = useCallback(
-    async (territoryId: string) => {
-      const context = requireContext();
-      setSaving(true);
-      try {
-        await deactivateTerritory(context.congregationId, territoryId, context.actorUid);
-      } finally {
-        setSaving(false);
-      }
-    },
-    [requireContext]
-  );
-
-  const assignToDay = useCallback(
-    async (dayOfWeek: TerritoryDayOfWeek, territoryIds: string[], note: string) => {
-      const context = requireContext();
-      setSaving(true);
-      try {
-        await assignTerritoriesToDay(
+        await updateTerritorySchedule(
           context.congregationId,
+          scheduleId,
           context.actorUid,
-          dayOfWeek,
-          territoryIds,
-          note
+          input
         );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [requireContext]
+  );
+
+  const remove = useCallback(
+    async (scheduleId: TerritoryDay) => {
+      const context = requireContext();
+      setSaving(true);
+      try {
+        await deleteTerritorySchedule(context.congregationId, scheduleId);
       } finally {
         setSaving(false);
       }
@@ -153,9 +106,8 @@ export function useTerritoryMutations(congregationId: string | null, actorUid: s
 
   return {
     saving,
-    createTerritory: create,
-    updateTerritory: update,
-    deactivateTerritory: deactivate,
-    assignTerritoriesToDay: assignToDay,
+    createTerritorySchedule: create,
+    updateTerritorySchedule: update,
+    deleteTerritorySchedule: remove,
   };
 }

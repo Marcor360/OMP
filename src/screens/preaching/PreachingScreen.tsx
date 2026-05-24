@@ -151,7 +151,7 @@ export function PreachingScreen() {
 
       <TouchableOpacity
         style={styles.secondaryButton}
-        onPress={() => router.push('/(protected)/preaching/territories' as any)}
+        onPress={() => router.push('/(protected)/territories' as any)}
         activeOpacity={0.85}
       >
         <Ionicons name="map-outline" size={18} color={colors.primary} />
@@ -172,7 +172,7 @@ export function PreachingScreen() {
       {userCanManageTerritories ? (
         <TouchableOpacity
           style={styles.secondaryButton}
-          onPress={() => router.push('/(protected)/preaching/territories/manage' as any)}
+          onPress={() => router.push('/(protected)/territories/manage' as any)}
           activeOpacity={0.85}
         >
           <Ionicons name="settings-outline" size={18} color={colors.primary} />

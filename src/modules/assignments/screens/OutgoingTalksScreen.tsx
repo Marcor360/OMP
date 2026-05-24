@@ -125,7 +125,7 @@ export function OutgoingTalksScreen() {
       cancelled = true;
       unsubscribe();
     };
-  }, [canManage, congregationId, loadingProfile]);
+  }, [canManage, congregationId, loadingProfile, t]);
 
   const eligibleSpeakers = useMemo(
     () =>
