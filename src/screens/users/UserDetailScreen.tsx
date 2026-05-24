@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert, Platform, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,6 +52,8 @@ export function UserDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const togglingRef = useRef(false);
+  const deletingRef = useRef(false);
 
   useEffect(() => {
     if (loadingProfile) return;
@@ -132,6 +134,7 @@ export function UserDetailScreen() {
   }, [user?.congregationId]);
 
   const handleToggleStatus = async () => {
+    if (togglingRef.current) return;
     if (!user) return;
 
     if (!hasPermission(appUser, 'usuarios', 'edit') && !hasPermission(appUser, 'usuarios', 'manage')) {
@@ -162,6 +165,7 @@ export function UserDetailScreen() {
     if (!confirmed) return;
 
     try {
+      togglingRef.current = true;
       setToggling(true);
 
       if (newStatus === 'inactive') {
@@ -185,11 +189,13 @@ export function UserDetailScreen() {
     } catch (requestError) {
       Alert.alert('Error', formatFirestoreError(requestError));
     } finally {
+      togglingRef.current = false;
       setToggling(false);
     }
   };
 
   const handleDeleteUser = async () => {
+    if (deletingRef.current) return;
     if (!user) return;
 
     if (!hasPermission(appUser, 'usuarios', 'delete') && !hasPermission(appUser, 'usuarios', 'manage')) {
@@ -228,6 +234,7 @@ export function UserDetailScreen() {
     if (!confirmed) return;
 
     try {
+      deletingRef.current = true;
       setDeleting(true);
       await deleteUserByAdmin({ uid: user.uid });
       Alert.alert(
@@ -238,6 +245,7 @@ export function UserDetailScreen() {
     } catch (requestError) {
       Alert.alert('Error', formatFirestoreError(requestError));
     } finally {
+      deletingRef.current = false;
       setDeleting(false);
     }
   };

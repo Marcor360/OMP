@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -207,6 +207,7 @@ export function UserFormScreen() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (!congregationId) return;
@@ -560,6 +561,8 @@ export function UserFormScreen() {
   };
 
   const handleSave = async () => {
+    if (savingRef.current) return;
+
     if (!canEdit) {
       Alert.alert('Permisos insuficientes', 'Necesitas permiso para crear o editar usuarios.');
       return;
@@ -572,12 +575,14 @@ export function UserFormScreen() {
 
     if (!validate()) return;
 
+    savingRef.current = true;
     setSaving(true);
 
     try {
       const selectedGender = gender;
       if (!selectedGender) {
         setErrors((current) => ({ ...current, gender: 'El genero es requerido.' }));
+        savingRef.current = false;
         setSaving(false);
         return;
       }
@@ -694,6 +699,7 @@ export function UserFormScreen() {
     } catch (requestError) {
       Alert.alert('Error', formatFirestoreError(requestError));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };

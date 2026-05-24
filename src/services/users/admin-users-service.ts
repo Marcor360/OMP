@@ -3,7 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/src/lib/firebase/app';
 import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
-import { deleteUser, updateUser } from '@/src/services/users/users-service';
+import { updateUser } from '@/src/services/users/users-service';
 import {
   UpdateUserDTO,
   UserPrivileges,
@@ -125,8 +125,9 @@ export const disableUserByAdmin = async ({ uid }: ToggleUserByAdminPayload): Pro
     await callFunction<ToggleUserByAdminPayload, unknown>('disableUserByAdmin', { uid });
   } catch (error) {
     if (isFunctionUnavailable(error)) {
-      await updateUser(uid, { isActive: false, status: 'inactive' });
-      return;
+      throw new AppError(
+        'La operacion de desactivar usuario requiere Cloud Functions (disableUserByAdmin) y no esta disponible.'
+      );
     }
 
     throw error;
@@ -138,9 +139,9 @@ export const deleteUserByAdmin = async ({ uid }: ToggleUserByAdminPayload): Prom
     await callFunction<ToggleUserByAdminPayload, unknown>('deleteUserByAdmin', { uid });
   } catch (error) {
     if (isFunctionUnavailable(error)) {
-      // Fallback temporal: elimina solo el documento de Firestore.
-      await deleteUser(uid);
-      return;
+      throw new AppError(
+        'La operacion de eliminar usuario requiere Cloud Functions (deleteUserByAdmin) y no esta disponible.'
+      );
     }
 
     throw error;
