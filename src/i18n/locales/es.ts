@@ -298,6 +298,8 @@ export const es = {
   'notifications.category.cleaning': 'Limpieza',
   'notifications.category.hospitality': 'Hospitality',
   'notifications.category.assignment': 'Asignacion',
+  'dashboard.organizationChart': 'Organigrama Congregacional',
+  'dashboard.organizationChartSubtitle': 'Estructura de responsabilidades de la congregacion',
 
   // Territories
   'territories.title': 'Territorios',

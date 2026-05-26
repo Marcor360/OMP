@@ -298,6 +298,8 @@ export const en = {
   'notifications.category.cleaning': 'Cleaning',
   'notifications.category.hospitality': 'Hospitality',
   'notifications.category.assignment': 'Assignment',
+  'dashboard.organizationChart': 'Congregation Organization Chart',
+  'dashboard.organizationChartSubtitle': 'Congregation responsibility structure',
 
   // Territories
   'territories.title': 'Territories',

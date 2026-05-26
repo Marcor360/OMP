@@ -37,7 +37,8 @@ type PermissionDepartment =
   | 'pagos'
   | 'configuracion'
   | 'avisos'
-  | 'asignaciones';
+  | 'asignaciones'
+  | 'organigrama';
 type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'manage' | 'approve' | 'export';
 type TerritoryPermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'assign' | 'manage';
 
@@ -52,6 +53,7 @@ const PERMISSION_DEPARTMENTS: PermissionDepartment[] = [
   'configuracion',
   'avisos',
   'asignaciones',
+  'organigrama',
 ];
 
 const PERMISSION_ACTIONS: PermissionAction[] = [

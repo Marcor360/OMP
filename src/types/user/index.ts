@@ -3,8 +3,10 @@ import { Timestamp } from 'firebase/firestore';
 export type UserRole = 'admin' | 'supervisor' | 'user';
 export type UserStatus = 'active' | 'inactive' | 'suspended';
 export type UserGender = 'masculino' | 'femenino';
-export type UserServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar';
+export type UserServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar' | 'apoyo';
 export type UserServiceDepartment =
+  | 'coordinacion'
+  | 'secretaria'
   | 'limpieza'
   | 'literatura'
   | 'tesoreria'
@@ -12,6 +14,11 @@ export type UserServiceDepartment =
   | 'discursos'
   | 'reuniones'
   | 'predicacion'
+  | 'territorios'
+  | 'asignaciones'
+  | 'hospitalidad'
+  | 'usuarios'
+  | 'configuracion'
   | 'audio_video'
   | 'acomodadores_microfonos';
 
@@ -20,9 +27,12 @@ export const USER_SERVICE_POSITION_LABELS: Record<UserServicePosition, string> =
   secretario: 'Secretario',
   encargado: 'Encargado',
   auxiliar: 'Auxiliar',
+  apoyo: 'Apoyo',
 };
 
 export const USER_SERVICE_DEPARTMENT_LABELS: Record<UserServiceDepartment, string> = {
+  coordinacion: 'Coordinacion',
+  secretaria: 'Secretaria',
   limpieza: 'Limpieza',
   literatura: 'Literatura',
   tesoreria: 'Tesoreria',
@@ -30,11 +40,18 @@ export const USER_SERVICE_DEPARTMENT_LABELS: Record<UserServiceDepartment, strin
   discursos: 'Discursos',
   reuniones: 'Reuniones',
   predicacion: 'Predicacion',
+  territorios: 'Territorios',
+  asignaciones: 'Asignaciones',
+  hospitalidad: 'Hospitalidad',
+  usuarios: 'Usuarios',
+  configuracion: 'Configuracion',
   audio_video: 'Audio y Video',
   acomodadores_microfonos: 'Acomodadores y Microfonos',
 };
 
 export const USER_SERVICE_DEPARTMENTS: UserServiceDepartment[] = [
+  'coordinacion',
+  'secretaria',
   'limpieza',
   'literatura',
   'tesoreria',
@@ -42,6 +59,11 @@ export const USER_SERVICE_DEPARTMENTS: UserServiceDepartment[] = [
   'discursos',
   'reuniones',
   'predicacion',
+  'territorios',
+  'asignaciones',
+  'hospitalidad',
+  'usuarios',
+  'configuracion',
   'audio_video',
   'acomodadores_microfonos',
 ];
@@ -67,7 +89,8 @@ export type PermissionDepartment =
   | 'pagos'
   | 'configuracion'
   | 'avisos'
-  | 'asignaciones';
+  | 'asignaciones'
+  | 'organigrama';
 
 export type PermissionAction =
   | 'view'

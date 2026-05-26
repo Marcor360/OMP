@@ -75,6 +75,8 @@ const normalizeAssignment = (
 });
 
 const AUTO_DEPARTMENT_CATEGORY: Record<UserServiceDepartment, DepartmentCategory> = {
+  coordinacion: 'administration',
+  secretaria: 'administration',
   limpieza: 'operations',
   literatura: 'operations',
   tesoreria: 'administration',
@@ -82,6 +84,11 @@ const AUTO_DEPARTMENT_CATEGORY: Record<UserServiceDepartment, DepartmentCategory
   discursos: 'meetings',
   reuniones: 'meetings',
   predicacion: 'service',
+  territorios: 'service',
+  asignaciones: 'meetings',
+  hospitalidad: 'operations',
+  usuarios: 'administration',
+  configuracion: 'administration',
   audio_video: 'operations',
   acomodadores_microfonos: 'operations',
 };
@@ -126,7 +133,7 @@ const autoDepartmentKeyForAssignment = (
 ): string | null => {
   if (position === 'coordinador') return 'auto:coordinador';
   if (position === 'secretario') return 'auto:secretario';
-  if ((position === 'encargado' || position === 'auxiliar') && department) {
+  if ((position === 'encargado' || position === 'auxiliar' || position === 'apoyo') && department) {
     return `auto:${department}`;
   }
   return null;

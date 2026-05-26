@@ -313,12 +313,18 @@ service cloud.firestore {
     function canManageDepartments() {
       return isActive()
         && (
-          hasServicePosition('coordinador')
+          isAdmin()
+          || hasServicePosition('coordinador')
           || hasServicePosition('secretario')
           || (
             currentUserData().permissions is map
             && currentUserData().permissions.departments is map
             && currentUserData().permissions.departments.manage == true
+          )
+          || (
+            currentUserData().permissions is map
+            && currentUserData().permissions.organigrama is map
+            && currentUserData().permissions.organigrama.manage == true
           )
         );
     }
@@ -854,7 +860,8 @@ service cloud.firestore {
           'pagos',
           'configuracion',
           'avisos',
-          'asignaciones'
+          'asignaciones',
+          'organigrama'
         ])
         && (!('usuarios' in permissions) || validPermissionActions(permissions.usuarios))
         && (!('reuniones' in permissions) || validPermissionActions(permissions.reuniones))
@@ -865,7 +872,8 @@ service cloud.firestore {
         && (!('pagos' in permissions) || validPermissionActions(permissions.pagos))
         && (!('configuracion' in permissions) || validPermissionActions(permissions.configuracion))
         && (!('avisos' in permissions) || validPermissionActions(permissions.avisos))
-        && (!('asignaciones' in permissions) || validPermissionActions(permissions.asignaciones));
+        && (!('asignaciones' in permissions) || validPermissionActions(permissions.asignaciones))
+        && (!('organigrama' in permissions) || validPermissionActions(permissions.organigrama));
     }
 
     function validUserCreate(userId) {
@@ -1041,6 +1049,24 @@ service cloud.firestore {
         && sameKeysOnUpdate([
           'cleaningGroupId',
           'cleaningGroupName',
+          'updatedAt'
+        ]);
+    }
+
+    function validOrganizationServiceAssignmentSync() {
+      return canManageDepartments()
+        && storedDocInMyCongregation()
+        && targetDocInMyCongregation()
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.isActive == resource.data.isActive
+        && request.resource.data.congregationId == resource.data.congregationId
+        && preservesCreatedAt()
+        && sameKeysOnUpdate([
+          'serviceAssignments',
+          'servicePosition',
+          'serviceDepartment',
+          'department',
           'updatedAt'
         ]);
     }
@@ -1359,64 +1385,76 @@ service cloud.firestore {
         && data.updatedBy == currentUid();
     }
 
-    function isValidDepartmentCategory(category) {
-      return category in ['administration', 'service', 'meetings', 'operations', 'groups', 'other'];
-    }
-
     function validDepartmentData(data) {
       return hasOnlyKeys(data, [
+          'id',
+          'congregationId',
           'name',
-          'category',
-          'parentId',
+          'description',
+          'icon',
+          'color',
           'order',
           'isActive',
+          'allowMultipleManagers',
+          'allowMultipleAssistants',
           'createdAt',
           'updatedAt',
           'createdBy',
           'updatedBy'
         ])
         && hasAllKeys(data, [
+          'congregationId',
           'name',
-          'category',
-          'parentId',
           'order',
           'isActive',
-          'createdAt',
-          'updatedAt',
-          'createdBy',
-          'updatedBy'
+          'allowMultipleManagers',
+          'allowMultipleAssistants'
         ])
+        && data.congregationId is string
         && isNonEmptyString(data.name)
         && data.name.size() <= 80
-        && isValidDepartmentCategory(data.category)
-        && (data.parentId == null || data.parentId is string)
+        && (!('id' in data) || data.id is string)
+        && (!('description' in data) || data.description is string)
+        && (!('icon' in data) || data.icon is string)
+        && (!('color' in data) || data.color is string)
         && data.order is number
         && data.isActive is bool
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp
-        && data.createdBy is string
-        && data.updatedBy is string;
+        && data.allowMultipleManagers is bool
+        && data.allowMultipleAssistants is bool
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp)
+        && (!('createdBy' in data) || data.createdBy is string)
+        && (!('updatedBy' in data) || data.updatedBy is string);
     }
 
     function validDepartmentCreate(data) {
       return validDepartmentData(data)
-        && data.isActive == true
-        && data.createdBy == currentUid()
-        && data.updatedBy == currentUid();
+        && data.isActive == true;
     }
 
     function validDepartmentUpdate(data) {
       return validDepartmentData(data)
-        && data.createdBy == resource.data.createdBy
-        && data.createdAt == resource.data.createdAt
-        && data.updatedBy == currentUid();
+        && preservesCreatedAt();
+    }
+
+    function validOrganizationPosition(position) {
+      return position in ['coordinador', 'secretario', 'encargado', 'auxiliar', 'apoyo'];
     }
 
     function validDepartmentAssignmentData(data) {
       return hasOnlyKeys(data, [
+          'id',
+          'congregationId',
           'departmentId',
+          'departmentName',
           'userId',
-          'assignmentRole',
+          'displayName',
+          'email',
+          'position',
+          'title',
+          'parentAssignmentId',
+          'level',
+          'order',
           'isActive',
           'createdAt',
           'updatedAt',
@@ -1424,39 +1462,58 @@ service cloud.firestore {
           'updatedBy'
         ])
         && hasAllKeys(data, [
+          'congregationId',
           'departmentId',
+          'departmentName',
           'userId',
-          'assignmentRole',
-          'isActive',
-          'createdAt',
-          'updatedAt',
-          'createdBy',
-          'updatedBy'
+          'displayName',
+          'position',
+          'title',
+          'level',
+          'order',
+          'isActive'
         ])
+        && data.congregationId is string
         && isNonEmptyString(data.departmentId)
+        && isNonEmptyString(data.departmentName)
         && isNonEmptyString(data.userId)
-        && data.assignmentRole in ['responsible', 'assistant']
+        && isNonEmptyString(data.displayName)
+        && validOrganizationPosition(data.position)
+        && isNonEmptyString(data.title)
+        && (!('id' in data) || data.id is string)
+        && (!('email' in data) || data.email is string)
+        && (!('parentAssignmentId' in data) || data.parentAssignmentId == null || data.parentAssignmentId is string)
+        && data.level is number
+        && data.order is number
         && data.isActive is bool
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp
-        && data.createdBy is string
-        && data.updatedBy is string;
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp)
+        && (!('createdBy' in data) || data.createdBy is string)
+        && (!('updatedBy' in data) || data.updatedBy is string)
+        && (data.position != 'coordinador' || data.departmentId == 'coordinacion')
+        && (data.position != 'secretario' || data.departmentId == 'secretaria');
     }
 
     function validDepartmentAssignmentCreate(data) {
       return validDepartmentAssignmentData(data)
         && data.isActive == true
-        && data.createdBy == currentUid()
-        && data.updatedBy == currentUid();
+        && exists(/databases/$(database)/documents/users/$(data.userId))
+        && get(/databases/$(database)/documents/users/$(data.userId)).data.congregationId == data.congregationId
+        && get(/databases/$(database)/documents/users/$(data.userId)).data.isActive == true
+        && exists(/databases/$(database)/documents/congregations/$(data.congregationId)/departments/$(data.departmentId));
     }
 
     function validDepartmentAssignmentUpdate(data) {
       return validDepartmentAssignmentData(data)
         && data.departmentId == resource.data.departmentId
         && data.userId == resource.data.userId
-        && data.createdBy == resource.data.createdBy
-        && data.createdAt == resource.data.createdAt
-        && data.updatedBy == currentUid();
+        && preservesCreatedAt()
+        && exists(/databases/$(database)/documents/users/$(data.userId))
+        && get(/databases/$(database)/documents/users/$(data.userId)).data.congregationId == data.congregationId
+        && (
+          data.isActive == false
+          || get(/databases/$(database)/documents/users/$(data.userId)).data.isActive == true
+        );
     }
 
     // =========================================================================
@@ -1795,6 +1852,9 @@ service cloud.firestore {
         ) || (
           // Gestion de grupos de limpieza: solo campos de membresia de limpieza.
           validCleaningMembershipUserUpdate()
+        ) || (
+          // Sincronizacion del organigrama congregacional: solo cargos de servicio.
+          validOrganizationServiceAssignmentSync()
         );
 
       allow delete: if isSuperAdmin() || (
@@ -2013,10 +2073,13 @@ service cloud.firestore {
 
         allow create: if canAccessCongregationData(congregationId)
           && canManageDepartments()
+          && request.resource.data.congregationId == congregationId
           && validDepartmentCreate(request.resource.data);
 
         allow update: if canAccessCongregationData(congregationId)
           && canManageDepartments()
+          && resource.data.congregationId == congregationId
+          && request.resource.data.congregationId == congregationId
           && validDepartmentUpdate(request.resource.data);
 
         allow delete: if false;
@@ -2027,10 +2090,13 @@ service cloud.firestore {
 
         allow create: if canAccessCongregationData(congregationId)
           && canManageDepartments()
+          && request.resource.data.congregationId == congregationId
           && validDepartmentAssignmentCreate(request.resource.data);
 
         allow update: if canAccessCongregationData(congregationId)
           && canManageDepartments()
+          && resource.data.congregationId == congregationId
+          && request.resource.data.congregationId == congregationId
           && validDepartmentAssignmentUpdate(request.resource.data);
 
         allow delete: if false;

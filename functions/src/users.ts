@@ -39,7 +39,8 @@ type PermissionDepartment =
   | 'pagos'
   | 'configuracion'
   | 'avisos'
-  | 'asignaciones';
+  | 'asignaciones'
+  | 'organigrama';
 
 type PermissionAction =
   | 'view'
@@ -217,6 +218,7 @@ const PERMISSION_DEPARTMENTS: PermissionDepartment[] = [
   'configuracion',
   'avisos',
   'asignaciones',
+  'organigrama',
 ];
 
 const PERMISSION_ACTIONS: PermissionAction[] = [

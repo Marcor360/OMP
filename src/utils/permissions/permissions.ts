@@ -25,6 +25,7 @@ export const PERMISSION_DEPARTMENTS: PermissionDepartment[] = [
   'configuracion',
   'avisos',
   'asignaciones',
+  'organigrama',
 ];
 
 export const PERMISSION_ACTIONS: PermissionAction[] = [
@@ -61,6 +62,7 @@ export const DEPARTMENT_LABELS: Record<PermissionDepartment, string> = {
   reuniones: 'Reuniones',
   limpieza: 'Limpieza',
   departments: 'Organigrama',
+  organigrama: 'Organigrama congregacional',
   predicacion: 'Predicacion',
   tesoreria: 'Tesoreria',
   pagos: 'Pagos',
@@ -93,6 +95,7 @@ export const SUPERVISOR_PERMISSION_TEMPLATE: Partial<Record<PermissionDepartment
   reuniones: ['view', 'create', 'edit', 'delete', 'manage'],
   limpieza: ['view', 'create', 'edit', 'delete', 'manage'],
   departments: ['view', 'create', 'edit', 'delete', 'manage'],
+  organigrama: ['view', 'create', 'edit', 'delete', 'manage'],
   predicacion: ['view', 'approve', 'export', 'manage'],
   tesoreria: ['view', 'create', 'edit', 'delete', 'manage'],
   pagos: ['view', 'create', 'approve', 'manage'],
@@ -431,9 +434,11 @@ export const canManageDepartments = (
   Boolean(
     user?.isActive === true &&
       (
+        user.role === 'admin' ||
         hasServiceAssignment(user, 'coordinador') ||
         hasServiceAssignment(user, 'secretario') ||
-        user.permissions?.departments?.manage === true
+        user.permissions?.departments?.manage === true ||
+        user.permissions?.organigrama?.manage === true
       )
   );
 

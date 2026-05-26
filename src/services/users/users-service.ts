@@ -79,12 +79,15 @@ const isUserServicePosition = (value: unknown): value is UserServicePosition => 
     value === 'coordinador' ||
     value === 'secretario' ||
     value === 'encargado' ||
-    value === 'auxiliar'
+    value === 'auxiliar' ||
+    value === 'apoyo'
   );
 };
 
 const isUserServiceDepartment = (value: unknown): value is UserServiceDepartment => {
   return (
+    value === 'coordinacion' ||
+    value === 'secretaria' ||
     value === 'limpieza' ||
     value === 'literatura' ||
     value === 'tesoreria' ||
@@ -92,6 +95,11 @@ const isUserServiceDepartment = (value: unknown): value is UserServiceDepartment
     value === 'discursos' ||
     value === 'reuniones' ||
     value === 'predicacion' ||
+    value === 'territorios' ||
+    value === 'asignaciones' ||
+    value === 'hospitalidad' ||
+    value === 'usuarios' ||
+    value === 'configuracion' ||
     value === 'audio_video' ||
     value === 'acomodadores_microfonos'
   );
@@ -108,6 +116,9 @@ const buildDepartmentLabel = (
   }
   if (position === 'auxiliar' && department) {
     return `Auxiliar de ${USER_SERVICE_DEPARTMENT_LABELS[department]}`;
+  }
+  if (position === 'apoyo' && department) {
+    return `Apoyo de ${USER_SERVICE_DEPARTMENT_LABELS[department]}`;
   }
 
   return undefined;

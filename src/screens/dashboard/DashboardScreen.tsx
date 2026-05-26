@@ -263,6 +263,23 @@ export function DashboardScreen() {
         <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
       </TouchableOpacity>
 
+      <TouchableOpacity
+        style={styles.preachingCard}
+        onPress={() => router.push('/(protected)/organization-chart' as any)}
+        activeOpacity={0.85}
+      >
+        <View style={styles.preachingIcon}>
+          <Ionicons name="git-network-outline" size={20} color={colors.primary} />
+        </View>
+        <View style={styles.preachingText}>
+          <ThemedText style={styles.preachingTitle}>{t('dashboard.organizationChart')}</ThemedText>
+          <ThemedText style={styles.preachingSubtitle}>
+            {t('dashboard.organizationChartSubtitle')}
+          </ThemedText>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
+      </TouchableOpacity>
+
       <DashboardEventsSection
         events={events}
         loading={eventsLoading}
