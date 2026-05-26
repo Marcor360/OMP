@@ -9,6 +9,7 @@ import { LogBox, Platform } from 'react-native';
 
 import { AuthProvider, useAuth } from '@/src/context/auth-context';
 import { ThemeModeProvider, useAppTheme } from '@/src/context/theme-context';
+import { ToastProvider } from '@/src/context/toast-context';
 import { I18nProvider, useI18n } from '@/src/i18n/index';
 import { getAppColors } from '@/src/styles';
 import { useInitialPermissions } from '@/src/hooks/use-initial-permissions';
@@ -208,7 +209,9 @@ function AppLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? NavigationThemes.dark : NavigationThemes.light}>
       <AuthProvider>
         <I18nProvider>
-          <RootLayoutNav />
+          <ToastProvider>
+            <RootLayoutNav />
+          </ToastProvider>
         </I18nProvider>
       </AuthProvider>
       <StatusBar

@@ -2,6 +2,7 @@ import { httpsCallable } from 'firebase/functions';
 
 import { functions } from '@/src/lib/firebase/app';
 import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
+import { invalidateCacheEntry } from '@/src/services/repositories/firestore-cache-first';
 import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
 import { updateUser } from '@/src/services/users/users-service';
 import {
@@ -49,6 +50,20 @@ export type CreateUserByAdminResult = {
 type UpdateUserByAdminPayload = {
   uid: string;
   data: UpdateUserDTO;
+};
+
+type UpdateUserByAdminResult = {
+  ok?: boolean;
+  user?: {
+    uid?: string;
+    role?: string;
+    servicePosition?: UserServicePosition;
+    serviceDepartment?: UserServiceDepartment;
+    serviceAssignments?: UserServiceAssignment[];
+    privileges?: UserPrivileges;
+    isElder?: boolean;
+    isMinisterialServant?: boolean;
+  };
 };
 
 type ToggleUserByAdminPayload = {
@@ -106,9 +121,17 @@ export const createUserByAdmin = async (
   }
 };
 
-export const updateUserByAdmin = async (payload: UpdateUserByAdminPayload): Promise<void> => {
+export const updateUserByAdmin = async (
+  payload: UpdateUserByAdminPayload
+): Promise<UpdateUserByAdminResult | void> => {
   try {
-    await callFunction<UpdateUserByAdminPayload, unknown>('updateUserByAdmin', payload);
+    const result = await callFunction<UpdateUserByAdminPayload, UpdateUserByAdminResult>(
+      'updateUserByAdmin',
+      payload
+    );
+    invalidateCacheEntry(`users/${payload.uid}`);
+    clearSessionCacheByPrefix('query:users/');
+    return result;
   } catch (error) {
     if (isFunctionUnavailable(error)) {
       // Fallback temporal: actualiza solo el documento de Firestore.
@@ -123,6 +146,8 @@ export const updateUserByAdmin = async (payload: UpdateUserByAdminPayload): Prom
 export const disableUserByAdmin = async ({ uid }: ToggleUserByAdminPayload): Promise<void> => {
   try {
     await callFunction<ToggleUserByAdminPayload, unknown>('disableUserByAdmin', { uid });
+    invalidateCacheEntry(`users/${uid}`);
+    clearSessionCacheByPrefix('query:users/');
   } catch (error) {
     if (isFunctionUnavailable(error)) {
       throw new AppError(
@@ -137,6 +162,8 @@ export const disableUserByAdmin = async ({ uid }: ToggleUserByAdminPayload): Pro
 export const deleteUserByAdmin = async ({ uid }: ToggleUserByAdminPayload): Promise<void> => {
   try {
     await callFunction<ToggleUserByAdminPayload, unknown>('deleteUserByAdmin', { uid });
+    invalidateCacheEntry(`users/${uid}`);
+    clearSessionCacheByPrefix('query:users/');
   } catch (error) {
     if (isFunctionUnavailable(error)) {
       throw new AppError(

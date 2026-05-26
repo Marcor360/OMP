@@ -142,7 +142,7 @@ export function OrgChartScreen() {
                       key={node.department.id}
                       node={node}
                       users={orgChart.users}
-                      canManage={canManage}
+                      canManage={canManage && !node.department.id.startsWith('auto:')}
                       saving={orgChart.saving}
                       onEdit={() => setDepartmentModal({ mode: 'edit', department: node.department })}
                       onAssignResponsible={() =>
@@ -264,7 +264,7 @@ function OrgChartCard({
       <AssignmentBlock
         label="Responsable"
         users={node.responsible ? [node.responsible] : []}
-        emptyLabel="Sin responsable asignado"
+        emptyLabel="SN"
         badgeColor={colors.primary}
         canManage={canManage}
         onAdd={onAssignResponsible}

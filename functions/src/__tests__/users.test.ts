@@ -92,7 +92,7 @@ const parsePermissions = (
   options?: { strict?: boolean }
 ): Record<string, unknown> | undefined => {
   const strict = options?.strict !== false;
-  if (value === undefined) return undefined;
+  if (value === undefined || value === null) return undefined;
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     if (!strict) return undefined;
     throw new HttpsError('invalid-argument', 'Permisos invalidos.');
@@ -260,6 +260,10 @@ describe('parseServicePosition', () => {
 // ─── Tests: parseCreateUserPayload ───────────────────────────────────────────
 
 describe('parsePermissions', () => {
+  it('trata permisos null como campo opcional ausente', () => {
+    expect(parsePermissions(null)).toBeUndefined();
+  });
+
   it('acepta los permisos que envia el formulario de supervisores', () => {
     expect(() =>
       parsePermissions({

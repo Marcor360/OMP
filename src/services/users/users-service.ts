@@ -251,18 +251,30 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
     servicePosition,
     serviceDepartment
   );
-  const privileges = normalizeBooleanMap(data.privileges, [
+  const normalizedPrivileges = normalizeBooleanMap(data.privileges, [
     'isElder',
     'isMinisterialServant',
     'isRegularPioneer',
     'isAuxiliaryPioneer',
   ] as const);
+  const privileges = {
+    ...(normalizedPrivileges ?? {}),
+    ...(normalizedPrivileges?.isElder === undefined && typeof data.isElder === 'boolean'
+      ? { isElder: data.isElder }
+      : {}),
+    ...(normalizedPrivileges?.isMinisterialServant === undefined && typeof data.isMinisterialServant === 'boolean'
+      ? { isMinisterialServant: data.isMinisterialServant }
+      : {}),
+  };
+  const normalizedPrivilegesForUser = Object.keys(privileges).length > 0 ? privileges : undefined;
   const isElder =
-    typeof data.isElder === 'boolean' ? data.isElder : privileges?.isElder === true;
+    typeof normalizedPrivilegesForUser?.isElder === 'boolean'
+      ? normalizedPrivilegesForUser.isElder
+      : data.isElder === true;
   const isMinisterialServant =
-    typeof data.isMinisterialServant === 'boolean'
-      ? data.isMinisterialServant
-      : privileges?.isMinisterialServant === true;
+    typeof normalizedPrivilegesForUser?.isMinisterialServant === 'boolean'
+      ? normalizedPrivilegesForUser.isMinisterialServant
+      : data.isMinisterialServant === true;
   const responsibilities = normalizeBooleanMap(data.responsibilities, [
     'isPreachingManager',
   ] as const);
@@ -291,7 +303,7 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
     servicePosition,
     serviceDepartment,
     serviceAssignments,
-    privileges,
+    privileges: normalizedPrivilegesForUser,
     responsibilities,
     permissions,
     isElder,

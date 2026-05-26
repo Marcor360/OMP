@@ -9,6 +9,7 @@ import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
+import { useToast } from '@/src/context/toast-context';
 import { useUser } from '@/src/context/user-context';
 import { getCongregationDisplayName } from '@/src/services/congregations/congregations-service';
 import {
@@ -45,6 +46,7 @@ export function UserDetailScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { t } = useI18n();
+  const { showToast } = useToast();
 
   const [user, setUser] = useState<AppUser | null>(null);
   const [congregationName, setCongregationName] = useState<string>('--');
@@ -186,6 +188,7 @@ export function UserDetailScreen() {
             }
           : null
       );
+      showToast(t('users.toast.updated'));
     } catch (requestError) {
       Alert.alert('Error', formatFirestoreError(requestError));
     } finally {
@@ -237,10 +240,7 @@ export function UserDetailScreen() {
       deletingRef.current = true;
       setDeleting(true);
       await deleteUserByAdmin({ uid: user.uid });
-      Alert.alert(
-        t('users.delete.successTitle'),
-        interpolate(t('users.delete.successMessage'), { name: user.displayName })
-      );
+      showToast(t('users.toast.deleted'));
       router.replace('/(protected)/(tabs)/users');
     } catch (requestError) {
       Alert.alert('Error', formatFirestoreError(requestError));

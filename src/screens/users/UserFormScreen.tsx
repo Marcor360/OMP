@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -16,7 +15,9 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
+import { useToast } from '@/src/context/toast-context';
 import { useUser } from '@/src/context/user-context';
+import { useI18n } from '@/src/i18n/index';
 import {
   getCongregationEmailDomain,
   getCongregationPlanUsage,
@@ -176,6 +177,8 @@ export function UserFormScreen() {
   const mode: Mode = id ? 'edit' : 'create';
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { showToast } = useToast();
+  const { t } = useI18n();
 
   const { appUser, congregationId, isAdmin, loadingProfile, profileError } = useUser();
   const canEdit =
@@ -329,6 +332,7 @@ export function UserFormScreen() {
 
   const occupiedAssignments = useMemo(() => {
     const occupiedUniquePositions = new Set<UserServicePosition>();
+    const occupiedManagerDepartments = new Set<UserServiceDepartment>();
 
     activeUsers.forEach((user) => {
       if (id && user.uid === id) return;
@@ -340,11 +344,16 @@ export function UserFormScreen() {
         ) {
           occupiedUniquePositions.add(assignment.position);
         }
+
+        if (assignment.position === 'encargado' && assignment.department) {
+          occupiedManagerDepartments.add(assignment.department);
+        }
       });
     });
 
     return {
       occupiedUniquePositions,
+      occupiedManagerDepartments,
     };
   }, [activeUsers, id]);
 
@@ -359,7 +368,31 @@ export function UserFormScreen() {
   };
 
   const isDepartmentOccupied = (department: UserServiceDepartment): boolean => {
-    return false;
+    if (servicePositionDraft === 'none') return false;
+
+    const alreadyAssignedToCurrentUser = serviceAssignments.some(
+      (assignment) =>
+        assignment.position === servicePositionDraft &&
+        assignment.department === department
+    );
+
+    if (alreadyAssignedToCurrentUser) return true;
+
+    return (
+      servicePositionDraft === 'encargado' &&
+      occupiedAssignments.occupiedManagerDepartments.has(department)
+    );
+  };
+
+  const isDraftAssignmentUnavailable = (assignment: UserServiceAssignment | null): boolean => {
+    if (!assignment) return true;
+    if (serviceAssignments.some((item) => assignmentKey(item) === assignmentKey(assignment))) return true;
+    if (isPositionOccupied(assignment.position)) return true;
+    return (
+      assignment.position === 'encargado' &&
+      Boolean(assignment.department) &&
+      occupiedAssignments.occupiedManagerDepartments.has(assignment.department as UserServiceDepartment)
+    );
   };
 
   const hasUniqueServicePosition = (position: 'coordinador' | 'secretario'): boolean =>
@@ -386,6 +419,18 @@ export function UserFormScreen() {
     }
     if (isPositionOccupied(selectedDraftAssignment.position)) {
       setErrors((current) => ({ ...current, assignment: 'Esta funcion ya esta ocupada.' }));
+      return;
+    }
+    if (
+      selectedDraftAssignment.position === 'encargado' &&
+      selectedDraftAssignment.department &&
+      occupiedAssignments.occupiedManagerDepartments.has(selectedDraftAssignment.department)
+    ) {
+      const department = selectedDraftAssignment.department;
+      setErrors((current) => ({
+        ...current,
+        assignment: `Ya existe un Encargado de ${USER_SERVICE_DEPARTMENT_LABELS[department]} activo en esta congregacion.`,
+      }));
       return;
     }
     if (
@@ -524,6 +569,16 @@ export function UserFormScreen() {
     }
   }, [occupiedAssignments.occupiedUniquePositions, servicePositionDraft]);
 
+  useEffect(() => {
+    if (
+      servicePositionDraft === 'encargado' &&
+      serviceDepartmentDraft &&
+      occupiedAssignments.occupiedManagerDepartments.has(serviceDepartmentDraft)
+    ) {
+      setServiceDepartmentDraft('');
+    }
+  }, [occupiedAssignments.occupiedManagerDepartments, serviceDepartmentDraft, servicePositionDraft]);
+
   const validate = (): boolean => {
     const assignmentError = undefined;
     const privilegesError =
@@ -592,7 +647,38 @@ export function UserFormScreen() {
       const normalizedLastName = lastName.trim();
       const normalizedSecondLastName = secondLastName.trim() || undefined;
       const normalizedPhone = phone.trim() || undefined;
-      const primaryAssignment = serviceAssignments[0];
+      let finalServiceAssignments = serviceAssignments;
+
+      if (
+        selectedDraftAssignment &&
+        !finalServiceAssignments.some((item) => assignmentKey(item) === assignmentKey(selectedDraftAssignment))
+      ) {
+        if (isPositionOccupied(selectedDraftAssignment.position)) {
+          setErrors((current) => ({ ...current, assignment: 'Esta funcion ya esta ocupada.' }));
+          savingRef.current = false;
+          setSaving(false);
+          return;
+        }
+
+        if (
+          selectedDraftAssignment.position === 'encargado' &&
+          selectedDraftAssignment.department &&
+          occupiedAssignments.occupiedManagerDepartments.has(selectedDraftAssignment.department)
+        ) {
+          const department = selectedDraftAssignment.department;
+          setErrors((current) => ({
+            ...current,
+            assignment: `Ya existe un Encargado de ${USER_SERVICE_DEPARTMENT_LABELS[department]} activo en esta congregacion.`,
+          }));
+          savingRef.current = false;
+          setSaving(false);
+          return;
+        }
+
+        finalServiceAssignments = [...finalServiceAssignments, selectedDraftAssignment];
+      }
+
+      const primaryAssignment = finalServiceAssignments[0];
       const normalizedServicePosition = primaryAssignment?.position;
       const normalizedServiceDepartment = primaryAssignment?.department;
       const departmentLabel = primaryAssignment?.label;
@@ -616,7 +702,7 @@ export function UserFormScreen() {
           department: departmentLabel,
           servicePosition: normalizedServicePosition,
           serviceDepartment: normalizedServiceDepartment,
-          serviceAssignments,
+          serviceAssignments: finalServiceAssignments,
           privileges,
           responsibilities,
           permissions: role === 'supervisor' ? permissions : undefined,
@@ -624,8 +710,6 @@ export function UserFormScreen() {
           isMinisterialServant: privileges.isMinisterialServant === true,
           isActive: true,
         });
-        const assignedEmail = createdUser.email ?? generatedEmailPreview;
-        const credentialsText = `Correo: ${assignedEmail}\nContrasena: ${password}`;
         const verifiedUser = await getUserById(createdUser.uid, { forceServer: true });
 
         if (!verifiedUser || verifiedUser.congregationId !== congregationId) {
@@ -634,33 +718,8 @@ export function UserFormScreen() {
           );
         }
 
-        const goToUsersList = () => router.replace('/(protected)/(tabs)/users' as any);
-
-        if (Platform.OS === 'web') {
-          Alert.alert(
-            'Usuario creado',
-            `Correo asignado: ${assignedEmail}\nContrasena inicial: ${password}\nDominio: @${createdUser.requiredDomain ?? allowedEmailDomain}`
-          );
-          goToUsersList();
-          return;
-        }
-
-        Alert.alert(
-          'Usuario creado',
-          `Correo asignado: ${assignedEmail}\nContrasena inicial: ${password}\nDominio: @${createdUser.requiredDomain ?? allowedEmailDomain}`,
-          [
-            {
-              text: 'Copiar credenciales',
-              onPress: () => {
-                void copyToClipboard(credentialsText).finally(goToUsersList);
-              },
-            },
-            {
-              text: 'Cerrar',
-              onPress: goToUsersList,
-            },
-          ]
-        );
+        showToast(t('users.toast.created'));
+        router.replace('/(protected)/(tabs)/users' as any);
         return;
       } else if (id) {
         const payload: UpdateUserDTO = isAdmin ? {
@@ -671,7 +730,7 @@ export function UserFormScreen() {
           department: departmentLabel,
           servicePosition: normalizedServicePosition,
           serviceDepartment: normalizedServiceDepartment,
-          serviceAssignments,
+          serviceAssignments: finalServiceAssignments,
           privileges,
           responsibilities,
           permissions: role === 'supervisor' ? permissions : {},
@@ -692,7 +751,36 @@ export function UserFormScreen() {
           });
         }
 
-        Alert.alert('Exito', 'Usuario actualizado correctamente.');
+        const verifiedUser = await getUserById(id, { forceServer: true });
+
+        if (!verifiedUser) {
+          throw new AppError('La funcion respondio, pero no se pudo confirmar el usuario actualizado.');
+        }
+
+        if (isAdmin) {
+          const expectedPrivileges = privileges;
+          const privilegesMismatch =
+            Boolean(verifiedUser.privileges?.isElder) !== Boolean(expectedPrivileges.isElder) ||
+            Boolean(verifiedUser.privileges?.isMinisterialServant) !== Boolean(expectedPrivileges.isMinisterialServant) ||
+            Boolean(verifiedUser.privileges?.isRegularPioneer) !== Boolean(expectedPrivileges.isRegularPioneer) ||
+            Boolean(verifiedUser.privileges?.isAuxiliaryPioneer) !== Boolean(expectedPrivileges.isAuxiliaryPioneer);
+          const savedAssignments = verifiedUser.serviceAssignments ?? [];
+          const assignmentsMismatch =
+            savedAssignments.length !== finalServiceAssignments.length ||
+            finalServiceAssignments.some((assignment) =>
+              !savedAssignments.some((saved) => assignmentKey(saved) === assignmentKey(assignment))
+            );
+
+          if (privilegesMismatch || assignmentsMismatch) {
+            throw new AppError(
+              'La funcion respondio, pero Firestore no reflejo los nombramientos o cargos actualizados. Intenta de nuevo.'
+            );
+          }
+        }
+
+        showToast(t('users.toast.updated'));
+        router.replace('/(protected)/(tabs)/users' as any);
+        return;
       }
 
       router.back();
@@ -982,10 +1070,11 @@ export function UserFormScreen() {
             <TouchableOpacity
               style={[
                 styles.addAssignmentButton,
-                (!selectedDraftAssignment || !canEdit) && styles.addAssignmentButtonDisabled,
+                (!selectedDraftAssignment || !canEdit || isDraftAssignmentUnavailable(selectedDraftAssignment)) &&
+                  styles.addAssignmentButtonDisabled,
               ]}
               onPress={addServiceAssignment}
-              disabled={!selectedDraftAssignment || !canEdit}
+              disabled={!selectedDraftAssignment || !canEdit || isDraftAssignmentUnavailable(selectedDraftAssignment)}
               activeOpacity={0.8}
             >
               <Ionicons name="add-outline" size={16} color={colors.primary} />
@@ -996,10 +1085,11 @@ export function UserFormScreen() {
           <TouchableOpacity
             style={[
               styles.addAssignmentButton,
-              (!selectedDraftAssignment || !canEdit) && styles.addAssignmentButtonDisabled,
+              (!selectedDraftAssignment || !canEdit || isDraftAssignmentUnavailable(selectedDraftAssignment)) &&
+                styles.addAssignmentButtonDisabled,
             ]}
             onPress={addServiceAssignment}
-            disabled={!selectedDraftAssignment || !canEdit}
+            disabled={!selectedDraftAssignment || !canEdit || isDraftAssignmentUnavailable(selectedDraftAssignment)}
             activeOpacity={0.8}
           >
             <Ionicons name="add-outline" size={16} color={colors.primary} />

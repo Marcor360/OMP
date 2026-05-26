@@ -317,7 +317,7 @@ const parseBooleanMap = <TKeys extends string>(
   keys: readonly TKeys[],
   label: string
 ): Partial<Record<TKeys, boolean>> | undefined => {
-  if (value === undefined) return undefined;
+  if (value === undefined || value === null) return undefined;
 
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new HttpsError('invalid-argument', `${label} invalido.`);
@@ -366,6 +366,38 @@ const parsePrivileges = (value: unknown): UserPrivileges | undefined => {
   return privileges;
 };
 
+const parsePrivilegesWithLegacyFlags = (
+  value: unknown,
+  source: Record<string, unknown>
+): UserPrivileges | undefined => {
+  const privileges = parsePrivileges(value);
+  const isElderProvided = typeof source.isElder === 'boolean';
+  const isMinisterialServantProvided = typeof source.isMinisterialServant === 'boolean';
+
+  if (!isElderProvided && !isMinisterialServantProvided) {
+    return privileges;
+  }
+
+  const merged: UserPrivileges = { ...(privileges ?? {}) };
+
+  if (isElderProvided) {
+    merged.isElder = source.isElder as boolean;
+  }
+
+  if (isMinisterialServantProvided) {
+    merged.isMinisterialServant = source.isMinisterialServant as boolean;
+  }
+
+  if (merged.isElder && merged.isMinisterialServant) {
+    throw new HttpsError(
+      'invalid-argument',
+      'Un usuario no puede ser Anciano y Siervo Ministerial al mismo tiempo.'
+    );
+  }
+
+  return Object.keys(merged).length > 0 ? merged : undefined;
+};
+
 const parseResponsibilities = (value: unknown): UserResponsibilities | undefined =>
   parseBooleanMap(
     value,
@@ -378,7 +410,7 @@ const parsePermissions = (
   options?: { strict?: boolean }
 ): UserPermissions | undefined => {
   const strict = options?.strict !== false;
-  if (value === undefined) return undefined;
+  if (value === undefined || value === null) return undefined;
 
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     if (!strict) return undefined;
@@ -613,7 +645,11 @@ const shouldValidateAssignmentUniqueness = (
   isActive: boolean
 ): boolean => {
   if (!isActive) return false;
-  return assignment.position === 'coordinador' || assignment.position === 'secretario';
+  return (
+    assignment.position === 'coordinador' ||
+    assignment.position === 'secretario' ||
+    (assignment.position === 'encargado' && Boolean(assignment.department))
+  );
 };
 
 const assertAssignmentUniqueness = async (params: {
@@ -651,7 +687,17 @@ const assertAssignmentUniqueness = async (params: {
           department: parseServiceDepartment(data.serviceDepartment) ?? legacy.department,
         }
       );
-      return currentAssignments.some((current) => current.position === assignment.position);
+      return currentAssignments.some((current) => {
+        if (assignment.position === 'coordinador' || assignment.position === 'secretario') {
+          return current.position === assignment.position;
+        }
+
+        return (
+          assignment.position === 'encargado' &&
+          current.position === 'encargado' &&
+          current.department === assignment.department
+        );
+      });
     });
 
     if (!owner) continue;
@@ -662,6 +708,11 @@ const assertAssignmentUniqueness = async (params: {
 
     if (assignment.position === 'secretario') {
       throw new HttpsError('already-exists', 'Ya existe un Secretario activo en esta congregacion.');
+    }
+
+    if (assignment.position === 'encargado' && assignment.department) {
+      const label = buildServiceAssignmentLabel('encargado', assignment.department);
+      throw new HttpsError('already-exists', `Ya existe un ${label} activo en esta congregacion.`);
     }
 
     throw new HttpsError('already-exists', 'Esta funcion congregacional ya esta ocupada.');
@@ -962,7 +1013,7 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
   const assignment = normalizeAssignmentForRole(role, rawPosition, rawDepartment);
   const serviceAssignments = parseServiceAssignments(data.serviceAssignments, role, assignment);
   const primaryAssignment = serviceAssignments[0] ?? assignment;
-  const privileges = parsePrivileges(data.privileges);
+  const privileges = parsePrivilegesWithLegacyFlags(data.privileges, data);
   const responsibilities = parseResponsibilities(data.responsibilities);
   const permissions = parsePermissions(data.permissions);
 
@@ -1049,7 +1100,12 @@ const parseUpdateUserPayload = (raw: unknown): UpdateUserPayload => {
   const serviceAssignmentsProvided = Object.prototype.hasOwnProperty.call(nested, 'serviceAssignments');
   const responsibilitiesProvided = Object.prototype.hasOwnProperty.call(nested, 'responsibilities');
   const permissionsProvided = Object.prototype.hasOwnProperty.call(nested, 'permissions');
-  const privileges = privilegesProvided ? parsePrivileges(nested.privileges) : undefined;
+  const legacyPrivilegesProvided =
+    Object.prototype.hasOwnProperty.call(nested, 'isElder') ||
+    Object.prototype.hasOwnProperty.call(nested, 'isMinisterialServant');
+  const privileges = privilegesProvided || legacyPrivilegesProvided
+    ? parsePrivilegesWithLegacyFlags(nested.privileges, nested)
+    : undefined;
   const responsibilities = responsibilitiesProvided
     ? parseResponsibilities(nested.responsibilities)
     : undefined;
@@ -1074,7 +1130,7 @@ const parseUpdateUserPayload = (raw: unknown): UpdateUserPayload => {
     privileges,
     responsibilities,
     permissions,
-    privilegesProvided,
+    privilegesProvided: privilegesProvided || legacyPrivilegesProvided,
     responsibilitiesProvided,
     permissionsProvided,
   };
@@ -1471,7 +1527,47 @@ export const updateUserByAdmin = onCall(
 
     await targetRef.update(docUpdates);
 
-    return { ok: true };
+    const updatedSnap = await targetRef.get();
+    const updatedData = updatedSnap.data() as {
+      role?: Role;
+      servicePosition?: ServicePosition;
+      serviceDepartment?: ServiceDepartment;
+      serviceAssignments?: StoredServiceAssignment[];
+      privileges?: UserPrivileges;
+      isElder?: boolean;
+      isMinisterialServant?: boolean;
+    } | undefined;
+
+    logger.info('updateUserByAdmin persisted user fields', {
+      requesterUid: request.auth.uid,
+      targetUid: payload.uid,
+      updatedKeys: Object.keys(docUpdates),
+      persisted: {
+        role: updatedData?.role,
+        servicePosition: updatedData?.servicePosition,
+        serviceDepartment: updatedData?.serviceDepartment,
+        serviceAssignmentsCount: Array.isArray(updatedData?.serviceAssignments)
+          ? updatedData.serviceAssignments.length
+          : 0,
+        privileges: updatedData?.privileges,
+        isElder: updatedData?.isElder,
+        isMinisterialServant: updatedData?.isMinisterialServant,
+      },
+    });
+
+    return {
+      ok: true,
+      user: {
+        uid: payload.uid,
+        role: updatedData?.role,
+        servicePosition: updatedData?.servicePosition,
+        serviceDepartment: updatedData?.serviceDepartment,
+        serviceAssignments: updatedData?.serviceAssignments ?? [],
+        privileges: updatedData?.privileges ?? {},
+        isElder: updatedData?.isElder === true,
+        isMinisterialServant: updatedData?.isMinisterialServant === true,
+      },
+    };
   }
 );
 

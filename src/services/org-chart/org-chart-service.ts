@@ -21,7 +21,13 @@ import {
   DEPARTMENT_CATEGORIES,
   INITIAL_DEPARTMENT_TEMPLATE,
 } from '@/src/types/org-chart';
-import type { AppUser } from '@/src/types/user';
+import {
+  USER_SERVICE_DEPARTMENT_LABELS,
+  USER_SERVICE_DEPARTMENTS,
+  type AppUser,
+  type UserServiceDepartment,
+  type UserServicePosition,
+} from '@/src/types/user';
 import {
   canManageDepartments,
 } from '@/src/utils/permissions/permissions';
@@ -67,6 +73,64 @@ const normalizeAssignment = (
   createdBy: typeof data.createdBy === 'string' ? data.createdBy : '',
   updatedBy: typeof data.updatedBy === 'string' ? data.updatedBy : '',
 });
+
+const AUTO_DEPARTMENT_CATEGORY: Record<UserServiceDepartment, DepartmentCategory> = {
+  limpieza: 'operations',
+  literatura: 'operations',
+  tesoreria: 'administration',
+  mantenimiento: 'operations',
+  discursos: 'meetings',
+  reuniones: 'meetings',
+  predicacion: 'service',
+  audio_video: 'operations',
+  acomodadores_microfonos: 'operations',
+};
+
+const AUTO_DEPARTMENTS: Department[] = [
+  {
+    id: 'auto:coordinador',
+    name: 'Coordinador',
+    category: 'administration',
+    parentId: null,
+    order: 10,
+    isActive: true,
+  },
+  {
+    id: 'auto:secretario',
+    name: 'Secretario',
+    category: 'administration',
+    parentId: null,
+    order: 20,
+    isActive: true,
+  },
+  ...USER_SERVICE_DEPARTMENTS.map((department, index): Department => ({
+    id: `auto:${department}`,
+    name: USER_SERVICE_DEPARTMENT_LABELS[department],
+    category: AUTO_DEPARTMENT_CATEGORY[department],
+    parentId: null,
+    order: 100 + (index + 1) * 10,
+    isActive: true,
+  })),
+];
+
+const normalizeLabelKey = (value: string): string =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
+const autoDepartmentKeyForAssignment = (
+  position?: UserServicePosition,
+  department?: UserServiceDepartment
+): string | null => {
+  if (position === 'coordinador') return 'auto:coordinador';
+  if (position === 'secretario') return 'auto:secretario';
+  if ((position === 'encargado' || position === 'auxiliar') && department) {
+    return `auto:${department}`;
+  }
+  return null;
+};
 
 const assertCongregationContext = (congregationId: string, currentUser: AppUser) => {
   if (!congregationId.trim()) {
@@ -386,8 +450,10 @@ export const buildOrgChart = (
     return acc;
   }, {} as OrgChartCategoryGroup);
 
-  const activeDepartments = departments
-    .filter((department) => department.isActive)
+  const autoDepartmentNameKeys = new Set(AUTO_DEPARTMENTS.map((department) => normalizeLabelKey(department.name)));
+  const customDepartments = departments
+    .filter((department) => department.isActive && !autoDepartmentNameKeys.has(normalizeLabelKey(department.name)));
+  const activeDepartments = [...AUTO_DEPARTMENTS, ...customDepartments]
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'es'));
   const departmentIds = new Set(activeDepartments.map((department) => department.id));
   const usersById = new Map(
@@ -397,6 +463,40 @@ export const buildOrgChart = (
   );
 
   activeDepartments.forEach((department) => {
+    if (department.id.startsWith('auto:')) {
+      const responsible = users
+        .filter((user) => user.isActive)
+        .find((user) =>
+          user.serviceAssignments?.some((assignment) => {
+            const departmentId = autoDepartmentKeyForAssignment(assignment.position, assignment.department);
+            if (departmentId !== department.id) return false;
+            return (
+              assignment.position === 'coordinador' ||
+              assignment.position === 'secretario' ||
+              assignment.position === 'encargado'
+            );
+          })
+        ) ?? null;
+
+      const assistants = users
+        .filter((user) => user.isActive)
+        .filter((user) =>
+          user.serviceAssignments?.some(
+            (assignment) =>
+              assignment.position === 'auxiliar' &&
+              autoDepartmentKeyForAssignment(assignment.position, assignment.department) === department.id
+          )
+        )
+        .sort((a, b) => a.displayName.localeCompare(b.displayName, 'es'));
+
+      groups[department.category].push({
+        department,
+        responsible,
+        assistants,
+      });
+      return;
+    }
+
     const departmentAssignments = assignments.filter(
       (assignment) =>
         assignment.isActive &&
