@@ -1,5 +1,6 @@
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { logger } from 'firebase-functions';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { isSystemPrincipalUser, SYSTEM_ACTOR_LABEL } from './user-protection.js';
 
@@ -32,6 +33,7 @@ type PermissionDepartment =
   | 'usuarios'
   | 'reuniones'
   | 'limpieza'
+  | 'departments'
   | 'predicacion'
   | 'tesoreria'
   | 'pagos'
@@ -48,10 +50,11 @@ type PermissionAction =
   | 'approve'
   | 'export';
 
-type TerritoryPermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'assign';
+type TerritoryPermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'assign' | 'manage';
 
 type DepartmentPermissions = Partial<Record<PermissionAction, boolean>> & {
   territories?: Partial<Record<TerritoryPermissionAction, boolean>>;
+  manageTerritories?: boolean;
 };
 
 type UserPermissions = Partial<Record<PermissionDepartment, DepartmentPermissions>>;
@@ -96,6 +99,58 @@ type CreateUserPayload = {
   privileges?: UserPrivileges;
   responsibilities?: UserResponsibilities;
   permissions?: UserPermissions;
+};
+
+const logCreateUserFailure = (
+  error: unknown,
+  context: {
+    step: string;
+    requesterUid?: string;
+    congregationId?: string;
+    role?: Role;
+    raw?: unknown;
+  }
+) => {
+  const httpsError = error instanceof HttpsError ? error : undefined;
+  const raw = typeof context.raw === 'object' && context.raw !== null
+    ? context.raw as Record<string, unknown>
+    : undefined;
+  const rawPermissions = typeof raw?.permissions === 'object' && raw.permissions !== null && !Array.isArray(raw.permissions)
+    ? raw.permissions as Record<string, unknown>
+    : undefined;
+  const rawAssignments = Array.isArray(raw?.serviceAssignments)
+    ? raw.serviceAssignments.map((item) => {
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+        return { type: typeof item };
+      }
+      const assignment = item as Record<string, unknown>;
+      return {
+        position: assignment.position,
+        department: assignment.department,
+        keys: Object.keys(assignment),
+      };
+    })
+    : undefined;
+
+  logger.error('createUserByAdmin failed', {
+    step: context.step,
+    requesterUid: context.requesterUid,
+    congregationId: context.congregationId,
+    role: context.role,
+    code: httpsError?.code,
+    errorMessage: error instanceof Error ? error.message : String(error),
+    payloadSummary: raw
+      ? {
+        keys: Object.keys(raw),
+        role: raw.role,
+        gender: raw.gender,
+        servicePosition: raw.servicePosition,
+        serviceDepartment: raw.serviceDepartment,
+        serviceAssignments: rawAssignments,
+        permissionDepartments: rawPermissions ? Object.keys(rawPermissions) : undefined,
+      }
+      : undefined,
+  });
 };
 
 type UpdateUserPayload = {
@@ -155,6 +210,7 @@ const PERMISSION_DEPARTMENTS: PermissionDepartment[] = [
   'usuarios',
   'reuniones',
   'limpieza',
+  'departments',
   'predicacion',
   'tesoreria',
   'pagos',
@@ -179,6 +235,7 @@ const TERRITORY_PERMISSION_ACTIONS: TerritoryPermissionAction[] = [
   'edit',
   'delete',
   'assign',
+  'manage',
 ];
 
 function assertValidRole(role: unknown): asserts role is Role {
@@ -316,10 +373,15 @@ const parseResponsibilities = (value: unknown): UserResponsibilities | undefined
     'Responsabilidades'
   ) as UserResponsibilities | undefined;
 
-const parsePermissions = (value: unknown): UserPermissions | undefined => {
+const parsePermissions = (
+  value: unknown,
+  options?: { strict?: boolean }
+): UserPermissions | undefined => {
+  const strict = options?.strict !== false;
   if (value === undefined) return undefined;
 
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    if (!strict) return undefined;
     throw new HttpsError('invalid-argument', 'Permisos invalidos.');
   }
 
@@ -327,7 +389,7 @@ const parsePermissions = (value: unknown): UserPermissions | undefined => {
   const invalidDepartment = Object.keys(source).find(
     (department) => !PERMISSION_DEPARTMENTS.includes(department as PermissionDepartment)
   );
-  if (invalidDepartment) {
+  if (strict && invalidDepartment) {
     throw new HttpsError('invalid-argument', 'Permisos contienen departamentos no permitidos.');
   }
 
@@ -336,6 +398,7 @@ const parsePermissions = (value: unknown): UserPermissions | undefined => {
     if (rawDepartment === undefined) return acc;
 
     if (typeof rawDepartment !== 'object' || rawDepartment === null || Array.isArray(rawDepartment)) {
+      if (!strict) return acc;
       throw new HttpsError('invalid-argument', 'Permisos por departamento invalidos.');
     }
 
@@ -343,15 +406,16 @@ const parsePermissions = (value: unknown): UserPermissions | undefined => {
     const invalidAction = Object.keys(rawActions).find(
       (action) =>
         !PERMISSION_ACTIONS.includes(action as PermissionAction) &&
-        !(department === 'predicacion' && action === 'territories')
+        !(department === 'predicacion' && (action === 'territories' || action === 'manageTerritories'))
     );
-    if (invalidAction) {
+    if (strict && invalidAction) {
       throw new HttpsError('invalid-argument', 'Permisos contienen acciones no permitidas.');
     }
 
     const actions = PERMISSION_ACTIONS.reduce<DepartmentPermissions>((normalized, action) => {
       if (rawActions[action] !== undefined) {
         if (typeof rawActions[action] !== 'boolean') {
+          if (!strict) return normalized;
           throw new HttpsError('invalid-argument', 'Los permisos deben ser booleanos.');
         }
         normalized[action] = rawActions[action] as boolean;
@@ -365,6 +429,7 @@ const parsePermissions = (value: unknown): UserPermissions | undefined => {
         rawActions.territories === null ||
         Array.isArray(rawActions.territories)
       ) {
+        if (!strict) return acc;
         throw new HttpsError('invalid-argument', 'Permisos de territorios invalidos.');
       }
 
@@ -372,7 +437,7 @@ const parsePermissions = (value: unknown): UserPermissions | undefined => {
       const invalidTerritoryAction = Object.keys(rawTerritories).find(
         (action) => !TERRITORY_PERMISSION_ACTIONS.includes(action as TerritoryPermissionAction)
       );
-      if (invalidTerritoryAction) {
+      if (strict && invalidTerritoryAction) {
         throw new HttpsError('invalid-argument', 'Permisos de territorios contienen acciones no permitidas.');
       }
 
@@ -380,6 +445,7 @@ const parsePermissions = (value: unknown): UserPermissions | undefined => {
         (normalized, action) => {
           if (rawTerritories[action] !== undefined) {
             if (typeof rawTerritories[action] !== 'boolean') {
+              if (!strict) return normalized;
               throw new HttpsError('invalid-argument', 'Los permisos de territorios deben ser booleanos.');
             }
             normalized[action] = rawTerritories[action] as boolean;
@@ -392,6 +458,14 @@ const parsePermissions = (value: unknown): UserPermissions | undefined => {
       if (Object.keys(territories).length > 0) {
         actions.territories = territories;
       }
+    }
+
+    if (department === 'predicacion' && rawActions.manageTerritories !== undefined) {
+      if (typeof rawActions.manageTerritories !== 'boolean') {
+        if (!strict) return acc;
+        throw new HttpsError('invalid-argument', 'El permiso de administrar territorios debe ser booleano.');
+      }
+      actions.manageTerritories = rawActions.manageTerritories;
     }
 
     if (Object.keys(actions).length > 0) {
@@ -771,7 +845,7 @@ async function getRequesterProfile(uid: string): Promise<RequesterProfile> {
 
   return {
     ...(data as RequesterProfile),
-    permissions: parsePermissions(data.permissions),
+    permissions: parsePermissions(data.permissions, { strict: false }),
   };
 }
 
@@ -1090,104 +1164,130 @@ const assertCongregationHasUserCapacity = async (params: {
 export const createUserByAdmin = onCall(
   { region: 'us-central1' },
   async (request) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
-    }
-
-    const requester = await getRequesterProfile(request.auth.uid);
-    assertUserPermission(requester, 'create');
-
-    const payload = parseCreateUserPayload(request.data);
-    assertDelegatedCreateIsSafe(requester, payload);
-
-    if (payload.congregationId !== requester.congregationId) {
-      throw new HttpsError('permission-denied', 'No puedes crear usuarios en otra congregacion.');
-    }
-
-    await assertAssignmentUniqueness({
-      congregationId: payload.congregationId,
-      assignments: payload.serviceAssignments,
-      isActive: payload.isActive,
-    });
-
-    await assertCongregationHasUserCapacity({
-      congregationId: payload.congregationId,
-      willCreateActiveUser: payload.isActive,
-    });
-
-    const auth = getAuth();
-    const db = getFirestore();
-
-    const congregationSnap = await db.collection('congregations').doc(payload.congregationId).get();
-    const congregationData = congregationSnap.exists ? (congregationSnap.data() as Record<string, unknown>) : undefined;
-
-    const requiredDomain = resolveCongregationEmailDomain(payload.congregationId, congregationData);
-    const generatedEmail = await resolveGeneratedEmail(
-      payload.firstName,
-      payload.middleName,
-      payload.lastName,
-      requiredDomain
-    );
-
-    const userRecord = await auth.createUser({
-      email: generatedEmail,
-      password: payload.password,
-      displayName: payload.displayName,
-      disabled: !payload.isActive,
-    });
+    let step = 'auth';
+    let payload: CreateUserPayload | undefined;
 
     try {
-      const userDoc: Record<string, unknown> = {
-        uid: userRecord.uid,
-        email: generatedEmail,
-        emailKey: generatedEmail.trim().toLowerCase(),
-        displayName: payload.displayName,
-        role: payload.role,
-        isActive: payload.isActive,
-        status: payload.isActive ? 'active' : 'inactive',
+      if (!request.auth?.uid) {
+        throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+      }
+
+      step = 'requester-profile';
+      const requester = await getRequesterProfile(request.auth.uid);
+
+      step = 'requester-permission';
+      assertUserPermission(requester, 'create');
+
+      step = 'payload';
+      payload = parseCreateUserPayload(request.data);
+
+      step = 'delegated-safety';
+      assertDelegatedCreateIsSafe(requester, payload);
+
+      step = 'same-congregation';
+      if (payload.congregationId !== requester.congregationId) {
+        throw new HttpsError('permission-denied', 'No puedes crear usuarios en otra congregacion.');
+      }
+
+      step = 'assignment-uniqueness';
+      await assertAssignmentUniqueness({
         congregationId: payload.congregationId,
-        congregationDomain: requiredDomain,
-        createdBy: request.auth.uid,
-        createdByName: resolveActorName(requester, request.auth.uid),
-        createdByEmail: resolveActorEmail(requester),
-        updatedBy: request.auth.uid,
-        updatedByName: resolveActorName(requester, request.auth.uid),
-        updatedByEmail: resolveActorEmail(requester),
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      };
+        assignments: payload.serviceAssignments,
+        isActive: payload.isActive,
+      });
 
-      userDoc.firstName = payload.firstName;
-      userDoc.lastName = payload.lastName;
-      if (payload.middleName) userDoc.middleName = payload.middleName;
-      if (payload.secondLastName) userDoc.secondLastName = payload.secondLastName;
-      if (payload.phone) userDoc.phone = payload.phone;
-      if (payload.gender) userDoc.gender = payload.gender;
-      if (payload.servicePosition) userDoc.servicePosition = payload.servicePosition;
-      if (payload.serviceDepartment) userDoc.serviceDepartment = payload.serviceDepartment;
-      if (payload.departmentLabel) userDoc.department = payload.departmentLabel;
-      userDoc.serviceAssignments = payload.serviceAssignments;
-      if (payload.privileges && Object.keys(payload.privileges).length > 0) {
-        userDoc.privileges = payload.privileges;
-      }
-      userDoc.isElder = payload.privileges?.isElder === true;
-      userDoc.isMinisterialServant = payload.privileges?.isMinisterialServant === true;
-      if (payload.responsibilities && Object.keys(payload.responsibilities).length > 0) {
-        userDoc.responsibilities = payload.responsibilities;
-      }
-      if (payload.permissions && Object.keys(payload.permissions).length > 0) {
-        userDoc.permissions = payload.permissions;
-      }
+      step = 'plan-capacity';
+      await assertCongregationHasUserCapacity({
+        congregationId: payload.congregationId,
+        willCreateActiveUser: payload.isActive,
+      });
 
-      await db.collection('users').doc(userRecord.uid).set(userDoc);
+      const auth = getAuth();
+      const db = getFirestore();
 
-      return {
-        uid: userRecord.uid,
+      step = 'congregation-domain';
+      const congregationSnap = await db.collection('congregations').doc(payload.congregationId).get();
+      const congregationData = congregationSnap.exists ? (congregationSnap.data() as Record<string, unknown>) : undefined;
+
+      const requiredDomain = resolveCongregationEmailDomain(payload.congregationId, congregationData);
+      const generatedEmail = await resolveGeneratedEmail(
+        payload.firstName,
+        payload.middleName,
+        payload.lastName,
+        requiredDomain
+      );
+
+      step = 'auth-create';
+      const userRecord = await auth.createUser({
         email: generatedEmail,
-        requiredDomain,
-      };
+        password: payload.password,
+        displayName: payload.displayName,
+        disabled: !payload.isActive,
+      });
+
+      try {
+        step = 'firestore-profile';
+        const userDoc: Record<string, unknown> = {
+          uid: userRecord.uid,
+          email: generatedEmail,
+          emailKey: generatedEmail.trim().toLowerCase(),
+          displayName: payload.displayName,
+          role: payload.role,
+          isActive: payload.isActive,
+          status: payload.isActive ? 'active' : 'inactive',
+          congregationId: payload.congregationId,
+          congregationDomain: requiredDomain,
+          createdBy: request.auth.uid,
+          createdByName: resolveActorName(requester, request.auth.uid),
+          createdByEmail: resolveActorEmail(requester),
+          updatedBy: request.auth.uid,
+          updatedByName: resolveActorName(requester, request.auth.uid),
+          updatedByEmail: resolveActorEmail(requester),
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+
+        userDoc.firstName = payload.firstName;
+        userDoc.lastName = payload.lastName;
+        if (payload.middleName) userDoc.middleName = payload.middleName;
+        if (payload.secondLastName) userDoc.secondLastName = payload.secondLastName;
+        if (payload.phone) userDoc.phone = payload.phone;
+        if (payload.gender) userDoc.gender = payload.gender;
+        if (payload.servicePosition) userDoc.servicePosition = payload.servicePosition;
+        if (payload.serviceDepartment) userDoc.serviceDepartment = payload.serviceDepartment;
+        if (payload.departmentLabel) userDoc.department = payload.departmentLabel;
+        userDoc.serviceAssignments = payload.serviceAssignments;
+        if (payload.privileges && Object.keys(payload.privileges).length > 0) {
+          userDoc.privileges = payload.privileges;
+        }
+        userDoc.isElder = payload.privileges?.isElder === true;
+        userDoc.isMinisterialServant = payload.privileges?.isMinisterialServant === true;
+        if (payload.responsibilities && Object.keys(payload.responsibilities).length > 0) {
+          userDoc.responsibilities = payload.responsibilities;
+        }
+        if (payload.permissions && Object.keys(payload.permissions).length > 0) {
+          userDoc.permissions = payload.permissions;
+        }
+
+        await db.collection('users').doc(userRecord.uid).set(userDoc);
+
+        return {
+          uid: userRecord.uid,
+          email: generatedEmail,
+          requiredDomain,
+        };
+      } catch (error) {
+        await auth.deleteUser(userRecord.uid);
+        throw error;
+      }
     } catch (error) {
-      await auth.deleteUser(userRecord.uid);
+      logCreateUserFailure(error, {
+        step,
+        requesterUid: request.auth?.uid,
+        congregationId: payload?.congregationId,
+        role: payload?.role,
+        raw: request.data,
+      });
       throw error;
     }
   }

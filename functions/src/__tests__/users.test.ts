@@ -27,6 +27,51 @@ const normalizeText = (value: unknown): string | undefined => {
 };
 
 type ServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar';
+type PermissionDepartment =
+  | 'usuarios'
+  | 'reuniones'
+  | 'limpieza'
+  | 'departments'
+  | 'predicacion'
+  | 'tesoreria'
+  | 'pagos'
+  | 'configuracion'
+  | 'avisos'
+  | 'asignaciones';
+type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'manage' | 'approve' | 'export';
+type TerritoryPermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'assign' | 'manage';
+
+const PERMISSION_DEPARTMENTS: PermissionDepartment[] = [
+  'usuarios',
+  'reuniones',
+  'limpieza',
+  'departments',
+  'predicacion',
+  'tesoreria',
+  'pagos',
+  'configuracion',
+  'avisos',
+  'asignaciones',
+];
+
+const PERMISSION_ACTIONS: PermissionAction[] = [
+  'view',
+  'create',
+  'edit',
+  'delete',
+  'manage',
+  'approve',
+  'export',
+];
+
+const TERRITORY_PERMISSION_ACTIONS: TerritoryPermissionAction[] = [
+  'view',
+  'create',
+  'edit',
+  'delete',
+  'assign',
+  'manage',
+];
 
 const parseServicePosition = (value: unknown): ServicePosition | undefined => {
   const text = normalizeText(value);
@@ -40,6 +85,74 @@ const parseServicePosition = (value: unknown): ServicePosition | undefined => {
     return text;
   }
   throw new HttpsError('invalid-argument', 'Asignacion de servicio invalida.');
+};
+
+const parsePermissions = (
+  value: unknown,
+  options?: { strict?: boolean }
+): Record<string, unknown> | undefined => {
+  const strict = options?.strict !== false;
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    if (!strict) return undefined;
+    throw new HttpsError('invalid-argument', 'Permisos invalidos.');
+  }
+
+  const source = value as Record<string, unknown>;
+  const invalidDepartment = Object.keys(source).find(
+    (department) => !PERMISSION_DEPARTMENTS.includes(department as PermissionDepartment)
+  );
+  if (invalidDepartment) {
+    if (!strict) return source;
+    throw new HttpsError('invalid-argument', 'Permisos contienen departamentos no permitidos.');
+  }
+
+  Object.entries(source).forEach(([department, rawDepartment]) => {
+    if (typeof rawDepartment !== 'object' || rawDepartment === null || Array.isArray(rawDepartment)) {
+      if (!strict) return;
+      throw new HttpsError('invalid-argument', 'Permisos por departamento invalidos.');
+    }
+
+    const rawActions = rawDepartment as Record<string, unknown>;
+    const invalidAction = Object.keys(rawActions).find(
+      (action) =>
+        !PERMISSION_ACTIONS.includes(action as PermissionAction) &&
+        !(department === 'predicacion' && (action === 'territories' || action === 'manageTerritories'))
+    );
+    if (invalidAction) {
+      if (!strict) return;
+      throw new HttpsError('invalid-argument', 'Permisos contienen acciones no permitidas.');
+    }
+
+    if (department === 'predicacion' && rawActions.territories !== undefined) {
+      if (
+        typeof rawActions.territories !== 'object' ||
+        rawActions.territories === null ||
+        Array.isArray(rawActions.territories)
+      ) {
+        if (!strict) return;
+        throw new HttpsError('invalid-argument', 'Permisos de territorios invalidos.');
+      }
+
+      const rawTerritories = rawActions.territories as Record<string, unknown>;
+      const invalidTerritoryAction = Object.keys(rawTerritories).find(
+        (action) => !TERRITORY_PERMISSION_ACTIONS.includes(action as TerritoryPermissionAction)
+      );
+      if (invalidTerritoryAction) {
+        if (!strict) return;
+        throw new HttpsError('invalid-argument', 'Permisos de territorios contienen acciones no permitidas.');
+      }
+    }
+
+    if (department === 'predicacion' && rawActions.manageTerritories !== undefined) {
+      if (typeof rawActions.manageTerritories !== 'boolean') {
+        if (!strict) return;
+        throw new HttpsError('invalid-argument', 'El permiso de administrar territorios debe ser booleano.');
+      }
+    }
+  });
+
+  return source;
 };
 
 // Simula parseCreateUserPayload con validaciones relevantes
@@ -145,6 +258,45 @@ describe('parseServicePosition', () => {
 });
 
 // ─── Tests: parseCreateUserPayload ───────────────────────────────────────────
+
+describe('parsePermissions', () => {
+  it('acepta los permisos que envia el formulario de supervisores', () => {
+    expect(() =>
+      parsePermissions({
+        usuarios: { view: true, create: true },
+        departments: { view: true, manage: true },
+        predicacion: {
+          view: true,
+          manageTerritories: true,
+          territories: {
+            view: true,
+            assign: true,
+            manage: true,
+          },
+        },
+      })
+    ).not.toThrow();
+  });
+
+  it('rechaza departamentos y acciones desconocidas', () => {
+    expect(() => parsePermissions({ desconocido: { view: true } })).toThrow(HttpsError);
+    expect(() => parsePermissions({ usuarios: { publish: true } })).toThrow(HttpsError);
+    expect(() => parsePermissions({ predicacion: { territories: { publish: true } } })).toThrow(HttpsError);
+  });
+
+  it('tolera permisos legados al leer perfiles existentes', () => {
+    expect(() =>
+      parsePermissions(
+        {
+          usuarios: { view: true, publish: true },
+          moduloViejo: { manage: true },
+          predicacion: { manageTerritories: 'yes' },
+        },
+        { strict: false }
+      )
+    ).not.toThrow();
+  });
+});
 
 describe('parseCreateUserPayload', () => {
   const valid = {

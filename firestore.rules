@@ -136,17 +136,6 @@ service cloud.firestore {
         );
     }
 
-    function isElder() {
-      return isActive()
-        && (
-          currentUserData().isElder == true
-          || (
-            currentUserData().privileges is map
-            && currentUserData().privileges.isElder == true
-          )
-        );
-    }
-
     function isCleaningManager() {
       return isAdmin()
         || hasPermission('limpieza', 'manage')
@@ -319,10 +308,6 @@ service cloud.firestore {
 
     function canDeactivateTerritories() {
       return isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('delete');
-    }
-
-    function canAssignTerritories() {
-      return isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('assign');
     }
 
     function canManageDepartments() {
@@ -1207,38 +1192,6 @@ service cloud.firestore {
       ];
     }
 
-    function validAssignmentData(data, congregationId, meetingId) {
-      return hasOnlyKeys(data, allowedAssignmentKeys())
-        && hasAllKeys(data, ['congregationId', 'meetingId', 'type', 'title'])
-        && data.congregationId == congregationId
-        && data.meetingId == meetingId
-        && isNonEmptyString(data.type)
-        && isNonEmptyString(data.title)
-        && (!('category' in data) || data.category is string)
-        && (!('section' in data) || data.section is string)
-        && (!('description' in data) || data.description is string)
-        && (!('priority' in data) || data.priority is string)
-        && (!('assignedToUid' in data) || data.assignedToUid is string)
-        && (!('assignedByUid' in data) || data.assignedByUid is string)
-        && (!('assignedByName' in data) || data.assignedByName is string)
-        && (!('createdBy' in data) || data.createdBy is string)
-        && (!('updatedBy' in data) || data.updatedBy is string)
-        && (!('cleaningGroupId' in data) || data.cleaningGroupId is string)
-        && (!('cleaningGroupName' in data) || data.cleaningGroupName is string)
-        && (!('assignedUsers' in data) || data.assignedUsers is list)
-        && (!('assignedToUserId' in data) || data.assignedToUserId is string)
-        && (!('assignedToPersonId' in data) || data.assignedToPersonId is string)
-        && (!('assignedToName' in data) || data.assignedToName is string)
-        && (!('assistantUserId' in data) || data.assistantUserId is string)
-        && (!('assistantPersonId' in data) || data.assistantPersonId is string)
-        && (!('assistantName' in data) || data.assistantName is string)
-        && (!('startTime' in data) || data.startTime is string)
-        && (!('endTime' in data) || data.endTime is string)
-        && (!('durationMinutes' in data) || data.durationMinutes is int)
-        && (!('status' in data) || data.status is string)
-        && (!('notes' in data) || data.notes is string);
-    }
-
     function validStandaloneAssignmentData(data, congregationId) {
       return hasOnlyKeys(data, allowedAssignmentKeys())
         && hasAllKeys(data, ['congregationId', 'category', 'type', 'title'])
@@ -1363,7 +1316,7 @@ service cloud.firestore {
         && (items.size() < 12 || validTerritoryScheduleItem(items[11]));
     }
 
-    function validTerritoryScheduleData(data, congregationId, scheduleId) {
+    function validTerritoryScheduleData(data, scheduleId) {
       return hasOnlyKeys(data, [
           'dayOfWeek',
           'territories',
@@ -1392,14 +1345,14 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
-    function validTerritoryScheduleCreate(data, congregationId, scheduleId) {
-      return validTerritoryScheduleData(data, congregationId, scheduleId)
+    function validTerritoryScheduleCreate(data, scheduleId) {
+      return validTerritoryScheduleData(data, scheduleId)
         && data.createdBy == currentUid()
         && data.updatedBy == currentUid();
     }
 
-    function validTerritoryScheduleUpdate(data, congregationId, scheduleId) {
-      return validTerritoryScheduleData(data, congregationId, scheduleId)
+    function validTerritoryScheduleUpdate(data, scheduleId) {
+      return validTerritoryScheduleData(data, scheduleId)
         && data.dayOfWeek == resource.data.dayOfWeek
         && data.createdBy == resource.data.createdBy
         && data.createdAt == resource.data.createdAt
@@ -1986,11 +1939,11 @@ service cloud.firestore {
 
         allow create: if canManageTerritorySchedule()
           && canAccessCongregationData(congregationId)
-          && validTerritoryScheduleCreate(request.resource.data, congregationId, scheduleId);
+          && validTerritoryScheduleCreate(request.resource.data, scheduleId);
 
         allow update: if canManageTerritorySchedule()
           && canAccessCongregationData(congregationId)
-          && validTerritoryScheduleUpdate(request.resource.data, congregationId, scheduleId);
+          && validTerritoryScheduleUpdate(request.resource.data, scheduleId);
 
         allow delete: if canManageTerritorySchedule()
           && canAccessCongregationData(congregationId);
