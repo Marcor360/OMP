@@ -153,7 +153,7 @@ export function OrganizationChart() {
   }
 
   if (orgChart.error) {
-    return <ErrorState message="No se pudo cargar el organigrama." onRetry={refreshAll} />;
+    return <ErrorState message={`No se pudo cargar el organigrama. ${orgChart.error}`} onRetry={refreshAll} />;
   }
 
   const hasAssignments = orgChart.assignments.some((assignment) => assignment.isActive);

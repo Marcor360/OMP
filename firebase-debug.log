@@ -1,0 +1,306 @@
+[debug] [2026-05-26T05:29:53.817Z] ----------------------------------------------------------------------
+[debug] [2026-05-26T05:29:53.819Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules
+[debug] [2026-05-26T05:29:53.820Z] CLI Version:   15.14.0
+[debug] [2026-05-26T05:29:53.820Z] Platform:      win32
+[debug] [2026-05-26T05:29:53.820Z] Node Version:  v24.14.0
+[debug] [2026-05-26T05:29:53.820Z] Time:          Mon May 25 2026 23:29:53 GMT-0600 (hora estándar central)
+[debug] [2026-05-26T05:29:53.820Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-26T05:29:55.012Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-26T05:29:55.012Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[debug] [2026-05-26T05:29:55.012Z] [iam] checking project ormeprassig-public for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-05-26T05:29:55.013Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:29:55.013Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:29:55.014Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions [none]
+[debug] [2026-05-26T05:29:55.014Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions  x-goog-user-project=ormeprassig-public
+[debug] [2026-05-26T05:29:55.014Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-05-26T05:29:55.346Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions 200
+[debug] [2026-05-26T05:29:55.346Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'ormeprassig-public'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-05-26T05:29:55.348Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:29:55.348Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:29:55.348Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) [none]
+[debug] [2026-05-26T05:29:55.672Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) 200
+[debug] [2026-05-26T05:29:55.672Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) {"name":"projects/ormeprassig-public/databases/(default)","uid":"63e53039-3f5a-4a56-a182-08aaeee87c68","createTime":"2026-03-18T17:03:41.355404Z","updateTime":"2026-03-18T17:03:41.355404Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-05-26T04:29:55.775509Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IIbbpMic1pQDMPCUx6v4qZMD"}
+[info] i  firestore: reading indexes from firestore.indexes.json... 
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-05-26T05:29:55.674Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:29:55.674Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:29:55.674Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [none]
+[debug] [2026-05-26T05:29:55.674Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [omitted]
+[debug] [2026-05-26T05:30:00.868Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test 503
+[debug] [2026-05-26T05:30:00.868Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test {"error":{"code":503,"message":"The service is currently unavailable.","status":"UNAVAILABLE"}}
+[error] 
+[error] Error: Request to https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test had HTTP Error: 503, The service is currently unavailable.
+[debug] [2026-05-26T05:30:01.014Z] Error Context: {
+  "body": {
+    "error": {
+      "code": 503,
+      "message": "The service is currently unavailable.",
+      "status": "UNAVAILABLE"
+    }
+  },
+  "response": {
+    "statusCode": 503
+  }
+}
+[debug] [2026-05-26T05:30:32.407Z] ----------------------------------------------------------------------
+[debug] [2026-05-26T05:30:32.409Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules
+[debug] [2026-05-26T05:30:32.409Z] CLI Version:   15.14.0
+[debug] [2026-05-26T05:30:32.409Z] Platform:      win32
+[debug] [2026-05-26T05:30:32.409Z] Node Version:  v24.14.0
+[debug] [2026-05-26T05:30:32.409Z] Time:          Mon May 25 2026 23:30:32 GMT-0600 (hora estándar central)
+[debug] [2026-05-26T05:30:32.409Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-26T05:30:33.529Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-26T05:30:33.529Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[debug] [2026-05-26T05:30:33.530Z] [iam] checking project ormeprassig-public for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-05-26T05:30:33.530Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:30:33.530Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:30:33.531Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions [none]
+[debug] [2026-05-26T05:30:33.531Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions  x-goog-user-project=ormeprassig-public
+[debug] [2026-05-26T05:30:33.531Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-05-26T05:30:33.819Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions 200
+[debug] [2026-05-26T05:30:33.819Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'ormeprassig-public'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-05-26T05:30:33.822Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:30:33.822Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:30:33.822Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) [none]
+[debug] [2026-05-26T05:30:34.165Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) 200
+[debug] [2026-05-26T05:30:34.165Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) {"name":"projects/ormeprassig-public/databases/(default)","uid":"63e53039-3f5a-4a56-a182-08aaeee87c68","createTime":"2026-03-18T17:03:41.355404Z","updateTime":"2026-03-18T17:03:41.355404Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-05-26T04:30:34.268866Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IPOS0tqc1pQDMPCUx6v4qZMD"}
+[info] i  firestore: reading indexes from firestore.indexes.json... 
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-05-26T05:30:34.166Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:30:34.166Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:30:34.166Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [none]
+[debug] [2026-05-26T05:30:34.166Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [omitted]
+[debug] [2026-05-26T05:30:39.313Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test 503
+[debug] [2026-05-26T05:30:39.313Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test {"error":{"code":503,"message":"The service is currently unavailable.","status":"UNAVAILABLE"}}
+[error] 
+[error] Error: Request to https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test had HTTP Error: 503, The service is currently unavailable.
+[debug] [2026-05-26T05:30:39.451Z] Error Context: {
+  "body": {
+    "error": {
+      "code": 503,
+      "message": "The service is currently unavailable.",
+      "status": "UNAVAILABLE"
+    }
+  },
+  "response": {
+    "statusCode": 503
+  }
+}
+[debug] [2026-05-26T05:31:10.820Z] ----------------------------------------------------------------------
+[debug] [2026-05-26T05:31:10.823Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules
+[debug] [2026-05-26T05:31:10.823Z] CLI Version:   15.14.0
+[debug] [2026-05-26T05:31:10.823Z] Platform:      win32
+[debug] [2026-05-26T05:31:10.823Z] Node Version:  v24.14.0
+[debug] [2026-05-26T05:31:10.823Z] Time:          Mon May 25 2026 23:31:10 GMT-0600 (hora estándar central)
+[debug] [2026-05-26T05:31:10.823Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-26T05:31:11.950Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-26T05:31:11.950Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[debug] [2026-05-26T05:31:11.950Z] [iam] checking project ormeprassig-public for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-05-26T05:31:11.951Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:11.951Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:11.952Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions [none]
+[debug] [2026-05-26T05:31:11.952Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions  x-goog-user-project=ormeprassig-public
+[debug] [2026-05-26T05:31:11.952Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-05-26T05:31:12.231Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions 200
+[debug] [2026-05-26T05:31:12.231Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'ormeprassig-public'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-05-26T05:31:12.233Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:12.233Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:12.233Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) [none]
+[debug] [2026-05-26T05:31:12.542Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) 200
+[debug] [2026-05-26T05:31:12.542Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) {"name":"projects/ormeprassig-public/databases/(default)","uid":"63e53039-3f5a-4a56-a182-08aaeee87c68","createTime":"2026-03-18T17:03:41.355404Z","updateTime":"2026-03-18T17:03:41.355404Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-05-26T04:31:12.657448Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IK2a+eyc1pQDMPCUx6v4qZMD"}
+[info] i  firestore: reading indexes from firestore.indexes.json... 
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-05-26T05:31:12.543Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:12.543Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:12.544Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [none]
+[debug] [2026-05-26T05:31:12.544Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [omitted]
+[debug] [2026-05-26T05:31:17.723Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test 503
+[debug] [2026-05-26T05:31:17.723Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test {"error":{"code":503,"message":"The service is currently unavailable.","status":"UNAVAILABLE"}}
+[error] 
+[error] Error: Request to https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test had HTTP Error: 503, The service is currently unavailable.
+[debug] [2026-05-26T05:31:17.819Z] Error Context: {
+  "body": {
+    "error": {
+      "code": 503,
+      "message": "The service is currently unavailable.",
+      "status": "UNAVAILABLE"
+    }
+  },
+  "response": {
+    "statusCode": 503
+  }
+}
+[debug] [2026-05-26T05:31:49.206Z] ----------------------------------------------------------------------
+[debug] [2026-05-26T05:31:49.208Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules
+[debug] [2026-05-26T05:31:49.208Z] CLI Version:   15.14.0
+[debug] [2026-05-26T05:31:49.208Z] Platform:      win32
+[debug] [2026-05-26T05:31:49.208Z] Node Version:  v24.14.0
+[debug] [2026-05-26T05:31:49.208Z] Time:          Mon May 25 2026 23:31:49 GMT-0600 (hora estándar central)
+[debug] [2026-05-26T05:31:49.208Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-26T05:31:50.319Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-26T05:31:50.319Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[debug] [2026-05-26T05:31:50.319Z] [iam] checking project ormeprassig-public for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-05-26T05:31:50.320Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:50.320Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:50.321Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions [none]
+[debug] [2026-05-26T05:31:50.321Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions  x-goog-user-project=ormeprassig-public
+[debug] [2026-05-26T05:31:50.321Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-05-26T05:31:50.611Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions 200
+[debug] [2026-05-26T05:31:50.611Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'ormeprassig-public'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-05-26T05:31:50.613Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:50.613Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:50.613Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) [none]
+[debug] [2026-05-26T05:31:50.909Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) 200
+[debug] [2026-05-26T05:31:50.909Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) {"name":"projects/ormeprassig-public/databases/(default)","uid":"63e53039-3f5a-4a56-a182-08aaeee87c68","createTime":"2026-03-18T17:03:41.355404Z","updateTime":"2026-03-18T17:03:41.355404Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-05-26T04:31:51.020952Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IKrdnv+c1pQDMPCUx6v4qZMD"}
+[info] i  firestore: reading indexes from firestore.indexes.json... 
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-05-26T05:31:50.910Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:50.910Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:31:50.910Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [none]
+[debug] [2026-05-26T05:31:50.910Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [omitted]
+[debug] [2026-05-26T05:31:56.075Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test 503
+[debug] [2026-05-26T05:31:56.075Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test {"error":{"code":503,"message":"The service is currently unavailable.","status":"UNAVAILABLE"}}
+[error] 
+[error] Error: Request to https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test had HTTP Error: 503, The service is currently unavailable.
+[debug] [2026-05-26T05:31:56.217Z] Error Context: {
+  "body": {
+    "error": {
+      "code": 503,
+      "message": "The service is currently unavailable.",
+      "status": "UNAVAILABLE"
+    }
+  },
+  "response": {
+    "statusCode": 503
+  }
+}
+[debug] [2026-05-26T05:32:27.604Z] ----------------------------------------------------------------------
+[debug] [2026-05-26T05:32:27.606Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules
+[debug] [2026-05-26T05:32:27.606Z] CLI Version:   15.14.0
+[debug] [2026-05-26T05:32:27.606Z] Platform:      win32
+[debug] [2026-05-26T05:32:27.606Z] Node Version:  v24.14.0
+[debug] [2026-05-26T05:32:27.606Z] Time:          Mon May 25 2026 23:32:27 GMT-0600 (hora estándar central)
+[debug] [2026-05-26T05:32:27.606Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-26T05:32:28.725Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-26T05:32:28.725Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[debug] [2026-05-26T05:32:28.725Z] [iam] checking project ormeprassig-public for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-05-26T05:32:28.726Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:32:28.726Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:32:28.727Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions [none]
+[debug] [2026-05-26T05:32:28.727Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions  x-goog-user-project=ormeprassig-public
+[debug] [2026-05-26T05:32:28.727Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-05-26T05:32:28.862Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions 200
+[debug] [2026-05-26T05:32:28.862Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'ormeprassig-public'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-05-26T05:32:28.865Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:32:28.865Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:32:28.865Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) [none]
+[debug] [2026-05-26T05:32:29.192Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) 200
+[debug] [2026-05-26T05:32:29.192Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) {"name":"projects/ormeprassig-public/databases/(default)","uid":"63e53039-3f5a-4a56-a182-08aaeee87c68","createTime":"2026-03-18T17:03:41.355404Z","updateTime":"2026-03-18T17:03:41.355404Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-05-26T04:32:29.305337Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IKa2v5Gd1pQDMPCUx6v4qZMD"}
+[info] i  firestore: reading indexes from firestore.indexes.json... 
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-05-26T05:32:29.193Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:32:29.193Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:32:29.193Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [none]
+[debug] [2026-05-26T05:32:29.193Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [omitted]
+[debug] [2026-05-26T05:32:34.343Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test 503
+[debug] [2026-05-26T05:32:34.343Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test {"error":{"code":503,"message":"The service is currently unavailable.","status":"UNAVAILABLE"}}
+[error] 
+[error] Error: Request to https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test had HTTP Error: 503, The service is currently unavailable.
+[debug] [2026-05-26T05:32:34.440Z] Error Context: {
+  "body": {
+    "error": {
+      "code": 503,
+      "message": "The service is currently unavailable.",
+      "status": "UNAVAILABLE"
+    }
+  },
+  "response": {
+    "statusCode": 503
+  }
+}
+[debug] [2026-05-26T05:33:23.656Z] ----------------------------------------------------------------------
+[debug] [2026-05-26T05:33:23.658Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Marco Rulfo\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules
+[debug] [2026-05-26T05:33:23.658Z] CLI Version:   15.14.0
+[debug] [2026-05-26T05:33:23.658Z] Platform:      win32
+[debug] [2026-05-26T05:33:23.658Z] Node Version:  v24.14.0
+[debug] [2026-05-26T05:33:23.659Z] Time:          Mon May 25 2026 23:33:23 GMT-0600 (hora estándar central)
+[debug] [2026-05-26T05:33:23.659Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-26T05:33:24.804Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-26T05:33:24.804Z] > authorizing via signed-in user (marcorulfo100@gmail.com)
+[debug] [2026-05-26T05:33:24.805Z] [iam] checking project ormeprassig-public for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-05-26T05:33:24.805Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:33:24.805Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:33:24.806Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions [none]
+[debug] [2026-05-26T05:33:24.806Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions  x-goog-user-project=ormeprassig-public
+[debug] [2026-05-26T05:33:24.806Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-05-26T05:33:25.096Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions 200
+[debug] [2026-05-26T05:33:25.096Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ormeprassig-public:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'ormeprassig-public'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-05-26T05:33:25.099Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:33:25.099Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:33:25.099Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) [none]
+[debug] [2026-05-26T05:33:25.390Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) 200
+[debug] [2026-05-26T05:33:25.390Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/ormeprassig-public/databases/(default) {"name":"projects/ormeprassig-public/databases/(default)","uid":"63e53039-3f5a-4a56-a182-08aaeee87c68","createTime":"2026-03-18T17:03:41.355404Z","updateTime":"2026-03-18T17:03:41.355404Z","locationId":"nam5","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-05-26T04:33:25.500275Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"s","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IMmlpayd1pQDMPCUx6v4qZMD"}
+[info] i  firestore: reading indexes from firestore.indexes.json... 
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-05-26T05:33:25.394Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:33:25.394Z] Checked if tokens are valid: true, expires at: 1779776609015
+[debug] [2026-05-26T05:33:25.394Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [none]
+[debug] [2026-05-26T05:33:25.394Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test [omitted]
+[debug] [2026-05-26T05:33:30.560Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test 503
+[debug] [2026-05-26T05:33:30.560Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test {"error":{"code":503,"message":"The service is currently unavailable.","status":"UNAVAILABLE"}}
+[error] 
+[error] Error: Request to https://firebaserules.googleapis.com/v1/projects/ormeprassig-public:test had HTTP Error: 503, The service is currently unavailable.
+[debug] [2026-05-26T05:33:30.658Z] Error Context: {
+  "body": {
+    "error": {
+      "code": 503,
+      "message": "The service is currently unavailable.",
+      "status": "UNAVAILABLE"
+    }
+  },
+  "response": {
+    "statusCode": 503
+  }
+}
