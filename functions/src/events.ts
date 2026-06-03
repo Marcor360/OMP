@@ -429,30 +429,9 @@ const createNotificationDocs = async (params: {
   const eventNotificationId = `event_${params.eventId}_${Date.now()}`;
   const batch = adminDb.batch();
 
-  batch.set(
-    adminDb
-      .collection('congregations')
-      .doc(params.congregationId)
-      .collection(NOTIFICATIONS_COLLECTION)
-      .doc(eventNotificationId),
-    {
-      notificationId: eventNotificationId,
-      congregationId: params.congregationId,
-      userIds: params.userIds,
-      title: params.title,
-      body: params.body,
-      type: 'event',
-      eventId: params.eventId,
-      eventType: params.eventType,
-      data: {
-        url: params.url,
-      },
-      createdAt: FieldValue.serverTimestamp(),
-    }
-  );
-
   params.userIds.forEach((userId) => {
-    batch.set(adminDb.collection(NOTIFICATIONS_COLLECTION).doc(`${eventNotificationId}_${userId}`), {
+    const notificationId = `${eventNotificationId}_${userId}`;
+    const payload = {
       userId,
       congregationId: params.congregationId,
       type: 'event',
@@ -466,7 +445,20 @@ const createNotificationDocs = async (params: {
       data: {
         url: params.url,
       },
-    });
+    };
+
+    batch.set(
+      adminDb
+        .collection('congregations')
+        .doc(params.congregationId)
+        .collection(NOTIFICATIONS_COLLECTION)
+        .doc(notificationId),
+      {
+        ...payload,
+        notificationId,
+        userIds: [userId],
+      }
+    );
   });
 
   await batch.commit();

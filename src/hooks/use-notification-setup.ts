@@ -55,6 +55,7 @@ export function useNotificationSetup({
     void tryRegisterPushToken();
     unsubscribeUnread = subscribeToUnreadNotificationsCount(
       uid,
+      congregationId,
       (unreadCount) => {
         void syncNativeUnreadNotifications(unreadCount);
       },

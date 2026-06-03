@@ -11,8 +11,8 @@ import {
 } from 'firebase/firestore';
 
 import {
-  notificationDocRef,
-  notificationsCollectionRef,
+  congregationNotificationDocRef,
+  congregationNotificationsCollectionRef,
 } from '@/src/lib/firebase/refs';
 import { AppNotification } from '@/src/features/notifications/types/notification.types';
 
@@ -144,14 +144,19 @@ const normalizeNotification = (
 };
 
 export const getUserNotifications = async (
-  uid: string
+  uid: string,
+  congregationId?: string | null
 ): Promise<AppNotification[]> => {
   if (!uid || uid.trim().length === 0) {
     return [];
   }
 
+  if (!congregationId || congregationId.trim().length === 0) {
+    return [];
+  }
+
   const q = query(
-    notificationsCollectionRef(),
+    congregationNotificationsCollectionRef(congregationId),
     where('userId', '==', uid),
     orderBy('createdAt', 'desc'),
     limit(PAGE_LIMIT)
@@ -167,6 +172,7 @@ export const getUserNotifications = async (
 
 export const subscribeToUserNotifications = (
   uid: string,
+  congregationId: string | null | undefined,
   callback: (notifications: AppNotification[]) => void,
   onError?: (error: unknown) => void
 ): Unsubscribe => {
@@ -175,8 +181,13 @@ export const subscribeToUserNotifications = (
     return () => {};
   }
 
+  if (!congregationId || congregationId.trim().length === 0) {
+    callback([]);
+    return () => {};
+  }
+
   const q = query(
-    notificationsCollectionRef(),
+    congregationNotificationsCollectionRef(congregationId),
     where('userId', '==', uid),
     orderBy('createdAt', 'desc'),
     limit(PAGE_LIMIT)
@@ -198,6 +209,7 @@ export const subscribeToUserNotifications = (
 
 export const subscribeToUnreadNotificationsCount = (
   uid: string,
+  congregationId: string | null | undefined,
   callback: (count: number) => void,
   onError?: (error: unknown) => void
 ): Unsubscribe => {
@@ -206,8 +218,13 @@ export const subscribeToUnreadNotificationsCount = (
     return () => {};
   }
 
+  if (!congregationId || congregationId.trim().length === 0) {
+    callback(0);
+    return () => {};
+  }
+
   const q = query(
-    notificationsCollectionRef(),
+    congregationNotificationsCollectionRef(congregationId),
     where('userId', '==', uid),
     where('isRead', '==', false),
     limit(PAGE_LIMIT)
@@ -228,26 +245,36 @@ export const subscribeToUnreadNotificationsCount = (
 };
 
 export const markNotificationAsRead = async (
-  notificationId: string
+  notificationId: string,
+  congregationId?: string | null
 ): Promise<void> => {
   if (!notificationId || notificationId.trim().length === 0) {
     return;
   }
 
-  await updateDoc(notificationDocRef(notificationId), {
+  if (!congregationId || congregationId.trim().length === 0) {
+    return;
+  }
+
+  await updateDoc(congregationNotificationDocRef(congregationId, notificationId), {
     isRead: true,
   });
 };
 
 export const markAllNotificationsAsRead = async (
-  uid: string
+  uid: string,
+  congregationId?: string | null
 ): Promise<void> => {
   if (!uid || uid.trim().length === 0) {
     return;
   }
 
+  if (!congregationId || congregationId.trim().length === 0) {
+    return;
+  }
+
   const unreadQuery = query(
-    notificationsCollectionRef(),
+    congregationNotificationsCollectionRef(congregationId),
     where('userId', '==', uid),
     where('isRead', '==', false),
     limit(PAGE_LIMIT)

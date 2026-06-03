@@ -9,6 +9,7 @@ const CLEANUP_SCHEDULE = "0 1 1 * *";
 const CLEANUP_TIME_ZONE = "America/Mexico_City";
 const RETENTION_MONTHS = 6;
 const QUERY_PAGE_SIZE = 400;
+const LEGACY_MIGRATION_PAGE_SIZE = 300;
 
 type NotificationCleanupSummary = {
   startedAt: string;
@@ -131,5 +132,103 @@ export const scheduledNotificationsCleanup = onSchedule(
     };
 
     logger.info("[scheduledNotificationsCleanup] Ejecucion finalizada", summary);
+  }
+);
+
+const migrateLegacyRootNotificationsPage = async (): Promise<{
+  scanned: number;
+  migrated: number;
+  skipped: number;
+}> => {
+  const snapshot = await adminDb
+    .collection(NOTIFICATIONS_COLLECTION_ID)
+    .limit(LEGACY_MIGRATION_PAGE_SIZE)
+    .get();
+
+  if (snapshot.empty) {
+    return { scanned: 0, migrated: 0, skipped: 0 };
+  }
+
+  const batch = adminDb.batch();
+  let migrated = 0;
+  let skipped = 0;
+
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data() as Record<string, unknown>;
+    const congregationId =
+      typeof data.congregationId === "string" ? data.congregationId.trim() : "";
+    const userId = typeof data.userId === "string" ? data.userId.trim() : "";
+
+    if (!congregationId || !userId) {
+      batch.delete(docSnap.ref);
+      skipped += 1;
+      return;
+    }
+
+    const scopedRef = adminDb
+      .collection("congregations")
+      .doc(congregationId)
+      .collection(NOTIFICATIONS_COLLECTION_ID)
+      .doc(docSnap.id);
+
+    batch.set(
+      scopedRef,
+      {
+        ...data,
+        notificationId:
+          typeof data.notificationId === "string" && data.notificationId.trim().length > 0
+            ? data.notificationId
+            : docSnap.id,
+        congregationId,
+        userId,
+        userIds: [userId],
+      },
+      { merge: true }
+    );
+    batch.delete(docSnap.ref);
+    migrated += 1;
+  });
+
+  if (migrated > 0 || skipped > 0) {
+    await batch.commit();
+  }
+
+  return {
+    scanned: snapshot.size,
+    migrated,
+    skipped,
+  };
+};
+
+export const scheduledLegacyRootNotificationsMigration = onSchedule(
+  {
+    schedule: "every 24 hours",
+    timeZone: CLEANUP_TIME_ZONE,
+    region: "us-central1",
+    timeoutSeconds: 540,
+    memory: "512MiB",
+    maxInstances: 1,
+  },
+  async () => {
+    let scanned = 0;
+    let migrated = 0;
+    let skipped = 0;
+
+    while (true) {
+      const page = await migrateLegacyRootNotificationsPage();
+      scanned += page.scanned;
+      migrated += page.migrated;
+      skipped += page.skipped;
+
+      if (page.scanned === 0 || page.migrated === 0) {
+        break;
+      }
+    }
+
+    logger.info("[scheduledLegacyRootNotificationsMigration] Finalizada", {
+      scanned,
+      migrated,
+      skipped,
+    });
   }
 );

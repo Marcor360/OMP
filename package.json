@@ -11,7 +11,8 @@
     "web": "expo start --web",
     "build:web": "expo export --platform web",
     "preview:web": "npx serve dist",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "validate": "npm run lint && tsc --noEmit && npm --prefix functions run lint && npm --prefix functions run build && npm --prefix functions test -- --runInBand"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

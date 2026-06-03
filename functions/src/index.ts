@@ -58,8 +58,14 @@ export {
 } from "./maintenance/scheduled-data-cleanup.js";
 
 export {
+  scheduledLegacyRootNotificationsMigration,
   scheduledNotificationsCleanup,
 } from "./maintenance/scheduled-notifications-cleanup.js";
+
+export {
+  refreshDashboardSummaryForCurrentCongregation,
+  scheduledDashboardSummaryRefresh,
+} from "./dashboard-summary.js";
 
 export {
   scheduledMonthlyTerritoryAssignmentsCleanup,

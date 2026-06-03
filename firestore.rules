@@ -1991,7 +1991,7 @@ service cloud.firestore {
       // por lo que la restricciÃ³n real se aplica en la app (siempre filtra por congregationId).
       // myCongregationId() != null garantiza que el solicitante tiene perfil activo con congregaciÃ³n.
       allow list: if isSuperAdmin() 
-        || (canListCongregationUsers() && myCongregationId() != null);
+        || (canListCongregationUsers() && storedDocInMyCongregation());
 
       allow create: if isSuperAdmin() || (canCreateUsers()
         && validUserCreate(userId)
@@ -2296,12 +2296,29 @@ service cloud.firestore {
           && (
             !('userId' in resource.data)
             || resource.data.userId == currentUid()
+            || (
+              'userIds' in resource.data
+              && resource.data.userIds is list
+              && currentUid() in resource.data.userIds
+            )
             || isAdminOrSupervisor()
             || isGlobalScreenAccess()
           );
 
         allow list: if canAccessCongregationData(congregationId)
-          && (isAdminOrSupervisor() || isGlobalScreenAccess());
+          && (
+            (
+              'userId' in resource.data
+              && resource.data.userId == currentUid()
+            )
+            || (
+              'userIds' in resource.data
+              && resource.data.userIds is list
+              && currentUid() in resource.data.userIds
+            )
+            || isAdminOrSupervisor()
+            || isGlobalScreenAccess()
+          );
 
         allow create: if (isAdmin() || isGlobalScreenAccess() || hasPermission('avisos', 'create') || hasPermission('avisos', 'manage'))
           && canAccessCongregationData(congregationId)
@@ -2319,7 +2336,10 @@ service cloud.firestore {
             && request.resource.data.title == resource.data.title
             && request.resource.data.body == resource.data.body
             && request.resource.data.type == resource.data.type
-            && request.resource.data.relatedId == resource.data.relatedId
+            && (
+              !('relatedId' in resource.data)
+              || request.resource.data.relatedId == resource.data.relatedId
+            )
             && sameKeysOnUpdate(['isRead', 'readAt'])
             && request.resource.data.isRead is bool
             && (!('readAt' in request.resource.data) || request.resource.data.readAt is string)
@@ -2406,20 +2426,7 @@ service cloud.firestore {
     // =========================================================================
 
     match /notifications/{notificationId} {
-      allow read: if isSuperAdmin() || (isAuthenticated()
-        && (
-          !('userId' in resource.data)
-          || resource.data.userId == currentUid()
-          || isAdminOrSupervisor()
-        ));
-
-      allow create: if isSuperAdmin() || isAdminOrSupervisor();
-
-      allow update: if isSuperAdmin() || (isAuthenticated()
-        && resource.data.userId == currentUid()
-        && sameKeysOnUpdate(['isRead', 'readAt']));
-
-      allow delete: if isSuperAdmin() || isAdmin();
+      allow read, write: if isSuperAdmin();
     }
   }
 }

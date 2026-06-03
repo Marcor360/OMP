@@ -41,6 +41,11 @@ export const assignmentDocRef = (
 export const congregationNotificationsCollectionRef = (congregationId: string) =>
   collection(db, 'congregations', congregationId, 'notifications');
 
+export const congregationNotificationDocRef = (
+  congregationId: string,
+  notificationId: string
+) => doc(db, 'congregations', congregationId, 'notifications', notificationId);
+
 export const outgoingTalksCollectionRef = (congregationId: string) =>
   collection(db, 'congregations', congregationId, 'outgoingTalks');
 

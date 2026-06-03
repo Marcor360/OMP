@@ -1,9 +1,9 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import { serverTimestamp, setDoc } from 'firebase/firestore';
+import { arrayUnion, serverTimestamp, setDoc } from 'firebase/firestore';
 
-import { userPushTokenDocRef } from '@/src/lib/firebase/refs';
+import { userDocRef, userPushTokenDocRef } from '@/src/lib/firebase/refs';
 import { PermissionStatus } from '@/src/types/permissions.types';
 import {
   canUseRemotePushNotifications,
@@ -242,6 +242,17 @@ export const registerExpoPushTokenForUser = async (params: {
         platform: Platform.OS,
         deviceName: Device.deviceName ?? Device.modelName ?? null,
         isActive: true,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    await setDoc(
+      userDocRef(userId),
+      {
+        uid: userId,
+        notificationTokens: arrayUnion(token),
+        pushTokenUpdatedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       },
       { merge: true }

@@ -136,7 +136,7 @@ const toVisibleMeetingsRange = (baseDate = new Date()): { start: Date; end: Date
   start.setHours(0, 0, 0, 0);
 
   const end = new Date(start);
-  end.setMonth(end.getMonth() + 18);
+  end.setDate(end.getDate() + 56);
   end.setHours(23, 59, 59, 999);
 
   return { start, end };
@@ -233,8 +233,6 @@ export const getDashboardData = async (params: {
   forceServer?: boolean;
 }): Promise<DashboardData> => {
   const { congregationId, uid, isAdmin, canManageAssignments, forceServer } = params;
-  // TODO(firebase): Mantener dashboardSummary/{congregationId} actualizado desde Cloud Functions
-  // o un proceso admin para evitar que el fallback semanal sea la fuente principal.
   let summary: DashboardSummary | null = null;
 
   try {
@@ -299,7 +297,7 @@ export const getDashboardData = async (params: {
     getMeetingsByWeek(congregationId, start, end, {
       includeMidweek: true,
       publicationStatus: 'published',
-      maxItems: 120,
+      maxItems: 40,
       forceServer,
     }),
     getPanelAssignments({

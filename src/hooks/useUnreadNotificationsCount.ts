@@ -4,7 +4,7 @@ import { useUser } from '@/src/context/user-context';
 import { subscribeToUnreadNotificationsCount } from '@/src/services/notifications/notificationService';
 
 export const useUnreadNotificationsCount = () => {
-  const { uid } = useUser();
+  const { uid, congregationId } = useUser();
 
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -20,6 +20,7 @@ export const useUnreadNotificationsCount = () => {
 
     const unsubscribe = subscribeToUnreadNotificationsCount(
       uid,
+      congregationId,
       (nextCount) => {
         setCount(nextCount);
         setLoading(false);
@@ -31,7 +32,7 @@ export const useUnreadNotificationsCount = () => {
     );
 
     return unsubscribe;
-  }, [uid]);
+  }, [congregationId, uid]);
 
   return {
     unreadCount: count,

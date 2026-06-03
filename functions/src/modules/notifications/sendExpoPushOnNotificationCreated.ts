@@ -84,6 +84,21 @@ const deactivateTokenDoc = async (
     );
 };
 
+const removeProfileToken = async (
+  userId: string,
+  token: string
+): Promise<void> => {
+  await adminDb.collection('users').doc(userId).set(
+    {
+      notificationTokens: FieldValue.arrayRemove(token),
+      expoPushTokens: FieldValue.arrayRemove(token),
+      pushTokens: FieldValue.arrayRemove(token),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+};
+
 export const sendExpoPushOnNotificationCreated = onDocumentCreated(
   {
     ...triggerOptions,
@@ -99,7 +114,13 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
     }
 
     const data = snapshot.data() as Record<string, unknown>;
-    const userIds = Array.from(new Set(asStringArray(data.userIds)));
+    const singleUserId = asNonEmptyString(data.userId);
+    const userIds = Array.from(
+      new Set([
+        ...asStringArray(data.userIds),
+        ...(singleUserId ? [singleUserId] : []),
+      ])
+    );
     const title = asNonEmptyString(data.title);
     const body = asNonEmptyString(data.body);
     const type = asNonEmptyString(data.type) ?? 'notification';
@@ -212,6 +233,9 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
                   tokenDoc.tokenDocId,
                   tokenValue
                 );
+              }
+              if (tokenDoc?.userId) {
+                await removeProfileToken(tokenDoc.userId, tokenValue);
               }
               return;
             }

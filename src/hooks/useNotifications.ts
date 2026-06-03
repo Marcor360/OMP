@@ -9,7 +9,7 @@ import { subscribeToUserNotifications } from '@/src/services/notifications/notif
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
 export const useNotifications = () => {
-  const { uid } = useUser();
+  const { uid, congregationId } = useUser();
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +28,7 @@ export const useNotifications = () => {
 
     const unsubscribe = subscribeToUserNotifications(
       uid,
+      congregationId,
       (items) => {
         setNotifications(items);
         setError(null);
@@ -40,7 +41,7 @@ export const useNotifications = () => {
     );
 
     return unsubscribe;
-  }, [uid]);
+  }, [congregationId, uid]);
 
   const refresh = useCallback(async () => {
     if (!uid) {
@@ -51,7 +52,7 @@ export const useNotifications = () => {
     setRefreshing(true);
 
     try {
-      const data = await getUserNotifications(uid);
+      const data = await getUserNotifications(uid, congregationId);
       setNotifications(data);
       setError(null);
     } catch (requestError) {
@@ -59,16 +60,16 @@ export const useNotifications = () => {
     } finally {
       setRefreshing(false);
     }
-  }, [uid]);
+  }, [congregationId, uid]);
 
   const markRead = useCallback(async (notificationId: string) => {
-    await markNotificationAsRead(notificationId);
-  }, []);
+    await markNotificationAsRead(notificationId, congregationId);
+  }, [congregationId]);
 
   const markAllRead = useCallback(async () => {
     if (!uid) return;
-    await markAllNotificationsAsRead(uid);
-  }, [uid]);
+    await markAllNotificationsAsRead(uid, congregationId);
+  }, [congregationId, uid]);
 
   return {
     notifications,

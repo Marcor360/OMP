@@ -189,33 +189,26 @@ export const createInternalNotification = async (params: {
     metadata: params.metadata,
   };
 
-  const batch = adminDb.batch();
-
-  batch.set(adminDb.collection(NOTIFICATIONS_COLLECTION).doc(params.notificationId), payload);
-
-  if (params.congregationId) {
-    batch.set(
-      adminDb
-        .collection(CONGREGATIONS_COLLECTION)
-        .doc(params.congregationId)
-        .collection(NOTIFICATIONS_COLLECTION)
-        .doc(params.notificationId),
-      {
-        notificationId: params.notificationId,
-        congregationId: params.congregationId,
-        userIds: [params.userId],
-        title: params.title,
-        body: params.body,
-        type: 'assignment',
-        category: params.category,
-        assignmentId: params.assignmentId,
-        data: {
-          url: resolveNotificationUrl(params.assignmentId, params.metadata),
-        },
-        createdAt: FieldValue.serverTimestamp(),
-      }
-    );
+  if (!params.congregationId) {
+    return;
   }
+
+  const batch = adminDb.batch();
+  batch.set(
+    adminDb
+      .collection(CONGREGATIONS_COLLECTION)
+      .doc(params.congregationId)
+      .collection(NOTIFICATIONS_COLLECTION)
+      .doc(params.notificationId),
+    {
+      ...payload,
+      notificationId: params.notificationId,
+      userIds: [params.userId],
+      data: {
+        url: resolveNotificationUrl(params.assignmentId, params.metadata),
+      },
+    }
+  );
 
   await batch.commit();
 };
