@@ -3,7 +3,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FirstLoginWelcomeModal } from '@/src/components/common/FirstLoginWelcomeModal';
 import { MobileSideMenu } from '@/src/components/navigation/MobileSideMenu';
 import { useUser } from '@/src/context/user-context';
 import { useI18n } from '@/src/i18n/index';
@@ -11,7 +10,7 @@ import { useAppColors } from '@/src/styles';
 import { getVisibleTabs } from '@/src/utils/permissions/permissions';
 
 export default function TabsLayout() {
-  const { uid, appUser, isSessionValid, isElder } = useUser();
+  const { appUser, isElder } = useUser();
   const { t } = useI18n();
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
@@ -148,7 +147,6 @@ export default function TabsLayout() {
           />
         </Tabs>
       </View>
-      <FirstLoginWelcomeModal uid={uid} enabled={isSessionValid} />
     </View>
   );
 }

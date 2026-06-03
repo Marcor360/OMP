@@ -7,11 +7,10 @@ import {
 import {
   getDepartmentAssignments,
   getDepartments,
-  seedDefaultDepartments,
 } from '@/src/modules/organization/services/organizationService';
-import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { isPermissionDeniedError } from '@/src/utils/errors/errors';
 
-export const useDepartmentAssignments = (congregationId: string | null, canSeed = false) => {
+export const useDepartmentAssignments = (congregationId: string | null) => {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [assignments, setAssignments] = useState<DepartmentAssignment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,31 +21,31 @@ export const useDepartmentAssignments = (congregationId: string | null, canSeed 
       setDepartments([]);
       setAssignments([]);
       setLoading(false);
-      setError('No hay congregacion activa.');
+      setError('No se pudo identificar la congregacion del usuario.');
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
-      let loadedDepartments = await getDepartments(congregationId);
-
-      if (loadedDepartments.length === 0 && canSeed) {
-        await seedDefaultDepartments(congregationId);
-        loadedDepartments = await getDepartments(congregationId);
-      }
-
-      const loadedAssignments = await getDepartmentAssignments(congregationId);
+      const [loadedDepartments, loadedAssignments] = await Promise.all([
+        getDepartments(congregationId),
+        getDepartmentAssignments(congregationId),
+      ]);
       setDepartments(loadedDepartments);
       setAssignments(loadedAssignments);
     } catch (requestError) {
-      setError(formatFirestoreError(requestError));
+      setError(
+        isPermissionDeniedError(requestError)
+          ? 'No se pudo leer el organigrama. Verifica que tu usuario este activo y pertenezca a esta congregacion.'
+          : 'No se pudo cargar el organigrama.'
+      );
       setDepartments([]);
       setAssignments([]);
     } finally {
       setLoading(false);
     }
-  }, [canSeed, congregationId]);
+  }, [congregationId]);
 
   useEffect(() => {
     void refresh();

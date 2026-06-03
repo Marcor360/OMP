@@ -19,8 +19,11 @@ export const canManageOrganizationChart = (
 ): boolean =>
   Boolean(
     user?.isActive === true &&
+      typeof user.congregationId === 'string' &&
+      user.congregationId.trim().length > 0 &&
       (
         user.role === 'admin' ||
+        String(user.role) === 'administrador' ||
         user.servicePosition === 'coordinador' ||
         user.servicePosition === 'secretario' ||
         user.serviceAssignments?.some(

@@ -426,6 +426,17 @@ export const en = {
     noUpcomingMeetings: 'No scheduled meetings.',
     pendingAssignments: 'Pending assignments',
     noPendingAssignments: 'No pending assignments.',
+    welcomeNotice: {
+      title: 'Welcome to OMP Suite',
+      paragraph1: 'OMP Suite is a tool created to support the congregation internal organization in a simpler, clearer, and more orderly way.',
+      paragraph2: 'From this application you can consult the information available according to your account permissions, such as meetings, assignments, responsibilities, cleaning groups, preaching territories, notifications, and other modules that help maintain better coordination within the congregation.',
+      paragraph3: 'This project has been developed with much effort and dedication, with the goal of offering a useful tool for those who support different responsibilities. The goal of OMP Suite is to make information easier to consult, reduce disorder, improve internal communication, and make some organizational tasks more practical for everyone.',
+      paragraph4: 'It is also important to mention that OMP Suite is currently developed by one person. For that reason, some parts of the application may still have details to correct, features being improved, or small errors that will be polished over time.',
+      paragraph5: 'Thank you very much for your understanding, patience, and support. Work will continue steadily to improve the stability, design, security, and overall experience of the application, with the desire for OMP Suite to become increasingly useful for you.',
+      signature: 'With appreciation,\nMRC\nDeveloper of OMP Suite',
+      dismiss: 'Understood',
+      dismissAccessibilityLabel: 'Dismiss welcome message',
+    },
   },
   // Assignments
   assignments: {

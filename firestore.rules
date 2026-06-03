@@ -310,22 +310,14 @@ service cloud.firestore {
       return isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('delete');
     }
 
-    function canManageDepartments() {
-      return isActive()
+    function canManageDepartments(congregationId) {
+      return canAccessCongregationData(congregationId)
         && (
           isAdmin()
           || hasServicePosition('coordinador')
           || hasServicePosition('secretario')
-          || (
-            currentUserData().permissions is map
-            && currentUserData().permissions.departments is map
-            && currentUserData().permissions.departments.manage == true
-          )
-          || (
-            currentUserData().permissions is map
-            && currentUserData().permissions.organigrama is map
-            && currentUserData().permissions.organigrama.manage == true
-          )
+          || hasPermission('departments', 'manage')
+          || hasPermission('organigrama', 'manage')
         );
     }
 
@@ -1054,7 +1046,7 @@ service cloud.firestore {
     }
 
     function validOrganizationServiceAssignmentSync() {
-      return canManageDepartments()
+      return canManageDepartments(request.resource.data.congregationId)
         && storedDocInMyCongregation()
         && targetDocInMyCongregation()
         && request.resource.data.email == resource.data.email
@@ -2071,13 +2063,11 @@ service cloud.firestore {
       match /departments/{departmentId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canAccessCongregationData(congregationId)
-          && canManageDepartments()
+        allow create: if canManageDepartments(congregationId)
           && request.resource.data.congregationId == congregationId
           && validDepartmentCreate(request.resource.data);
 
-        allow update: if canAccessCongregationData(congregationId)
-          && canManageDepartments()
+        allow update: if canManageDepartments(congregationId)
           && resource.data.congregationId == congregationId
           && request.resource.data.congregationId == congregationId
           && validDepartmentUpdate(request.resource.data);
@@ -2088,13 +2078,11 @@ service cloud.firestore {
       match /departmentAssignments/{assignmentId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canAccessCongregationData(congregationId)
-          && canManageDepartments()
+        allow create: if canManageDepartments(congregationId)
           && request.resource.data.congregationId == congregationId
           && validDepartmentAssignmentCreate(request.resource.data);
 
-        allow update: if canAccessCongregationData(congregationId)
-          && canManageDepartments()
+        allow update: if canManageDepartments(congregationId)
           && resource.data.congregationId == congregationId
           && request.resource.data.congregationId == congregationId
           && validDepartmentAssignmentUpdate(request.resource.data);

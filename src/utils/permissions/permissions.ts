@@ -427,14 +427,17 @@ export const canViewOrgChart = (
 
 export const canManageDepartments = (
   user:
-    | Pick<AppUser, 'role' | 'isActive' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | Pick<AppUser, 'role' | 'isActive' | 'congregationId' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
     | null
     | undefined
 ): boolean =>
   Boolean(
     user?.isActive === true &&
+      typeof user.congregationId === 'string' &&
+      user.congregationId.trim().length > 0 &&
       (
         user.role === 'admin' ||
+        String(user.role) === 'administrador' ||
         hasServiceAssignment(user, 'coordinador') ||
         hasServiceAssignment(user, 'secretario') ||
         user.permissions?.departments?.manage === true ||

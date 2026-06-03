@@ -5,6 +5,9 @@ export const formatFirestoreError = (error: unknown): string => {
   return getFirebaseErrorMessage(error);
 };
 
+export const isPermissionDeniedError = (error: unknown): boolean =>
+  String((error as { code?: unknown })?.code ?? '') === 'permission-denied';
+
 /** Error generico para mostrar al usuario */
 export class AppError extends Error {
   constructor(

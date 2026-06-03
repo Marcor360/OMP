@@ -426,6 +426,17 @@ export const es = {
     noUpcomingMeetings: 'No hay reuniones programadas.',
     pendingAssignments: 'Asignaciones pendientes',
     noPendingAssignments: 'Sin asignaciones pendientes.',
+    welcomeNotice: {
+      title: 'Bienvenido a OMP Suite',
+      paragraph1: 'OMP Suite es una herramienta creada para apoyar la organización interna de la congregación de una manera más sencilla, clara y ordenada.',
+      paragraph2: 'Desde esta aplicación podrás consultar la información disponible según los permisos de tu cuenta, como reuniones, asignaciones, responsabilidades, grupos de limpieza, territorios de predicación, notificaciones y otros módulos que ayudan a mantener una mejor coordinación dentro de la congregación.',
+      paragraph3: 'Este proyecto ha sido desarrollado con mucho esfuerzo y dedicación, pensando en ofrecer una herramienta útil para quienes apoyan en diferentes responsabilidades. El objetivo de OMP Suite es facilitar la consulta de información, reducir el desorden, mejorar la comunicación interna y hacer que algunas tareas organizativas sean más prácticas para todos.',
+      paragraph4: 'También es importante mencionar que OMP Suite es desarrollado actualmente por una sola persona. Por esa razón, es posible que en algunas partes de la aplicación todavía existan detalles por corregir, funciones en mejora o pequeños errores que se irán puliendo con el tiempo.',
+      paragraph5: 'Agradezco mucho su comprensión, paciencia y apoyo. Se seguirá trabajando constantemente para mejorar la estabilidad, el diseño, la seguridad y la experiencia general de la aplicación, con el deseo de que OMP Suite sea cada vez más útil para ustedes.',
+      signature: 'Con aprecio,\nMRC\nDesarrollador de OMP Suite',
+      dismiss: 'Entendido',
+      dismissAccessibilityLabel: 'Cerrar mensaje de bienvenida',
+    },
   },
   // Assignments
   assignments: {

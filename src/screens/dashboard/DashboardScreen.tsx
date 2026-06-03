@@ -9,6 +9,7 @@ import { MeetingCard } from '@/src/components/cards/MeetingCard';
 import { StatCard } from '@/src/components/cards/StatCard';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
+import { OmpWelcomeNotice } from '@/src/components/common/OmpWelcomeNotice';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { NotificationsBadge } from '@/src/features/notifications/components/NotificationsBadge';
@@ -221,6 +222,8 @@ export function DashboardScreen() {
           <NotificationsBadge compact />
         </TouchableOpacity>
       </View>
+
+      <OmpWelcomeNotice />
 
       <View style={styles.statsRow}>
         <StatCard title={t('dashboard.assignments')} value={metrics.totalAssignments ?? 0} icon="checkmark-done-outline" color={colors.primary} />

@@ -20,6 +20,7 @@ import {
   createDepartmentAssignment,
   deactivateDepartmentAssignment,
   getActiveOrganizationUsers,
+  seedDefaultDepartments,
   updateDepartment,
   updateDepartmentAssignment,
 } from '@/src/modules/organization/services/organizationService';
@@ -34,7 +35,7 @@ import {
 } from '@/src/modules/organization/utils/organizationPermissions';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import type { AppUser } from '@/src/types/user';
-import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { formatFirestoreError, isPermissionDeniedError } from '@/src/utils/errors/errors';
 
 export function OrganizationChart() {
   const colors = useAppColors();
@@ -44,7 +45,7 @@ export function OrganizationChart() {
   const layout = useResponsiveOrganizationLayout();
   const canView = canViewOrganizationChart(appUser);
   const canManage = canManageOrganizationChart(appUser);
-  const orgChart = useOrganizationChart(congregationId, canManage);
+  const orgChart = useOrganizationChart(canView ? congregationId : null);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -101,7 +102,12 @@ export function OrganizationChart() {
       setEditingAssignment(null);
       await refreshAll();
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      Alert.alert(
+        'Error',
+        isPermissionDeniedError(requestError)
+          ? 'No tienes permisos para modificar el organigrama.'
+          : formatFirestoreError(requestError)
+      );
     } finally {
       setSaving(false);
     }
@@ -116,7 +122,12 @@ export function OrganizationChart() {
       setEditingAssignment(null);
       await refreshAll();
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      Alert.alert(
+        'Error',
+        isPermissionDeniedError(requestError)
+          ? 'No tienes permisos para modificar el organigrama.'
+          : formatFirestoreError(requestError)
+      );
     } finally {
       setSaving(false);
     }
@@ -138,7 +149,40 @@ export function OrganizationChart() {
       setEditingDepartment(null);
       await orgChart.refresh();
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      Alert.alert(
+        'Error',
+        isPermissionDeniedError(requestError)
+          ? 'No tienes permisos para modificar el organigrama.'
+          : formatFirestoreError(requestError)
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSeedDefaultDepartments = async () => {
+    if (!congregationId) {
+      Alert.alert('Error', 'No se pudo identificar la congregacion del usuario.');
+      return;
+    }
+
+    if (!canManage) {
+      Alert.alert('Error', 'No tienes permisos para crear departamentos del organigrama.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await seedDefaultDepartments(congregationId);
+      showToast('Departamentos base creados con exito');
+      await orgChart.refresh();
+    } catch (requestError) {
+      Alert.alert(
+        'Error',
+        isPermissionDeniedError(requestError)
+          ? 'No tienes permisos para crear departamentos del organigrama.'
+          : 'No se pudieron crear los departamentos base.'
+      );
     } finally {
       setSaving(false);
     }
@@ -153,10 +197,12 @@ export function OrganizationChart() {
   }
 
   if (orgChart.error) {
-    return <ErrorState message={`No se pudo cargar el organigrama. ${orgChart.error}`} onRetry={refreshAll} />;
+    return <ErrorState message={orgChart.error} onRetry={refreshAll} />;
   }
 
+  const hasDepartments = orgChart.departments.some((department) => department.isActive);
   const hasAssignments = orgChart.assignments.some((assignment) => assignment.isActive);
+  const isEmpty = !hasDepartments && !hasAssignments;
 
   return (
     <ScreenContainer scrollable={layout.isMobile} padded={false}>
@@ -176,16 +222,18 @@ export function OrganizationChart() {
               >
                 <Ionicons name="business-outline" size={18} color={colors.primary} />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.primaryHeaderButton}
-                onPress={() => openAssignmentModal()}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="add-outline" size={18} color={colors.onPrimary} />
-                <ThemedText style={styles.primaryHeaderButtonText}>
-                  {hasAssignments ? 'Editar organigrama' : 'Crear organigrama'}
-                </ThemedText>
-              </TouchableOpacity>
+              {hasDepartments ? (
+                <TouchableOpacity
+                  style={styles.primaryHeaderButton}
+                  onPress={() => openAssignmentModal()}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="add-outline" size={18} color={colors.onPrimary} />
+                  <ThemedText style={styles.primaryHeaderButtonText}>
+                    {hasAssignments ? 'Editar organigrama' : 'Crear organigrama'}
+                  </ThemedText>
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : null
         }
@@ -199,7 +247,21 @@ export function OrganizationChart() {
           </View>
         ))}
 
-        {!hasAssignments ? (
+        {isEmpty ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="git-network-outline" size={34} color={colors.textMuted} />
+            <ThemedText style={styles.emptyTitle}>Aun no hay organigrama configurado para esta congregacion.</ThemedText>
+            {canManage ? (
+              <TouchableOpacity
+                style={[styles.emptyButton, saving && styles.disabledButton]}
+                onPress={handleSeedDefaultDepartments}
+                disabled={saving}
+              >
+                <ThemedText style={styles.emptyButtonText}>Crear departamentos base</ThemedText>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : !hasAssignments ? (
           <View style={styles.emptyState}>
             <Ionicons name="git-network-outline" size={34} color={colors.textMuted} />
             <ThemedText style={styles.emptyTitle}>Aun no hay asignaciones en el organigrama congregacional.</ThemedText>
@@ -327,5 +389,8 @@ const createStyles = (colors: AppColorSet) =>
     emptyButtonText: {
       color: colors.onPrimary,
       fontWeight: '900',
+    },
+    disabledButton: {
+      opacity: 0.65,
     },
   });
