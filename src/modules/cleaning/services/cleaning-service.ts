@@ -20,8 +20,8 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '@/src/lib/firebase/app';
 import {
   userDocRef,
-  usersCollectionRef,
 } from '@/src/lib/firebase/refs';
+import { getAllUsers } from '@/src/services/users/users-service';
 import {
   CleaningAssignableUser,
   CleaningGroup,
@@ -664,13 +664,11 @@ export const getCleaningAssignableUsers = async (
 ): Promise<CleaningAssignableUser[]> => {
   if (!congregationId) return [];
 
-  const q = query(usersCollectionRef(), where('congregationId', '==', congregationId));
+  const users = await getAllUsers(congregationId, { forceServer: true });
 
-  const snap = await getDocs(q);
-
-  return snap.docs.map((d) => {
-    const data = d.data() as Record<string, unknown>;
-    const uid = d.id;
+  return users.map((user) => {
+    const data = user as unknown as Record<string, unknown>;
+    const uid = user.uid;
     const assignedGroupId =
       typeof data.cleaningGroupId === 'string' && data.cleaningGroupId.length > 0
         ? data.cleaningGroupId

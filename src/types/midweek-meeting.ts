@@ -54,6 +54,9 @@ export interface MidweekAssignment {
   startTime?: string;
   endTime?: string;
   assignmentScope?: 'internal' | 'informational';
+  controlledBy?: 'meetingEditor' | 'hospitalityMicrophones';
+  lockedFromMeetingEditor?: boolean;
+  sourceModule?: 'hospitalityMicrophones';
   participants: ParticipantAssignment[];
   isOptional?: boolean;
   assignmentType?: MidweekAssignmentType;

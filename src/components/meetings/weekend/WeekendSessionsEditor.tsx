@@ -18,6 +18,7 @@ interface WeekendSessionsEditorProps {
   disabled?: boolean;
   onChange: (sessions: WeekendMeetingSessionDraft[]) => void;
   blockedUserIds?: Set<string>;
+  lockWatchtowerReader?: boolean;
 }
 
 interface UserSelectFieldProps {
@@ -126,6 +127,7 @@ export function WeekendSessionsEditor({
   disabled,
   onChange,
   blockedUserIds,
+  lockWatchtowerReader,
 }: WeekendSessionsEditorProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -364,7 +366,7 @@ export function WeekendSessionsEditor({
               valueUserId={session.watchtowerStudy.reader.userId}
               valueLabel={session.watchtowerStudy.reader.assigneeNameSnapshot}
               users={users}
-              disabled={disabled}
+              disabled={disabled || lockWatchtowerReader}
               placeholder="Seleccionar lector"
               blockedUserIds={blockedUserIds}
               onSelect={(user) =>

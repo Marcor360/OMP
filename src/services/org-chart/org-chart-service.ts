@@ -4,7 +4,6 @@ import {
   getDocs,
   query,
   serverTimestamp,
-  where,
   writeBatch,
 } from 'firebase/firestore';
 
@@ -31,6 +30,7 @@ import {
 import {
   canManageDepartments,
 } from '@/src/utils/permissions/permissions';
+import { getAllUsers } from '@/src/services/users/users-service';
 
 const departmentsRef = (congregationId: string) =>
   collection(db, 'congregations', congregationId, 'departments');
@@ -299,16 +299,14 @@ const assertAssignmentTarget = async (
   departmentId: string,
   userId: string
 ) => {
-  const [departments, usersSnap] = await Promise.all([
+  const [departments, users] = await Promise.all([
     getActiveDepartments(congregationId),
-    getDocs(query(collection(db, 'users'), where('congregationId', '==', congregationId), where('isActive', '==', true))),
+    getAllUsers(congregationId, { forceServer: true }),
   ]);
   const department = departments.find((item) => item.id === departmentId);
   if (!department) throw new Error('Departamento no encontrado o inactivo.');
 
-  const userDoc = usersSnap.docs
-    .map((snap): Record<string, unknown> & { id: string } => ({ id: snap.id, ...snap.data() }))
-    .find((item) => item.id === userId);
+  const userDoc = users.find((item) => item.uid === userId);
   if (!userDoc || userDoc.congregationId !== congregationId || userDoc.isActive !== true) {
     throw new Error('El usuario seleccionado no es elegible.');
   }

@@ -56,6 +56,8 @@ export function AssignmentCardEditor({
   const styles = createStyles(colors);
 
   const isLivingAsChristians = assignment.sectionId === 'livingAsChristians';
+  const isLocked = assignment.lockedFromMeetingEditor === true;
+  const isDisabled = disabled || isLocked;
   const visibleParticipants = normalizeParticipants(assignment, assignment.participants);
 
   const updateField = <K extends keyof MidweekAssignment>(
@@ -102,18 +104,18 @@ export function AssignmentCardEditor({
           <TouchableOpacity
             style={[styles.iconAction, !canMoveUp && styles.disabled]}
             onPress={onMoveUp}
-            disabled={disabled || !canMoveUp}
+            disabled={isDisabled || !canMoveUp}
           >
             <Ionicons name="arrow-up-outline" size={16} color={colors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.iconAction, !canMoveDown && styles.disabled]}
             onPress={onMoveDown}
-            disabled={disabled || !canMoveDown}
+            disabled={isDisabled || !canMoveDown}
           >
             <Ionicons name="arrow-down-outline" size={16} color={colors.textPrimary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconAction} onPress={onRemove} disabled={disabled}>
+          <TouchableOpacity style={styles.iconAction} onPress={onRemove} disabled={isDisabled}>
             <Ionicons name="trash-outline" size={16} color={colors.error} />
           </TouchableOpacity>
         </View>
@@ -128,7 +130,7 @@ export function AssignmentCardEditor({
             onChangeText={(next) => updateField('title', next)}
             placeholder="Ej: Discurso, lectura, video"
             placeholderTextColor={colors.textDisabled}
-            editable={!disabled}
+            editable={!isDisabled}
           />
           {errors?.title ? <ThemedText style={styles.errorText}>{errors.title}</ThemedText> : null}
         </View>
@@ -141,7 +143,7 @@ export function AssignmentCardEditor({
             onChangeText={(next) => updateField('theme', next)}
             placeholder="Ej: Jer 13:1-11"
             placeholderTextColor={colors.textDisabled}
-            editable={!disabled}
+            editable={!isDisabled}
           />
         </View>
 
@@ -167,7 +169,7 @@ export function AssignmentCardEditor({
             placeholder="5"
             placeholderTextColor={colors.textDisabled}
             keyboardType="number-pad"
-            editable={!disabled}
+            editable={!isDisabled}
           />
           {errors?.durationMinutes ? (
             <ThemedText style={styles.errorText}>{errors.durationMinutes}</ThemedText>
@@ -182,7 +184,7 @@ export function AssignmentCardEditor({
             <TouchableOpacity
               style={styles.addParticipantBtn}
               onPress={addParticipant}
-              disabled={disabled}
+              disabled={isDisabled}
             >
               <Ionicons name="add" size={16} color={colors.onPrimary} />
               <ThemedText style={styles.addParticipantText}>
@@ -206,7 +208,7 @@ export function AssignmentCardEditor({
                   key={participant.id}
                   participant={participant}
                   users={users}
-                  disabled={disabled}
+                  disabled={isDisabled}
                   error={participantError}
                   allowManual
                   title={participantLabel(participantIndex)}
@@ -230,6 +232,11 @@ export function AssignmentCardEditor({
           </View>
         )}
       </View>
+      {isLocked ? (
+        <ThemedText style={styles.lockedText}>
+          Controlado desde acomodadores y microfonos.
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
@@ -311,6 +318,11 @@ const createStyles = (colors: AppColorSet) =>
     errorText: {
       color: colors.error,
       fontSize: 12,
+    },
+    lockedText: {
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: '600',
     },
     participantsHeader: {
       flexDirection: 'row',

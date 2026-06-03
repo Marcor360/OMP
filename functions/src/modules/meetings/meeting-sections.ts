@@ -29,6 +29,9 @@ export interface NormalizedMeetingAssignment {
   title: string;
   assignmentScope: MeetingAssignmentScope;
   assignees: NormalizedMeetingAssignee[];
+  controlledBy?: 'meetingEditor' | 'hospitalityMicrophones';
+  lockedFromMeetingEditor?: boolean;
+  sourceModule?: 'hospitalityMicrophones';
 }
 
 export interface NormalizedMeetingSection {
@@ -237,6 +240,12 @@ const normalizeAssignment = (
     title: normalizeText(raw.title) ?? `Asignacion ${index + 1}`,
     assignmentScope: normalizeAssignmentScope(raw, assignees),
     assignees,
+    controlledBy:
+      raw.controlledBy === 'meetingEditor' || raw.controlledBy === 'hospitalityMicrophones'
+        ? raw.controlledBy
+        : undefined,
+    lockedFromMeetingEditor: raw.lockedFromMeetingEditor === true,
+    sourceModule: raw.sourceModule === 'hospitalityMicrophones' ? raw.sourceModule : undefined,
   };
 };
 
@@ -541,6 +550,11 @@ export const toFirestoreSectionsPayload = (
       sectionKey: assignment.sectionKey,
       title: assignment.title,
       assignmentScope: assignment.assignmentScope,
+      ...(assignment.controlledBy !== undefined ? { controlledBy: assignment.controlledBy } : {}),
+      ...(assignment.lockedFromMeetingEditor !== undefined
+        ? { lockedFromMeetingEditor: assignment.lockedFromMeetingEditor }
+        : {}),
+      ...(assignment.sourceModule !== undefined ? { sourceModule: assignment.sourceModule } : {}),
       assignees: assignment.assignees.map((assignee) =>
         toFirestoreAssigneePayload(assignee)
       ),

@@ -225,6 +225,7 @@ export const en = {
   'users.error.cannotDeleteSelf': 'You cannot delete your own user account.',
   'users.error.cannotDeleteSystemUser': 'This user was created by the main system and cannot be deleted.',
   'users.error.cannotDeleteAdmin': 'You cannot delete a system administrator.',
+  'users.error.cannotManageAdmin': 'Only an administrator can modify another administrator.',
   'users.detail.title': 'User details',
   'users.detail.systemProtected': 'Main system user. This account cannot be deleted.',
   'users.field.phone': 'Phone',

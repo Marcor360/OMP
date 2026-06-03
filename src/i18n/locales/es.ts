@@ -225,6 +225,7 @@ export const es = {
   'users.error.cannotDeleteSelf': 'No puedes eliminar tu propio usuario.',
   'users.error.cannotDeleteSystemUser': 'Este usuario fue creado por el sistema principal y no se puede eliminar.',
   'users.error.cannotDeleteAdmin': 'No puedes eliminar a un administrador del sistema.',
+  'users.error.cannotManageAdmin': 'Solo un administrador puede modificar a otro administrador.',
   'users.detail.title': 'Detalle de usuario',
   'users.detail.systemProtected': 'Usuario principal del sistema. No se puede eliminar.',
   'users.field.phone': 'Telefono',

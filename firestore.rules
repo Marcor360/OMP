@@ -1991,7 +1991,7 @@ service cloud.firestore {
       // por lo que la restricciÃ³n real se aplica en la app (siempre filtra por congregationId).
       // myCongregationId() != null garantiza que el solicitante tiene perfil activo con congregaciÃ³n.
       allow list: if isSuperAdmin() 
-        || (canListCongregationUsers() && storedDocInMyCongregation());
+        || (canListCongregationUsers() && myCongregationId() != null);
 
       allow create: if isSuperAdmin() || (canCreateUsers()
         && validUserCreate(userId)

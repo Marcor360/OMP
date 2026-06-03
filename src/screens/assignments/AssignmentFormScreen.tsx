@@ -284,7 +284,7 @@ export function AssignmentFormScreen() {
           ? validateRequired(meetingId, 'La reunion')
           : undefined,
       assignedTo:
-        mode === 'create' && targetMode === 'person' && personAssignmentMode === 'user'
+        targetMode === 'person' && personAssignmentMode === 'user'
           ? validateRequired(assignedToUid, 'La persona asignada') ??
             (blockedOutgoingTalkUserIds.has(assignedToUid) ? OUTGOING_TALK_BLOCK_MESSAGE : undefined)
           : undefined,
@@ -294,7 +294,14 @@ export function AssignmentFormScreen() {
           : undefined,
       cleaningGroupId:
         mode === 'create' && targetMode === 'cleaningGroup'
-          ? validateRequired(cleaningGroupId, 'El grupo o familia de aseo')
+          ? validateRequired(cleaningGroupId, 'El grupo o familia de aseo') ??
+            (
+              cleaningGroups
+                .find((group) => group.id === cleaningGroupId)
+                ?.memberIds.some((memberId) => blockedOutgoingTalkUserIds.has(memberId))
+                ? OUTGOING_TALK_BLOCK_MESSAGE
+                : undefined
+            )
           : undefined,
     };
 

@@ -282,6 +282,20 @@ const assignmentToPermissions = (assignment: Pick<UserServiceAssignment, 'positi
     };
   }
 
+  if (assignment.position === 'encargado' && assignment.department === 'acomodadores_microfonos') {
+    return {
+      asignaciones: { view: true, create: true, edit: true, manage: true },
+      reuniones: { view: true, edit: true },
+    };
+  }
+
+  if (assignment.position === 'auxiliar' && assignment.department === 'acomodadores_microfonos') {
+    return {
+      asignaciones: { view: true, edit: true },
+      reuniones: { view: true, edit: true },
+    };
+  }
+
   return {};
 };
 
@@ -466,6 +480,18 @@ export const canManageCleaning = (
 export const canManageHospitality = (
   user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
 ): boolean => canManageCleaning(user);
+
+export const canManageHospitalityMicrophones = (
+  user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
+): boolean =>
+  isAdmin(user) ||
+  hasServiceAssignment(user, 'encargado', 'acomodadores_microfonos') ||
+  hasServiceAssignment(user, 'auxiliar', 'acomodadores_microfonos') ||
+  hasPermission(user, 'asignaciones', 'manage') ||
+  (
+    hasPermission(user, 'asignaciones', 'view') &&
+    hasPermission(user, 'asignaciones', 'edit')
+  );
 
 const hasPreachingAssignment = (
   user:

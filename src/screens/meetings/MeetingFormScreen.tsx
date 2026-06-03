@@ -42,6 +42,7 @@ import {
   OUTGOING_TALK_BLOCK_MESSAGE,
   getBlockedOutgoingTalkUserIds,
 } from '@/src/modules/assignments/utils/outgoing-talks';
+import { isHospitalityMicrophonesControlledReader } from '@/src/modules/assignments/utils/meeting-readers';
 import { OutgoingTalk } from '@/src/modules/assignments/types/outgoing-talks.types';
 import { resolveMeetingTemplate } from '@/src/services/meetings/meeting-template';
 import {
@@ -221,6 +222,15 @@ const programAssignmentToEditorAssignment = (assignment: MeetingProgramAssignmen
   startTime: undefined,
   endTime: undefined,
   assignmentScope: assignment.assignmentScope,
+  controlledBy:
+    assignment.controlledBy ??
+    (isHospitalityMicrophonesControlledReader(assignment) ? 'hospitalityMicrophones' : undefined),
+  lockedFromMeetingEditor:
+    assignment.lockedFromMeetingEditor === true ||
+    isHospitalityMicrophonesControlledReader(assignment),
+  sourceModule:
+    assignment.sourceModule ??
+    (isHospitalityMicrophonesControlledReader(assignment) ? 'hospitalityMicrophones' : undefined),
   participants: assignment.assignees.map((assignee) => {
     if (assignee.assigneeType === 'registeredUser') {
       return {
@@ -309,6 +319,9 @@ const editorSectionToProgramSection = (
     isEnabled: editorSection.isEnabled !== false,
     colorToken: currentSection.colorToken,
     assignments: editorSection.items.map((assignment, index) => {
+      const currentAssignment = currentSection.assignments.find(
+        (item) => item.assignmentKey === assignment.id
+      );
       const participants =
         editorSection.id === 'livingAsChristians'
           ? assignment.participants.slice(0, 2)
@@ -320,6 +333,10 @@ const editorSectionToProgramSection = (
         title: assignment.title,
         roleLabel: normalizeText(assignment.theme ?? ''),
         assignmentScope: assignment.assignmentScope ?? 'internal',
+        controlledBy: currentAssignment?.controlledBy ?? assignment.controlledBy,
+        lockedFromMeetingEditor:
+          currentAssignment?.lockedFromMeetingEditor ?? assignment.lockedFromMeetingEditor,
+        sourceModule: currentAssignment?.sourceModule ?? assignment.sourceModule,
         assignees: participants.map((participant) =>
           editorParticipantToProgramAssignee(participant, assignment.id, markers)
         ),
@@ -1217,6 +1234,7 @@ export function MeetingFormScreen() {
               users={availableUsers}
               disabled={!canManage}
               blockedUserIds={blockedOutgoingTalkUserIds}
+              lockWatchtowerReader
               onChange={setWeekendSessions}
             />
           ) : (

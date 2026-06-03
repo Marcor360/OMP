@@ -538,6 +538,9 @@ export const buildWeekendSectionsFromSessions = (params: {
           title: 'Lector del Estudio de La Atalaya',
           roleLabel: 'Lector',
           assignmentScope: 'internal',
+          controlledBy: 'hospitalityMicrophones',
+          lockedFromMeetingEditor: true,
+          sourceModule: 'hospitalityMicrophones',
           assignees: [
             buildRegisteredAssignee({
               id: session.watchtowerStudy.reader.assigneeId,

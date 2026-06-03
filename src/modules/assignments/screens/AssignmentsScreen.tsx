@@ -20,7 +20,11 @@ import {
 } from '@/src/modules/assignments/types/assignment.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { useUser } from '@/src/context/user-context';
-import { canManageAssignments, canManageOutgoingTalks } from '@/src/utils/permissions/permissions';
+import {
+  canManageAssignments,
+  canManageHospitalityMicrophones,
+  canManageOutgoingTalks,
+} from '@/src/utils/permissions/permissions';
 
 export function AssignmentsScreen() {
   const router = useRouter();
@@ -28,6 +32,7 @@ export function AssignmentsScreen() {
   const styles = createStyles(colors);
   const { appUser, congregationId, loadingProfile, profileError, uid } = useUser();
   const showOutgoingTalks = canManageOutgoingTalks(appUser);
+  const showReaders = canManageHospitalityMicrophones(appUser);
   const canCreateAssignments = canManageAssignments(appUser);
 
   const {
@@ -107,6 +112,16 @@ export function AssignmentsScreen() {
               >
                 <Ionicons name="exit-outline" size={16} color={colors.primary} />
                 <ThemedText style={styles.createButtonText}>Salidas</ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            {showReaders ? (
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={() => router.push('/(protected)/assignments/readers' as never)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="book-outline" size={16} color={colors.primary} />
+                <ThemedText style={styles.createButtonText}>Lectores</ThemedText>
               </TouchableOpacity>
             ) : null}
             {canCreateAssignments ? (

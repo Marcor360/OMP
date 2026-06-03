@@ -1,6 +1,4 @@
-import { getDocs, orderBy, query, where } from 'firebase/firestore';
-
-import { usersCollectionRef } from '@/src/lib/firebase/refs';
+import { getActiveUsers } from '@/src/services/users/users-service';
 
 export interface ActiveCongregationUser {
   uid: string;
@@ -75,29 +73,11 @@ export const getActiveCongregationUsers = async (
     return [];
   }
 
-  const usersRef = usersCollectionRef();
-
-  const queryWithOrder = query(
-    usersRef,
-    where('congregationId', '==', congregationId),
-    orderBy('displayName', 'asc')
-  );
-
-  try {
-    const orderedSnapshot = await getDocs(queryWithOrder);
-
-    return orderedSnapshot.docs
-      .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }))
+  const users = await getActiveUsers(congregationId);
+  return sortByDisplayName(
+    users
+      .map((user) => ({ id: user.uid, data: user as unknown as Record<string, unknown> }))
       .filter((entry) => isActiveUserRecord(entry.data))
-      .map((entry) => toActiveUser(entry.id, entry.data));
-  } catch {
-    const fallbackSnapshot = await getDocs(query(usersRef, where('congregationId', '==', congregationId)));
-
-    return sortByDisplayName(
-      fallbackSnapshot.docs
-        .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }))
-        .filter((entry) => isActiveUserRecord(entry.data))
-        .map((entry) => toActiveUser(entry.id, entry.data))
-    );
-  }
+      .map((entry) => toActiveUser(entry.id, entry.data))
+  );
 };

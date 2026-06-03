@@ -46,6 +46,9 @@ export interface MeetingProgramAssignment {
   roleLabel?: string;
   assignmentScope: MeetingAssignmentScope;
   assignees: MeetingAssignmentAssignee[];
+  controlledBy?: 'meetingEditor' | 'hospitalityMicrophones';
+  lockedFromMeetingEditor?: boolean;
+  sourceModule?: 'hospitalityMicrophones';
   roomKey?: string;
   startTime?: string;
   endTime?: string;
@@ -77,6 +80,9 @@ type SectionTemplate = {
     roleLabel?: string;
     assignmentScope: MeetingAssignmentScope;
     allowCircuitOverseerOption?: boolean;
+    controlledBy?: 'meetingEditor' | 'hospitalityMicrophones';
+    lockedFromMeetingEditor?: boolean;
+    sourceModule?: 'hospitalityMicrophones';
   }[];
 };
 
@@ -132,7 +138,14 @@ const MIDWEEK_SECTION_TEMPLATES: SectionTemplate[] = [
         roleLabel: 'Conductor',
         assignmentScope: 'internal',
       },
-      { title: 'Lector', roleLabel: 'Lector', assignmentScope: 'internal' },
+      {
+        title: 'Lector',
+        roleLabel: 'Lector',
+        assignmentScope: 'internal',
+        controlledBy: 'hospitalityMicrophones',
+        lockedFromMeetingEditor: true,
+        sourceModule: 'hospitalityMicrophones',
+      },
     ],
   },
 ];
@@ -168,7 +181,14 @@ const WEEKEND_SECTION_TEMPLATES: SectionTemplate[] = [
         roleLabel: 'Conductor',
         assignmentScope: 'internal',
       },
-      { title: 'Lector del Estudio de la Atalaya', roleLabel: 'Lector', assignmentScope: 'internal' },
+      {
+        title: 'Lector del Estudio de la Atalaya',
+        roleLabel: 'Lector',
+        assignmentScope: 'internal',
+        controlledBy: 'hospitalityMicrophones',
+        lockedFromMeetingEditor: true,
+        sourceModule: 'hospitalityMicrophones',
+      },
     ],
   },
 ];
@@ -217,6 +237,9 @@ export const createEmptyMeetingAssignment = (
     endTime: input?.endTime,
     durationMinutes: input?.durationMinutes,
     allowCircuitOverseerOption: input?.allowCircuitOverseerOption,
+    controlledBy: input?.controlledBy,
+    lockedFromMeetingEditor: input?.lockedFromMeetingEditor,
+    sourceModule: input?.sourceModule,
     notes: input?.notes,
   };
 };
@@ -305,6 +328,12 @@ const normalizeAssignment = (
         ? raw.durationMinutes
         : undefined,
     allowCircuitOverseerOption: raw.allowCircuitOverseerOption === true,
+    controlledBy:
+      raw.controlledBy === 'meetingEditor' || raw.controlledBy === 'hospitalityMicrophones'
+        ? raw.controlledBy
+        : undefined,
+    lockedFromMeetingEditor: raw.lockedFromMeetingEditor === true,
+    sourceModule: raw.sourceModule === 'hospitalityMicrophones' ? raw.sourceModule : undefined,
     notes: normalizeText(raw.notes),
   };
 };

@@ -78,7 +78,21 @@ type RequesterProfile = {
   congregationId: string;
   displayName?: string;
   email?: string;
+  servicePosition?: ServicePosition;
+  protectedFromDeletion?: boolean;
+  isSystemUser?: boolean;
+  isPrimaryAdmin?: boolean;
+  isRootAdmin?: boolean;
+  systemProtected?: boolean;
   permissions?: UserPermissions;
+};
+
+type ListUsersPayload = {
+  activeOnly?: boolean;
+};
+
+type ListUsersResult = {
+  users: (Record<string, unknown> & { uid: string })[];
 };
 
 type CreateUserPayload = {
@@ -883,6 +897,42 @@ const splitDisplayName = (displayName: string): { firstName?: string; lastName?:
   };
 };
 
+export const listUsersForCurrentCongregation = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<ListUsersResult> => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const requester = await getRequesterProfile(request.auth.uid);
+    assertCanListUsers(requester);
+
+    const payload = parseListUsersPayload(request.data);
+    const db = getFirestore();
+    let query = db
+      .collection('users')
+      .where('congregationId', '==', requester.congregationId)
+      .limit(500);
+
+    if (payload.activeOnly) {
+      query = db
+        .collection('users')
+        .where('congregationId', '==', requester.congregationId)
+        .where('isActive', '==', true)
+        .limit(500);
+    }
+
+    const snap = await query.get();
+    const users = sortListedUsers(
+      snap.docs
+        .map((doc) => sanitizeUserForList(doc.id, doc.data()))
+        .filter((user) => !payload.activeOnly || isActiveUserListRecord(user))
+    );
+
+    return { users };
+  }
+);
+
 async function getRequesterProfile(uid: string): Promise<RequesterProfile> {
   const db = getFirestore();
   const snap = await db.collection('users').doc(uid).get();
@@ -902,12 +952,6 @@ async function getRequesterProfile(uid: string): Promise<RequesterProfile> {
   };
 }
 
-function assertAdmin(profile: { role: Role }) {
-  if (profile.role !== 'admin') {
-    throw new HttpsError('permission-denied', 'Solo un administrador puede realizar esta operacion.');
-  }
-}
-
 const requesterHasPermission = (
   profile: Pick<RequesterProfile, 'role' | 'permissions'>,
   department: PermissionDepartment,
@@ -925,6 +969,116 @@ function assertUserPermission(
     throw new HttpsError('permission-denied', 'No tienes permisos para gestionar usuarios.');
   }
 }
+
+const requesterHasGlobalScreenAccess = (profile: RequesterProfile): boolean =>
+  profile.role === 'admin' ||
+  profile.servicePosition === 'coordinador' ||
+  profile.servicePosition === 'secretario' ||
+  profile.protectedFromDeletion === true ||
+  profile.isSystemUser === true ||
+  profile.isPrimaryAdmin === true ||
+  profile.isRootAdmin === true ||
+  profile.systemProtected === true;
+
+function assertCanListUsers(profile: RequesterProfile) {
+  const canList =
+    profile.role === 'admin' ||
+    profile.role === 'supervisor' ||
+    requesterHasGlobalScreenAccess(profile) ||
+    profile.permissions?.departments?.manage === true ||
+    requesterHasPermission(profile, 'usuarios', 'view') ||
+    requesterHasPermission(profile, 'usuarios', 'manage');
+
+  if (!canList) {
+    throw new HttpsError('permission-denied', 'No tienes permisos para ver usuarios.');
+  }
+}
+
+const sanitizeUserForList = (
+  uid: string,
+  data: Record<string, unknown>
+): Record<string, unknown> & { uid: string } => {
+  const allowedKeys = [
+    'email',
+    'displayName',
+    'role',
+    'congregationId',
+    'isActive',
+    'active',
+    'status',
+    'phone',
+    'gender',
+    'department',
+    'servicePosition',
+    'serviceDepartment',
+    'serviceAssignments',
+    'privileges',
+    'responsibilities',
+    'permissions',
+    'isElder',
+    'isMinisterialServant',
+    'avatarUrl',
+    'secondLastName',
+    'cleaningEligible',
+    'cleaningGroupId',
+    'cleaningGroupName',
+    'notificationsEnabled',
+    'platformNotifications',
+    'cleaningNotifications',
+    'hospitalityNotifications',
+    'createdBy',
+    'createdByName',
+    'createdByEmail',
+    'updatedBy',
+    'updatedByName',
+    'updatedByEmail',
+    'protectedFromDeletion',
+    'isSystemUser',
+    'isPrimaryAdmin',
+    'isRootAdmin',
+    'systemProtected',
+    'createdAt',
+    'updatedAt',
+  ] as const;
+
+  return allowedKeys.reduce<Record<string, unknown> & { uid: string }>(
+    (acc, key) => {
+      if (data[key] !== undefined) {
+        acc[key] = data[key];
+      }
+      return acc;
+    },
+    { uid }
+  );
+};
+
+const isActiveUserListRecord = (data: Record<string, unknown>): boolean => {
+  if (typeof data.isActive === 'boolean') return data.isActive;
+  if (typeof data.active === 'boolean') return data.active;
+  if (data.status === 'inactive' || data.status === 'suspended') return false;
+  return true;
+};
+
+const sortListedUsers = (
+  users: (Record<string, unknown> & { uid: string })[]
+): (Record<string, unknown> & { uid: string })[] =>
+  [...users].sort((left, right) => {
+    const leftLabel = normalizeText(left.displayName) ?? normalizeText(left.email) ?? left.uid;
+    const rightLabel = normalizeText(right.displayName) ?? normalizeText(right.email) ?? right.uid;
+    return leftLabel.localeCompare(rightLabel, 'es');
+  });
+
+const parseListUsersPayload = (value: unknown): ListUsersPayload => {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new HttpsError('invalid-argument', 'Solicitud invalida.');
+  }
+
+  const source = value as Record<string, unknown>;
+  return {
+    activeOnly: source.activeOnly === true,
+  };
+};
 
 const assertDelegatedCreateIsSafe = (requester: RequesterProfile, payload: CreateUserPayload) => {
   if (requester.role === 'admin') return;
@@ -1359,7 +1513,7 @@ export const updateUserByAdmin = onCall(
     }
 
     const requester = await getRequesterProfile(request.auth.uid);
-    assertAdmin(requester);
+    assertUserPermission(requester, 'edit');
 
     const payload = parseUpdateUserPayload(request.data);
     assertDelegatedUpdateIsSafe(requester, payload);
@@ -1384,6 +1538,10 @@ export const updateUserByAdmin = onCall(
 
     if (target.congregationId !== requester.congregationId) {
       throw new HttpsError('permission-denied', 'No puedes modificar usuarios de otra congregacion.');
+    }
+
+    if (target.role === 'admin' && requester.role !== 'admin') {
+      throw new HttpsError('permission-denied', 'Solo un administrador puede modificar a otro administrador.');
     }
 
     const currentRole = target.role === 'admin' || target.role === 'supervisor' || target.role === 'user'
@@ -1597,9 +1755,16 @@ export const updateUserPasswordByAdmin = onCall(
       throw new HttpsError('not-found', 'Usuario no encontrado.');
     }
 
-    const target = targetSnap.data() as { congregationId: string };
+    const target = targetSnap.data() as { congregationId: string; role?: Role };
     if (target.congregationId !== requester.congregationId) {
       throw new HttpsError('permission-denied', 'No puedes modificar usuarios de otra congregacion.');
+    }
+
+    if (target.role === 'admin' && requester.role !== 'admin') {
+      throw new HttpsError(
+        'permission-denied',
+        'Solo un administrador puede cambiar la contrasena de otro administrador.'
+      );
     }
 
     await getAuth().updateUser(payload.uid, { password: payload.newPassword });
@@ -1638,10 +1803,14 @@ export const disableUserByAdmin = onCall(
       throw new HttpsError('not-found', 'Usuario no encontrado.');
     }
 
-    const target = targetSnap.data() as { congregationId: string };
+    const target = targetSnap.data() as { congregationId: string; role?: Role };
 
     if (target.congregationId !== requester.congregationId) {
       throw new HttpsError('permission-denied', 'No puedes desactivar usuarios de otra congregacion.');
+    }
+
+    if (target.role === 'admin' && requester.role !== 'admin') {
+      throw new HttpsError('permission-denied', 'Solo un administrador puede desactivar a otro administrador.');
     }
 
     await getAuth().updateUser(uid, { disabled: true });

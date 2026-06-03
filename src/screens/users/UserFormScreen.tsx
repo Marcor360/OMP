@@ -285,6 +285,12 @@ export function UserFormScreen() {
           return;
         }
 
+        if (loadedUser.role === 'admin' && !isAdmin) {
+          Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotManageAdmin'));
+          router.back();
+          return;
+        }
+
         setDisplayName(loadedUser.displayName);
         setRole(loadedUser.role);
         setGender(loadedUser.gender ?? null);
@@ -301,7 +307,7 @@ export function UserFormScreen() {
         router.back();
       })
       .finally(() => setLoading(false));
-  }, [congregationId, id, loadingProfile, mode, router]);
+  }, [congregationId, id, isAdmin, loadingProfile, mode, router, t]);
 
   const generatedEmailPreview = useMemo(
     () => buildGeneratedEmailPreview(firstName, middleName, lastName, allowedEmailDomain),

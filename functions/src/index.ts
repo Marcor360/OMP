@@ -2,6 +2,7 @@ import './config/firebaseAdmin.js';
 
 export {
   createUserByAdmin,
+  listUsersForCurrentCongregation,
   updateUserByAdmin,
   updateUserPasswordByAdmin,
   disableUserByAdmin,

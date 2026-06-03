@@ -144,6 +144,11 @@ export function UserDetailScreen() {
       return;
     }
 
+    if (user.role === 'admin' && !isAdmin) {
+      Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotManageAdmin'));
+      return;
+    }
+
     const newStatus: UserStatus = user.status === 'active' ? 'inactive' : 'active';
     const action =
       newStatus === 'inactive'
@@ -262,7 +267,8 @@ export function UserDetailScreen() {
 
   const isProtectedSystemUser = isSystemPrincipalUser(user);
   const canEditThisUser =
-    hasPermission(appUser, 'usuarios', 'edit') || hasPermission(appUser, 'usuarios', 'manage');
+    (isAdmin || user.role !== 'admin') &&
+    (hasPermission(appUser, 'usuarios', 'edit') || hasPermission(appUser, 'usuarios', 'manage'));
   const canDeleteThisUser =
     hasPermission(appUser, 'usuarios', 'delete') || hasPermission(appUser, 'usuarios', 'manage');
   const canManageThisUser = canEditThisUser || canDeleteThisUser;

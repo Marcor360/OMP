@@ -4,7 +4,6 @@ import { functions } from '@/src/lib/firebase/app';
 import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import { invalidateCacheEntry } from '@/src/services/repositories/firestore-cache-first';
 import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
-import { updateUser } from '@/src/services/users/users-service';
 import {
   UpdateUserDTO,
   UserPrivileges,
@@ -134,9 +133,9 @@ export const updateUserByAdmin = async (
     return result;
   } catch (error) {
     if (isFunctionUnavailable(error)) {
-      // Fallback temporal: actualiza solo el documento de Firestore.
-      await updateUser(payload.uid, payload.data);
-      return;
+      throw new AppError(
+        'La operacion de editar usuario requiere Cloud Functions (updateUserByAdmin) y no esta disponible.'
+      );
     }
 
     throw error;

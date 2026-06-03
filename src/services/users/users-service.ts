@@ -1,30 +1,31 @@
 import {
   deleteDoc,
-  getDocs,
   onSnapshot,
-  orderBy,
-  query,
   serverTimestamp,
   setDoc,
   updateDoc,
-  where,
   type Unsubscribe,
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
+import { functions } from '@/src/lib/firebase/app';
 import {
   logFirestoreListenerCreated,
   logFirestoreListenerDestroyed,
 } from '@/src/services/firebase/firestore-debug';
 import {
   getDocumentCacheFirst,
-  getQueryCacheFirst,
   invalidateCacheEntry,
 } from '@/src/services/repositories/firestore-cache-first';
-import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
+import {
+  clearSessionCacheByPrefix,
+  getSessionCachedValue,
+  runSingleFlight,
+  setSessionCachedValue,
+} from '@/src/services/repositories/session-cache';
 import { isSystemPrincipalUser } from '@/src/utils/users/user-protection';
 import {
   userDocRef,
-  usersCollectionRef,
 } from '@/src/lib/firebase/refs';
 import {
   AppUser,
@@ -395,6 +396,58 @@ const dedupeUsersByEmail = (items: AppUser[]): AppUser[] => {
 const isIncompleteProfile = (user: AppUser): boolean =>
   user.uid.trim().length === 0 || user.congregationId.trim().length === 0;
 
+type ListUsersForCurrentCongregationPayload = {
+  activeOnly?: boolean;
+};
+
+type ListUsersForCurrentCongregationResult = {
+  users?: (Record<string, unknown> & { uid?: string })[];
+};
+
+const listUsersForCurrentCongregation = async (
+  payload: ListUsersForCurrentCongregationPayload
+): Promise<AppUser[]> => {
+  const callable = httpsCallable<
+    ListUsersForCurrentCongregationPayload,
+    ListUsersForCurrentCongregationResult
+  >(functions, 'listUsersForCurrentCongregation');
+  const result = await callable(payload);
+  const users = Array.isArray(result.data?.users) ? result.data.users : [];
+
+  return sortUsers(
+    dedupeUsersByEmail(
+      users
+        .map((user) => normalizeUser(typeof user.uid === 'string' ? user.uid : '', user))
+        .filter((user) => user.uid.length > 0)
+        .filter((user) => !isSystemPrincipalUser(user))
+    )
+  );
+};
+
+const getUsersForCurrentCongregationCached = async (
+  congregationId: string,
+  options?: { forceServer?: boolean; activeOnly?: boolean }
+): Promise<AppUser[]> => {
+  const activeKey = options?.activeOnly ? 'active' : 'all';
+  const cacheKey = `query:users/congregation/${congregationId}/${activeKey}`;
+  const requestKey = `request:${cacheKey}`;
+
+  if (!options?.forceServer) {
+    const cached = getSessionCachedValue<AppUser[]>(cacheKey, USERS_QUERY_CACHE_TTL_MS);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
+  return runSingleFlight(requestKey, async () => {
+    const users = await listUsersForCurrentCongregation({
+      activeOnly: options?.activeOnly,
+    });
+    setSessionCachedValue(cacheKey, users);
+    return users;
+  });
+};
+
 /** Obtiene un usuario por UID */
 export const getUserById = async (
   uid: string,
@@ -432,40 +485,20 @@ export const getAllUsers = async (
     return [];
   }
 
-  const q = query(usersCollectionRef(), where('congregationId', '==', congregationId));
-
-  return getQueryCacheFirst<AppUser[]>({
-    cacheKey: `users/congregation/${congregationId}`,
-    query: q,
-    maxAgeMs: USERS_QUERY_CACHE_TTL_MS,
+  return getUsersForCurrentCongregationCached(congregationId, {
     forceServer: options?.forceServer,
-    mapSnapshot: (snapshot) =>
-      sortUsers(
-        dedupeUsersByEmail(
-          snapshot.docs
-            .map((docSnapshot) => normalizeUser(docSnapshot.id, docSnapshot.data()))
-            .filter((user) => !isSystemPrincipalUser(user))
-        )
-      ),
   });
 };
 
 /** Obtiene usuarios activos de una congregacion */
 export const getActiveUsers = async (congregationId: string): Promise<AppUser[]> => {
-  const q = query(
-    usersCollectionRef(),
-    where('congregationId', '==', congregationId),
-    where('isActive', '==', true),
-    orderBy('displayName', 'asc')
-  );
-  const snap = await getDocs(q);
-  return sortUsers(
-    dedupeUsersByEmail(
-      snap.docs
-        .map((d) => normalizeUser(d.id, d.data()))
-        .filter((user) => !isSystemPrincipalUser(user))
-    )
-  );
+  if (!congregationId || typeof congregationId !== 'string') {
+    return [];
+  }
+
+  return getUsersForCurrentCongregationCached(congregationId, {
+    activeOnly: true,
+  });
 };
 
 /** Crea o actualiza el perfil de usuario en Firestore */
@@ -543,31 +576,26 @@ export const subscribeToUsers = (
     return () => {};
   }
 
-  const q = query(usersCollectionRef(), where('congregationId', '==', congregationId));
   const listenerKey = `users:congregation:${congregationId}`;
   logFirestoreListenerCreated(listenerKey);
+  let cancelled = false;
 
-  const unsubscribe = onSnapshot(
-    q,
-    (snap) => {
-      const users = sortUsers(
-        dedupeUsersByEmail(
-          snap.docs
-            .map((d) => normalizeUser(d.id, d.data()))
-            .filter((user) => !isSystemPrincipalUser(user))
-        )
-      );
-      callback(users);
-    },
-    (error) => {
-      console.error('subscribeToUsers error:', error);
-      onError?.(error);
-    }
-  );
+  void getAllUsers(congregationId, { forceServer: true })
+    .then((users) => {
+      if (!cancelled) {
+        callback(users);
+      }
+    })
+    .catch((error) => {
+      if (!cancelled) {
+        console.error('subscribeToUsers error:', error);
+        onError?.(error);
+      }
+    });
 
   return () => {
+    cancelled = true;
     logFirestoreListenerDestroyed(listenerKey);
-    unsubscribe();
   };
 };
 
