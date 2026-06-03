@@ -26,6 +26,7 @@ import { useI18n } from '@/src/i18n/index';
 import { useAppColors } from '@/src/styles';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { ErrorState } from '@/src/components/common/ErrorState';
+import { PageHeader } from '@/src/components/layout/PageHeader';
 import { useFieldService } from '@/src/modules/field-service/hooks/use-field-service';
 import { FieldServiceCalendar } from '@/src/modules/field-service/components/FieldServiceCalendar';
 import { FieldServiceDayModal } from '@/src/modules/field-service/components/FieldServiceDayModal';
@@ -45,6 +46,14 @@ function WebOnlyNotice() {
   const colors = useAppColors();
   const router = useRouter();
   const { t } = useI18n();
+  const handleBack = () => {
+    if (router.canGoBack?.()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/(protected)/(tabs)' as never);
+  };
 
   return (
     <SafeAreaView
@@ -90,7 +99,7 @@ function WebOnlyNotice() {
       </Text>
 
       <TouchableOpacity
-        onPress={() => router.back()}
+        onPress={handleBack}
         style={{
           flexDirection: 'row',
           alignItems: 'center',
@@ -117,7 +126,6 @@ function WebOnlyNotice() {
 export function FieldServiceScreen() {
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const router = useRouter();
   const { t } = useI18n();
 
   // Estado local de navegación del calendario
@@ -285,21 +293,7 @@ export function FieldServiceScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {/* ── Header ── */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          accessibilityLabel="Volver"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{t('fieldService.title')}</Text>
-          <Text style={styles.headerSub}>{t('fieldService.subtitle')}</Text>
-        </View>
-        <View style={styles.headerRight} />
-      </View>
+      <PageHeader title={t('fieldService.title')} subtitle={t('fieldService.subtitle')} showBack />
 
       <ScrollView
         contentContainerStyle={styles.content}

@@ -22,6 +22,7 @@ import { createCleaningGroup } from '@/src/modules/cleaning/services/cleaning-se
 import { useCleaningCache } from '@/src/modules/cleaning/context/CleaningCacheContext';
 import { CleaningServiceError } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { LoadingState } from '@/src/components/common/LoadingState';
+import { PageHeader } from '@/src/components/layout/PageHeader';
 
 const DEFAULT_FORM: CleaningGroupFormValues = {
   name: '',
@@ -210,18 +211,7 @@ export function CreateCleaningGroupScreen() {
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Volver"
-        >
-          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('cleaning.createTitle')}</Text>
-      </View>
+      <PageHeader title={t('cleaning.createTitle')} showBack />
 
       <ScrollView
         style={styles.scroll}

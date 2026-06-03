@@ -24,6 +24,7 @@ import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { EmptyState } from '@/src/components/common/EmptyState';
+import { PageHeader } from '@/src/components/layout/PageHeader';
 import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
 
 type FilterType = 'all' | 'active' | 'family' | 'inactive';
@@ -214,25 +215,28 @@ export function CleaningDashboardScreen() {
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTextBlock}>
-          <Text style={styles.headerTitle}>{t('cleaning.title')}</Text>
-          <Text style={styles.headerSub}>
-            {t(stats.totalGroups === 1 ? 'cleaning.groupsRegistered' : 'cleaning.groupsRegistered_plural', { count: stats.totalGroups })}
-          </Text>
-        </View>
-        {canManage ? (
-          <TouchableOpacity
-            style={styles.createBtn}
-            onPress={handleCreate}
-            accessibilityRole="button"
-            accessibilityLabel="Crear nuevo grupo de limpieza"
-          >
-            <Ionicons name="add" size={26} color={colors.onPrimary} />
-          </TouchableOpacity>
-        ) : null}
-      </View>
+      <PageHeader
+        title={t('cleaning.title')}
+        subtitle={t(
+          stats.totalGroups === 1
+            ? 'cleaning.groupsRegistered'
+            : 'cleaning.groupsRegistered_plural',
+          { count: stats.totalGroups }
+        )}
+        showBack
+        actions={
+          canManage ? (
+            <TouchableOpacity
+              style={styles.createBtn}
+              onPress={handleCreate}
+              accessibilityRole="button"
+              accessibilityLabel="Crear nuevo grupo de limpieza"
+            >
+              <Ionicons name="add" size={26} color={colors.onPrimary} />
+            </TouchableOpacity>
+          ) : null
+        }
+      />
 
       <View style={styles.statsRow}>
         <CleaningStatsCard

@@ -75,7 +75,7 @@ export const INITIAL_DEPARTMENT_TEMPLATE: DepartmentPayload[] = [
   { name: 'Coordinador del cuerpo de ancianos', category: 'administration', order: 20 },
   { name: 'Contabilidad', category: 'administration', order: 30 },
   { name: 'Superintendente de servicio', category: 'service', order: 10 },
-  { name: 'Territorios', category: 'service', order: 20 },
+  { name: 'Predicacion', category: 'service', order: 20 },
   { name: 'Grupo de servicio #1', category: 'service', order: 30 },
   { name: 'Grupo de servicio #2', category: 'service', order: 40 },
   { name: 'Grupo de servicio #3', category: 'service', order: 50 },

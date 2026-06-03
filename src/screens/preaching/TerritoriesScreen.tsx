@@ -9,33 +9,31 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { useI18n } from '@/src/i18n/index';
-import { useTerritorySchedule } from '@/src/hooks/use-territories';
+import { useVisibleMonthlyTerritories } from '@/src/hooks/use-territories';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { TERRITORY_DAY_LABELS, TERRITORY_DAYS } from '@/src/types/territory';
+import {
+  getCurrentMonthId,
+  getMonthLabel,
+  type Territory,
+  type TerritoryAssignmentTarget,
+} from '@/src/types/territory';
 import { canManageTerritories } from '@/src/utils/permissions/permissions';
 
 export function TerritoriesScreen() {
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const { t } = useI18n();
-  const { appUser, congregationId, loadingProfile, profileError } = useUser();
-  const { schedule, scheduleByDay, loading, error } = useTerritorySchedule(congregationId);
+  const { appUser, uid, congregationId, loadingProfile, profileError } = useUser();
+  const monthId = getCurrentMonthId();
+  const { data, loading, error } = useVisibleMonthlyTerritories(congregationId, uid, monthId);
   const canManage = canManageTerritories(appUser);
-  const totalTerritories = schedule.reduce(
-    (total, day) => total + day.territories.filter((territory) => territory.enabled).length,
-    0
-  );
+  const congregationCount = data?.congregationTargets.reduce((total, target) => total + target.territoryIds.length, 0) ?? 0;
+  const groupCount = data?.groupTargets.reduce((total, target) => total + target.territoryIds.length, 0) ?? 0;
 
-  if (loadingProfile || loading) {
-    return <LoadingState message={t('territories.loading')} />;
-  }
+  if (loadingProfile || loading) return <LoadingState message="Cargando territorios..." />;
 
   if (!appUser || !appUser.isActive || !congregationId) {
-    return (
-      <ErrorState message={profileError ?? t('territories.activeAccountRequired')} />
-    );
+    return <ErrorState message={profileError ?? 'Necesitas una cuenta activa con congregacion.'} />;
   }
 
   if (error) return <ErrorState message={error} />;
@@ -43,17 +41,17 @@ export function TerritoriesScreen() {
   return (
     <ScreenContainer>
       <PageHeader
-        title={t('territories.title')}
-        subtitle={t('territories.weekSubtitle')}
+        title="Territorios"
+        subtitle={`Predicacion · ${getMonthLabel(monthId)}`}
         showBack
         actions={
           canManage ? (
             <TouchableOpacity
               style={styles.headerButton}
-              onPress={() => router.push('/(protected)/territories/manage' as never)}
+              onPress={() => router.push('/(protected)/preaching/territories/manage' as never)}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel={t('territories.manageTitle')}
+              accessibilityLabel="Administrar predicacion"
             >
               <Ionicons name="settings-outline" size={18} color={colors.onPrimary} />
             </TouchableOpacity>
@@ -61,55 +59,79 @@ export function TerritoriesScreen() {
         }
       />
 
-      {totalTerritories === 0 ? (
+      {congregationCount + groupCount === 0 ? (
         <EmptyState
           icon="map-outline"
-          title={t('territories.emptyTitle')}
-          description={t('territories.empty')}
+          title="Sin territorios asignados"
+          description="Todavia no hay territorios de predicacion asignados para este mes."
         />
       ) : (
-        <View style={styles.dayList}>
-          {TERRITORY_DAYS.map((day) => {
-            const territories = scheduleByDay
-              .get(day)
-              ?.territories.filter((territory) => territory.enabled) ?? [];
+        <View style={styles.sectionList}>
+          <TerritorySection
+            title="Para toda la congregacion"
+            subtitle={`${congregationCount} ${congregationCount === 1 ? 'territorio' : 'territorios'}`}
+            targets={data?.congregationTargets ?? []}
+            territoriesById={data?.territoriesById ?? new Map()}
+          />
 
-            return (
-              <View key={day} style={styles.dayCard}>
-                <View style={styles.dayHeader}>
-                  <ThemedText style={styles.dayTitle}>{TERRITORY_DAY_LABELS[day]}</ThemedText>
-                  <ThemedText style={styles.countLabel}>
-                    {territories.length} {territories.length === 1 ? t('territories.countOne') : t('territories.countMany')}
-                  </ThemedText>
-                </View>
-
-                {territories.length > 0 ? (
-                  <View style={styles.territoryList}>
-                    {territories.map((territory) => (
-                      <View key={`${day}:${territory.number}`} style={styles.territoryRow}>
-                        <View style={styles.territoryIcon}>
-                          <Ionicons name="map-outline" size={18} color={colors.primary} />
-                        </View>
-                        <View style={styles.territoryBody}>
-                          <ThemedText style={styles.territoryName}>
-                            {t('territories.itemTitle', { number: territory.number })}
-                          </ThemedText>
-                          <ThemedText style={styles.territoryDescription}>
-                            {territory.description}
-                          </ThemedText>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <ThemedText style={styles.emptyDay}>{t('territories.emptyDay')}</ThemedText>
-                )}
-              </View>
-            );
-          })}
+          {data?.userGroup ? (
+            <TerritorySection
+              title="Mi grupo de predicacion"
+              subtitle={`${data.userGroup.name} · ${groupCount} ${groupCount === 1 ? 'territorio' : 'territorios'}`}
+              targets={data.groupTargets}
+              territoriesById={data.territoriesById}
+            />
+          ) : null}
         </View>
       )}
     </ScreenContainer>
+  );
+}
+
+function TerritorySection({
+  title,
+  subtitle,
+  targets,
+  territoriesById,
+}: {
+  title: string;
+  subtitle: string;
+  targets: TerritoryAssignmentTarget[];
+  territoriesById: Map<string, Territory>;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+  const territories = targets.flatMap((target) =>
+    target.territoryIds
+      .map((territoryId) => territoriesById.get(territoryId))
+      .filter((territory): territory is Territory => Boolean(territory))
+  );
+
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionTitleWrap}>
+          <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+          <ThemedText style={styles.sectionSubtitle}>{subtitle}</ThemedText>
+        </View>
+        <Ionicons name="map-outline" size={20} color={colors.primary} />
+      </View>
+
+      {territories.length === 0 ? (
+        <ThemedText style={styles.emptyText}>Sin territorios para esta seccion.</ThemedText>
+      ) : (
+        <View style={styles.territoryList}>
+          {territories.map((territory) => (
+            <View key={territory.id} style={styles.territoryRow}>
+              <View style={styles.territoryIcon}>
+                <ThemedText style={styles.territoryNumber}>{territory.number}</ThemedText>
+              </View>
+              <ThemedText style={styles.territoryDescription}>{territory.description}</ThemedText>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -123,67 +145,69 @@ const createStyles = (colors: AppColorSet) =>
       justifyContent: 'center',
       backgroundColor: colors.primary,
     },
-    dayList: {
-      gap: 12,
+    sectionList: {
+      gap: 14,
     },
-    dayCard: {
+    section: {
       borderRadius: 12,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: 14,
-      gap: 10,
+      gap: 12,
     },
-    dayHeader: {
+    sectionHeader: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
-      gap: 10,
+      justifyContent: 'space-between',
+      gap: 12,
     },
-    dayTitle: {
+    sectionTitleWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+    sectionTitle: {
       color: colors.textPrimary,
       fontSize: 17,
       fontWeight: '800',
     },
-    countLabel: {
+    sectionSubtitle: {
       color: colors.textMuted,
       fontSize: 12,
       fontWeight: '700',
+      marginTop: 2,
     },
     territoryList: {
       gap: 8,
     },
     territoryRow: {
       flexDirection: 'row',
+      alignItems: 'center',
       gap: 10,
       padding: 10,
       borderRadius: 10,
       backgroundColor: colors.surfaceRaised,
     },
     territoryIcon: {
-      width: 34,
-      height: 34,
+      minWidth: 36,
+      height: 36,
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.infoLight,
     },
-    territoryBody: {
-      flex: 1,
-      minWidth: 0,
-    },
-    territoryName: {
-      color: colors.textPrimary,
-      fontSize: 15,
-      fontWeight: '800',
+    territoryNumber: {
+      color: colors.primary,
+      fontSize: 14,
+      fontWeight: '900',
     },
     territoryDescription: {
+      flex: 1,
       color: colors.textSecondary,
-      fontSize: 13,
-      lineHeight: 18,
-      marginTop: 3,
+      fontSize: 14,
+      lineHeight: 19,
     },
-    emptyDay: {
+    emptyText: {
       color: colors.textMuted,
       fontSize: 13,
       fontStyle: 'italic',

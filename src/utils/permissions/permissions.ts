@@ -82,12 +82,12 @@ export const ACTION_LABELS: Record<PermissionAction, string> = {
 };
 
 export const TERRITORY_ACTION_LABELS: Record<TerritoryPermissionAction, string> = {
-  view: 'Ver territorios',
-  create: 'Crear territorios',
-  edit: 'Editar territorios',
-  delete: 'Desactivar territorios',
-  assign: 'Asignar territorios',
-  manage: 'Administrar territorios',
+  view: 'Ver predicacion',
+  create: 'Crear territorios de predicacion',
+  edit: 'Editar territorios de predicacion',
+  delete: 'Desactivar territorios de predicacion',
+  assign: 'Asignar territorios de predicacion',
+  manage: 'Administrar predicacion',
 };
 
 export const SUPERVISOR_PERMISSION_TEMPLATE: Partial<Record<PermissionDepartment, PermissionAction[]>> = {
@@ -240,13 +240,19 @@ const assignmentToPermissions = (assignment: Pick<UserServiceAssignment, 'positi
     };
   }
 
-  if (assignment.position === 'encargado' && assignment.department === 'predicacion') {
+  if (
+    assignment.position === 'encargado' &&
+    (assignment.department === 'predicacion' || assignment.department === 'territorios')
+  ) {
     return {
       predicacion: { view: true, approve: true, export: true, manage: true },
     };
   }
 
-  if (assignment.position === 'auxiliar' && assignment.department === 'predicacion') {
+  if (
+    assignment.position === 'auxiliar' &&
+    (assignment.department === 'predicacion' || assignment.department === 'territorios')
+  ) {
     return {
       predicacion: { view: true, export: true },
     };
@@ -471,10 +477,12 @@ const hasPreachingAssignment = (
   Boolean(
     (
       user?.servicePosition === position &&
-      user.serviceDepartment === 'predicacion'
+      (user.serviceDepartment === 'predicacion' || user.serviceDepartment === 'territorios')
     ) ||
       user?.serviceAssignments?.some(
-        (assignment) => assignment.position === position && assignment.department === 'predicacion'
+        (assignment) =>
+          assignment.position === position &&
+          (assignment.department === 'predicacion' || assignment.department === 'territorios')
       )
   );
 
@@ -496,20 +504,54 @@ export const hasTerritoryPermission = (
   return preachingPermissions?.territories?.[action] === true;
 };
 
-export const canManageTerritories = (
+export const canViewTerritories = (
+  user: Pick<AppUser, 'isActive' | 'congregationId'> | null | undefined
+): boolean =>
+  Boolean(user?.isActive === true && typeof user.congregationId === 'string' && user.congregationId.trim().length > 0);
+
+export const canManageTerritoryCatalog = (
   user:
     | Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
     | null
     | undefined
 ): boolean =>
   isAdmin(user) ||
-  hasPermission(user, 'predicacion', 'manage') ||
-  getEffectivePermissions(user).predicacion?.manageTerritories === true ||
-  getEffectivePermissions(user).predicacion?.territories?.manage === true ||
+  hasPreachingAssignment(user, 'encargado') ||
   hasTerritoryPermission(user, 'create') ||
   hasTerritoryPermission(user, 'edit') ||
-  hasTerritoryPermission(user, 'delete') ||
+  hasTerritoryPermission(user, 'delete');
+
+export const canManagePreachingGroups = (
+  user:
+    | Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | null
+    | undefined
+): boolean =>
+  isAdmin(user) ||
+  hasPreachingAssignment(user, 'encargado') ||
+  getEffectivePermissions(user).predicacion?.territories?.manage === true;
+
+export const canAssignMonthlyTerritories = (
+  user:
+    | Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | null
+    | undefined
+): boolean =>
+  isAdmin(user) ||
+  hasPreachingAssignment(user, 'encargado') ||
   hasTerritoryPermission(user, 'assign');
+
+export const canManageTerritories = (
+  user:
+    | Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | null
+    | undefined
+): boolean =>
+  canManageTerritoryCatalog(user) ||
+  canManagePreachingGroups(user) ||
+  canAssignMonthlyTerritories(user) ||
+  hasPermission(user, 'predicacion', 'manage') ||
+  getEffectivePermissions(user).predicacion?.manageTerritories === true;
 
 export const getVisibleTabs = (
   user:

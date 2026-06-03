@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================================
-    // AUTENTICACIÓN Y USUARIO ACTUAL
+    // AUTENTICACIÃ“N Y USUARIO ACTUAL
     // =========================================================================
 
     function isAuthenticated() {
@@ -167,7 +167,10 @@ service cloud.firestore {
       return isActive()
         && (
           (
-            currentUserData().serviceDepartment == 'predicacion'
+            (
+              currentUserData().serviceDepartment == 'predicacion'
+              || currentUserData().serviceDepartment == 'territorios'
+            )
             && (
               (
                 currentUserData().servicePosition == 'encargado'
@@ -282,7 +285,10 @@ service cloud.firestore {
         && (
           (
             currentUserData().servicePosition == position
-            && currentUserData().serviceDepartment == 'predicacion'
+            && (
+              currentUserData().serviceDepartment == 'predicacion'
+              || currentUserData().serviceDepartment == 'territorios'
+            )
           )
           || (
             currentUserData().serviceAssignments is list
@@ -292,6 +298,15 @@ service cloud.firestore {
               ])
               || currentUserData().serviceAssignments.hasAny([
                 { 'position': position, 'department': 'predicacion', 'label': 'Auxiliar de Predicacion' }
+              ])
+              || currentUserData().serviceAssignments.hasAny([
+                { 'position': position, 'department': 'territorios', 'label': 'Territorios' }
+              ])
+              || currentUserData().serviceAssignments.hasAny([
+                { 'position': position, 'department': 'territorios', 'label': 'Encargado de Predicacion' }
+              ])
+              || currentUserData().serviceAssignments.hasAny([
+                { 'position': position, 'department': 'territorios', 'label': 'Auxiliar de Predicacion' }
               ])
             )
           )
@@ -327,6 +342,12 @@ service cloud.firestore {
         || hasPermission('predicacion', 'manage')
         || hasTerritoryPermission('manage')
         || hasTerritoryPermission('assign');
+    }
+
+    function canManagePreachingGroups() {
+      return isAdmin()
+        || hasPreachingAssignment('encargado')
+        || hasTerritoryPermission('manage');
     }
 
     function canReadUsers() {
@@ -595,12 +616,12 @@ service cloud.firestore {
         'role',
         'isActive',
         // 'status' es gestionado exclusivamente por Cloud Functions (createUserByAdmin / updateUserByAdmin).
-        // Se incluye aquí para que validUserData no rechace documentos que ya lo contienen
+        // Se incluye aquÃ­ para que validUserData no rechace documentos que ya lo contienen
         // cuando el cliente realiza actualizaciones parciales.
         'status',
         'congregationId',
         'congregationDomain',
-        // Campos de asignación de servicio — escritura por Cloud Functions.
+        // Campos de asignaciÃ³n de servicio â€” escritura por Cloud Functions.
         'servicePosition',
         'serviceDepartment',
         'serviceAssignments',
@@ -612,15 +633,15 @@ service cloud.firestore {
         'isMinisterialServant',
         'createdAt',
         'updatedAt',
-        // Campos de notificaciones push — escritura controlada por validPushTokenUpdate()
+        // Campos de notificaciones push â€” escritura controlada por validPushTokenUpdate()
         'notificationTokens',
         'pushTokenUpdatedAt',
-        // Campos de preferencias de notificación
+        // Campos de preferencias de notificaciÃ³n
         'notificationsEnabled',
         'platformNotifications',
         'cleaningNotifications',
         'hospitalityNotifications',
-        // Campos de módulo de limpieza
+        // Campos de mÃ³dulo de limpieza
         'cleaningEligible',
         'cleaningGroupId',
         'cleaningGroupName',
@@ -895,10 +916,10 @@ service cloud.firestore {
         ]);
     }
 
-    // Permite al propio usuario actualizar SOLO su token de notificación push.
+    // Permite al propio usuario actualizar SOLO su token de notificaciÃ³n push.
     // El cliente llama setDoc(..., { uid, notificationTokens: arrayUnion(token),
     //   pushTokenUpdatedAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true }).
-    // Esta condición es independiente de validSelfUserUpdate para no interferir
+    // Esta condiciÃ³n es independiente de validSelfUserUpdate para no interferir
     // con las validaciones de perfil.
     function validPushTokenUpdate(userId) {
       return isSameUser(userId)
@@ -1256,9 +1277,9 @@ service cloud.firestore {
 
     function validTerritoryData(data, congregationId) {
       return hasOnlyKeys(data, [
+          'id',
           'congregationId',
           'number',
-          'name',
           'description',
           'status',
           'createdBy',
@@ -1269,7 +1290,6 @@ service cloud.firestore {
         && hasAllKeys(data, [
           'congregationId',
           'number',
-          'name',
           'description',
           'status',
           'createdBy',
@@ -1278,11 +1298,11 @@ service cloud.firestore {
           'updatedAt'
         ])
         && data.congregationId == congregationId
-        && (data.number == null || data.number is number)
-        && isNonEmptyString(data.name)
-        && data.name.size() <= 50
-        && data.description is string
-        && data.description.size() <= 160
+        && (!('id' in data) || data.id is string)
+        && data.number is int
+        && data.number > 0
+        && isNonEmptyString(data.description)
+        && data.description.size() <= 100
         && data.status in ['active', 'inactive']
         && data.createdBy is string
         && data.updatedBy is string
@@ -1294,6 +1314,154 @@ service cloud.firestore {
       return validTerritoryData(data, congregationId)
         && data.status == 'active'
         && data.createdBy == currentUid()
+        && data.updatedBy == currentUid();
+    }
+
+    function validPreachingGroupData(data, congregationId) {
+      return hasOnlyKeys(data, [
+          'id',
+          'congregationId',
+          'name',
+          'number',
+          'captainUserId',
+          'captainName',
+          'assistantUserId',
+          'assistantName',
+          'memberIds',
+          'memberNames',
+          'memberCount',
+          'isActive',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'name',
+          'number',
+          'captainUserId',
+          'captainName',
+          'memberIds',
+          'memberNames',
+          'memberCount',
+          'isActive',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && (!('id' in data) || data.id is string)
+        && isNonEmptyString(data.name)
+        && data.name.size() <= 40
+        && data.number is int
+        && data.number > 0
+        && isNonEmptyString(data.captainUserId)
+        && isNonEmptyString(data.captainName)
+        && (!('assistantUserId' in data) || data.assistantUserId == null || data.assistantUserId is string)
+        && (!('assistantName' in data) || data.assistantName == null || data.assistantName is string)
+        && data.memberIds is list
+        && data.memberIds.size() > 0
+        && data.memberIds.size() <= 200
+        && data.memberIds.hasAny([data.captainUserId])
+        && (!('assistantUserId' in data) || data.assistantUserId == null || data.memberIds.hasAny([data.assistantUserId]))
+        && data.memberNames is list
+        && data.memberNames.size() == data.memberIds.size()
+        && data.memberCount is int
+        && data.memberCount == data.memberIds.size()
+        && data.isActive is bool
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validPreachingGroupCreate(data, congregationId) {
+      return validPreachingGroupData(data, congregationId)
+        && data.isActive == true
+        && data.createdBy == currentUid()
+        && data.updatedBy == currentUid();
+    }
+
+    function validPreachingGroupUpdate(data, congregationId) {
+      return validPreachingGroupData(data, congregationId)
+        && data.congregationId == resource.data.congregationId
+        && data.createdBy == resource.data.createdBy
+        && data.createdAt == resource.data.createdAt
+        && data.updatedBy == currentUid();
+    }
+
+    function validMonthlyTerritoryTarget(target) {
+      return target is map
+        && target.keys().hasOnly(['id', 'scope', 'groupId', 'groupName', 'territoryIds', 'territoryNumbers', 'notes'])
+        && isNonEmptyString(target.id)
+        && target.scope in ['congregation', 'group']
+        && (!('groupId' in target) || target.groupId == null || target.groupId is string)
+        && (!('groupName' in target) || target.groupName == null || target.groupName is string)
+        && target.territoryIds is list
+        && target.territoryIds.size() <= 200
+        && target.territoryNumbers is list
+        && target.territoryNumbers.size() == target.territoryIds.size()
+        && (!('notes' in target) || target.notes == null || (target.notes is string && target.notes.size() <= 200));
+    }
+
+    function validMonthlyTerritoryTargets(targets) {
+      return targets is list
+        && targets.size() <= 10
+        && (targets.size() < 1 || validMonthlyTerritoryTarget(targets[0]))
+        && (targets.size() < 2 || validMonthlyTerritoryTarget(targets[1]))
+        && (targets.size() < 3 || validMonthlyTerritoryTarget(targets[2]))
+        && (targets.size() < 4 || validMonthlyTerritoryTarget(targets[3]))
+        && (targets.size() < 5 || validMonthlyTerritoryTarget(targets[4]))
+        && (targets.size() < 6 || validMonthlyTerritoryTarget(targets[5]))
+        && (targets.size() < 7 || validMonthlyTerritoryTarget(targets[6]))
+        && (targets.size() < 8 || validMonthlyTerritoryTarget(targets[7]))
+        && (targets.size() < 9 || validMonthlyTerritoryTarget(targets[8]))
+        && (targets.size() < 10 || validMonthlyTerritoryTarget(targets[9]));
+    }
+
+    function validMonthlyTerritoryAssignmentData(data, congregationId, monthId) {
+      return hasOnlyKeys(data, [
+          'id',
+          'congregationId',
+          'monthId',
+          'assignments',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'monthId',
+          'assignments',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && (!('id' in data) || data.id == monthId)
+        && data.congregationId == congregationId
+        && data.monthId == monthId
+        && monthId.matches('^\\d{4}-\\d{2}$')
+        && validMonthlyTerritoryTargets(data.assignments)
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validMonthlyTerritoryAssignmentCreate(data, congregationId, monthId) {
+      return validMonthlyTerritoryAssignmentData(data, congregationId, monthId)
+        && data.createdBy == currentUid()
+        && data.updatedBy == currentUid();
+    }
+
+    function validMonthlyTerritoryAssignmentUpdate(data, congregationId, monthId) {
+      return validMonthlyTerritoryAssignmentData(data, congregationId, monthId)
+        && data.createdBy == resource.data.createdBy
+        && data.createdAt == resource.data.createdAt
         && data.updatedBy == currentUid();
     }
 
@@ -1818,10 +1986,10 @@ service cloud.firestore {
         || isSameUser(userId)
         || (canReadUsers() && storedDocInMyCongregation());
 
-      // list sólo dentro de la propia congregación.
+      // list sÃ³lo dentro de la propia congregaciÃ³n.
       // Firestore Security Rules no permiten inspeccionar filtros de query,
-      // por lo que la restricción real se aplica en la app (siempre filtra por congregationId).
-      // myCongregationId() != null garantiza que el solicitante tiene perfil activo con congregación.
+      // por lo que la restricciÃ³n real se aplica en la app (siempre filtra por congregationId).
+      // myCongregationId() != null garantiza que el solicitante tiene perfil activo con congregaciÃ³n.
       allow list: if isSuperAdmin() 
         || (canListCongregationUsers() && myCongregationId() != null);
 
@@ -1982,6 +2150,36 @@ service cloud.firestore {
           && canAccessCongregationData(congregationId)
           && resource.data.congregationId == congregationId
           && validTerritoryUpdate(request.resource.data, congregationId);
+
+        allow delete: if false;
+      }
+
+      match /preachingGroups/{groupId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canManagePreachingGroups()
+          && canAccessCongregationData(congregationId)
+          && validPreachingGroupCreate(request.resource.data, congregationId);
+
+        allow update: if canManagePreachingGroups()
+          && canAccessCongregationData(congregationId)
+          && resource.data.congregationId == congregationId
+          && validPreachingGroupUpdate(request.resource.data, congregationId);
+
+        allow delete: if false;
+      }
+
+      match /monthlyTerritoryAssignments/{monthId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId)
+          && validMonthlyTerritoryAssignmentCreate(request.resource.data, congregationId, monthId);
+
+        allow update: if canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId)
+          && resource.data.congregationId == congregationId
+          && validMonthlyTerritoryAssignmentUpdate(request.resource.data, congregationId, monthId);
 
         allow delete: if false;
       }
@@ -2174,7 +2372,7 @@ service cloud.firestore {
     // =========================================================================
     // REGLAS: DASHBOARD SUMMARY
     // Documento de resumen pre-calculado por Cloud Functions.
-    // Solo lectura para usuarios activos de la misma congregación.
+    // Solo lectura para usuarios activos de la misma congregaciÃ³n.
     // Escritura reservada exclusivamente para Cloud Functions.
     // =========================================================================
 
@@ -2185,55 +2383,25 @@ service cloud.firestore {
 
     // =========================================================================
     // REGLAS: CLEANING GROUPS
-    // Grupos de limpieza — acceso por congregación.
+    // Grupos de limpieza â€” acceso por congregaciÃ³n.
     // =========================================================================
 
     match /cleaningGroups/{groupId} {
-      allow get: if isActive()
-        && resource.data.congregationId is string
-        && canAccessCongregationData(resource.data.congregationId);
-
-      // list restringido a usuarios activos de la misma congregación que el documento.
-      // myCongregationId() != null garantiza que el solicitante tiene congregación asignada.
-      allow list: if isActive() && canAccessCongregationData(myCongregationId());
-
-      allow create: if isCleaningManager()
-        && targetDocInMyCongregation()
-        && validCleaningGroupData(request.resource.data, request.resource.data.congregationId);
-
-      allow update: if isCleaningManager()
-        && storedDocInMyCongregation()
-        && targetDocInMyCongregation()
-        && validCleaningGroupData(request.resource.data, request.resource.data.congregationId)
-        && preservesCreatedAt();
-
-      allow delete: if isAdmin() && storedDocInMyCongregation();
+      // Coleccion raiz legacy cerrada para mantener el aislamiento por
+      // congregacion en /congregations/{id}/cleaningGroups.
+      allow read, write: if false;
     }
 
     match /cleaning_groups/{groupId} {
-      allow get: if isActive()
-        && resource.data.congregationId is string
-        && canAccessCongregationData(resource.data.congregationId);
-
-      allow list: if isActive() && canAccessCongregationData(myCongregationId());
-
-      allow create: if isCleaningManager()
-        && targetDocInMyCongregation()
-        && validCleaningGroupData(request.resource.data, request.resource.data.congregationId);
-
-      allow update: if isCleaningManager()
-        && storedDocInMyCongregation()
-        && targetDocInMyCongregation()
-        && validCleaningGroupData(request.resource.data, request.resource.data.congregationId)
-        && preservesCreatedAt();
-
-      allow delete: if isAdmin() && storedDocInMyCongregation();
+      // Coleccion raiz legacy cerrada para evitar duplicar reglas y mantener
+      // el acceso moderno en /congregations/{id}/cleaningGroups.
+      allow read, write: if false;
     }
 
     // =========================================================================
-    // REGLAS: NOTIFICATIONS (colección raíz)
-    // Nota: las notificaciones de congregación están en
-    // /congregations/{id}/notifications. Esta colección raíz es para
+    // REGLAS: NOTIFICATIONS (colecciÃ³n raÃ­z)
+    // Nota: las notificaciones de congregaciÃ³n estÃ¡n en
+    // /congregations/{id}/notifications. Esta colecciÃ³n raÃ­z es para
     // notificaciones globales o de sistema (si se usan).
     // =========================================================================
 

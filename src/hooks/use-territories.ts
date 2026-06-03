@@ -1,102 +1,175 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import {
-  createTerritorySchedule,
-  deleteTerritorySchedule,
-  subscribeTerritorySchedule,
-  updateTerritorySchedule,
+  createPreachingGroup,
+  createTerritory,
+  deactivatePreachingGroup,
+  deactivateTerritory,
+  getActiveCongregationUsersForGroups,
+  getMonthlyTerritoryAssignment,
+  subscribePreachingGroups,
+  subscribeTerritories,
+  subscribeVisibleMonthlyTerritories,
+  updatePreachingGroup,
+  updateTerritory,
+  upsertMonthlyTerritoryAssignment,
 } from '@/src/services/territories/territories-service';
 import type {
-  CreateTerritoryScheduleInput,
-  TerritoryDay,
-  TerritorySchedule,
-  UpdateTerritoryScheduleInput,
+  MonthlyTerritoryAssignment,
+  MonthlyTerritoryAssignmentInput,
+  PreachingGroup,
+  PreachingGroupInput,
+  Territory,
+  TerritoryInput,
+  VisibleMonthlyTerritories,
 } from '@/src/types/territory';
+import type { AppUser } from '@/src/types/user';
 
-export function useTerritorySchedule(congregationId: string | null) {
-  const [schedule, setSchedule] = useState<TerritorySchedule[]>([]);
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : 'No se pudieron cargar los territorios.';
+
+export function useTerritoriesCatalog(congregationId: string | null) {
+  const [territories, setTerritories] = useState<Territory[]>([]);
   const [loading, setLoading] = useState(Boolean(congregationId));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!congregationId) {
-      setSchedule([]);
+      setTerritories([]);
       setLoading(false);
       setError(null);
       return;
     }
 
     setLoading(true);
-    return subscribeTerritorySchedule(
+    return subscribeTerritories(
       congregationId,
-      (nextSchedule) => {
-        setSchedule(nextSchedule);
+      (next) => {
+        setTerritories(next);
         setLoading(false);
         setError(null);
       },
       (snapshotError) => {
-        setError(snapshotError.message);
+        setError(getErrorMessage(snapshotError));
         setLoading(false);
       }
     );
   }, [congregationId]);
 
-  const scheduleByDay = useMemo(
-    () => new Map(schedule.map((item) => [item.dayOfWeek, item])),
-    [schedule]
-  );
+  return { territories, loading, error };
+}
 
-  return { schedule, scheduleByDay, loading, error };
+export function usePreachingGroups(congregationId: string | null) {
+  const [groups, setGroups] = useState<PreachingGroup[]>([]);
+  const [loading, setLoading] = useState(Boolean(congregationId));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!congregationId) {
+      setGroups([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    setLoading(true);
+    return subscribePreachingGroups(
+      congregationId,
+      (next) => {
+        setGroups(next);
+        setLoading(false);
+        setError(null);
+      },
+      (snapshotError) => {
+        setError(getErrorMessage(snapshotError));
+        setLoading(false);
+      }
+    );
+  }, [congregationId]);
+
+  return { groups, loading, error };
+}
+
+export function useVisibleMonthlyTerritories(
+  congregationId: string | null,
+  userId: string | null,
+  monthId: string
+) {
+  const [data, setData] = useState<VisibleMonthlyTerritories | null>(null);
+  const [loading, setLoading] = useState(Boolean(congregationId && userId));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!congregationId || !userId) {
+      setData(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    setLoading(true);
+    return subscribeVisibleMonthlyTerritories(
+      congregationId,
+      userId,
+      monthId,
+      (next) => {
+        setData(next);
+        setLoading(false);
+        setError(null);
+      },
+      (snapshotError) => {
+        setError(getErrorMessage(snapshotError));
+        setLoading(false);
+      }
+    );
+  }, [congregationId, monthId, userId]);
+
+  return { data, loading, error };
+}
+
+export function useMonthlyTerritoryAssignment(congregationId: string | null, monthId: string) {
+  const [assignment, setAssignment] = useState<MonthlyTerritoryAssignment | null>(null);
+  const [loading, setLoading] = useState(Boolean(congregationId));
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!congregationId) {
+      setAssignment(null);
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      setAssignment(await getMonthlyTerritoryAssignment(congregationId, monthId));
+      setError(null);
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setLoading(false);
+    }
+  }, [congregationId, monthId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return { assignment, loading, error, refresh: load };
 }
 
 export function useTerritoryMutations(congregationId: string | null, actorUid: string | null) {
   const [saving, setSaving] = useState(false);
 
   const requireContext = useCallback(() => {
-    if (!congregationId || !actorUid) {
-      throw new Error('Necesitas una congregacion y usuario activo.');
-    }
-
+    if (!congregationId || !actorUid) throw new Error('Necesitas una congregacion y usuario activo.');
     return { congregationId, actorUid };
   }, [actorUid, congregationId]);
 
-  const create = useCallback(
-    async (input: CreateTerritoryScheduleInput) => {
+  const run = useCallback(
+    async (action: (context: { congregationId: string; actorUid: string }) => Promise<void>) => {
       const context = requireContext();
       setSaving(true);
       try {
-        await createTerritorySchedule(context.congregationId, context.actorUid, input);
-      } finally {
-        setSaving(false);
-      }
-    },
-    [requireContext]
-  );
-
-  const update = useCallback(
-    async (scheduleId: TerritoryDay, input: UpdateTerritoryScheduleInput) => {
-      const context = requireContext();
-      setSaving(true);
-      try {
-        await updateTerritorySchedule(
-          context.congregationId,
-          scheduleId,
-          context.actorUid,
-          input
-        );
-      } finally {
-        setSaving(false);
-      }
-    },
-    [requireContext]
-  );
-
-  const remove = useCallback(
-    async (scheduleId: TerritoryDay) => {
-      const context = requireContext();
-      setSaving(true);
-      try {
-        await deleteTerritorySchedule(context.congregationId, scheduleId);
+        await action(context);
       } finally {
         setSaving(false);
       }
@@ -106,8 +179,48 @@ export function useTerritoryMutations(congregationId: string | null, actorUid: s
 
   return {
     saving,
-    createTerritorySchedule: create,
-    updateTerritorySchedule: update,
-    deleteTerritorySchedule: remove,
+    createTerritory: (input: TerritoryInput) =>
+      run((context) => createTerritory(context.congregationId, context.actorUid, input)),
+    updateTerritory: (territoryId: string, input: TerritoryInput) =>
+      run((context) => updateTerritory(context.congregationId, territoryId, context.actorUid, input)),
+    deactivateTerritory: (territoryId: string) =>
+      run((context) => deactivateTerritory(context.congregationId, territoryId, context.actorUid)),
+    createPreachingGroup: (input: PreachingGroupInput) =>
+      run((context) => createPreachingGroup(context.congregationId, context.actorUid, input)),
+    updatePreachingGroup: (groupId: string, input: PreachingGroupInput) =>
+      run((context) => updatePreachingGroup(context.congregationId, groupId, context.actorUid, input)),
+    deactivatePreachingGroup: (groupId: string) =>
+      run((context) => deactivatePreachingGroup(context.congregationId, groupId, context.actorUid)),
+    upsertMonthlyTerritoryAssignment: (monthId: string, input: MonthlyTerritoryAssignmentInput) =>
+      run((context) => upsertMonthlyTerritoryAssignment(context.congregationId, monthId, context.actorUid, input)),
   };
+}
+
+export function useActiveCongregationUsers(congregationId: string | null) {
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [loading, setLoading] = useState(Boolean(congregationId));
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!congregationId) {
+      setUsers([]);
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      setUsers(await getActiveCongregationUsersForGroups(congregationId));
+      setError(null);
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setLoading(false);
+    }
+  }, [congregationId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return { users, loading, error, refresh: load };
 }

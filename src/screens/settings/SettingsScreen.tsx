@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
+import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ThemedText } from '@/src/components/themed-text';
 import { PermissionRow } from '@/src/components/common/PermissionRow';
 import { useAppTheme } from '@/src/context/theme-context';
@@ -128,7 +129,8 @@ export function SettingsScreen() {
   }
 
   return (
-    <ScreenContainer scrollable={false}>
+    <ScreenContainer scrollable={false} padded={false}>
+      <PageHeader title={t('tabs.settings')} showBack />
       <ScrollView contentContainerStyle={styles.content}>
         <Section title={t('settings.section.account')}>
           <SettingRow

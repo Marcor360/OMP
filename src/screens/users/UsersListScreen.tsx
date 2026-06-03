@@ -7,6 +7,7 @@ import { UserCard } from '@/src/components/cards/UserCard';
 import { EmptyState } from '@/src/components/common/EmptyState';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
+import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
@@ -146,6 +147,7 @@ export function UsersListScreen() {
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
+      <PageHeader title={t('tabs.users')} showBack />
       <FlatList
         data={users}
         keyExtractor={(item) => item.uid}

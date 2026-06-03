@@ -97,7 +97,6 @@ export const ORGANIZATION_POSITION_LABELS: Record<OrganizationPosition, string> 
 
 export const OPERATIONAL_DEPARTMENT_IDS: OrganizationDepartment[] = [
   'predicacion',
-  'territorios',
   'reuniones',
   'asignaciones',
   'limpieza',
@@ -132,16 +131,9 @@ export const DEFAULT_DEPARTMENTS: Pick<
     allowMultipleAssistants: true,
   },
   {
-    id: 'territorios',
-    name: 'Territorios',
-    order: 4,
-    allowMultipleManagers: false,
-    allowMultipleAssistants: true,
-  },
-  {
     id: 'reuniones',
     name: 'Reuniones',
-    order: 5,
+    order: 4,
     allowMultipleManagers: false,
     allowMultipleAssistants: true,
   },

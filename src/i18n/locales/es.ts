@@ -313,7 +313,7 @@ export const es = {
   'territories.countMany': 'territorios',
   'territories.itemTitle': 'Territorio {{number}}',
   'territories.itemIndex': 'Territorio {{index}}',
-  'territories.manageTitle': 'Administrar territorios',
+  'territories.manageTitle': 'Administrar predicacion',
   'territories.addTerritory': 'Agregar territorio',
   'territories.description': 'Descripcion corta',
   'territories.number': 'Numero',

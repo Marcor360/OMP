@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
+import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ThemedText } from '@/src/components/themed-text';
 import { useI18n } from '@/src/i18n/index';
 import { useAppColors } from '@/src/styles';
@@ -17,7 +18,8 @@ export function AboutScreen() {
   const buildVersion = Application.nativeBuildVersion ?? '1';
 
   return (
-    <ScreenContainer>
+    <ScreenContainer scrollable={false} padded={false}>
+      <PageHeader title={t('settings.screen.about')} showBack />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Ícono de la aplicación */}
         <View style={styles.iconContainer}>
@@ -73,7 +75,7 @@ export function AboutScreen() {
 const createStyles = (colors: ReturnType<typeof useAppColors>) =>
   StyleSheet.create({
     scrollContent: {
-      flex: 1,
+      flexGrow: 1,
       padding: 24,
       gap: 24,
       alignItems: 'center',

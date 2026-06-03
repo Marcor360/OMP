@@ -62,5 +62,13 @@ export {
 } from "./maintenance/scheduled-notifications-cleanup.js";
 
 export {
+  scheduledMonthlyTerritoryAssignmentsCleanup,
+} from "./territories-maintenance.js";
+
+export {
+  remindNextMonthTerritoryAssignments,
+} from "./territories-notifications.js";
+
+export {
   listCleaningGroupsForCurrentUser,
 } from './cleaning.js';

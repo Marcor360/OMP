@@ -40,7 +40,7 @@ export const USER_SERVICE_DEPARTMENT_LABELS: Record<UserServiceDepartment, strin
   discursos: 'Discursos',
   reuniones: 'Reuniones',
   predicacion: 'Predicacion',
-  territorios: 'Territorios',
+  territorios: 'Predicacion',
   asignaciones: 'Asignaciones',
   hospitalidad: 'Hospitalidad',
   usuarios: 'Usuarios',
@@ -59,7 +59,6 @@ export const USER_SERVICE_DEPARTMENTS: UserServiceDepartment[] = [
   'discursos',
   'reuniones',
   'predicacion',
-  'territorios',
   'asignaciones',
   'hospitalidad',
   'usuarios',
@@ -259,7 +258,7 @@ export const isPreachingManager = (
 ): boolean =>
   Boolean(
     (
-      user?.serviceDepartment === 'predicacion' &&
+      (user?.serviceDepartment === 'predicacion' || user?.serviceDepartment === 'territorios') &&
         (
           (user.servicePosition === 'encargado' && user.privileges?.isElder === true) ||
           user.servicePosition === 'auxiliar'
@@ -267,7 +266,7 @@ export const isPreachingManager = (
     ) ||
       user?.serviceAssignments?.some(
         (assignment) =>
-          assignment.department === 'predicacion' &&
+          (assignment.department === 'predicacion' || assignment.department === 'territorios') &&
           (
             (assignment.position === 'encargado' && user.privileges?.isElder === true) ||
             assignment.position === 'auxiliar'

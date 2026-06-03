@@ -1,5 +1,3 @@
-import { Redirect } from 'expo-router';
+import { TerritoriesScreen } from '@/src/screens/preaching/TerritoriesScreen';
 
-export default function LegacyTerritoriesRoute() {
-  return <Redirect href="/(protected)/territories" />;
-}
+export default TerritoriesScreen;

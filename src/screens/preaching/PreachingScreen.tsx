@@ -93,7 +93,7 @@ export function PreachingScreen() {
 
   return (
     <ScreenContainer refreshing={loading} onRefresh={refresh}>
-      <PageHeader title="Predicacion" />
+      <PageHeader title="Predicacion" showBack />
 
       <View style={styles.hero}>
         <View style={styles.heroIcon}>
@@ -151,11 +151,11 @@ export function PreachingScreen() {
 
       <TouchableOpacity
         style={styles.secondaryButton}
-        onPress={() => router.push('/(protected)/territories' as any)}
+        onPress={() => router.push('/(protected)/preaching/territories' as any)}
         activeOpacity={0.85}
       >
         <Ionicons name="map-outline" size={18} color={colors.primary} />
-        <ThemedText style={styles.secondaryButtonText}>Territorios</ThemedText>
+        <ThemedText style={styles.secondaryButtonText}>Territorios de predicacion</ThemedText>
       </TouchableOpacity>
 
       {userIsPreachingManager ? (
@@ -172,11 +172,11 @@ export function PreachingScreen() {
       {userCanManageTerritories ? (
         <TouchableOpacity
           style={styles.secondaryButton}
-          onPress={() => router.push('/(protected)/territories/manage' as any)}
+          onPress={() => router.push('/(protected)/preaching/territories/manage' as any)}
           activeOpacity={0.85}
         >
           <Ionicons name="settings-outline" size={18} color={colors.primary} />
-          <ThemedText style={styles.secondaryButtonText}>Administrar territorios</ThemedText>
+          <ThemedText style={styles.secondaryButtonText}>Administrar predicacion</ThemedText>
         </TouchableOpacity>
       ) : null}
 

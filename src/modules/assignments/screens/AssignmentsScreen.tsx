@@ -96,6 +96,7 @@ export function AssignmentsScreen() {
       <PageHeader
         title="Asignaciones"
         subtitle="Panel de solo lectura"
+        showBack
         actions={
           <View style={styles.actionsRow}>
             {showOutgoingTalks ? (

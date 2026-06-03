@@ -27,6 +27,7 @@ import { updateCleaningGroup } from '@/src/modules/cleaning/services/cleaning-se
 import { CleaningServiceError } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { ErrorState } from '@/src/components/common/ErrorState';
+import { PageHeader } from '@/src/components/layout/PageHeader';
 
 interface EditCleaningGroupScreenProps {
   groupId: string;
@@ -192,17 +193,7 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Volver"
-        >
-          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('cleaning.editTitle')}</Text>
-      </View>
+      <PageHeader title={t('cleaning.editTitle')} showBack />
 
       <ScrollView
         style={styles.scroll}

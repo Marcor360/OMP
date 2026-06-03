@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { ScrollView, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
+import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ThemedText } from '@/src/components/themed-text';
 import { useI18n } from '@/src/i18n/index';
 import { LANGUAGE_OPTIONS } from '@/src/i18n/language-options';
@@ -18,8 +19,9 @@ export function LanguageSelectorScreen() {
   };
 
   return (
-    <ScreenContainer>
-      <View style={styles.container}>
+    <ScreenContainer scrollable={false} padded={false}>
+      <PageHeader title={t('settings.screen.language')} showBack />
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <ThemedText style={styles.description} type="subtitle">
           {t('language.description')}
         </ThemedText>
@@ -69,7 +71,7 @@ export function LanguageSelectorScreen() {
             {t('language.info')}
           </ThemedText>
         </View>
-      </View>
+      </ScrollView>
     </ScreenContainer>
   );
 }
@@ -77,8 +79,9 @@ export function LanguageSelectorScreen() {
 const createStyles = (colors: ReturnType<typeof useAppColors>) =>
   StyleSheet.create({
     container: {
-      flex: 1,
+      flexGrow: 1,
       gap: 24,
+      padding: 16,
     },
     description: {
       fontSize: 15,

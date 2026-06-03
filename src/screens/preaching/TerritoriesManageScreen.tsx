@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Alert, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
@@ -8,408 +8,581 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { useI18n } from '@/src/i18n/index';
-import { useTerritoryMutations, useTerritorySchedule } from '@/src/hooks/use-territories';
-import { sanitizeTerritoryItems } from '@/src/services/territories/territories-service';
+import {
+  useActiveCongregationUsers,
+  useMonthlyTerritoryAssignment,
+  usePreachingGroups,
+  useTerritoriesCatalog,
+  useTerritoryMutations,
+} from '@/src/hooks/use-territories';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
-  TERRITORIES_PER_DAY_MAX,
-  TERRITORY_DAY_LABELS,
-  TERRITORY_DAYS,
+  buildTerritoryId,
+  getCurrentMonthId,
+  getMonthLabel,
   TERRITORY_DESCRIPTION_MAX_LENGTH,
-  type TerritoryDay,
-  type TerritoryItem,
+  type PreachingGroup,
+  type Territory,
+  type TerritoryAssignmentTarget,
 } from '@/src/types/territory';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { canManageTerritories } from '@/src/utils/permissions/permissions';
+import {
+  canAssignMonthlyTerritories,
+  canManagePreachingGroups,
+  canManageTerritoryCatalog,
+} from '@/src/utils/permissions/permissions';
+
+type TabKey = 'territories' | 'groups' | 'monthly';
 
 type TerritoryDraft = {
+  id?: string;
   number: string;
   description: string;
-  enabled: boolean;
 };
 
-const emptyDraft = (): TerritoryDraft => ({
-  number: '',
-  description: '',
-  enabled: true,
-});
+type GroupDraft = {
+  id?: string;
+  number: string;
+  captainUserId: string;
+  assistantUserId: string;
+  memberIds: string[];
+};
 
-const toDraft = (territory: TerritoryItem): TerritoryDraft => ({
-  number: String(territory.number),
-  description: territory.description,
-  enabled: territory.enabled,
-});
-
-const toTerritoryItems = (drafts: TerritoryDraft[]): TerritoryItem[] =>
-  drafts.map((draft) => ({
-    number: Number(draft.number.trim()),
-    description: draft.description.trim(),
-    enabled: draft.enabled,
-  }));
+const emptyTerritoryDraft = (): TerritoryDraft => ({ number: '', description: '' });
+const emptyGroupDraft = (): GroupDraft => ({ number: '', captainUserId: '', assistantUserId: '', memberIds: [] });
 
 export function TerritoriesManageScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const { t } = useI18n();
   const { appUser, uid, congregationId, loadingProfile } = useUser();
-  const { scheduleByDay, loading, error } = useTerritorySchedule(congregationId);
+  const [tab, setTab] = useState<TabKey>('territories');
+  const monthId = getCurrentMonthId();
+  const catalog = useTerritoriesCatalog(congregationId);
+  const groups = usePreachingGroups(congregationId);
+  const monthly = useMonthlyTerritoryAssignment(congregationId, monthId);
+  const users = useActiveCongregationUsers(congregationId);
   const mutations = useTerritoryMutations(congregationId, uid);
-  const [selectedDay, setSelectedDay] = useState<TerritoryDay>('monday');
-  const [draftsByDay, setDraftsByDay] = useState<Partial<Record<TerritoryDay, TerritoryDraft[]>>>({});
 
-  const canManage = canManageTerritories(appUser);
-  const selectedSchedule = scheduleByDay.get(selectedDay);
-  const drafts = useMemo(
-    () => draftsByDay[selectedDay] ?? [emptyDraft()],
-    [draftsByDay, selectedDay]
-  );
+  const canCatalog = canManageTerritoryCatalog(appUser);
+  const canGroups = canManagePreachingGroups(appUser);
+  const canAssign = canAssignMonthlyTerritories(appUser);
+  const canManageAny = canCatalog || canGroups || canAssign;
+  const loading = loadingProfile || catalog.loading || groups.loading || monthly.loading || users.loading;
+  const error = catalog.error ?? groups.error ?? monthly.error ?? users.error;
 
-  useEffect(() => {
-    const nextDrafts: Partial<Record<TerritoryDay, TerritoryDraft[]>> = {};
-
-    TERRITORY_DAYS.forEach((day) => {
-      const territories = scheduleByDay.get(day)?.territories ?? [];
-      nextDrafts[day] = territories.length > 0 ? territories.map(toDraft) : [emptyDraft()];
-    });
-
-    setDraftsByDay(nextDrafts);
-  }, [scheduleByDay]);
-
-  const formError = useMemo(() => {
-    try {
-      sanitizeTerritoryItems(toTerritoryItems(drafts));
-      return null;
-    } catch (validationError) {
-      return validationError instanceof Error
-        ? validationError.message
-        : t('territories.invalidData');
-    }
-  }, [drafts, t]);
-
-  const setDraftsForSelectedDay = (updater: (current: TerritoryDraft[]) => TerritoryDraft[]) => {
-    setDraftsByDay((current) => ({
-      ...current,
-      [selectedDay]: updater(current[selectedDay] ?? [emptyDraft()]),
-    }));
-  };
-
-  const handleChangeDraft = (
-    index: number,
-    key: keyof TerritoryDraft,
-    value: string | boolean
-  ) => {
-    setDraftsForSelectedDay((current) =>
-      current.map((draft, draftIndex) =>
-        draftIndex === index ? { ...draft, [key]: value } : draft
-      )
-    );
-  };
-
-  const handleAddTerritory = () => {
-    setDraftsForSelectedDay((current) =>
-      current.length >= TERRITORIES_PER_DAY_MAX ? current : [...current, emptyDraft()]
-    );
-  };
-
-  const handleRemoveTerritory = (index: number) => {
-    setDraftsForSelectedDay((current) =>
-      current.length <= 1 ? [emptyDraft()] : current.filter((_, draftIndex) => draftIndex !== index)
-    );
-  };
-
-  const handleSave = async () => {
-    try {
-      const territories = sanitizeTerritoryItems(toTerritoryItems(drafts));
-
-      if (selectedSchedule) {
-        await mutations.updateTerritorySchedule(selectedDay, { territories, active: true });
-      } else {
-        await mutations.createTerritorySchedule({
-          dayOfWeek: selectedDay,
-          territories,
-          active: true,
-        });
-      }
-
-      Alert.alert(t('common.success'), t('territories.saved'));
-    } catch (saveError) {
-      Alert.alert(t('common.error'), formatFirestoreError(saveError));
-    }
-  };
-
-  const handleDeleteDay = () => {
-    if (!selectedSchedule) return;
-
-    Alert.alert(
-      t('territories.deleteDayTitle'),
-      t('territories.deleteDayConfirm', { day: TERRITORY_DAY_LABELS[selectedDay] }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('territories.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await mutations.deleteTerritorySchedule(selectedDay);
-              setDraftsForSelectedDay(() => [emptyDraft()]);
-            } catch (deleteError) {
-              Alert.alert(t('common.error'), formatFirestoreError(deleteError));
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  if (loadingProfile || loading) {
-    return <LoadingState message={t('territories.loading')} />;
-  }
-
-  if (!appUser || !canManage) {
-    return <ErrorState message={t('territories.noPermission')} />;
-  }
-
-  if (error) {
-    return <ErrorState message={error} />;
-  }
+  if (loading) return <LoadingState message="Cargando administracion de predicacion..." />;
+  if (!appUser || !canManageAny) return <ErrorState message="No tienes permisos para administrar predicacion." />;
+  if (error) return <ErrorState message={error} />;
 
   return (
     <ScreenContainer>
-      <PageHeader title={t('territories.manageTitle')} showBack />
+      <PageHeader title="Administrar predicacion" showBack />
 
-      <View style={styles.section}>
-        <ThemedText style={styles.sectionTitle}>{t('territories.day')}</ThemedText>
-        <View style={styles.dayGrid}>
-          {TERRITORY_DAYS.map((day) => {
-            const selected = selectedDay === day;
-            return (
-              <TouchableOpacity
-                key={day}
-                style={[styles.dayButton, selected && styles.dayButtonActive]}
-                onPress={() => setSelectedDay(day)}
-                activeOpacity={0.85}
-              >
-                <ThemedText style={[styles.dayButtonText, selected && styles.dayButtonTextActive]}>
-                  {TERRITORY_DAY_LABELS[day]}
-                </ThemedText>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+      <View style={styles.tabs}>
+        <TabButton label="Territorios" active={tab === 'territories'} onPress={() => setTab('territories')} />
+        <TabButton label="Grupos" active={tab === 'groups'} onPress={() => setTab('groups')} />
+        <TabButton label="Asignacion mensual" active={tab === 'monthly'} onPress={() => setTab('monthly')} />
       </View>
 
+      {tab === 'territories' ? (
+        <TerritoryCatalogSection
+          territories={catalog.territories}
+          canManage={canCatalog}
+          saving={mutations.saving}
+          onSave={async (draft) => {
+            try {
+              const input = {
+                number: Number(draft.number.trim()),
+                description: draft.description.trim(),
+                status: 'active' as const,
+              };
+              if (draft.id) await mutations.updateTerritory(draft.id, input);
+              else await mutations.createTerritory(input);
+              Alert.alert('Territorios', 'Territorio guardado correctamente.');
+            } catch (saveError) {
+              Alert.alert('Error', formatFirestoreError(saveError));
+            }
+          }}
+          onDeactivate={async (territoryId) => {
+            try {
+              await mutations.deactivateTerritory(territoryId);
+            } catch (saveError) {
+              Alert.alert('Error', formatFirestoreError(saveError));
+            }
+          }}
+        />
+      ) : null}
+
+      {tab === 'groups' ? (
+        <GroupsSection
+          groups={groups.groups}
+          users={users.users}
+          canManage={canGroups}
+          saving={mutations.saving}
+          onSave={async (draft) => {
+            try {
+              const selectedUsers = users.users.filter((user) => draft.memberIds.includes(user.uid));
+              const captain = users.users.find((user) => user.uid === draft.captainUserId);
+              const assistant = users.users.find((user) => user.uid === draft.assistantUserId);
+              const input = {
+                number: Number(draft.number.trim()),
+                captainUserId: draft.captainUserId,
+                captainName: captain?.displayName ?? '',
+                assistantUserId: assistant?.uid ?? null,
+                assistantName: assistant?.displayName ?? null,
+                memberIds: draft.memberIds,
+                memberNames: selectedUsers.map((user) => user.displayName),
+                isActive: true,
+              };
+              if (draft.id) await mutations.updatePreachingGroup(draft.id, input);
+              else await mutations.createPreachingGroup(input);
+              Alert.alert('Grupos', 'Grupo guardado correctamente.');
+            } catch (saveError) {
+              Alert.alert('Error', formatFirestoreError(saveError));
+            }
+          }}
+          onDeactivate={async (groupId) => {
+            try {
+              await mutations.deactivatePreachingGroup(groupId);
+            } catch (saveError) {
+              Alert.alert('Error', formatFirestoreError(saveError));
+            }
+          }}
+        />
+      ) : null}
+
+      {tab === 'monthly' ? (
+        <MonthlyAssignmentSection
+          monthId={monthId}
+          territories={catalog.territories}
+          groups={groups.groups}
+          existingTargets={monthly.assignment?.assignments ?? []}
+          canManage={canAssign}
+          saving={mutations.saving}
+          onSave={async (targets) => {
+            try {
+              await mutations.upsertMonthlyTerritoryAssignment(monthId, { assignments: targets });
+              await monthly.refresh();
+              Alert.alert('Asignacion mensual', 'Asignacion mensual guardada.');
+            } catch (saveError) {
+              Alert.alert('Error', formatFirestoreError(saveError));
+            }
+          }}
+        />
+      ) : null}
+    </ScreenContainer>
+  );
+}
+
+function TabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+  return (
+    <TouchableOpacity style={[styles.tabButton, active && styles.tabButtonActive]} onPress={onPress}>
+      <ThemedText style={[styles.tabText, active && styles.tabTextActive]}>{label}</ThemedText>
+    </TouchableOpacity>
+  );
+}
+
+function TerritoryCatalogSection({
+  territories,
+  canManage,
+  saving,
+  onSave,
+  onDeactivate,
+}: {
+  territories: Territory[];
+  canManage: boolean;
+  saving: boolean;
+  onSave: (draft: TerritoryDraft) => Promise<void>;
+  onDeactivate: (territoryId: string) => Promise<void>;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+  const [draft, setDraft] = useState<TerritoryDraft>(emptyTerritoryDraft());
+  const activeTerritories = territories.filter((territory) => territory.status === 'active');
+  const descriptionTooLong = draft.description.length > TERRITORY_DESCRIPTION_MAX_LENGTH;
+
+  if (!canManage) return <ErrorState message="No tienes permisos para administrar el catalogo." />;
+
+  return (
+    <View style={styles.stack}>
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <ThemedText style={styles.sectionTitle}>
-            {TERRITORY_DAY_LABELS[selectedDay]}
-          </ThemedText>
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={handleAddTerritory}
-            disabled={drafts.length >= TERRITORIES_PER_DAY_MAX}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="add-outline" size={20} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.list}>
-          {drafts.map((draft, index) => {
-            const descriptionTooLong = draft.description.length > TERRITORY_DESCRIPTION_MAX_LENGTH;
-
-            return (
-              <View key={`${selectedDay}:${index}`} style={styles.territoryCard}>
-                <View style={styles.cardHeader}>
-                  <ThemedText style={styles.cardTitle}>
-                    {t('territories.itemIndex', { index: index + 1 })}
-                  </ThemedText>
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity
-                      style={[styles.statusButton, draft.enabled ? styles.enabledButton : styles.disabledStatusButton]}
-                      onPress={() => handleChangeDraft(index, 'enabled', !draft.enabled)}
-                      activeOpacity={0.85}
-                    >
-                      <ThemedText style={[styles.statusButtonText, draft.enabled && styles.enabledButtonText]}>
-                        {draft.enabled ? t('territories.enabled') : t('territories.disabled')}
-                      </ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.iconButton}
-                      onPress={() => handleRemoveTerritory(index)}
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons name="trash-outline" size={18} color={colors.error} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <TextInput
-                  style={styles.input}
-                  value={draft.number}
-                  onChangeText={(value) => handleChangeDraft(index, 'number', value)}
-                  placeholder={t('territories.number')}
-                  placeholderTextColor={colors.textDisabled}
-                  keyboardType="number-pad"
-                />
-
-                <TextInput
-                  style={[styles.input, styles.descriptionInput, descriptionTooLong && styles.inputError]}
-                  value={draft.description}
-                  onChangeText={(value) => handleChangeDraft(index, 'description', value)}
-                  placeholder={t('territories.description')}
-                  placeholderTextColor={colors.textDisabled}
-                  multiline
-                  maxLength={TERRITORY_DESCRIPTION_MAX_LENGTH + 20}
-                />
-                <ThemedText
-                  style={[
-                    styles.counter,
-                    descriptionTooLong && styles.counterError,
-                  ]}
-                >
-                  {draft.description.length}/{TERRITORY_DESCRIPTION_MAX_LENGTH}
-                </ThemedText>
-              </View>
-            );
-          })}
-        </View>
-
-        {formError ? <ThemedText style={styles.errorText}>{formError}</ThemedText> : null}
-
+        <ThemedText style={styles.sectionTitle}>{draft.id ? 'Editar territorio' : 'Nuevo territorio'}</ThemedText>
+        <TextInput
+          style={styles.input}
+          value={draft.number}
+          onChangeText={(number) => setDraft((current) => ({ ...current, number }))}
+          placeholder="Numero"
+          placeholderTextColor={colors.textDisabled}
+          keyboardType="number-pad"
+          editable={!draft.id}
+        />
+        <TextInput
+          style={[styles.input, styles.descriptionInput, descriptionTooLong && styles.inputError]}
+          value={draft.description}
+          onChangeText={(description) => setDraft((current) => ({ ...current, description }))}
+          placeholder="Descripcion corta"
+          placeholderTextColor={colors.textDisabled}
+          multiline
+          maxLength={TERRITORY_DESCRIPTION_MAX_LENGTH + 20}
+        />
+        <ThemedText style={[styles.counter, descriptionTooLong && styles.errorText]}>
+          {draft.description.length}/{TERRITORY_DESCRIPTION_MAX_LENGTH}
+        </ThemedText>
         <TouchableOpacity
-          style={[styles.primaryButton, (mutations.saving || Boolean(formError)) && styles.disabledButton]}
-          onPress={handleSave}
-          disabled={mutations.saving || Boolean(formError)}
-          activeOpacity={0.85}
+          style={[styles.primaryButton, saving && styles.disabledButton]}
+          disabled={saving}
+          onPress={async () => {
+            await onSave(draft);
+            setDraft(emptyTerritoryDraft());
+          }}
         >
           <Ionicons name="save-outline" size={18} color={colors.onPrimary} />
-          <ThemedText style={styles.primaryButtonText}>{t('territories.save')}</ThemedText>
+          <ThemedText style={styles.primaryButtonText}>Guardar territorio</ThemedText>
         </TouchableOpacity>
-
-        {selectedSchedule ? (
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={handleDeleteDay}
-            disabled={mutations.saving}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="archive-outline" size={18} color={colors.error} />
-            <ThemedText style={styles.deleteButtonText}>{t('territories.deleteDay')}</ThemedText>
-          </TouchableOpacity>
-        ) : null}
       </View>
-    </ScreenContainer>
+
+      <View style={styles.list}>
+        {activeTerritories.map((territory) => (
+          <View key={territory.id} style={styles.card}>
+            <View style={styles.cardText}>
+              <ThemedText style={styles.cardTitle}>Territorio {territory.number}</ThemedText>
+              <ThemedText style={styles.cardSubtitle}>{territory.description}</ThemedText>
+            </View>
+            <View style={styles.cardActions}>
+              <TouchableOpacity style={styles.iconButton} onPress={() => setDraft({ id: territory.id, number: String(territory.number), description: territory.description })}>
+                <Ionicons name="create-outline" size={18} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconButton} onPress={() => void onDeactivate(territory.id)}>
+                <Ionicons name="archive-outline" size={18} color={colors.error} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function GroupsSection({
+  groups,
+  users,
+  canManage,
+  saving,
+  onSave,
+  onDeactivate,
+}: {
+  groups: PreachingGroup[];
+  users: { uid: string; displayName: string }[];
+  canManage: boolean;
+  saving: boolean;
+  onSave: (draft: GroupDraft) => Promise<void>;
+  onDeactivate: (groupId: string) => Promise<void>;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+  const [draft, setDraft] = useState<GroupDraft>(emptyGroupDraft());
+  const activeGroups = groups.filter((group) => group.isActive);
+
+  if (!canManage) return <ErrorState message="No tienes permisos para administrar grupos." />;
+
+  const toggleMember = (uid: string) => {
+    setDraft((current) => ({
+      ...current,
+      memberIds: current.memberIds.includes(uid)
+        ? current.memberIds.filter((item) => item !== uid)
+        : [...current.memberIds, uid],
+    }));
+  };
+
+  return (
+    <View style={styles.stack}>
+      <View style={styles.section}>
+        <ThemedText style={styles.sectionTitle}>{draft.id ? 'Editar grupo' : 'Nuevo grupo'}</ThemedText>
+        <TextInput
+          style={styles.input}
+          value={draft.number}
+          onChangeText={(number) => setDraft((current) => ({ ...current, number }))}
+          placeholder="Numero de grupo"
+          placeholderTextColor={colors.textDisabled}
+          keyboardType="number-pad"
+        />
+        <ThemedText style={styles.label}>Capitan</ThemedText>
+        <UserChipList users={users} selectedIds={draft.captainUserId ? [draft.captainUserId] : []} onPress={(uid) => setDraft((current) => ({ ...current, captainUserId: uid, memberIds: Array.from(new Set([...current.memberIds, uid])) }))} />
+        <ThemedText style={styles.label}>Auxiliar</ThemedText>
+        <UserChipList users={users} selectedIds={draft.assistantUserId ? [draft.assistantUserId] : []} onPress={(uid) => setDraft((current) => ({ ...current, assistantUserId: current.assistantUserId === uid ? '' : uid, memberIds: Array.from(new Set([...current.memberIds, uid])) }))} />
+        <ThemedText style={styles.label}>Integrantes</ThemedText>
+        <UserChipList users={users} selectedIds={draft.memberIds} onPress={toggleMember} />
+        <TouchableOpacity
+          style={[styles.primaryButton, saving && styles.disabledButton]}
+          disabled={saving}
+          onPress={async () => {
+            await onSave(draft);
+            setDraft(emptyGroupDraft());
+          }}
+        >
+          <Ionicons name="save-outline" size={18} color={colors.onPrimary} />
+          <ThemedText style={styles.primaryButtonText}>Guardar grupo</ThemedText>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.list}>
+        {activeGroups.map((group) => (
+          <View key={group.id} style={styles.card}>
+            <View style={styles.cardText}>
+              <ThemedText style={styles.cardTitle}>{group.name}</ThemedText>
+              <ThemedText style={styles.cardSubtitle}>
+                Capitan: {group.captainName} · {group.memberCount} integrantes
+              </ThemedText>
+            </View>
+            <View style={styles.cardActions}>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => setDraft({
+                  id: group.id,
+                  number: String(group.number),
+                  captainUserId: group.captainUserId,
+                  assistantUserId: group.assistantUserId ?? '',
+                  memberIds: group.memberIds,
+                })}
+              >
+                <Ionicons name="create-outline" size={18} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconButton} onPress={() => void onDeactivate(group.id)}>
+                <Ionicons name="archive-outline" size={18} color={colors.error} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function UserChipList({
+  users,
+  selectedIds,
+  onPress,
+}: {
+  users: { uid: string; displayName: string }[];
+  selectedIds: string[];
+  onPress: (uid: string) => void;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+  return (
+    <View style={styles.chipWrap}>
+      {users.map((user) => {
+        const selected = selectedIds.includes(user.uid);
+        return (
+          <TouchableOpacity key={user.uid} style={[styles.chip, selected && styles.chipActive]} onPress={() => onPress(user.uid)}>
+            <ThemedText style={[styles.chipText, selected && styles.chipTextActive]}>{user.displayName}</ThemedText>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+function MonthlyAssignmentSection({
+  monthId,
+  territories,
+  groups,
+  existingTargets,
+  canManage,
+  saving,
+  onSave,
+}: {
+  monthId: string;
+  territories: Territory[];
+  groups: PreachingGroup[];
+  existingTargets: TerritoryAssignmentTarget[];
+  canManage: boolean;
+  saving: boolean;
+  onSave: (targets: TerritoryAssignmentTarget[]) => Promise<void>;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+  const activeTerritories = territories.filter((territory) => territory.status === 'active');
+  const activeGroups = groups.filter((group) => group.isActive);
+  const existingCongregationIds = existingTargets.find((target) => target.scope === 'congregation')?.territoryIds ?? [];
+  const [congregationIds, setCongregationIds] = useState<string[]>(existingCongregationIds);
+  const [groupIdsByGroup, setGroupIdsByGroup] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(
+      existingTargets
+        .filter((target) => target.scope === 'group' && target.groupId)
+        .map((target) => [target.groupId as string, target.territoryIds])
+    )
+  );
+
+  if (!canManage) return <ErrorState message="No tienes permisos para asignar territorios." />;
+
+  const toggle = (items: string[], territoryId: string) =>
+    items.includes(territoryId) ? items.filter((item) => item !== territoryId) : [...items, territoryId];
+
+  const buildTargets = (): TerritoryAssignmentTarget[] => {
+    const targets: TerritoryAssignmentTarget[] = [];
+    if (congregationIds.length > 0) {
+      targets.push({
+        id: 'congregation',
+        scope: 'congregation',
+        groupId: null,
+        groupName: null,
+        territoryIds: congregationIds,
+        territoryNumbers: [],
+        notes: null,
+      });
+    }
+    activeGroups.forEach((group) => {
+      const territoryIds = groupIdsByGroup[group.id] ?? [];
+      if (territoryIds.length === 0) return;
+      targets.push({
+        id: `group_${group.id}`,
+        scope: 'group',
+        groupId: group.id,
+        groupName: group.name,
+        territoryIds,
+        territoryNumbers: [],
+        notes: null,
+      });
+    });
+    return targets;
+  };
+
+  const selectedGlobally = new Set([
+    ...congregationIds,
+    ...Object.values(groupIdsByGroup).flat(),
+  ]);
+
+  return (
+    <View style={styles.stack}>
+      <View style={styles.section}>
+        <ThemedText style={styles.sectionTitle}>Asignacion mensual</ThemedText>
+        <ThemedText style={styles.cardSubtitle}>{getMonthLabel(monthId)}</ThemedText>
+      </View>
+
+      <AssignmentPicker
+        title="Para toda la congregacion"
+        territories={activeTerritories}
+        selectedIds={congregationIds}
+        disabledIds={selectedGlobally}
+        onToggle={(territoryId) => setCongregationIds((current) => toggle(current, territoryId))}
+      />
+
+      {activeGroups.map((group) => (
+        <AssignmentPicker
+          key={group.id}
+          title={group.name}
+          territories={activeTerritories}
+          selectedIds={groupIdsByGroup[group.id] ?? []}
+          disabledIds={selectedGlobally}
+          onToggle={(territoryId) => setGroupIdsByGroup((current) => ({ ...current, [group.id]: toggle(current[group.id] ?? [], territoryId) }))}
+        />
+      ))}
+
+      <TouchableOpacity
+        style={[styles.primaryButton, saving && styles.disabledButton]}
+        disabled={saving}
+        onPress={() => void onSave(buildTargets())}
+      >
+        <Ionicons name="calendar-outline" size={18} color={colors.onPrimary} />
+        <ThemedText style={styles.primaryButtonText}>Guardar asignacion mensual</ThemedText>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function AssignmentPicker({
+  title,
+  territories,
+  selectedIds,
+  disabledIds,
+  onToggle,
+}: {
+  title: string;
+  territories: Territory[];
+  selectedIds: string[];
+  disabledIds: Set<string>;
+  onToggle: (territoryId: string) => void;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+  return (
+    <View style={styles.section}>
+      <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+      <View style={styles.chipWrap}>
+        {territories.map((territory) => {
+          const selected = selectedIds.includes(territory.id);
+          const disabled = disabledIds.has(territory.id) && !selected;
+          return (
+            <TouchableOpacity
+              key={territory.id}
+              style={[styles.chip, selected && styles.chipActive, disabled && styles.disabledButton]}
+              disabled={disabled}
+              onPress={() => onToggle(territory.id)}
+            >
+              <ThemedText style={[styles.chipText, selected && styles.chipTextActive]}>
+                {buildTerritoryId(territory.number).replace('territory_', '#')}
+              </ThemedText>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
 const createStyles = (colors: AppColorSet) =>
   StyleSheet.create({
+    tabs: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 14,
+    },
+    tabButton: {
+      minHeight: 38,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      paddingHorizontal: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    tabButtonActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    tabText: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    tabTextActive: {
+      color: colors.onPrimary,
+    },
+    stack: {
+      gap: 12,
+    },
     section: {
       borderRadius: 12,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: 14,
-      gap: 12,
-      marginBottom: 14,
-    },
-    sectionHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 12,
+      gap: 10,
     },
     sectionTitle: {
       color: colors.textPrimary,
-      fontSize: 17,
+      fontSize: 16,
       fontWeight: '800',
     },
-    dayGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-    },
-    dayButton: {
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.backgroundLight,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-    },
-    dayButtonActive: {
-      borderColor: colors.primary,
-      backgroundColor: colors.primary,
-    },
-    dayButtonText: {
-      color: colors.textSecondary,
+    label: {
+      color: colors.textMuted,
       fontSize: 12,
       fontWeight: '800',
-    },
-    dayButtonTextActive: {
-      color: colors.onPrimary,
-    },
-    list: {
-      gap: 10,
-    },
-    territoryCard: {
-      borderRadius: 10,
-      backgroundColor: colors.surfaceRaised,
-      padding: 12,
-      gap: 10,
-    },
-    cardHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: 10,
-    },
-    cardTitle: {
-      flex: 1,
-      color: colors.textPrimary,
-      fontSize: 15,
-      fontWeight: '800',
-    },
-    cardActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    statusButton: {
-      minHeight: 32,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: colors.border,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 10,
-      backgroundColor: colors.backgroundLight,
-    },
-    enabledButton: {
-      borderColor: colors.success,
-      backgroundColor: colors.successLight,
-    },
-    disabledStatusButton: {
-      opacity: 0.8,
-    },
-    statusButtonText: {
-      color: colors.textMuted,
-      fontSize: 11,
-      fontWeight: '800',
-    },
-    enabledButtonText: {
-      color: colors.success,
-    },
-    iconButton: {
-      width: 34,
-      height: 34,
-      borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.backgroundLight,
-      borderWidth: 1,
-      borderColor: colors.border,
     },
     input: {
       minHeight: 46,
@@ -435,13 +608,8 @@ const createStyles = (colors: AppColorSet) =>
       fontSize: 11,
       fontWeight: '700',
     },
-    counterError: {
-      color: colors.error,
-    },
     errorText: {
       color: colors.error,
-      fontSize: 12,
-      fontWeight: '700',
     },
     primaryButton: {
       minHeight: 50,
@@ -461,21 +629,72 @@ const createStyles = (colors: AppColorSet) =>
     disabledButton: {
       opacity: 0.45,
     },
-    deleteButton: {
-      minHeight: 46,
+    list: {
+      gap: 10,
+    },
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
       borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      padding: 12,
+    },
+    cardText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    cardTitle: {
+      color: colors.textPrimary,
+      fontSize: 15,
+      fontWeight: '800',
+    },
+    cardSubtitle: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 2,
+    },
+    cardActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    iconButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.backgroundLight,
       alignItems: 'center',
       justifyContent: 'center',
-      flexDirection: 'row',
-      gap: 8,
-      borderWidth: 1,
-      borderColor: colors.error + '66',
-      backgroundColor: colors.errorLight,
-      paddingHorizontal: 14,
     },
-    deleteButtonText: {
-      color: colors.error,
-      fontSize: 14,
+    chipWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    chip: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceRaised,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    chipActive: {
+      borderColor: colors.primary,
+      backgroundColor: colors.infoLight,
+    },
+    chipText: {
+      color: colors.textSecondary,
+      fontSize: 12,
       fontWeight: '800',
+    },
+    chipTextActive: {
+      color: colors.primary,
     },
   });

@@ -84,15 +84,15 @@ function ProtectedContent() {
         {/* Settings */}
         <Stack.Screen
           name="settings/theme"
-          options={{ title: t('settings.screen.theme'), headerShown: true }}
+          options={{ title: t('settings.screen.theme'), headerShown: false }}
         />
         <Stack.Screen
           name="settings/language"
-          options={{ title: t('settings.screen.language'), headerShown: true }}
+          options={{ title: t('settings.screen.language'), headerShown: false }}
         />
         <Stack.Screen
           name="settings/about"
-          options={{ title: t('settings.screen.about'), headerShown: true }}
+          options={{ title: t('settings.screen.about'), headerShown: false }}
         />
       </Stack>
     </>

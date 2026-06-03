@@ -7,6 +7,7 @@ import { MeetingCard } from '@/src/components/cards/MeetingCard';
 import { EmptyState } from '@/src/components/common/EmptyState';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
+import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
@@ -170,6 +171,7 @@ export function MeetingsListScreen() {
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
+      <PageHeader title={t('tabs.meetings')} showBack />
       <FlatList
         data={groupedMeetings}
         keyExtractor={(group) => group.id}

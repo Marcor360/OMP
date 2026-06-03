@@ -14,7 +14,9 @@ interface PageHeaderProps {
   title: string;
   subtitle?: string;
   showBack?: boolean;
+  fallbackRoute?: string;
   actions?: React.ReactNode;
+  rightAction?: React.ReactNode;
   style?: ViewStyle;
 }
 
@@ -22,12 +24,23 @@ export function PageHeader({
   title,
   subtitle,
   showBack = false,
+  fallbackRoute,
   actions,
+  rightAction,
   style,
 }: PageHeaderProps) {
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const headerAction = actions ?? rightAction;
+  const handleBack = () => {
+    if (router.canGoBack?.()) {
+      router.back();
+      return;
+    }
+
+    router.replace((fallbackRoute ?? '/(protected)/(tabs)') as never);
+  };
 
   return (
     <View style={[styles.container, style]}>
@@ -35,8 +48,10 @@ export function PageHeader({
         {showBack && (
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={handleBack}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Volver"
           >
             <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
@@ -52,7 +67,7 @@ export function PageHeader({
           ) : null}
         </View>
       </View>
-      {actions ? <View style={styles.actions}>{actions}</View> : null}
+      {headerAction ? <View style={styles.actions}>{headerAction}</View> : null}
     </View>
   );
 }

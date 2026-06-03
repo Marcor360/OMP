@@ -30,6 +30,7 @@ import {
 import { CleaningServiceError } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { ErrorState } from '@/src/components/common/ErrorState';
+import { PageHeader } from '@/src/components/layout/PageHeader';
 
 interface CleaningGroupDetailScreenProps {
   groupId: string;
@@ -62,6 +63,15 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
     }
     refresh();
   }, [congregationId, refresh, refreshAll, refreshAssignableUsers]);
+
+  const goBackToCleaning = useCallback(() => {
+    if (router.canGoBack?.()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/(protected)/cleaning' as never);
+  }, [router]);
 
   const memberProfiles = group
     ? group.memberIds.map((uid) => {
@@ -142,7 +152,7 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
               if (congregationId) {
                 await refreshAll(congregationId).catch(() => undefined);
               }
-              router.back();
+              goBackToCleaning();
             } catch (err) {
               setActionError(
                 err instanceof CleaningServiceError
@@ -327,27 +337,20 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       >
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Volver"
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {group.name}
-          </Text>
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => router.push(`/(protected)/cleaning/edit/${groupId}`)}
-            accessibilityRole="button"
-            accessibilityLabel={t('cleaning.editGroup')}
-          >
-            <Ionicons name="create-outline" size={22} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
+        <PageHeader
+          title={group.name}
+          showBack
+          actions={
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() => router.push(`/(protected)/cleaning/edit/${groupId}`)}
+              accessibilityRole="button"
+              accessibilityLabel={t('cleaning.editGroup')}
+            >
+              <Ionicons name="create-outline" size={22} color={colors.primary} />
+            </TouchableOpacity>
+          }
+        />
 
         <View style={styles.infoCard}>
           <View style={styles.nameRow}>

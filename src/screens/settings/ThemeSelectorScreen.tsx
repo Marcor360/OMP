@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { ScrollView, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
+import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ThemedText } from '@/src/components/themed-text';
 import { useAppTheme, type ThemeMode } from '@/src/context/theme-context';
 import { useI18n } from '@/src/i18n/index';
@@ -29,8 +30,9 @@ export function ThemeSelectorScreen() {
   };
 
   return (
-    <ScreenContainer>
-      <View style={styles.container}>
+    <ScreenContainer scrollable={false} padded={false}>
+      <PageHeader title={t('settings.screen.theme')} showBack />
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Descripción */}
         <ThemedText style={styles.description} type="subtitle">
           {t('theme.description')}
@@ -94,7 +96,7 @@ export function ThemeSelectorScreen() {
                 : 'La aplicación siempre usará el tema oscuro.'}
           </ThemedText>
         </View>
-      </View>
+      </ScrollView>
     </ScreenContainer>
   );
 }
@@ -102,8 +104,9 @@ export function ThemeSelectorScreen() {
 const createStyles = (colors: ReturnType<typeof useAppColors>) =>
   StyleSheet.create({
     container: {
-      flex: 1,
+      flexGrow: 1,
       gap: 24,
+      padding: 16,
     },
     description: {
       fontSize: 15,
