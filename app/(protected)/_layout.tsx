@@ -1,4 +1,7 @@
-import { Stack } from 'expo-router';
+import { Stack, useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
+import { useEffect } from 'react';
+
+import { useAuth } from '@/src/context/auth-context';
 import { UserProvider, useUser } from '@/src/context/user-context';
 import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
 import { useStartupPermissionPrompt } from '@/src/hooks/use-startup-permission-prompt';
@@ -6,6 +9,7 @@ import { useI18n } from '@/src/i18n/index';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { CongregationBlockedScreen } from '@/src/screens/errors/CongregationBlockedScreen';
 import { SystemAnnouncementGate } from '@/src/components/announcements/SystemAnnouncementGate';
+import { buildPathWithParams } from '@/src/utils/navigation/redirect';
 
 function ProtectedNotificationSetup() {
   const { uid, congregationId, isSessionValid } = useUser();
@@ -25,6 +29,28 @@ function ProtectedNotificationSetup() {
 }
 
 export default function ProtectedLayout() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useGlobalSearchParams();
+
+  useEffect(() => {
+    if (loading || user) {
+      return;
+    }
+
+    router.replace({
+      pathname: '/login',
+      params: {
+        redirectTo: buildPathWithParams(pathname, searchParams),
+      },
+    });
+  }, [loading, pathname, router, searchParams, user]);
+
+  if (loading || !user) {
+    return <LoadingState message="Verificando acceso..." />;
+  }
+
   return (
     <UserProvider>
       <ProtectedContent />

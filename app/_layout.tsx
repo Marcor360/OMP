@@ -1,6 +1,6 @@
 import '../global.css';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
@@ -16,6 +16,7 @@ import { useInitialPermissions } from '@/src/hooks/use-initial-permissions';
 import { useCacheControlCleanup } from '@/src/hooks/use-cache-control-cleanup';
 import { configureGlobalNotificationHandler } from '@/src/services/notifications/push-notifications.service';
 import { canUseRemotePushNotifications } from '@/src/utils/runtime';
+import { buildPathWithParams, getSafeRedirectPath } from '@/src/utils/navigation/redirect';
 
 // Prevenir que el splash se oculte automáticamente
 if (Platform.OS !== 'web') {
@@ -34,6 +35,8 @@ function RootLayoutNav() {
   const { user, loading } = useAuth();
   const { isReady: i18nReady, hasCompletedLanguageOnboarding } = useI18n();
   const segments = useSegments();
+  const pathname = usePathname();
+  const searchParams = useGlobalSearchParams();
   const router = useRouter();
   const [appReady, setAppReady] = useState(false);
   const [splashHidden, setSplashHidden] = useState(false);
@@ -107,6 +110,7 @@ function RootLayoutNav() {
     const inAuthGroup = segments[0] === '(auth)';
     const inLanguageSetup = segments[0] === 'language-setup';
     const inProtectedGroup = segments[0] === '(protected)';
+    const currentPath = buildPathWithParams(pathname, searchParams);
 
     if (!hasCompletedLanguageOnboarding) {
       if (!inLanguageSetup) {
@@ -116,16 +120,21 @@ function RootLayoutNav() {
     }
 
     if (inLanguageSetup) {
-      router.replace(user ? ('/(protected)/(tabs)/' as any) : '/(auth)/login');
+      router.replace(user ? ('/(protected)/(tabs)/' as any) : '/login');
       return;
     }
 
-    if (!user && !inAuthGroup) {
+    if (!user && inProtectedGroup) {
       // Sin sesión y fuera del grupo auth → ir a login
-      router.replace('/(auth)/login');
+      router.replace({
+        pathname: '/login',
+        params: { redirectTo: currentPath },
+      });
+    } else if (!user && !inAuthGroup) {
+      router.replace('/login');
     } else if (user && inAuthGroup) {
       // Con sesión y en pantalla de auth → ir a tabs
-      router.replace('/(protected)/(tabs)/' as any);
+      router.replace(getSafeRedirectPath(searchParams.redirectTo) as any);
     } else if (user && !inProtectedGroup && !inAuthGroup && !inLanguageSetup) {
       // Con sesión pero en index u otra ruta no protegida (ej: primera carga) → ir a tabs
       router.replace('/(protected)/(tabs)/' as any);
@@ -134,6 +143,8 @@ function RootLayoutNav() {
     appReady,
     user,
     segments,
+    pathname,
+    searchParams,
     router,
     hasCompletedLanguageOnboarding,
   ]);

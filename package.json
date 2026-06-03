@@ -9,8 +9,8 @@
     "android:release": "expo run:android --variant release",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build:web": "expo export --platform web",
-    "preview:web": "npx serve dist",
+    "build:web": "expo export --platform web && node scripts/copy-web-htaccess.js",
+    "preview:web": "npx serve dist --single",
     "lint": "expo lint",
     "validate": "npm run lint && tsc --noEmit && npm --prefix functions run lint && npm --prefix functions run build && npm --prefix functions test -- --runInBand"
   },
