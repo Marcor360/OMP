@@ -1,236 +1,313 @@
-# 📘 OMP — Organization, Ministry & Programs
+# 📘 OMP Suite — Organization, Ministry & Programs
 
-**OMP** es una aplicación multiplataforma desarrollada con **Expo**, **React Native**, **TypeScript** y **Firebase** para ayudar a organizar actividades internas de una congregación: usuarios, reuniones, asignaciones, limpieza, hospitalidad, predicación, territorios, notificaciones y control administrativo.
+**OMP Suite** es una aplicación multiplataforma desarrollada con **Expo**, **React Native**, **TypeScript** y **Firebase**, creada para ayudar a organizar actividades internas de una congregación de forma digital, segura y estructurada.
 
-> ⚠️ **Aviso importante:** OMP no es una aplicación oficial de los Testigos de Jehová. No está afiliada, respaldada ni relacionada con JW.ORG ni con ninguna entidad oficial de los Testigos de Jehová. Es una herramienta independiente creada con respeto, cuidado y enfoque técnico para facilitar la organización interna.
+La plataforma permite administrar usuarios, reuniones, asignaciones, limpieza, hospitalidad, predicación, territorios, notificaciones, permisos, roles, organigrama y configuración general por congregación.
 
----
-
-## 🧭 Estado del proyecto
-
-| Área | Estado |
-|---|---|
-| 📱 App Android | Release `1.0.1` generado en formato AAB |
-| 🍎 App iOS | Base preparada por Expo, pendiente de distribución |
-| 🌐 Web con Expo | Disponible mediante `expo start --web` |
-| 🔐 Firebase Auth | Integrado |
-| 🗄️ Cloud Firestore | Integrado |
-| ⚙️ Cloud Functions | Integradas |
-| 🔔 Notificaciones push | Integradas con Expo Notifications, permisos Android y Firebase |
-| 🛡️ Reglas de seguridad Firestore | Integradas |
-| 💾 Caché local / cache-first | Integrado |
-| 🌎 Internacionalización | Español e inglés activos, estructura extendida para más idiomas |
-| 📦 Build Android | `android/app/build/outputs/bundle/release/app-release.aab` |
-| 🧩 Panel administrativo externo | Pendiente / en planeación |
-| 📊 Límites por plan de congregación | Base visible en ajustes, reglas de negocio en evolución |
-
-### Versión actual
-
-| Campo | Valor |
-|---|---|
-| Versión de app | `1.0.1` |
-| Android `versionName` | `1.0.1` |
-| Android `versionCode` | `101` |
-| Paquete Android | `com.marcor360.omp` |
-| Formato de publicación Android | Android App Bundle (`.aab`) |
-| Firma release | `android/app/my-upload-key.keystore` |
+> ⚠️ **Aviso importante:** OMP Suite no es una aplicación oficial de los Testigos de Jehová. No está afiliada, respaldada ni relacionada con JW.ORG ni con ninguna entidad oficial de los Testigos de Jehová. Es una herramienta independiente creada con respeto, cuidado y enfoque técnico para apoyar la organización interna de una congregación.
 
 ---
 
-## ✨ Características principales
+## 🧭 Estado general del proyecto
+
+OMP Suite se encuentra en una etapa avanzada de desarrollo inicial, con una base funcional sólida y varios módulos principales ya integrados.
+
+El proyecto cuenta con aproximadamente **3 meses de desarrollo constante**, con trabajo dedicado casi todos los días en análisis, diseño, programación, arquitectura, seguridad, pruebas, documentación, configuración de servicios y mejoras generales.
+
+Durante este periodo se ha construido una base técnica preparada para operar en dispositivos móviles, web y, posteriormente, distribución iOS.
+
+OMP Suite no es un prototipo improvisado. Es un producto digital en evolución, construido con inversión real de tiempo, infraestructura, herramientas, pruebas, mantenimiento y mejora continua.
+
+---
+
+## 📌 Resumen actual
+
+| Área              | Estado                                                          |
+| ----------------- | --------------------------------------------------------------- |
+| 📱 App Android    | Release `1.0.1` generado en formato AAB                         |
+| 🍎 App iOS        | Base preparada con Expo, pendiente de distribución              |
+| 🌐 Web            | Compatible mediante Expo Web                                    |
+| 🔐 Autenticación  | Firebase Authentication integrado                               |
+| 🗄️ Base de datos | Cloud Firestore integrado                                       |
+| ⚙️ Backend        | Firebase Cloud Functions integrado                              |
+| 🔔 Notificaciones | Expo Notifications y Firebase integrados                        |
+| 🛡️ Seguridad     | Reglas de Firestore implementadas                               |
+| 💾 Caché local    | Estrategia cache-first integrada                                |
+| 🌎 Idiomas        | Español e inglés activos, estructura preparada para más idiomas |
+| 🧩 Administración | Roles, permisos y control por congregación                      |
+| 💳 Suscripciones  | Modelo de planes mensuales definido                             |
+
+---
+
+## 🎯 Objetivo del proyecto
+
+OMP Suite busca centralizar y simplificar la administración interna de una congregación mediante una aplicación moderna, accesible y segura.
+
+El objetivo es que los usuarios puedan consultar su información de forma clara, mientras que administradores, supervisores y encargados pueden gestionar las áreas correspondientes sin depender de hojas de cálculo, mensajes dispersos o procesos manuales.
+
+La aplicación está pensada para mejorar la organización, reducir errores, facilitar la comunicación interna y mantener la información disponible de forma ordenada.
+
+---
+
+## ✨ Funcionalidades principales
 
 ### 👥 Gestión de usuarios
 
-- Creación de usuarios por administradores.
-- Roles principales: `admin`, `supervisor` y `user`.
-- Permisos por áreas internas: usuarios, reuniones, asignaciones, limpieza, predicación y configuración.
-- Activación, desactivación y eliminación controlada de usuarios.
-- Cambio de contraseña por administrador.
-- Generación de correo interno por congregación.
-- Validación de cargos y responsabilidades internas.
-- Protección para evitar que un administrador se elimine o desactive a sí mismo desde flujos sensibles.
-- Sincronización entre Firebase Authentication y Firestore mediante Cloud Functions.
-- Limpieza automática de perfiles cuando un usuario de autenticación se elimina.
+* Creación y administración de usuarios.
+* Roles principales:
+
+  * Administrador
+  * Supervisor
+  * Usuario
+* Activación y desactivación de usuarios.
+* Cambio de contraseña por administradores.
+* Control de permisos por módulo.
+* Validación de usuarios activos.
+* Protección contra acciones sensibles.
+* Separación entre rol del sistema y privilegios internos de la congregación.
+* Sincronización entre Firebase Authentication y Firestore mediante Cloud Functions.
+
+---
 
 ### 🏛️ Congregaciones y aislamiento de datos
 
-- Cada usuario pertenece a una `congregationId`.
-- Las reglas de Firestore restringen lecturas y escrituras por congregación.
-- Las operaciones sensibles validan que el usuario autenticado esté activo y pertenezca a la misma congregación.
-- La estructura está preparada para operar varias congregaciones dentro del mismo proyecto Firebase.
-- Pantalla de acceso bloqueado cuando una congregación no está habilitada.
-- Consulta de plan de congregación desde ajustes, incluyendo usuarios activos y cupos disponibles.
-- Referencias Firestore centralizadas para reducir errores al trabajar con rutas de datos.
+* Cada usuario pertenece a una congregación.
+* Cada congregación maneja sus propios datos.
+* Los usuarios solo pueden acceder a la información de su congregación.
+* Las reglas de seguridad bloquean lecturas o escrituras no autorizadas.
+* Preparado para operar múltiples congregaciones dentro del mismo proyecto Firebase.
+* Control de acceso por congregación activa, suspendida o deshabilitada.
+* Estructura diseñada para mantener separación de datos por congregación.
+
+---
 
 ### 📅 Reuniones y asignaciones
 
-- Gestión de reuniones de entre semana y fin de semana.
-- Asignaciones asociadas a reuniones.
-- Asignaciones independientes para áreas como limpieza u hospitalidad.
-- Publicación de reuniones.
-- Notificaciones al publicar, actualizar o recordar asignaciones.
-- Creación, edición, detalle y administración de reuniones protegidas por permisos.
-- Soporte para reuniones de Vida y Ministerio Cristiano con secciones, participantes y asignaciones.
-- Gestión de reuniones de fin de semana y responsabilidades relacionadas.
-- Sincronización de asignaciones de limpieza desde reuniones cuando corresponde.
-- Filtros de asignaciones por fecha, categoría, subtipo, persona, congregación y estado.
-- Sección de discursos salientes dentro del módulo de asignaciones.
-- Invalidación de caché al crear, actualizar, publicar o eliminar reuniones.
+* Gestión de reuniones de entre semana.
+* Gestión de reuniones de fin de semana.
+* Creación, edición y publicación de reuniones.
+* Asignaciones vinculadas a reuniones.
+* Asignaciones independientes para otras áreas.
+* Filtros por fecha, categoría, persona, estado y congregación.
+* Notificaciones relacionadas con reuniones y asignaciones.
+* Invalidación de caché cuando se crean, editan o eliminan reuniones.
+* Soporte para responsabilidades internas relacionadas con reuniones.
+
+---
 
 ### 🧹 Limpieza y grupos
 
-- Creación y administración de grupos de limpieza.
-- Asignación de miembros registrados de la congregación.
-- Soporte para grupos estándar o familiares.
-- Validación de membresía y conteo de miembros.
-- Compatibilidad con nombres de colección actuales y legacy.
-- Dashboard de limpieza con tarjetas, estadísticas y acceso rápido a grupos.
-- Creación, edición, detalle y eliminación de grupos según permisos.
-- Selección de usuarios asignables a grupos de limpieza.
-- Vista de “mi limpieza” para mostrar responsabilidades cercanas del usuario.
-- Caché local específico para grupos y usuarios asignables.
-- Integración con asignaciones y notificaciones de categoría `cleaning`.
+* Creación de grupos de limpieza.
+* Administración de miembros por grupo.
+* Soporte para grupos estándar o familiares.
+* Vista de próximas responsabilidades.
+* Dashboard de limpieza con información relevante.
+* Control de permisos para crear, editar o eliminar grupos.
+* Integración con asignaciones y notificaciones.
+* Selección de usuarios asignables a limpieza.
 
-### 🔔 Notificaciones
-
-- Registro de tokens push por usuario.
-- Preferencias de notificación por tipo.
-- Notificaciones internas en Firestore.
-- Notificaciones push para asignaciones, reuniones y recordatorios.
-- Limpieza programada de notificaciones antiguas.
-- Solicitud de permiso `POST_NOTIFICATIONS` en Android.
-- Aviso inicial propio antes de abrir el diálogo nativo de permisos.
-- Registro de Expo Push Token por usuario y congregación.
-- Subcolección `/users/{uid}/pushTokens` para tokens activos por dispositivo.
-- Desactivación de tokens cuando Expo reporta `DeviceNotRegistered`.
-- Canales Android para notificaciones generales y limpieza.
-- Notificaciones visibles en la barra del dispositivo aunque la app no esté abierta.
-- Navegación profunda desde una notificación hacia la ruta interna indicada.
-- Sincronización de contador/badge con notificaciones no leídas.
-- Pantalla de notificaciones con listado, conteo de no leídas, marcar una o marcar todas como leídas.
-
-### 💾 Caché y control de lecturas
-
-- Estrategia cache-first para documentos y consultas.
-- Uso de caché local de Firestore cuando está disponible.
-- Caché en memoria por sesión.
-- Fallback al servidor cuando los datos locales no existen o están incompletos.
-- Control `singleFlight` para evitar solicitudes duplicadas simultáneas.
-- Limpieza controlada de cachés temporales al iniciar sesión o cambiar de contexto.
-- Repositorios cache-first para datos de dashboard y consultas frecuentes.
-- Invalidación por prefijo para mantener consistencia después de cambios importantes.
-- Uso de listeners en tiempo real solo donde aportan valor funcional.
-
-### 🧭 Dashboard y navegación
-
-- Dashboard protegido para usuarios autenticados.
-- Resumen de próximas reuniones, asignaciones y responsabilidades.
-- Tarjeta local del contador de horas de predicación en dispositivos móviles.
-- Navegación por pestañas con visibilidad según permisos.
-- Rutas protegidas por sesión usando Expo Router.
-- Pantallas de error para acceso no autorizado y rutas no encontradas.
+---
 
 ### 🧑‍💼 Predicación, informes y territorios
 
-- Módulo de predicación con acceso desde pestañas.
-- Registro de informes de predicación del usuario.
-- Panel de encargado de predicación con resumen de publicadores, enviados, faltantes, horas, estudios y cursos.
-- Gestión de territorios con listado y administración.
-- Contador local de horas de predicación usando almacenamiento del dispositivo.
-- Calendario mensual y resumen semanal para horas de predicación.
-- Separación entre datos locales de contador y datos remotos de informes/congregación.
+* Registro de informes de predicación.
+* Contador local de horas.
+* Resumen semanal y mensual.
+* Gestión de territorios.
+* Asignación de territorios por día o planificación.
+* Panel para encargado de predicación.
+* Visualización de publicadores enviados y faltantes.
+* Separación entre datos locales del dispositivo y datos remotos de la congregación.
+* Preparado para mejorar la administración de territorios y reportes.
 
-### 🌎 Internacionalización
+---
 
-- Estructura preparada para soporte multiidioma.
-- Flujo inicial de selección/configuración de idioma.
-- Español e inglés disponibles en las pantallas principales.
-- Archivos base para francés, árabe, hindi y chino.
-- Persistencia de idioma seleccionado.
-- Pantalla de cambio de idioma desde ajustes.
+### 🧭 Organigrama congregacional
 
-### ⚙️ Ajustes y experiencia de aplicación
+* Estructura de departamentos.
+* Responsables y auxiliares por área.
+* Visualización para usuarios activos de la congregación.
+* Edición limitada a usuarios autorizados.
+* Preparado para representar responsabilidades internas de forma clara y ordenada.
+* Base para organizar funciones por departamento y asignación.
 
-- Pantalla de ajustes con información de cuenta, rol y correo.
-- Sección de plan de congregación con usuarios activos y usuarios disponibles.
-- Accesos administrativos a usuarios, reuniones, asignaciones, limpieza y notificaciones.
-- Control de permisos del dispositivo, incluyendo estado de notificaciones.
-- Selector de tema claro/oscuro.
-- Pantalla “Acerca de” con versión y build nativo.
-- Enrutamiento a términos, privacidad y descripción del proyecto cuando estén disponibles.
+---
+
+### 🔔 Notificaciones
+
+* Registro de tokens push por usuario.
+* Notificaciones internas dentro de la app.
+* Notificaciones push para asignaciones, reuniones y recordatorios.
+* Preferencias por tipo de notificación.
+* Limpieza de notificaciones antiguas.
+* Contador de notificaciones no leídas.
+* Navegación profunda desde una notificación hacia la pantalla correspondiente.
+* Canales de notificación para Android.
+
+---
+
+### ⚙️ Configuración y experiencia de usuario
+
+* Pantalla de ajustes.
+* Información de cuenta.
+* Información de rol.
+* Selector de idioma.
+* Selector de tema claro u oscuro.
+* Estado de permisos del dispositivo.
+* Acceso a información del proyecto.
+* Preparado para términos, privacidad y documentación adicional.
+
+---
+
+## 💰 Inversión acumulada y valor estimado del proyecto
+
+OMP Suite representa una inversión real de tiempo, infraestructura, herramientas, análisis, diseño, desarrollo, pruebas, seguridad y mantenimiento continuo.
+
+Durante los primeros **3 meses de desarrollo**, el proyecto ha requerido trabajo constante en diferentes áreas técnicas y de producto, incluyendo desarrollo móvil, desarrollo web, arquitectura Firebase, reglas de seguridad, experiencia de usuario, pruebas en dispositivos reales, documentación, dominio, hosting y configuración de servicios.
+
+Aunque gran parte del trabajo ha sido realizado directamente por **Marco Antonio Rulfo Castro — MrDev**, el valor real del producto puede estimarse tomando como referencia los perfiles profesionales que normalmente participarían en un proyecto de este tipo.
+
+### Valor equivalente por perfiles profesionales
+
+| Perfil equivalente                                                  | Participación estimada                                                                     |   Valor estimado |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------: |
+| Desarrollo principal semi-senior en React Native, Expo y TypeScript | Desarrollo de app, navegación, pantallas, lógica, módulos y estructura general             |     $117,000 MXN |
+| UX/UI y diseño de experiencia                                       | Diseño visual, estructura de pantallas, experiencia móvil/web y usabilidad                 |      $18,000 MXN |
+| Backend, Firebase y seguridad                                       | Firestore, Cloud Functions, autenticación, reglas, permisos y aislamiento por congregación |      $30,000 MXN |
+| QA y pruebas funcionales                                            | Pruebas en dispositivos reales, revisión de errores, flujos y comportamiento de la app     |       $8,750 MXN |
+| DevOps, dominio, hosting y configuración técnica                    | Configuración de entorno, dominio, hosting, builds, despliegues y servicios externos       |      $12,500 MXN |
+| Costos operativos directos                                          | Hosting, dominio, herramientas, Google/Firebase, pruebas y suscripciones                   |       $8,500 MXN |
+| **Valor acumulado estimado del proyecto**                           |                                                                                            | **$194,750 MXN** |
+
+Este valor no representa únicamente gastos pagados, sino el **valor equivalente de desarrollo e inversión técnica** que tendría construir una aplicación como OMP Suite con perfiles profesionales.
+
+Por su alcance actual, OMP Suite puede considerarse un producto con un valor estimado entre:
+
+**$150,000 MXN y $200,000 MXN**
+
+Este rango contempla el desarrollo acumulado, la arquitectura implementada, la experiencia de usuario, la seguridad, la infraestructura, las pruebas, la documentación y el mantenimiento realizado hasta la fecha.
+
+---
+
+## 📌 Costos operativos directos aproximados
+
+Además del tiempo de desarrollo, OMP Suite ha requerido inversión directa para mantenerse activo y preparado para su crecimiento.
+
+| Concepto                                                         | Costo aproximado |
+| ---------------------------------------------------------------- | ---------------: |
+| Hosting y mantenimiento web                                      |       $2,000 MXN |
+| Dominio                                                          |       $1,000 MXN |
+| Herramientas y suscripciones de desarrollo                       |       $1,200 MXN |
+| Servicios de Google, Firebase, pruebas y plataforma              |       $1,800 MXN |
+| Otras herramientas, pruebas, configuraciones y recursos técnicos |       $2,500 MXN |
+| **Total operativo estimado**                                     |   **$8,500 MXN** |
+
+Estos costos permiten sostener la infraestructura, realizar pruebas, mantener servicios activos, mejorar la seguridad y continuar desarrollando nuevas funciones.
+
+---
+
+## 💳 Planes y suscripciones
+
+OMP Suite utiliza un modelo de suscripción mensual por congregación.
+
+La suscripción permite sostener el proyecto, cubrir costos operativos, mantener la infraestructura activa, mejorar la seguridad, corregir errores, optimizar el rendimiento y continuar desarrollando nuevas funciones.
+
+| Plan   | Límite de usuarios | Precio mensual |
+| ------ | -----------------: | -------------: |
+| Básico |  Hasta 80 usuarios |        $70 MXN |
+| Medio  | Hasta 150 usuarios |       $120 MXN |
+| Grande | Hasta 250 usuarios |       $200 MXN |
+
+Los precios están pensados para que el proyecto sea accesible, pero también sostenible. Incluyen el uso de infraestructura, almacenamiento, autenticación, base de datos, notificaciones, dominio, mantenimiento, procesamiento de pagos y mejora continua.
+
+---
+
+## 💡 ¿Por qué se cobra?
+
+Aunque OMP Suite nace como una herramienta de apoyo, mantener una aplicación funcional, segura y disponible implica costos reales.
+
+El cobro ayuda a cubrir:
+
+* Hosting y mantenimiento web.
+* Dominio.
+* Firebase Authentication.
+* Cloud Firestore.
+* Cloud Functions.
+* Servicios de Google.
+* Notificaciones push.
+* Herramientas de desarrollo.
+* Suscripciones técnicas.
+* Pruebas en dispositivos reales.
+* Seguridad y reglas de acceso.
+* Corrección de errores.
+* Optimización de rendimiento.
+* Procesamiento de pagos.
+* Documentación.
+* Mantenimiento continuo.
+* Nuevas funciones.
+
+La suscripción no busca limitar el acceso, sino permitir que OMP Suite siga funcionando de manera estable, segura y profesional.
 
 ---
 
 ## 🧰 Stack técnico
 
-| Capa | Tecnología |
-|---|---|
-| ⚛️ Framework | Expo SDK 54 |
-| 📱 UI runtime | React 19 / React Native 0.81 |
-| 🧠 Lenguaje | TypeScript |
-| 🧭 Navegación | Expo Router |
-| 🎨 Estilos | NativeWind / Tailwind CSS |
-| 🔥 Backend | Firebase |
-| 🔐 Autenticación | Firebase Authentication |
-| 🗄️ Base de datos | Cloud Firestore |
-| ⚙️ Backend serverless | Firebase Cloud Functions |
-| 🔔 Notificaciones | Expo Notifications / Firebase Admin Messaging |
-| 💾 Persistencia local | AsyncStorage + caché local Firestore |
-| 🌐 Web | React Native Web vía Expo |
+| Capa               | Tecnología                           |
+| ------------------ | ------------------------------------ |
+| Framework          | Expo                                 |
+| UI móvil           | React Native                         |
+| Lenguaje           | TypeScript                           |
+| Navegación         | Expo Router                          |
+| Estilos            | NativeWind / Tailwind CSS            |
+| Backend            | Firebase                             |
+| Autenticación      | Firebase Authentication              |
+| Base de datos      | Cloud Firestore                      |
+| Backend serverless | Firebase Cloud Functions             |
+| Notificaciones     | Expo Notifications / Firebase        |
+| Persistencia local | AsyncStorage + caché local Firestore |
+| Web                | React Native Web mediante Expo       |
 
 ---
 
-## 📂 Arquitectura del repositorio
+## 📂 Arquitectura general
 
 ```text
 /
-├── app/                         # Rutas de Expo Router
+├── app/                         # Rutas principales con Expo Router
 │   ├── (auth)/                  # Pantallas de autenticación
-│   ├── (protected)/             # Pantallas protegidas por sesión
-│   ├── _layout.tsx              # Layout raíz y providers globales
+│   ├── (protected)/             # Pantallas protegidas
+│   ├── _layout.tsx              # Layout raíz
 │   ├── index.tsx                # Entrada inicial
 │   └── language-setup.tsx       # Configuración inicial de idioma
 │
 ├── src/
 │   ├── components/              # Componentes reutilizables
 │   ├── config/                  # Configuración auxiliar
-│   ├── constants/               # Constantes del sistema
+│   ├── constants/               # Constantes globales
 │   ├── context/                 # Contextos globales
-│   ├── features/notifications/  # Funcionalidad de notificaciones
-│   ├── firebase/                # Utilidades relacionadas con Firebase
+│   ├── features/                # Funciones por característica
+│   ├── firebase/                # Utilidades Firebase
 │   ├── hooks/                   # Hooks reutilizables
 │   ├── i18n/                    # Internacionalización
-│   ├── lib/firebase/            # Inicialización Firebase y referencias Firestore
+│   ├── lib/                     # Inicialización y referencias
 │   ├── modules/                 # Módulos por dominio
-│   │   ├── assignments/         # Asignaciones
-│   │   ├── cleaning/            # Limpieza
-│   │   └── field-service/       # Contador local de horas de predicación
 │   ├── screens/                 # Pantallas principales
-│   ├── services/                # Servicios de Auth, Firestore, notificaciones y repositorios
+│   ├── services/                # Servicios de negocio
 │   ├── styles/                  # Estilos globales
-│   ├── types/                   # Tipos y DTOs
-│   └── utils/                   # Utilidades puras
+│   ├── types/                   # Tipos TypeScript
+│   └── utils/                   # Utilidades generales
 │
 ├── functions/                   # Firebase Cloud Functions
-│   ├── src/
-│   │   ├── users.ts             # Administración de usuarios con Firebase Admin
-│   │   ├── users-sync.ts        # Sincronización Auth <-> Firestore
-│   │   ├── meetings-management.ts
-│   │   ├── meetings-publication.ts
-│   │   ├── meetings-notifications.ts
-│   │   ├── midweek-import.ts
-│   │   ├── maintenance/         # Limpiezas programadas
-│   │   └── modules/notifications/
-│   └── package.json
+│   └── src/
 │
-├── docs/                        # Documentación técnica extendida
-├── assets/images/               # Iconos, splash y recursos visuales
-├── android/                     # Proyecto Android nativo generado por Expo prebuild
-├── firestore.rules              # Reglas de seguridad Firestore
+├── docs/                        # Documentación técnica
+├── assets/                      # Recursos visuales
+├── android/                     # Proyecto Android generado
+├── firestore.rules              # Reglas de seguridad
 ├── firestore.indexes.json       # Índices Firestore
-├── firebase.json                # Configuración de Firebase deploy
+├── firebase.json                # Configuración Firebase
 ├── app.json                     # Configuración Expo
-├── package.json                 # Dependencias y scripts de la app
+├── package.json                 # Dependencias y scripts
 └── tsconfig.json                # Configuración TypeScript
 ```
 
@@ -238,266 +315,113 @@
 
 ## 🗄️ Modelo de datos principal
 
-| Colección / ruta | Uso |
-|---|---|
-| `/users/{uid}` | Perfil de usuario, rol, congregación, estado, tokens push y responsabilidades |
-| `/congregations/{congregationId}` | Datos base de cada congregación |
-| `/congregations/{congregationId}/persons/{personId}` | Personas registradas dentro de la congregación |
-| `/congregations/{congregationId}/meetings/{meetingId}` | Reuniones de entre semana, fin de semana u otras |
-| `/congregations/{congregationId}/meetings/{meetingId}/assignments/{assignmentId}` | Asignaciones vinculadas a una reunión |
-| `/congregations/{congregationId}/assignments/{assignmentId}` | Asignaciones independientes: limpieza, hospitalidad u otras |
-| `/congregations/{congregationId}/cleaningGroups/{groupId}` | Grupos de limpieza por congregación |
-| `/congregations/{congregationId}/departments/{departmentId}` | Departamentos activos del organigrama congregacional |
-| `/congregations/{congregationId}/departmentAssignments/{assignmentId}` | Responsables y auxiliares activos por departamento |
-| `/congregations/{congregationId}/outgoingTalks/{outgoingTalkId}` | Discursos salientes |
-| `/congregations/{congregationId}/changeLogs/{changeLogId}` | Bitácora de cambios de congregación |
-| `/congregations/{congregationId}/notifications/{notificationId}` | Notificaciones internas por congregación |
-| `/congregations/{congregationId}/territorySchedule/{scheduleId}` | Territorios de predicación asignados por día |
-| `/users/{uid}/pushTokens/{tokenDocId}` | Tokens Expo Push activos por usuario y dispositivo |
-| `/congregations/{congregationId}/preachingReports/{monthId}/submissions/{userId}` | Informes mensuales de predicación |
-| `/dashboardSummary/{congregationId}` | Resumen precalculado para dashboard |
-| `/system/{docId}` | Documentos internos de control, por ejemplo cache control |
+| Ruta                                                    | Uso                           |
+| ------------------------------------------------------- | ----------------------------- |
+| `/users/{uid}`                                          | Perfil del usuario            |
+| `/congregations/{congregationId}`                       | Datos base de la congregación |
+| `/congregations/{congregationId}/persons`               | Personas registradas          |
+| `/congregations/{congregationId}/meetings`              | Reuniones                     |
+| `/congregations/{congregationId}/assignments`           | Asignaciones                  |
+| `/congregations/{congregationId}/cleaningGroups`        | Grupos de limpieza            |
+| `/congregations/{congregationId}/departments`           | Departamentos del organigrama |
+| `/congregations/{congregationId}/departmentAssignments` | Responsables por departamento |
+| `/congregations/{congregationId}/territories`           | Territorios                   |
+| `/congregations/{congregationId}/notifications`         | Notificaciones internas       |
+| `/congregations/{congregationId}/changeLogs`            | Bitácora de cambios           |
 
 ---
 
-## 🛡️ Seguridad y permisos
+## 🔐 Seguridad
 
-La seguridad se aplica en dos capas:
+OMP Suite utiliza varias capas de seguridad para proteger la información de cada congregación.
 
-1. **Frontend:** rutas protegidas, control de pantallas visibles y permisos por rol.
-2. **Backend/Firestore Rules:** validación real de lectura/escritura por usuario, rol, estado activo y congregación.
+Entre las principales medidas se incluyen:
 
-Principios actuales:
+* Autenticación mediante Firebase Authentication.
+* Reglas de seguridad en Cloud Firestore.
+* Validación de usuario activo.
+* Validación de congregación.
+* Separación de datos por congregación.
+* Control de permisos por módulo.
+* Cloud Functions para operaciones sensibles.
+* Protección de rutas dentro de la aplicación.
+* Validación de estructura en documentos importantes.
+* Bloqueo de acceso para congregaciones suspendidas o deshabilitadas.
 
-- Un usuario debe estar autenticado para acceder a datos protegidos.
-- El documento `/users/{uid}` define el rol real y la congregación del usuario.
-- Las operaciones de congregación validan `sameCongregation(congregationId)`.
-- Las escrituras sensibles requieren `admin`, `supervisor` o encargado autorizado, según el módulo.
-- `dashboardSummary` es solo lectura desde cliente; la escritura queda reservada para procesos backend.
-- Los documentos de sistema son de solo lectura para usuarios autenticados y escritura bloqueada desde cliente.
-- Las rutas protegidas se renderizan solo después de validar sesión y perfil.
-- Las pestañas visibles se calculan según permisos efectivos del usuario.
-- Las reglas validan listas, tipos de datos esperados y campos permitidos en actualizaciones sensibles.
-- Los tokens push se escriben de forma controlada y se asocian al usuario autenticado.
-
-### Permisos Android declarados
-
-| Permiso | Motivo |
-|---|---|
-| `android.permission.POST_NOTIFICATIONS` | Mostrar notificaciones en Android 13+ después de autorización del usuario |
-| `android.permission.VIBRATE` | Vibración en avisos y notificaciones |
-
-Permisos bloqueados en Android:
-
-- `READ_EXTERNAL_STORAGE`
-- `WRITE_EXTERNAL_STORAGE`
-- `RECORD_AUDIO`
-- `SYSTEM_ALERT_WINDOW`
-- `RECEIVE_BOOT_COMPLETED`
-- `SCHEDULE_EXACT_ALARM`
-
-Estos bloqueos reducen la superficie de permisos y ayudan a mantener una revisión más clara en tiendas.
+La seguridad se diseña bajo el principio de que ningún usuario debe acceder a información de otra congregación ni modificar información para la que no tenga permisos.
 
 ---
 
-## ⚙️ Cloud Functions incluidas
+## 🧩 Roles, permisos y responsabilidades
 
-Las funciones exportadas actualmente cubren:
+OMP Suite separa el rol del sistema de las responsabilidades internas.
 
-- `createUserByAdmin`
-- `updateUserByAdmin`
-- `updateUserPasswordByAdmin`
-- `disableUserByAdmin`
-- `deleteUserByAdmin`
-- `deleteAuthUserOnProfileDelete`
-- `deleteUserProfileOnAuthDelete`
-- `setMeetingPublicationStatus`
-- `createMeetingByManager`
-- `updateMeetingByManager`
-- `deleteMeetingByManager`
-- `syncMeetingCleaningAssignmentsByManager`
-- `notifyAssignmentUsers`
-- `notifyCongregationAssignmentUsers`
-- `notifyMeetingAssignmentUsers`
-- `notifyMeetingPublicationAndChanges`
-- `sendMeetingReminderThreeDaysBefore`
-- `sendExpoPushOnNotificationCreated`
-- `scheduledDataCleanup`
-- `scheduledNotificationsCleanup`
+### Roles principales del sistema
 
-### Cobertura funcional de backend
+| Rol           | Descripción                                             |
+| ------------- | ------------------------------------------------------- |
+| Administrador | Puede administrar la congregación dentro de la app      |
+| Supervisor    | Puede gestionar módulos específicos según permisos      |
+| Usuario       | Puede consultar información y usar funciones permitidas |
 
-- Administración segura de usuarios usando Firebase Admin SDK.
-- Sincronización entre Auth y documentos de usuario.
-- Importación y administración de reuniones.
-- Publicación de reuniones y generación de avisos.
-- Procesamiento de notificaciones por asignaciones y cambios de reunión.
-- Envío de push mediante Expo Push Service.
-- Limpieza programada de datos temporales y notificaciones antiguas.
-- Pruebas unitarias para flujos críticos de usuarios, notificaciones, publicaciones y limpieza.
+### Responsabilidades internas
+
+Un usuario puede tener responsabilidades adicionales por departamento, por ejemplo:
+
+* Limpieza
+* Predicación
+* Territorios
+* Reuniones
+* Discursos
+* Tesorería
+* Organigrama
+* Configuración
+
+Esto permite que un usuario no necesite ser administrador completo para apoyar en una sección específica.
 
 ---
 
-## 🧮 Inversión estimada del desarrollo
+## 💾 Rendimiento y control de lecturas
 
-Esta estimación representa el valor aproximado del trabajo realizado hasta el estado actual del proyecto. No incluye impuestos ni costos legales.
+El proyecto integra estrategias para reducir lecturas innecesarias y mejorar la experiencia:
 
-### ⏱️ Horas estimadas
+* Caché local.
+* Consultas cache-first.
+* Caché en memoria por sesión.
+* Invalidación de caché después de cambios importantes.
+* Uso controlado de listeners en tiempo real.
+* Prevención de solicitudes duplicadas simultáneas.
+* Separación entre datos locales y datos remotos.
 
-| Periodo | Dedicación aproximada | Horas |
-|---|---:|---:|
-| Mes 1 | 10 h/día × 30 días | 300 h |
-| Mes 2 | 3-5 h/día × 30 días | 90-150 h |
-| **Total estimado** | 2 meses completos | **390-450 h** |
-
-Para el cálculo principal se usa un punto medio de **420 horas**.
-
-### 💰 Costo estimado por área
-
-Tarifa conservadora usada: **$150 MXN/hora**.
-
-| Área | Horas estimadas | Costo aproximado |
-|---|---:|---:|
-| 💻 Desarrollo / programación de la app | 190 h | $28,500 MXN |
-| 🎨 Diseño UX/UI, estructura visual e imágenes | 85 h | $12,750 MXN |
-| 🔥 Firebase, reglas, Auth, Firestore y arquitectura de datos | 65 h | $9,750 MXN |
-| 🧪 Pruebas, errores, ajustes y depuración | 45 h | $6,750 MXN |
-| 🧠 Planificación, estructura, ideas y flujos | 35 h | $5,250 MXN |
-| **Subtotal por trabajo** | **420 h** | **$63,000 MXN** |
-
-### 🧾 Suscripciones usadas
-
-| Concepto | Costo mensual | Meses | Total |
-|---|---:|---:|---:|
-| Herramientas / suscripciones de desarrollo | $400 MXN | 2 | $800 MXN |
-
-### 📌 Total estimado actual
-
-| Concepto | Total |
-|---|---:|
-| Trabajo estimado | $63,000 MXN |
-| Suscripciones | $800 MXN |
-| **Total general estimado** | **$63,800 MXN** |
-
-Rango razonable:
-
-
-> Esta cifra no representa precio de venta final. Representa una estimación conservadora del valor del trabajo ya invertido.
+Esto ayuda a mejorar el rendimiento, reducir tiempos de carga y controlar costos de infraestructura.
 
 ---
 
-## 🔥 Costos aproximados de Firebase
+## 🌎 Internacionalización
 
-Firebase puede operar con costo muy bajo al inicio si la app está bien optimizada. El consumo crítico para OMP no será solamente la cantidad de usuarios, sino principalmente:
+OMP Suite está preparado para múltiples idiomas.
 
-- Lecturas de Firestore.
-- Listeners en tiempo real.
-- Consultas repetidas.
-- Cloud Functions ejecutadas por cambios de documentos.
-- Notificaciones.
+Actualmente cuenta con:
 
+* Español.
+* Inglés.
 
-
-### 📊 Escenarios mensuales iniciales
-
-| Escenario | Descripción | Costo estimado |
-|---|---|---:|
-| 🟢 Inicial optimizado | Pocas congregaciones, caché activa, sin bucles | $0 - $100 MXN/mes |
-| 🟡 Crecimiento controlado | Varias congregaciones, lecturas moderadas | $100 - $500 MXN/mes |
-| 🟠 Uso medio | Más usuarios activos, notificaciones y funciones frecuentes | $500 - $1,500 MXN/mes |
-| 🔴 Uso alto | Muchas congregaciones, muchos listeners, más Storage y Functions | $1,500 - $5,000+ MXN/mes |
-
-
+La estructura está preparada para extenderse a otros idiomas en el futuro.
 
 ---
 
-## 📈 Costos futuros del proyecto
-
-Además de Firebase, OMP puede requerir costos de operación y publicación.
-
-### 🧾 Costos técnicos mensuales
-
-| Concepto | Costo aproximado |
-|---|---:|
-| Suscripciones de herramientas | $400 MXN/mes |
-| Firebase inicial / moderado | $0 - $500 MXN/mes |
-| Reserva técnica recomendada | $300 - $1,000 MXN/mes |
-| **Total mensual base estimado** | **$700 - $1,900 MXN/mes** |
-
-### 📱 Publicación de apps
-
-| Servicio | Costo aproximado |
-|---|---:|
-| Google Play Console | $25 USD una sola vez |
-| Apple Developer Program | $99 USD/año |
-
-Con referencia de **1 USD ≈ $17.43 MXN**:
-
-| Servicio | Aprox. MXN |
-|---|---:|
-| Google Play Console | ~$436 MXN una sola vez |
-| Apple Developer Program | ~$1,726 MXN/año |
-
-### 🛠️ Mantenimiento futuro
-
-Si el proyecto sigue creciendo, el costo real no será solo Firebase. También debe considerarse:
-
-- Corrección de errores.
-- Ajustes de seguridad.
-- Revisión de reglas Firestore.
-- Optimización de lecturas.
-- Nuevas pantallas.
-- Soporte a administradores.
-- Publicación de versiones.
-- Desarrollo de una segunda aplicación administrativa.
-
-Ejemplo de costo de mantenimiento si se valoran las horas a **$150 MXN/hora**:
-
-| Escenario | Horas mensuales | Costo estimado |
-|---|---:|---:|
-| Mantenimiento ligero | 10 h/mes | $1,500 MXN |
-| Mantenimiento moderado | 20-40 h/mes | $3,000 - $6,000 MXN |
-| Desarrollo activo | 90-150 h/mes | $13,500 - $22,500 MXN |
-
----
-
-## 📦 Planes sugeridos por congregación
-
-Todos los planes deben incluir las mismas funcionalidades. La única diferencia es la cantidad máxima de usuarios activos por congregación.
-
-| Plan | Usuarios activos máximos | Precio mensual sugerido |
-|---|---:|---:|
-| 🟢 OMP Básico | 70 usuarios | $69 MXN/mes |
-| 🟡 OMP Intermedio | 120 usuarios | $109 MXN/mes |
-| 🔵 OMP Completo | 200 usuarios | $159 MXN/mes |
-
-### Criterio de estos precios
-
-Estos precios no buscan generar ganancia. Su objetivo es ayudar a cubrir:
-
-- Firebase.
-- Servidores y almacenamiento.
-- Notificaciones.
-- Publicación en tiendas.
-- Herramientas de desarrollo.
-- Reserva técnica.
-- Mantenimiento futuro.
-
----
-
-## 🚀 Instalación local
+## 🚀 Instalación y ejecución local
 
 ### Requisitos
 
-- Node.js compatible con Expo y Firebase Functions.
-- npm.
-- Expo CLI mediante `npx expo`.
-- Proyecto Firebase configurado.
-- Firebase CLI si se van a desplegar reglas o funciones.
-- Android Studio para Android local.
-- Xcode para iOS local en macOS.
+* Node.js
+* npm
+* Expo CLI
+* Firebase CLI
+* Cuenta de Firebase configurada
+* Proyecto Firebase activo
 
-### Instalar dependencias de la app
+### Instalar dependencias
 
 ```bash
 npm install
@@ -506,283 +430,135 @@ npm install
 ### Ejecutar en desarrollo
 
 ```bash
-npm start
+npm run start
 ```
 
-Atajos comunes desde Expo:
+### Ejecutar en Android
 
 ```bash
 npm run android
-npm run android:release
-npm run ios
+```
+
+### Ejecutar en Web
+
+```bash
 npm run web
 ```
 
-### Generar Android App Bundle (AAB)
-
-El archivo para Google Play se genera con Gradle desde la carpeta `android`:
+### Validar el proyecto
 
 ```bash
-cd android
-./gradlew :app:bundleRelease
-```
-
-En Windows PowerShell:
-
-```powershell
-cd android
-.\gradlew.bat :app:bundleRelease
-```
-
-Salida esperada:
-
-```text
-android/app/build/outputs/bundle/release/app-release.aab
-```
-
-### Firma Android release
-
-El proyecto está configurado para firmar release con:
-
-```text
-android/app/my-upload-key.keystore
-```
-
-Propiedades usadas por Gradle:
-
-```properties
-MYAPP_UPLOAD_STORE_FILE=my-upload-key.keystore
-MYAPP_UPLOAD_KEY_ALIAS=my-key-alias
-MYAPP_UPLOAD_STORE_PASSWORD=...
-MYAPP_UPLOAD_KEY_PASSWORD=...
-```
-
-El archivo `.keystore` debe respaldarse fuera del repositorio y conservarse de forma segura. Si se pierde, puede complicar futuras actualizaciones de la app en Google Play.
-
-### Nota sobre `expo run:android`
-
-Para ejecutar una variante release con Expo CLI se usa:
-
-```bash
-npm run android -- --variant release
-```
-
-No se usa `--mode=release` en esta versión de Expo CLI.
-
-### Instalar dependencias de Cloud Functions
-
-```bash
-cd functions
-npm install
-npm run build
-```
-
-### Ejecutar lint
-
-Desde la raíz:
-
-```bash
-npm run lint
-```
-
-Desde `functions/`:
-
-```bash
-cd functions
-npm run lint
+npm run validate
 ```
 
 ---
 
-## 🔥 Firebase
+## ⚙️ Scripts principales
 
-### Configuración actual
-
-La app inicializa Firebase desde `src/lib/firebase/app.ts`.
-
-Para producción o distribución pública, se recomienda migrar la configuración cliente a variables `EXPO_PUBLIC_*` y mantener fuera del repositorio cualquier credencial privada de servidor. La configuración cliente de Firebase no equivale a una llave secreta de administrador, pero las credenciales de servicio, llaves privadas y archivos sensibles nunca deben incluirse en el cliente ni en el repositorio.
-
-### Deploy de reglas e índices
-
-```bash
-firebase deploy --only firestore
-```
-
-### Deploy de funciones
-
-```bash
-firebase deploy --only functions
-```
-
-También puede ejecutarse desde la carpeta `functions`:
-
-```bash
-npm run deploy
-```
-
-### Servicios Firebase usados
-
-| Servicio | Uso en OMP |
-|---|---|
-| Firebase Authentication | Inicio de sesión y usuarios administrados |
-| Cloud Firestore | Datos principales de usuarios, congregaciones, reuniones, asignaciones y notificaciones |
-| Cloud Functions | Procesos administrativos, publicaciones, notificaciones y limpiezas programadas |
-| Firebase Admin SDK | Operaciones de backend sobre Auth y Firestore |
-| Firestore Rules | Control real de acceso por sesión, rol, estado y congregación |
-
-### Flujo resumido de notificaciones
-
-1. El usuario inicia sesión en una build real o release.
-2. La app revisa si puede usar notificaciones remotas.
-3. Si el permiso está sin definir, se muestra un aviso propio.
-4. Al aceptar, Android/iOS muestra el permiso nativo.
-5. Si el permiso queda concedido, la app obtiene el Expo Push Token.
-6. El token se guarda en `/users/{uid}/pushTokens`.
-7. Cuando se crea una notificación en Firestore, Cloud Functions envía el push.
-8. Si Expo indica que el dispositivo ya no está registrado, el token se marca como inactivo.
+| Script                    | Uso                            |
+| ------------------------- | ------------------------------ |
+| `npm run start`           | Inicia Expo                    |
+| `npm run android`         | Ejecuta Android                |
+| `npm run android:release` | Ejecuta variante release       |
+| `npm run ios`             | Ejecuta iOS                    |
+| `npm run web`             | Ejecuta versión web            |
+| `npm run build:web`       | Genera build web               |
+| `npm run lint`            | Ejecuta lint                   |
+| `npm run validate`        | Ejecuta validaciones generales |
 
 ---
 
-## 📝 Notas de versión
+## 🧪 Calidad y validación
 
-### 1.0.1
+El proyecto utiliza:
 
-Primera versión Android preparada para distribución interna o publicación inicial en Google Play.
+* TypeScript para tipado estático.
+* ESLint para revisión de código.
+* Validación de reglas y funciones.
+* Build de Cloud Functions.
+* Pruebas para funciones backend.
+* Revisión de permisos y flujos sensibles.
+* Pruebas en dispositivos reales.
 
-Incluye:
+Se recomienda seguir ampliando las pruebas automatizadas, especialmente para:
 
-- Autenticación con Firebase.
-- Dashboard protegido por sesión.
-- Gestión de usuarios, roles y permisos.
-- Gestión de reuniones de entre semana y fin de semana.
-- Asignaciones por reunión e independientes.
-- Módulo de limpieza con grupos y responsabilidades.
-- Módulo de predicación, informes y territorios.
-- Contador local de horas de predicación en dispositivo móvil.
-- Notificaciones internas y push.
-- Solicitud de permiso de notificaciones en Android.
-- Canales de notificación para avisos generales y limpieza.
-- Soporte de temas claro/oscuro.
-- Selección de idioma.
-- Caché local/cache-first para reducir lecturas.
-- Build Android App Bundle firmado.
-
-Texto sugerido para Google Play:
-
-```text
-Primera versión de OMP para Android. Incluye inicio de sesión, reuniones, asignaciones, grupos de limpieza, predicación, territorios, usuarios y notificaciones push con solicitud de permiso en el dispositivo.
-```
+* Permisos.
+* Roles.
+* Acceso por congregación.
+* Reglas de Firestore.
+* Navegación protegida.
+* Operaciones administrativas.
+* Flujos de suscripción.
+* Notificaciones.
 
 ---
 
-## 📜 Scripts disponibles
+## 🧱 Roadmap
 
-### App principal
+### Prioridad alta
 
-| Script | Uso |
-|---|---|
-| `npm start` | Inicia Expo / Metro Bundler |
-| `npm run android` | Ejecuta la app en Android |
-| `npm run android:release` | Ejecuta `expo run:android --variant release` |
-| `npm run ios` | Ejecuta la app en iOS |
-| `npm run web` | Ejecuta la app en web |
-| `npm run lint` | Ejecuta validación ESLint |
-| `npm run reset-project` | Ejecuta el script local de reset del proyecto |
+* Pulir navegación móvil.
+* Homologar headers y botones de regreso.
+* Fortalecer modelo de permisos.
+* Limpiar reglas legacy.
+* Mejorar documentación técnica.
+* Finalizar flujo de suscripciones y cobros.
+* Mejorar pantalla de planes.
+* Optimizar experiencia visual en web y móvil.
 
-### Comandos Android nativos
+### Prioridad media
 
-| Comando | Uso |
-|---|---|
-| `cd android && ./gradlew :app:assembleRelease` | Genera APK release local |
-| `cd android && ./gradlew :app:bundleRelease` | Genera AAB release para Google Play |
-| `cd android && ./gradlew clean` | Limpia artefactos de build nativo |
+* Panel administrativo externo.
+* Reportes avanzados.
+* Historial de actividad.
+* Mejoras visuales del organigrama.
+* Exportación de información.
+* Mejoras en territorios.
+* Más idiomas.
+* Mejoras en accesibilidad.
 
-### Cloud Functions
+### Prioridad futura
 
-| Script | Uso |
-|---|---|
-| `npm run lint` | Revisa código de funciones |
-| `npm run build` | Compila TypeScript |
-| `npm run test` | Ejecuta pruebas con Jest |
-| `npm run serve` | Compila e inicia emuladores de Functions |
-| `npm run shell` | Abre shell de Firebase Functions |
-| `npm run deploy` | Despliega Functions |
-| `npm run logs` | Consulta logs de Firebase Functions |
-
----
-
-## ✅ Buenas prácticas del proyecto
-
-Antes de agregar o modificar una funcionalidad:
-
-1. Identificar los archivos exactos que se van a tocar.
-2. Confirmar que el cambio no afecta módulos no relacionados.
-3. Mantener separación entre UI, servicios, tipos y reglas.
-4. Evitar `onSnapshot` innecesarios en pantallas que no requieren tiempo real.
-5. Usar estrategia cache-first cuando sea posible.
-6. Mantener consultas filtradas por `congregationId`.
-7. No cargar colecciones completas si solo se necesita un resumen.
-8. Probar reglas de Firestore antes de desplegar cambios sensibles.
-9. No subir logs, llaves privadas, archivos `.env`, certificados o builds generados.
-10. Actualizar `app.json`, `package.json`, `package-lock.json`, `versionName` y `versionCode` en cada release.
-11. Regenerar el AAB después de cambios de versión o permisos Android.
-12. Validar notificaciones en dispositivo físico, no en Expo Go.
-13. Revisar permisos Android antes de subir una nueva versión a Play Console.
-14. Mantener respaldado el keystore de release.
+* Distribución iOS.
+* Panel web independiente.
+* Métricas administrativas.
+* Automatizaciones avanzadas.
+* Herramientas de respaldo y recuperación.
+* Módulos adicionales según necesidades reales.
 
 ---
 
-## ⚠️ Riesgos técnicos conocidos
+## 🛡️ Principios del proyecto
 
-- El repositorio es público; conviene mantener reglas, App Check y credenciales privadas correctamente protegidas.
-- Existe configuración Firebase visible del lado cliente; esto es normal en apps Firebase, pero no reemplaza la necesidad de reglas estrictas.
-- Los listeners en tiempo real pueden aumentar lecturas si se montan varias veces o no se limpian correctamente.
-- Las funciones con memoria alta o muchos `maxInstances` pueden generar costos si el uso crece.
-- Es recomendable auditar periódicamente Firestore Reads, Functions Invocations y Storage.
-- Las notificaciones push remotas no funcionan en Expo Go; se requiere development build o release build.
-- La publicación en Google Play requiere conservar la firma de app y el keystore de upload.
-- Los cambios de reglas Firestore pueden bloquear flujos reales si no se prueban con usuarios de distintos roles.
-- El contador local de horas depende del almacenamiento del dispositivo y no debe tratarse como dato remoto sincronizado.
-- Los permisos de Android pueden cambiar por versión del sistema operativo; Android 13+ requiere permiso explícito para notificaciones.
+OMP Suite se desarrolla bajo estos principios:
 
----
-
-## 🗺️ Roadmap sugerido
-
-- [ ] Implementar planes por congregación:
-  - OMP Básico: hasta 70 usuarios activos.
-  - OMP Intermedio: hasta 120 usuarios activos.
-  - OMP Completo: hasta 200 usuarios activos.
-- [ ] Mostrar plan actual en configuración.
-- [ ] Mostrar usuarios disponibles restantes al crear usuarios.
-- [ ] Bloquear creación de usuarios al alcanzar el límite del plan.
-- [ ] Crear panel administrativo externo para alta y gestión de congregaciones.
-- [ ] Agregar métricas internas de consumo por congregación.
-- [ ] Revisar y reducir listeners `onSnapshot` no esenciales.
-- [ ] Endurecer App Check y monitoreo de Firebase.
-- [ ] Agregar documentación de despliegue Android/iOS.
-- [ ] Definir licencia o política de uso privado.
-
----
-
-## 📚 Documentación adicional
-
-Existe documentación técnica extendida en:
-
-```text
-docs/Documentacion_Tecnica.md
-```
+* Seguridad primero.
+* Separación clara de datos por congregación.
+* Interfaz sencilla para usuarios no técnicos.
+* Control granular de permisos.
+* Código escalable y mantenible.
+* Costos controlados.
+* Respeto por la información privada.
+* Mejora continua con base en uso real.
+* Accesibilidad y claridad visual.
+* Sostenibilidad técnica y económica.
 
 ---
 
 ## 📄 Licencia y uso
 
-Este repositorio no define todavía una licencia pública. Hasta que se agregue una licencia formal, el código debe considerarse de uso privado del autor.
+Este proyecto es privado/independiente y se desarrolla con fines de organización interna.
+
+El uso, distribución o modificación debe respetar la finalidad original del proyecto, la privacidad de los usuarios y las condiciones definidas por el responsable del desarrollo.
 
 ---
 
-## 👨‍💻 Autor
+## 👨‍💻 Desarrollo y mantenimiento
 
-**Desarrollado por MRC**
+OMP Suite es desarrollado y mantenido por:
 
-Proyecto desarrollado de forma independiente, con enfoque en organización, utilidad práctica y sostenibilidad técnica.
+**Marco Antonio Rulfo Castro — MrDev**
+
+El proyecto concentra trabajo de diferentes áreas: desarrollo frontend, desarrollo móvil, backend serverless, arquitectura Firebase, UX/UI, seguridad, pruebas, documentación, configuración técnica y mantenimiento continuo.
+
+Esta inversión permite que OMP Suite no sea solo una app básica, sino una plataforma organizada, escalable y preparada para seguir creciendo con nuevas funcionalidades.
