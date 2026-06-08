@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================================
-    // AUTENTICACIÃ“N Y USUARIO ACTUAL
+    // AUTENTICACION Y USUARIO ACTUAL
     // =========================================================================
 
     function isAuthenticated() {
@@ -616,12 +616,12 @@ service cloud.firestore {
         'role',
         'isActive',
         // 'status' es gestionado exclusivamente por Cloud Functions (createUserByAdmin / updateUserByAdmin).
-        // Se incluye aquÃ­ para que validUserData no rechace documentos que ya lo contienen
+        // Se incluye aqui para que validUserData no rechace documentos que ya lo contienen
         // cuando el cliente realiza actualizaciones parciales.
         'status',
         'congregationId',
         'congregationDomain',
-        // Campos de asignaciÃ³n de servicio â€” escritura por Cloud Functions.
+        // Campos de asignacion de servicio - escritura por Cloud Functions.
         'servicePosition',
         'serviceDepartment',
         'serviceAssignments',
@@ -633,15 +633,15 @@ service cloud.firestore {
         'isMinisterialServant',
         'createdAt',
         'updatedAt',
-        // Campos de notificaciones push â€” escritura controlada por validPushTokenUpdate()
+        // Campos de notificaciones push - escritura controlada por validPushTokenUpdate()
         'notificationTokens',
         'pushTokenUpdatedAt',
-        // Campos de preferencias de notificaciÃ³n
+        // Campos de preferencias de notificacion
         'notificationsEnabled',
         'platformNotifications',
         'cleaningNotifications',
         'hospitalityNotifications',
-        // Campos de mÃ³dulo de limpieza
+        // Campos de modulo de limpieza
         'cleaningEligible',
         'cleaningGroupId',
         'cleaningGroupName',
@@ -916,10 +916,10 @@ service cloud.firestore {
         ]);
     }
 
-    // Permite al propio usuario actualizar SOLO su token de notificaciÃ³n push.
+    // Permite al propio usuario actualizar SOLO su token de notificacion push.
     // El cliente llama setDoc(..., { uid, notificationTokens: arrayUnion(token),
     //   pushTokenUpdatedAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true }).
-    // Esta condiciÃ³n es independiente de validSelfUserUpdate para no interferir
+    // Esta condicion es independiente de validSelfUserUpdate para no interferir
     // con las validaciones de perfil.
     function validPushTokenUpdate(userId) {
       return isSameUser(userId)
@@ -1986,10 +1986,10 @@ service cloud.firestore {
         || isSameUser(userId)
         || (canReadUsers() && storedDocInMyCongregation());
 
-      // list sÃ³lo dentro de la propia congregaciÃ³n.
+      // list solo dentro de la propia congregacion.
       // Firestore Security Rules no permiten inspeccionar filtros de query,
-      // por lo que la restricciÃ³n real se aplica en la app (siempre filtra por congregationId).
-      // myCongregationId() != null garantiza que el solicitante tiene perfil activo con congregaciÃ³n.
+      // por lo que la restriccion real se aplica en la app (siempre filtra por congregationId).
+      // myCongregationId() != null garantiza que el solicitante tiene perfil activo con congregacion.
       allow list: if isSuperAdmin() 
         || (canListCongregationUsers() && myCongregationId() != null);
 
@@ -2392,7 +2392,7 @@ service cloud.firestore {
     // =========================================================================
     // REGLAS: DASHBOARD SUMMARY
     // Documento de resumen pre-calculado por Cloud Functions.
-    // Solo lectura para usuarios activos de la misma congregaciÃ³n.
+    // Solo lectura para usuarios activos de la misma congregacion.
     // Escritura reservada exclusivamente para Cloud Functions.
     // =========================================================================
 
@@ -2403,7 +2403,7 @@ service cloud.firestore {
 
     // =========================================================================
     // REGLAS: CLEANING GROUPS
-    // Grupos de limpieza â€” acceso por congregaciÃ³n.
+    // Grupos de limpieza - acceso por congregacion.
     // =========================================================================
 
     match /cleaningGroups/{groupId} {
@@ -2419,9 +2419,9 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // REGLAS: NOTIFICATIONS (colecciÃ³n raÃ­z)
-    // Nota: las notificaciones de congregaciÃ³n estÃ¡n en
-    // /congregations/{id}/notifications. Esta colecciÃ³n raÃ­z es para
+    // REGLAS: NOTIFICATIONS (coleccion raiz)
+    // Nota: las notificaciones de congregacion estan en
+    // /congregations/{id}/notifications. Esta coleccion raiz es para
     // notificaciones globales o de sistema (si se usan).
     // =========================================================================
 

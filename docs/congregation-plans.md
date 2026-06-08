@@ -16,11 +16,13 @@ Campos recomendados:
 }
 ```
 
-Planes:
+Planes vigentes en codigo:
 
-- `basic`: OMP Basico, hasta 70 usuarios activos, $69 MXN/mes.
-- `intermediate`: OMP Intermedio, hasta 120 usuarios activos, $109 MXN/mes.
-- `complete`: OMP Completo, hasta 200 usuarios activos, $159 MXN/mes.
+- `basic`: OMP Basico, hasta 70 usuarios activos.
+- `intermediate`: OMP Intermedio, hasta 120 usuarios activos.
+- `complete`: OMP Completo, hasta 200 usuarios activos.
+
+Los precios no deben duplicarse aqui hasta cerrar el flujo de cobro. Si se agregan, deben venir de una sola fuente de verdad usada por la app, Functions y el panel administrativo.
 
 Reglas actuales:
 

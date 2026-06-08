@@ -34,7 +34,15 @@ firestore-debug*.log
 *.pem
 
 # local env files
+.env
+.env.*
+!.env.example
 .env*.local
+
+# credentials and secrets
+serviceAccountKey.json
+*-service-account.json
+*.keystore
 
 # typescript
 *.tsbuildinfo

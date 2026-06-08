@@ -32,7 +32,7 @@
     "firebase-functions-test": "^3.4.1",
     "jest": "^29.7.0",
     "ts-jest": "^29.4.9",
-    "typescript": "^6.0.0"
+    "typescript": "~5.9.2"
   },
   "private": true
 }
