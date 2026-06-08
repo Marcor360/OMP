@@ -107,6 +107,8 @@ function ProtectedContent() {
         <Stack.Screen name="territories/manage" options={{ headerShown: false }} />
         <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
         <Stack.Screen name="organization-chart" options={{ headerShown: false }} />
+        <Stack.Screen name="billing/index" options={{ headerShown: false }} />
+        <Stack.Screen name="billing/success" options={{ headerShown: false }} />
         <Stack.Screen name="unauthorized" options={{ headerShown: false }} />
         {/* Settings */}
         <Stack.Screen

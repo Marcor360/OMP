@@ -6,8 +6,9 @@ import {
   serverTimestamp,
   writeBatch,
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
-import { db } from '@/src/lib/firebase/app';
+import { db, functions } from '@/src/lib/firebase/app';
 import type {
   Department,
   DepartmentAssignment,
@@ -30,7 +31,7 @@ import {
 import {
   canManageDepartments,
 } from '@/src/utils/permissions/permissions';
-import { getAllUsers } from '@/src/services/users/users-service';
+import { normalizeUser } from '@/src/services/users/users-service';
 
 const departmentsRef = (congregationId: string) =>
   collection(db, 'congregations', congregationId, 'departments');
@@ -178,6 +179,27 @@ const getAllAssignments = async (congregationId: string): Promise<DepartmentAssi
   return snap.docs.map((docSnap) => normalizeAssignment(docSnap.id, docSnap.data()));
 };
 
+type OrgChartUsersResult = {
+  users?: (Record<string, unknown> & { uid?: string })[];
+};
+
+export const getOrgChartUsersForCurrentCongregation = async (
+  congregationId: string
+): Promise<AppUser[]> => {
+  const callable = httpsCallable<Record<string, never>, OrgChartUsersResult>(
+    functions,
+    'listOrgChartUsersForCurrentCongregation'
+  );
+  const result = await callable({});
+  const users = Array.isArray(result.data?.users) ? result.data.users : [];
+
+  return users
+    .map((user) => normalizeUser(typeof user.uid === 'string' ? user.uid : '', user))
+    .filter((user) => user.uid.length > 0)
+    .filter((user) => user.isActive === true && user.congregationId === congregationId)
+    .sort((a, b) => a.displayName.localeCompare(b.displayName, 'es'));
+};
+
 export const getActiveDepartments = async (congregationId: string): Promise<Department[]> =>
   (await getAllDepartments(congregationId)).filter((department) => department.isActive);
 
@@ -301,7 +323,7 @@ const assertAssignmentTarget = async (
 ) => {
   const [departments, users] = await Promise.all([
     getActiveDepartments(congregationId),
-    getAllUsers(congregationId, { forceServer: true }),
+    getOrgChartUsersForCurrentCongregation(congregationId),
   ]);
   const department = departments.find((item) => item.id === departmentId);
   if (!department) throw new Error('Departamento no encontrado o inactivo.');

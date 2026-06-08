@@ -9,13 +9,13 @@ import {
   getActiveDepartmentAssignments,
   getActiveDepartments,
   getEligibleUsersForDepartmentAssignments,
+  getOrgChartUsersForCurrentCongregation,
   initializeDepartmentsIfMissing,
   removeDepartmentAssignment,
   reorderDepartments,
   updateDepartment,
   updateDepartmentAssignmentRole,
 } from '@/src/services/org-chart/org-chart-service';
-import { getAllUsers } from '@/src/services/users/users-service';
 import type {
   Department,
   DepartmentAssignmentRole,
@@ -45,7 +45,7 @@ export function useOrgChart(congregationId: string | null, currentUser: AppUser 
       const [nextDepartments, nextAssignments, congregationUsers] = await Promise.all([
         getActiveDepartments(congregationId),
         getActiveDepartmentAssignments(congregationId),
-        getAllUsers(congregationId),
+        getOrgChartUsersForCurrentCongregation(congregationId),
       ]);
       setDepartments(nextDepartments);
       setAssignments(nextAssignments);

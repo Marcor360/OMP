@@ -17,6 +17,7 @@ import { CongregationPlanUsage } from '@/src/types/congregation-plan';
 import { getCongregationPlanUsage } from '@/src/services/congregations/congregations-service';
 import { type AppColors, useAppColors } from '@/src/styles';
 import { isExpoGo } from '@/src/utils/runtime';
+import { canViewBilling } from '@/src/utils/users/billing-permissions';
 import {
   canAccessSettings,
   canManageAssignments,
@@ -37,6 +38,7 @@ export function SettingsScreen() {
   const [planUsage, setPlanUsage] = useState<CongregationPlanUsage | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const canViewCongregationPlan = canAccessSettings(appUser);
+  const canViewCongregationBilling = canViewBilling(appUser);
   const canViewAdministration =
     canAccessSettings(appUser) ||
     canViewUsers(appUser) ||
@@ -171,6 +173,15 @@ export function SettingsScreen() {
               label={t('settings.plan.availableUsers')}
               value={planUsage ? String(planUsage.remainingActiveUsers) : '--'}
             />
+            {canViewCongregationBilling ? (
+              <SettingRow
+                icon="card-outline"
+                label={t('billing.title')}
+                value="Stripe"
+                showArrow
+                onPress={() => router.push('/(protected)/billing' as any)}
+              />
+            ) : null}
           </Section>
         ) : null}
 

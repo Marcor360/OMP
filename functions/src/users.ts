@@ -260,6 +260,16 @@ function assertValidRole(role: unknown): asserts role is Role {
   }
 }
 
+function normalizeRole(value: unknown): Role | undefined {
+  if (value === 'admin' || value === 'supervisor' || value === 'user') return value;
+  if (typeof value !== 'string') return undefined;
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'administrador') return 'admin';
+  if (normalized === 'usuario') return 'user';
+  return undefined;
+}
+
 const normalizeText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -933,6 +943,31 @@ export const listUsersForCurrentCongregation = onCall(
   }
 );
 
+export const listOrgChartUsersForCurrentCongregation = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<ListUsersResult> => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const requester = await getRequesterProfile(request.auth.uid);
+    const db = getFirestore();
+    const snap = await db
+      .collection('users')
+      .where('congregationId', '==', requester.congregationId)
+      .where('isActive', '==', true)
+      .limit(500)
+      .get();
+    const users = sortListedUsers(
+      snap.docs
+        .map((doc) => sanitizeOrgChartUserForList(doc.id, doc.data()))
+        .filter(isActiveUserListRecord)
+    );
+
+    return { users };
+  }
+);
+
 async function getRequesterProfile(uid: string): Promise<RequesterProfile> {
   const db = getFirestore();
   const snap = await db.collection('users').doc(uid).get();
@@ -946,8 +981,14 @@ async function getRequesterProfile(uid: string): Promise<RequesterProfile> {
     throw new HttpsError('permission-denied', 'El usuario autenticado esta inactivo.');
   }
 
+  const role = normalizeRole(data.role);
+  if (!role) {
+    throw new HttpsError('permission-denied', 'Rol de usuario invalido.');
+  }
+
   return {
     ...(data as RequesterProfile),
+    role,
     permissions: parsePermissions(data.permissions, { strict: false }),
   };
 }
@@ -1039,6 +1080,33 @@ const sanitizeUserForList = (
     'systemProtected',
     'createdAt',
     'updatedAt',
+  ] as const;
+
+  return allowedKeys.reduce<Record<string, unknown> & { uid: string }>(
+    (acc, key) => {
+      if (data[key] !== undefined) {
+        acc[key] = data[key];
+      }
+      return acc;
+    },
+    { uid }
+  );
+};
+
+const sanitizeOrgChartUserForList = (
+  uid: string,
+  data: Record<string, unknown>
+): Record<string, unknown> & { uid: string } => {
+  const allowedKeys = [
+    'displayName',
+    'congregationId',
+    'isActive',
+    'active',
+    'status',
+    'department',
+    'servicePosition',
+    'serviceDepartment',
+    'serviceAssignments',
   ] as const;
 
   return allowedKeys.reduce<Record<string, unknown> & { uid: string }>(

@@ -43,7 +43,7 @@ export const canViewBilling = (
 export const canPaySubscription = (
   user: BillingUser | null | undefined
 ): boolean =>
-  hasPermission(user, 'pagos', 'create') || isTreasuryManager(user) || isAssistantTreasury(user);
+  hasPermission(user, 'pagos', 'create') || isTreasuryManager(user);
 
 export const canManageSubscription = (
   user: BillingUser | null | undefined

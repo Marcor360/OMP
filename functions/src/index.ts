@@ -2,6 +2,7 @@ import './config/firebaseAdmin.js';
 
 export {
   createUserByAdmin,
+  listOrgChartUsersForCurrentCongregation,
   listUsersForCurrentCongregation,
   updateUserByAdmin,
   updateUserPasswordByAdmin,
@@ -79,3 +80,10 @@ export {
 export {
   listCleaningGroupsForCurrentUser,
 } from './cleaning.js';
+
+export {
+  createBillingPortalSession,
+  createCheckoutSession,
+  sendBillingPaymentReminders,
+  stripeWebhook,
+} from './billing.js';
