@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -12,16 +11,19 @@ import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
 import { useI18n } from '@/src/i18n/index';
 import {
-  createBillingPortalSession,
-  createCheckoutSession,
+  createStripeCheckoutSession,
+  createStripePortalSession,
   getCongregationBillingSummary,
+  getStripeBillingUsage,
   type CongregationBillingSummary,
 } from '@/src/services/billing/billing-service';
 import { type AppColors, useAppColors } from '@/src/styles';
 import {
   BILLING_PLAN_LABELS,
+  BILLING_PLAN_LIMITS,
+  BILLING_PLAN_PRICES_MXN,
   BILLING_PLANS,
-  type BillingPlanId,
+  type BillingPlanKey,
 } from '@/src/types/billing';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import {
@@ -53,14 +55,6 @@ const formatDate = (value: unknown): string => {
   }).format(date);
 };
 
-const resolveReturnUrl = (path: string): string | undefined => {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    return `${window.location.origin}${path}`;
-  }
-
-  return Linking.createURL(path.replace(/^\//, ''));
-};
-
 const openExternalUrl = async (url: string): Promise<void> => {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     window.location.assign(url);
@@ -76,6 +70,7 @@ export function BillingScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
   const [summary, setSummary] = useState<CongregationBillingSummary | null>(null);
+  const [activeUsersCount, setActiveUsersCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,9 +81,9 @@ export function BillingScreen() {
   const isExempt = summary?.billingExemption?.exempt === true;
 
   const currentPlanLabel = useMemo(() => {
-    const planId = summary?.billing.planId;
-    return planId ? BILLING_PLAN_LABELS[planId] : t('billing.noActivePlan');
-  }, [summary?.billing.planId, t]);
+    const planKey = summary?.billing.planKey;
+    return planKey ? BILLING_PLAN_LABELS[planKey] : t('billing.noActivePlan');
+  }, [summary?.billing.planKey, t]);
 
   const refresh = useCallback(async () => {
     if (!congregationId) {
@@ -101,7 +96,14 @@ export function BillingScreen() {
     try {
       setLoading(true);
       setError(null);
-      setSummary(await getCongregationBillingSummary(congregationId));
+      const nextSummary = await getCongregationBillingSummary(congregationId);
+      setSummary(nextSummary);
+
+      try {
+        setActiveUsersCount(await getStripeBillingUsage({ congregationId }));
+      } catch {
+        setActiveUsersCount(null);
+      }
     } catch (requestError) {
       setError(formatFirestoreError(requestError));
     } finally {
@@ -114,16 +116,14 @@ export function BillingScreen() {
     void refresh();
   }, [loadingProfile, refresh]);
 
-  const handleCheckout = async (plan: BillingPlanId) => {
+  const handleCheckout = async (planKey: BillingPlanKey) => {
     if (!congregationId) return;
 
     try {
-      setActionLoading(plan);
-      const url = await createCheckoutSession({
+      setActionLoading(planKey);
+      const url = await createStripeCheckoutSession({
         congregationId,
-        plan,
-        successUrl: resolveReturnUrl('/billing/success'),
-        cancelUrl: resolveReturnUrl('/billing'),
+        planKey,
       });
       await openExternalUrl(url);
     } catch (requestError) {
@@ -138,9 +138,8 @@ export function BillingScreen() {
 
     try {
       setActionLoading('portal');
-      const url = await createBillingPortalSession({
+      const url = await createStripePortalSession({
         congregationId,
-        returnUrl: resolveReturnUrl('/billing'),
       });
       await openExternalUrl(url);
     } catch (requestError) {
@@ -182,7 +181,22 @@ export function BillingScreen() {
         <View style={styles.metricGrid}>
           <Metric label={t('billing.nextPayment')} value={formatDate(summary?.billing.nextPaymentDate)} />
           <Metric label={t('billing.currentPeriod')} value={formatDate(summary?.billing.currentPeriodEnd)} />
-          <Metric label={t('billing.billingDay')} value={summary?.billing.billingDay ? String(summary.billing.billingDay) : '1'} />
+          <Metric
+            label={t('billing.allowedUsers')}
+            value={String(summary?.billing.activeUsersLimit ?? '-')}
+          />
+          <Metric
+            label={t('billing.activeUsers')}
+            value={activeUsersCount === null ? '--' : String(activeUsersCount)}
+          />
+          <Metric
+            label={t('billing.billingDay')}
+            value={summary?.billing.billingDay ? String(summary.billing.billingDay) : '1'}
+          />
+          <Metric
+            label={t('billing.lastPayment')}
+            value={summary?.billing.lastPaymentStatus ?? '--'}
+          />
         </View>
       </View>
 
@@ -208,7 +222,10 @@ export function BillingScreen() {
             <View>
               <ThemedText style={styles.planName}>{BILLING_PLAN_LABELS[plan]}</ThemedText>
               <ThemedText style={styles.planDescription}>
-                {t('billing.planDescription')}
+                {t('billing.planDescription', {
+                  price: BILLING_PLAN_PRICES_MXN[plan],
+                  limit: BILLING_PLAN_LIMITS[plan],
+                })}
               </ThemedText>
             </View>
             {actionLoading === plan ? (

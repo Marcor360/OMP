@@ -1,12 +1,13 @@
 import Stripe from 'stripe';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
-import { adminDb } from './config/firebaseAdmin.js';
+import { adminDb } from '../config/firebaseAdmin.js';
 
-type BillingPlanId = 'omp_80' | 'omp_150' | 'omp_250';
+type BillingPlanKey = 'omp_80' | 'omp_150' | 'omp_250';
 type ServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar' | string;
 type ServiceDepartment = 'tesoreria' | string;
 
@@ -28,10 +29,12 @@ type RequesterProfile = {
 
 type BillingState = {
   enabled?: boolean;
+  provider?: string;
   status?: string;
   billingDay?: number;
   billingCycle?: string;
-  planId?: BillingPlanId;
+  planKey?: BillingPlanKey;
+  stripePriceId?: string;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   currentPeriodStart?: Timestamp | null;
@@ -41,21 +44,30 @@ type BillingState = {
 
 type CheckoutPayload = {
   congregationId?: string;
-  plan?: BillingPlanId;
-  successUrl?: string;
-  cancelUrl?: string;
+  planKey?: BillingPlanKey;
 };
 
 type PortalPayload = {
   congregationId?: string;
-  returnUrl?: string;
 };
 
 const REGION = 'us-central1';
 const BILLING_DAY = 1;
 const BILLING_CYCLE = 'monthly';
-const DEFAULT_SUCCESS_PATH = '/billing/success';
-const DEFAULT_CANCEL_PATH = '/billing';
+const STRIPE_SECRET_KEY = defineSecret('STRIPE_SECRET_KEY');
+const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
+const STRIPE_PRICE_OMP_80 = defineSecret('STRIPE_PRICE_OMP_80');
+const STRIPE_PRICE_OMP_150 = defineSecret('STRIPE_PRICE_OMP_150');
+const STRIPE_PRICE_OMP_250 = defineSecret('STRIPE_PRICE_OMP_250');
+const APP_BILLING_RETURN_URL = defineSecret('APP_BILLING_RETURN_URL');
+const STRIPE_RUNTIME_SECRETS = [
+  STRIPE_SECRET_KEY,
+  STRIPE_WEBHOOK_SECRET,
+  STRIPE_PRICE_OMP_80,
+  STRIPE_PRICE_OMP_150,
+  STRIPE_PRICE_OMP_250,
+  APP_BILLING_RETURN_URL,
+];
 const MANAGED_EVENTS = new Set([
   'checkout.session.completed',
   'customer.subscription.created',
@@ -63,33 +75,40 @@ const MANAGED_EVENTS = new Set([
   'customer.subscription.deleted',
   'invoice.paid',
   'invoice.payment_failed',
+  'invoice.payment_action_required',
 ]);
 
-const PLAN_PRICE_ENV: Record<BillingPlanId, string> = {
-  omp_80: 'STRIPE_PRICE_OMP_80',
-  omp_150: 'STRIPE_PRICE_OMP_150',
-  omp_250: 'STRIPE_PRICE_OMP_250',
+const PLAN_PRICE_SECRETS: Record<BillingPlanKey, typeof STRIPE_PRICE_OMP_80> = {
+  omp_80: STRIPE_PRICE_OMP_80,
+  omp_150: STRIPE_PRICE_OMP_150,
+  omp_250: STRIPE_PRICE_OMP_250,
 };
 
-const PLAN_LIMITS: Record<BillingPlanId, number> = {
+const PLAN_LIMITS: Record<BillingPlanKey, number> = {
   omp_80: 80,
   omp_150: 150,
   omp_250: 250,
 };
 
-const getEnv = (key: string): string => {
-  const value = process.env[key]?.trim();
+const PLAN_PRICES_MXN: Record<BillingPlanKey, number> = {
+  omp_80: 70,
+  omp_150: 120,
+  omp_250: 200,
+};
+
+const getSecret = (secret: { name: string; value: () => string }): string => {
+  const value = secret.value().trim();
   if (!value) {
-    throw new HttpsError('failed-precondition', `Falta configurar ${key}.`);
+    throw new HttpsError('failed-precondition', `Falta configurar ${secret.name}.`);
   }
   return value;
 };
 
-const getStripe = () => new Stripe(getEnv('STRIPE_SECRET_KEY'));
+const getStripe = () => new Stripe(getSecret(STRIPE_SECRET_KEY));
 
-const getPriceId = (plan: BillingPlanId): string => getEnv(PLAN_PRICE_ENV[plan]);
+const getPriceId = (planKey: BillingPlanKey): string => getSecret(PLAN_PRICE_SECRETS[planKey]);
 
-const isBillingPlanId = (value: unknown): value is BillingPlanId =>
+const isBillingPlanKey = (value: unknown): value is BillingPlanKey =>
   value === 'omp_80' || value === 'omp_150' || value === 'omp_250';
 
 const asTrimmedString = (value: unknown): string | null => {
@@ -128,10 +147,7 @@ const getNextFirstOfMonthUnix = (from = new Date()): number => {
 };
 
 const getDefaultUrl = (path: string): string => {
-  const base =
-    process.env.APP_BILLING_RETURN_URL?.trim() ||
-    process.env.EXPO_PUBLIC_APP_URL?.trim() ||
-    'https://ormeprassig-public.web.app';
+  const base = getSecret(APP_BILLING_RETURN_URL);
   return `${base.replace(/\/$/, '')}${path}`;
 };
 
@@ -142,17 +158,15 @@ const parseCheckoutPayload = (value: unknown): Required<CheckoutPayload> => {
 
   const source = value as Record<string, unknown>;
   const congregationId = asTrimmedString(source.congregationId);
-  const plan = source.plan;
+  const planKey = source.planKey;
 
-  if (!congregationId || !isBillingPlanId(plan)) {
+  if (!congregationId || !isBillingPlanKey(planKey)) {
     throw new HttpsError('invalid-argument', 'Se requiere congregacion y plan valido.');
   }
 
   return {
     congregationId,
-    plan,
-    successUrl: asTrimmedString(source.successUrl) ?? getDefaultUrl(DEFAULT_SUCCESS_PATH),
-    cancelUrl: asTrimmedString(source.cancelUrl) ?? getDefaultUrl(DEFAULT_CANCEL_PATH),
+    planKey,
   };
 };
 
@@ -169,7 +183,6 @@ const parsePortalPayload = (value: unknown): Required<PortalPayload> => {
 
   return {
     congregationId,
-    returnUrl: asTrimmedString(source.returnUrl) ?? getDefaultUrl(DEFAULT_CANCEL_PATH),
   };
 };
 
@@ -230,6 +243,11 @@ const canOperateBilling = (profile: RequesterProfile): boolean =>
   hasBillingPermission(profile, 'create') ||
   hasBillingPermission(profile, 'manage');
 
+const canViewBilling = (profile: RequesterProfile): boolean =>
+  canOperateBilling(profile) ||
+  hasServiceAssignment(profile, 'auxiliar', 'tesoreria') ||
+  profile.permissions?.pagos?.view === true;
+
 const assertBillingActor = async (
   uid: string,
   congregationId: string
@@ -240,6 +258,20 @@ const assertBillingActor = async (
   }
   if (!canOperateBilling(profile)) {
     throw new HttpsError('permission-denied', 'Solo coordinador o tesorero puede gestionar cobros.');
+  }
+  return profile;
+};
+
+const assertBillingViewer = async (
+  uid: string,
+  congregationId: string
+): Promise<RequesterProfile> => {
+  const profile = await getRequesterProfile(uid);
+  if (profile.congregationId !== congregationId) {
+    throw new HttpsError('permission-denied', 'No puedes ver pagos de otra congregacion.');
+  }
+  if (!canViewBilling(profile)) {
+    throw new HttpsError('permission-denied', 'No tienes permiso para ver facturacion.');
   }
   return profile;
 };
@@ -305,10 +337,10 @@ const resolveCustomerId = (value: unknown): string | null => {
   return null;
 };
 
-const priceToPlanId = (priceId: string | null): BillingPlanId | undefined => {
+const priceToPlanKey = (priceId: string | null): BillingPlanKey | undefined => {
   if (!priceId) return undefined;
-  return (Object.keys(PLAN_PRICE_ENV) as BillingPlanId[]).find(
-    (plan) => process.env[PLAN_PRICE_ENV[plan]]?.trim() === priceId
+  return (Object.keys(PLAN_PRICE_SECRETS) as BillingPlanKey[]).find(
+    (planKey) => getSecret(PLAN_PRICE_SECRETS[planKey]) === priceId
   );
 };
 
@@ -357,16 +389,22 @@ const subscriptionToBillingUpdate = (
     typeof price === 'object' && price !== null
       ? asTrimmedString((price as Record<string, unknown>).id)
       : null;
-  const planId = priceToPlanId(priceId) ?? fallback?.planId;
+  const metadataPlanKey = getObjectMetadata(subscription).planKey;
+  const planKey =
+    priceToPlanKey(priceId) ??
+    (isBillingPlanKey(metadataPlanKey) ? metadataPlanKey : undefined) ??
+    fallback?.planKey;
   const subscriptionId = asTrimmedString(subscription.id);
 
   return {
     'billing.enabled': true,
+    'billing.provider': 'stripe',
     'billing.status': asTrimmedString(subscription.status) ?? 'unknown',
     'billing.billingDay': BILLING_DAY,
     'billing.billingCycle': BILLING_CYCLE,
-    'billing.planId': planId ?? null,
-    'billing.activeUsersLimit': planId ? PLAN_LIMITS[planId] : null,
+    'billing.planKey': planKey ?? null,
+    'billing.activeUsersLimit': planKey ? PLAN_LIMITS[planKey] : null,
+    'billing.stripePriceId': priceId,
     'billing.stripeCustomerId': resolveCustomerId(subscription.customer),
     'billing.stripeSubscriptionId': subscriptionId,
     'billing.currentPeriodStart': period.start,
@@ -423,12 +461,19 @@ const handleCheckoutCompleted = async (
     subscription as unknown as Record<string, unknown>,
     {
       congregationId,
-      planId: isBillingPlanId(metadata.plan) ? metadata.plan : undefined,
+      planKey: isBillingPlanKey(metadata.planKey) ? metadata.planKey : undefined,
     }
   );
 };
 
-const handleInvoicePaid = async (invoice: Record<string, unknown>): Promise<void> => {
+const getInvoiceUrl = (invoice: Record<string, unknown>): string | null =>
+  asTrimmedString(invoice.hosted_invoice_url) ?? asTrimmedString(invoice.invoice_pdf);
+
+const handleInvoiceStatus = async (
+  invoice: Record<string, unknown>,
+  status: 'active' | 'past_due' | 'payment_action_required',
+  lastPaymentStatus: 'paid' | 'payment_failed' | 'action_required'
+): Promise<void> => {
   const rawInvoice = invoice as unknown as Record<string, unknown>;
   const subscriptionId = resolveSubscriptionId(rawInvoice.subscription);
   if (!subscriptionId) return;
@@ -437,35 +482,38 @@ const handleInvoicePaid = async (invoice: Record<string, unknown>): Promise<void
 
   await getCongregationRef(congregationId).set(
     {
-      'billing.status': 'active',
-      'billing.lastPaymentAt': FieldValue.serverTimestamp(),
+      'billing.status': status,
+      'billing.lastPaymentStatus': lastPaymentStatus,
       'billing.lastInvoiceId': asTrimmedString(invoice.id),
+      'billing.lastInvoiceUrl': getInvoiceUrl(invoice),
       'billing.updatedAt': FieldValue.serverTimestamp(),
     },
     { merge: true }
   );
 };
 
-const handleInvoicePaymentFailed = async (invoice: Record<string, unknown>): Promise<void> => {
-  const rawInvoice = invoice as unknown as Record<string, unknown>;
-  const subscriptionId = resolveSubscriptionId(rawInvoice.subscription);
-  if (!subscriptionId) return;
-  const congregationId = await findCongregationBySubscription(subscriptionId);
-  if (!congregationId) return;
-
-  await getCongregationRef(congregationId).set(
-    {
-      'billing.status': 'past_due',
-      'billing.lastFailedPaymentAt': FieldValue.serverTimestamp(),
-      'billing.lastInvoiceId': asTrimmedString(invoice.id),
-      'billing.updatedAt': FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-};
-
-export const createCheckoutSession = onCall(
+export const getStripeBillingUsage = onCall(
   { region: REGION },
+  async (request): Promise<{ activeUsersCount: number }> => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+    const payload = parsePortalPayload(request.data);
+    await assertBillingViewer(request.auth.uid, payload.congregationId);
+
+    const snap = await adminDb
+      .collection('users')
+      .where('congregationId', '==', payload.congregationId)
+      .where('isActive', '==', true)
+      .count()
+      .get();
+
+    return { activeUsersCount: snap.data().count };
+  }
+);
+
+export const createStripeCheckoutSession = onCall(
+  { region: REGION, secrets: STRIPE_RUNTIME_SECRETS },
   async (request): Promise<{ url: string }> => {
     if (!request.auth?.uid) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
@@ -491,11 +539,13 @@ export const createCheckoutSession = onCall(
       {
         billing: {
           enabled: true,
+          provider: 'stripe',
           status: 'checkout_pending',
           billingDay: BILLING_DAY,
           billingCycle: BILLING_CYCLE,
-          planId: payload.plan,
-          activeUsersLimit: PLAN_LIMITS[payload.plan],
+          planKey: payload.planKey,
+          activeUsersLimit: PLAN_LIMITS[payload.planKey],
+          stripePriceId: getPriceId(payload.planKey),
           stripeCustomerId: customerId,
           updatedAt: FieldValue.serverTimestamp(),
         },
@@ -509,7 +559,7 @@ export const createCheckoutSession = onCall(
       client_reference_id: payload.congregationId,
       line_items: [
         {
-          price: getPriceId(payload.plan),
+          price: getPriceId(payload.planKey),
           quantity: 1,
         },
       ],
@@ -518,16 +568,18 @@ export const createCheckoutSession = onCall(
         proration_behavior: 'create_prorations',
         metadata: {
           congregationId: payload.congregationId,
-          plan: payload.plan,
+          planKey: payload.planKey,
+          activeUsersLimit: String(PLAN_LIMITS[payload.planKey]),
+          monthlyPriceMxn: String(PLAN_PRICES_MXN[payload.planKey]),
         },
       },
       metadata: {
         congregationId: payload.congregationId,
-        plan: payload.plan,
+        planKey: payload.planKey,
         requesterUid: requester.uid,
       },
-      success_url: payload.successUrl,
-      cancel_url: payload.cancelUrl,
+      success_url: getDefaultUrl('/success'),
+      cancel_url: getDefaultUrl('/cancel'),
     });
 
     if (!session.url) {
@@ -538,8 +590,8 @@ export const createCheckoutSession = onCall(
   }
 );
 
-export const createBillingPortalSession = onCall(
-  { region: REGION },
+export const createStripePortalSession = onCall(
+  { region: REGION, secrets: STRIPE_RUNTIME_SECRETS },
   async (request): Promise<{ url: string }> => {
     if (!request.auth?.uid) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
@@ -560,7 +612,7 @@ export const createBillingPortalSession = onCall(
 
     const session = await getStripe().billingPortal.sessions.create({
       customer: customerId,
-      return_url: payload.returnUrl,
+      return_url: getDefaultUrl(''),
     });
 
     return { url: session.url };
@@ -568,7 +620,7 @@ export const createBillingPortalSession = onCall(
 );
 
 export const stripeWebhook = onRequest(
-  { region: REGION },
+  { region: REGION, secrets: STRIPE_RUNTIME_SECRETS },
   async (request, response): Promise<void> => {
     if (request.method !== 'POST') {
       response.status(405).send('Method Not Allowed');
@@ -587,7 +639,7 @@ export const stripeWebhook = onRequest(
       event = stripe.webhooks.constructEvent(
         request.rawBody,
         signature,
-        getEnv('STRIPE_WEBHOOK_SECRET')
+        getSecret(STRIPE_WEBHOOK_SECRET)
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -611,9 +663,19 @@ export const stripeWebhook = onRequest(
       ) {
         await updateCongregationFromSubscription(event.data.object as Record<string, unknown>);
       } else if (event.type === 'invoice.paid') {
-        await handleInvoicePaid(event.data.object as Record<string, unknown>);
+        await handleInvoiceStatus(event.data.object as Record<string, unknown>, 'active', 'paid');
       } else if (event.type === 'invoice.payment_failed') {
-        await handleInvoicePaymentFailed(event.data.object as Record<string, unknown>);
+        await handleInvoiceStatus(
+          event.data.object as Record<string, unknown>,
+          'past_due',
+          'payment_failed'
+        );
+      } else if (event.type === 'invoice.payment_action_required') {
+        await handleInvoiceStatus(
+          event.data.object as Record<string, unknown>,
+          'payment_action_required',
+          'action_required'
+        );
       }
 
       response.json({ received: true });

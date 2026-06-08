@@ -5,7 +5,7 @@ import { functions } from '@/src/lib/firebase/app';
 import { congregationDocRef } from '@/src/lib/firebase/refs';
 import type {
   BillingExemption,
-  BillingPlanId,
+  BillingPlanKey,
   CongregationBillingState,
 } from '@/src/types/billing';
 
@@ -17,18 +17,19 @@ export type CongregationBillingSummary = {
 
 type CheckoutPayload = {
   congregationId: string;
-  plan: BillingPlanId;
-  successUrl?: string;
-  cancelUrl?: string;
+  planKey: BillingPlanKey;
 };
 
 type PortalPayload = {
   congregationId: string;
-  returnUrl?: string;
 };
 
 type UrlResult = {
   url?: string;
+};
+
+type BillingUsageResult = {
+  activeUsersCount?: number;
 };
 
 const normalizeBilling = (value: unknown): CongregationBillingState => {
@@ -42,14 +43,16 @@ const normalizeBilling = (value: unknown): CongregationBillingState => {
   const data = value as Record<string, unknown>;
   return {
     enabled: data.enabled === true,
+    provider: typeof data.provider === 'string' ? data.provider : undefined,
     status: typeof data.status === 'string' ? data.status : 'disabled',
     billingDay: typeof data.billingDay === 'number' ? data.billingDay : undefined,
     billingCycle: typeof data.billingCycle === 'string' ? data.billingCycle : undefined,
-    planId:
-      data.planId === 'omp_80' || data.planId === 'omp_150' || data.planId === 'omp_250'
-        ? data.planId
+    planKey:
+      data.planKey === 'omp_80' || data.planKey === 'omp_150' || data.planKey === 'omp_250'
+        ? data.planKey
         : undefined,
     activeUsersLimit: typeof data.activeUsersLimit === 'number' ? data.activeUsersLimit : undefined,
+    stripePriceId: typeof data.stripePriceId === 'string' ? data.stripePriceId : undefined,
     stripeCustomerId: typeof data.stripeCustomerId === 'string' ? data.stripeCustomerId : undefined,
     stripeSubscriptionId:
       typeof data.stripeSubscriptionId === 'string' ? data.stripeSubscriptionId : undefined,
@@ -57,6 +60,9 @@ const normalizeBilling = (value: unknown): CongregationBillingState => {
     currentPeriodEnd: data.currentPeriodEnd,
     nextPaymentDate: data.nextPaymentDate,
     cancelAtPeriodEnd: data.cancelAtPeriodEnd === true,
+    lastPaymentStatus:
+      typeof data.lastPaymentStatus === 'string' ? data.lastPaymentStatus : undefined,
+    lastInvoiceUrl: typeof data.lastInvoiceUrl === 'string' ? data.lastInvoiceUrl : undefined,
     updatedAt: data.updatedAt,
   };
 };
@@ -67,6 +73,8 @@ const normalizeExemption = (value: unknown): BillingExemption | undefined => {
   return {
     exempt: data.exempt === true,
     reason: typeof data.reason === 'string' ? data.reason : undefined,
+    grantedBy: typeof data.grantedBy === 'string' ? data.grantedBy : undefined,
+    grantedAt: data.grantedAt,
   };
 };
 
@@ -86,16 +94,30 @@ export const getCongregationBillingSummary = async (
   };
 };
 
-export const createCheckoutSession = async (payload: CheckoutPayload): Promise<string> => {
-  const callable = httpsCallable<CheckoutPayload, UrlResult>(functions, 'createCheckoutSession');
+export const createStripeCheckoutSession = async (payload: CheckoutPayload): Promise<string> => {
+  const callable = httpsCallable<CheckoutPayload, UrlResult>(
+    functions,
+    'createStripeCheckoutSession'
+  );
   const result = await callable(payload);
   if (!result.data?.url) throw new Error('Stripe no devolvio URL de pago.');
   return result.data.url;
 };
 
-export const createBillingPortalSession = async (payload: PortalPayload): Promise<string> => {
-  const callable = httpsCallable<PortalPayload, UrlResult>(functions, 'createBillingPortalSession');
+export const createStripePortalSession = async (payload: PortalPayload): Promise<string> => {
+  const callable = httpsCallable<PortalPayload, UrlResult>(functions, 'createStripePortalSession');
   const result = await callable(payload);
   if (!result.data?.url) throw new Error('Stripe no devolvio URL de portal.');
   return result.data.url;
+};
+
+export const getStripeBillingUsage = async (payload: PortalPayload): Promise<number | null> => {
+  const callable = httpsCallable<PortalPayload, BillingUsageResult>(
+    functions,
+    'getStripeBillingUsage'
+  );
+  const result = await callable(payload);
+  return typeof result.data?.activeUsersCount === 'number'
+    ? result.data.activeUsersCount
+    : null;
 };

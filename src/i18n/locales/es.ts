@@ -89,8 +89,11 @@ export const es = {
   'billing.nextPayment': 'Proximo pago',
   'billing.currentPeriod': 'Periodo actual',
   'billing.billingDay': 'Dia de cobro',
+  'billing.allowedUsers': 'Usuarios permitidos',
+  'billing.activeUsers': 'Usuarios activos',
+  'billing.lastPayment': 'Ultimo pago',
   'billing.choosePlan': 'Elegir plan',
-  'billing.planDescription': 'Pago mensual con corte el dia 1',
+  'billing.planDescription': '${{price}} MXN al mes, hasta {{limit}} usuarios',
   'billing.openPortal': 'Abrir portal de Stripe',
   'billing.error.noCongregation': 'No se pudo identificar la congregacion.',
   'billing.error.noPermission': 'No tienes permiso para ver la facturacion.',
@@ -100,6 +103,10 @@ export const es = {
   'billing.success.heading': 'Estamos confirmando tu suscripcion',
   'billing.success.description': 'Stripe notificara a OMP mediante webhook. En unos segundos se actualizara el estado de facturacion.',
   'billing.success.back': 'Volver a facturacion',
+  'billing.cancel.title': 'Pago cancelado',
+  'billing.cancel.heading': 'No se completo el pago',
+  'billing.cancel.description': 'Puedes volver a elegir un plan cuando estes listo. El estado real de facturacion se mantiene en Firestore.',
+  'billing.cancel.back': 'Volver a facturacion',
 
   // Settings - Legal
   'settings.legal.terms': 'Terminos de uso',

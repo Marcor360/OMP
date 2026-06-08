@@ -82,8 +82,9 @@ export {
 } from './cleaning.js';
 
 export {
-  createBillingPortalSession,
-  createCheckoutSession,
+  createStripeCheckoutSession,
+  createStripePortalSession,
+  getStripeBillingUsage,
   sendBillingPaymentReminders,
   stripeWebhook,
-} from './billing.js';
+} from './billing/stripe.js';
