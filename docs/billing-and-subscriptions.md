@@ -32,6 +32,17 @@ STRIPE_PRICE_OMP_250=price_1Tfr4rBNusNy7pYKS7XQFqWA
 APP_BILLING_RETURN_URL=https://app.ompsuite.com/billing
 ```
 
+La clave publicable `pk_test_...` no se usa en esta integracion principal porque OMP no captura tarjetas ni inicializa Stripe desde React/Expo. Checkout se crea en Cloud Functions y el cliente solo abre la URL devuelta. No guardar `pk_test_...` como `STRIPE_SECRET_KEY`; `STRIPE_SECRET_KEY` debe ser una clave rotada `sk_test_...` o `sk_live_...` del mismo entorno donde existen los `price_id`.
+
+Despues de crear el webhook en Stripe, guardar tambien el signing secret `whsec_...`:
+
+```bash
+npx -y firebase-tools@latest functions:secrets:set STRIPE_WEBHOOK_SECRET
+npx -y firebase-tools@latest deploy --only functions
+```
+
+Para el Customer Portal, activarlo desde Stripe Dashboard en modo prueba antes de usar `createStripePortalSession`. El portal debe permitir actualizar metodo de pago y consultar facturas.
+
 ## Cloud Functions
 
 - `createStripeCheckoutSession`: callable autenticado. Valida congregacion, permisos de pago y exencion. Crea/reutiliza `stripeCustomerId` y devuelve la URL de Checkout.
