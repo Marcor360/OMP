@@ -41,7 +41,7 @@ npx -y firebase-tools@latest functions:secrets:set STRIPE_WEBHOOK_SECRET
 npx -y firebase-tools@latest deploy --only functions
 ```
 
-Para el Customer Portal, activarlo desde Stripe Dashboard en modo prueba antes de usar `createStripePortalSession`. El portal debe permitir actualizar metodo de pago y consultar facturas.
+Para el Customer Portal, activarlo desde Stripe Dashboard en modo prueba antes de usar `createStripePortalSession`. El portal debe permitir actualizar metodo de pago y consultar facturas. No activar cambio de plan ni cancelacion de suscripcion desde Customer Portal en esta fase.
 
 ## Cloud Functions
 

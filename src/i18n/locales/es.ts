@@ -109,11 +109,11 @@ export const es = {
   'billing.error.portalTitle': 'No se pudo abrir el portal',
   'billing.success.title': 'Pago recibido',
   'billing.success.heading': 'Estamos confirmando tu suscripcion',
-  'billing.success.description': 'Estamos validando tu pago. El estado se actualizara automaticamente cuando Stripe confirme la operacion.',
+  'billing.success.description': 'Estamos validando tu pago. El estado se actualizará automáticamente cuando Stripe confirme la operación.',
   'billing.success.back': 'Volver a facturacion',
   'billing.cancel.title': 'Pago cancelado',
   'billing.cancel.heading': 'No se completo el pago',
-  'billing.cancel.description': 'Puedes volver a elegir un plan cuando estes listo. El estado real de facturacion se mantiene en Firestore.',
+  'billing.cancel.description': 'El proceso de pago fue cancelado. Puedes intentarlo nuevamente.',
   'billing.cancel.back': 'Volver a facturacion',
 
   // Settings - Legal
