@@ -90,12 +90,14 @@ function ProtectedContent() {
         <Stack.Screen name="assignments/create" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/edit/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/outgoing-talks" options={{ headerShown: false }} />
+        <Stack.Screen name="assignments/hospitality-microphones" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/readers" options={{ headerShown: false }} />
         <Stack.Screen name="events/create" options={{ headerShown: false }} />
         <Stack.Screen name="events/edit/[id]" options={{ headerShown: false }} />
         {/* Módulo de limpieza */}
         <Stack.Screen name="cleaning/index" options={{ headerShown: false }} />
         <Stack.Screen name="cleaning/create" options={{ headerShown: false }} />
+        <Stack.Screen name="cleaning/schedule" options={{ headerShown: false }} />
         <Stack.Screen name="cleaning/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="cleaning/edit/[id]" options={{ headerShown: false }} />
         {/* Módulo: Contador de Horas de Predicación (100% local, sin Firebase) */}

@@ -46,6 +46,7 @@ import {
   convertProgramSectionsToLegacyMidweekSections,
   normalizeMeetingProgramPayload,
 } from '@/src/services/meetings/meeting-program-utils';
+import { applyPublishedPlanningToMeeting } from '@/src/services/meetings/meeting-autofill-service';
 import { sanitizeForFirestore } from '@/src/services/meetings/firestore-payload';
 import {
   createMeetingByManager,
@@ -528,10 +529,32 @@ export const createMeeting = async (
     publicationStatus: data.publicationStatus,
     legacyMidweekSections: data.midweekSections,
   });
+  const planningMeetingDate = timestampToDate(normalizedProgram.meetingDate);
+  const planning = planningMeetingDate
+    ? await applyPublishedPlanningToMeeting({
+        congregationId,
+        meetingType: inferredType,
+        meetingDate: planningMeetingDate,
+        sections: normalizedProgram.sections,
+      }).catch((error) => {
+        console.warn('Meeting planning autofill skipped:', error);
+        return null;
+      })
+    : null;
+  const plannedSections = planning?.sections ?? normalizedProgram.sections;
+  const plannedAssignedUserIds = collectAssignedUserIds(plannedSections);
+  const plannedCleaningGroupIds =
+    planning && planning.cleaningGroupIds.length > 0
+      ? planning.cleaningGroupIds
+      : data.cleaningGroupIds ?? [];
+  const plannedCleaningGroupNames =
+    planning && planning.cleaningGroupNames.length > 0
+      ? planning.cleaningGroupNames
+      : data.cleaningGroupNames ?? [];
 
   const legacyMidweekSections =
     inferredType === 'midweek'
-      ? convertProgramSectionsToLegacyMidweekSections(normalizedProgram.sections)
+      ? convertProgramSectionsToLegacyMidweekSections(plannedSections)
       : undefined;
 
   const rawPayload: Record<string, unknown> = {
@@ -558,12 +581,16 @@ export const createMeeting = async (
     closingPrayer: data.closingPrayer,
     chairman: data.chairman,
     publicationStatus: normalizedProgram.publicationStatus,
-    sections: normalizedProgram.sections,
-    assignedUserIds: normalizedProgram.assignedUserIds,
+    sections: plannedSections,
+    assignedUserIds: plannedAssignedUserIds,
     cleaningAssignmentMode: data.cleaningAssignmentMode ?? 'none',
-    cleaningGroupIds: data.cleaningGroupIds ?? [],
-    cleaningGroupNames: data.cleaningGroupNames ?? [],
-    searchableText: normalizedProgram.searchableText,
+    cleaningGroupIds: plannedCleaningGroupIds,
+    cleaningGroupNames: plannedCleaningGroupNames,
+    searchableText: buildMeetingSearchableText({
+      title: data.title,
+      description: data.description,
+      sections: plannedSections,
+    }),
     midweekSections: legacyMidweekSections ?? data.midweekSections ?? null,
     organizerUid,
     organizerName,
@@ -629,6 +656,29 @@ export const updateMeeting = async (
     publicationStatus: data.publicationStatus,
     legacyMidweekSections: data.midweekSections,
   });
+  const planningMeetingDate = timestampToDate(normalizedProgram.meetingDate);
+  const planning = planningMeetingDate
+    ? await applyPublishedPlanningToMeeting({
+        congregationId,
+        meetingId: id,
+        meetingType: inferredType,
+        meetingDate: planningMeetingDate,
+        sections: normalizedProgram.sections,
+      }).catch((error) => {
+        console.warn('Meeting planning autofill skipped:', error);
+        return null;
+      })
+    : null;
+  const plannedSections = planning?.sections ?? normalizedProgram.sections;
+  const plannedAssignedUserIds = collectAssignedUserIds(plannedSections);
+  const plannedCleaningGroupIds =
+    planning && planning.cleaningGroupIds.length > 0
+      ? planning.cleaningGroupIds
+      : data.cleaningGroupIds;
+  const plannedCleaningGroupNames =
+    planning && planning.cleaningGroupNames.length > 0
+      ? planning.cleaningGroupNames
+      : data.cleaningGroupNames;
 
   const rawPayload: Record<string, unknown> = {
     title: data.title,
@@ -655,18 +705,22 @@ export const updateMeeting = async (
     closingPrayer: data.closingPrayer,
     chairman: data.chairman,
     publicationStatus: normalizedProgram.publicationStatus,
-    sections: normalizedProgram.sections,
-    assignedUserIds: normalizedProgram.assignedUserIds,
+    sections: plannedSections,
+    assignedUserIds: plannedAssignedUserIds,
     cleaningAssignmentMode: data.cleaningAssignmentMode,
-    cleaningGroupIds: data.cleaningGroupIds,
-    cleaningGroupNames: data.cleaningGroupNames,
-    searchableText: normalizedProgram.searchableText,
+    cleaningGroupIds: plannedCleaningGroupIds,
+    cleaningGroupNames: plannedCleaningGroupNames,
+    searchableText: buildMeetingSearchableText({
+      title: data.title ?? 'Reunion',
+      description: data.description,
+      sections: plannedSections,
+    }),
     updatedAt: serverTimestamp(),
   };
 
   if (inferredType === 'midweek') {
     rawPayload.midweekSections = convertProgramSectionsToLegacyMidweekSections(
-      normalizedProgram.sections
+      plannedSections
     );
   }
 

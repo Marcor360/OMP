@@ -36,12 +36,18 @@ import {
   type ParticipantAssignment,
 } from '@/src/types/midweek-meeting';
 import { MeetingStatus } from '@/src/types/meeting';
-import { MeetingProgramSection, MeetingPublicationStatus } from '@/src/types/meeting/program';
+import {
+  MeetingProgramSection,
+  MeetingPublicationStatus,
+  buildMeetingSearchableText,
+  collectAssignedUserIds,
+} from '@/src/types/meeting/program';
 
 import {
   convertProgramSectionsToLegacyMidweekSections,
   normalizeMeetingProgramPayload,
 } from '@/src/services/meetings/meeting-program-utils';
+import { applyPublishedPlanningToMeeting } from '@/src/services/meetings/meeting-autofill-service';
 import { sanitizeForFirestore } from '@/src/services/meetings/firestore-payload';
 
 type MidweekMeetingCategory = 'midweek';
@@ -479,9 +485,20 @@ export const createMidweekMeeting = async (
     publicationStatus: payload.publicationStatus,
     legacyMidweekSections: payload.midweekSections,
   });
+  const planning = await applyPublishedPlanningToMeeting({
+    congregationId,
+    meetingType: 'midweek',
+    meetingDate: normalizedProgram.meetingDate.toDate(),
+    sections: normalizedProgram.sections,
+  }).catch((error) => {
+    console.warn('Midweek meeting planning autofill skipped:', error);
+    return null;
+  });
+  const plannedSections = planning?.sections ?? normalizedProgram.sections;
   const normalizedSections = convertProgramSectionsToLegacyMidweekSections(
-    normalizedProgram.sections
+    plannedSections
   );
+  const plannedAssignedUserIds = collectAssignedUserIds(plannedSections);
 
   const rawPayload: Record<string, unknown> = {
     meetingCategory: 'midweek',
@@ -507,10 +524,20 @@ export const createMidweekMeeting = async (
     closingSong: payload.closingSong?.trim() || null,
     closingPrayer: payload.closingPrayer?.trim() || null,
     chairman: payload.chairman?.trim() || null,
-    sections: normalizedProgram.sections,
+    sections: plannedSections,
     midweekSections: normalizedSections,
-    assignedUserIds: normalizedProgram.assignedUserIds,
-    searchableText: normalizedProgram.searchableText,
+    assignedUserIds: plannedAssignedUserIds,
+    searchableText: buildMeetingSearchableText({
+      title: payload.title,
+      description: payload.description,
+      sections: plannedSections,
+    }),
+    cleaningAssignmentMode:
+      planning && planning.cleaningGroupIds.length > 0 ? 'selected' : undefined,
+    cleaningGroupIds:
+      planning && planning.cleaningGroupIds.length > 0 ? planning.cleaningGroupIds : undefined,
+    cleaningGroupNames:
+      planning && planning.cleaningGroupNames.length > 0 ? planning.cleaningGroupNames : undefined,
     organizerUid: actor.uid,
     organizerName: actor.displayName,
     attendees: actor.uid ? [actor.uid] : [],
@@ -568,9 +595,21 @@ export const updateMidweekMeeting = async (
     publicationStatus: payload.publicationStatus,
     legacyMidweekSections: payload.midweekSections,
   });
+  const planning = await applyPublishedPlanningToMeeting({
+    congregationId,
+    meetingId,
+    meetingType: 'midweek',
+    meetingDate: normalizedProgram.meetingDate.toDate(),
+    sections: normalizedProgram.sections,
+  }).catch((error) => {
+    console.warn('Midweek meeting planning autofill skipped:', error);
+    return null;
+  });
+  const plannedSections = planning?.sections ?? normalizedProgram.sections;
   const normalizedSections = convertProgramSectionsToLegacyMidweekSections(
-    normalizedProgram.sections
+    plannedSections
   );
+  const plannedAssignedUserIds = collectAssignedUserIds(plannedSections);
 
   const rawUpdatePayload: Record<string, unknown> = {
     meetingCategory: 'midweek',
@@ -596,10 +635,20 @@ export const updateMidweekMeeting = async (
     closingSong: payload.closingSong?.trim() || null,
     closingPrayer: payload.closingPrayer?.trim() || null,
     chairman: payload.chairman?.trim() || null,
-    sections: normalizedProgram.sections,
+    sections: plannedSections,
     midweekSections: normalizedSections,
-    assignedUserIds: normalizedProgram.assignedUserIds,
-    searchableText: normalizedProgram.searchableText,
+    assignedUserIds: plannedAssignedUserIds,
+    searchableText: buildMeetingSearchableText({
+      title: payload.title,
+      description: payload.description,
+      sections: plannedSections,
+    }),
+    cleaningAssignmentMode:
+      planning && planning.cleaningGroupIds.length > 0 ? 'selected' : undefined,
+    cleaningGroupIds:
+      planning && planning.cleaningGroupIds.length > 0 ? planning.cleaningGroupIds : undefined,
+    cleaningGroupNames:
+      planning && planning.cleaningGroupNames.length > 0 ? planning.cleaningGroupNames : undefined,
     updatedAt: serverTimestamp(),
   };
 

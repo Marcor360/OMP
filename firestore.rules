@@ -166,6 +166,34 @@ service cloud.firestore {
         );
     }
 
+    function isHospitalityMicrophonesManager() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPermission('acomodadores_microfonos', 'manage')
+          || (
+            hasPermission('acomodadores_microfonos', 'create')
+            && hasPermission('acomodadores_microfonos', 'edit')
+          )
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && currentUserData().serviceDepartment == 'acomodadores_microfonos'
+              )
+              || (
+                currentUserData().serviceAssignments is list
+                && currentUserData().serviceAssignments.hasAny([
+                  { 'position': 'encargado', 'department': 'acomodadores_microfonos', 'label': 'Encargado de Acomodadores y Microfonos' },
+                  { 'position': 'auxiliar', 'department': 'acomodadores_microfonos', 'label': 'Auxiliar de Acomodadores y Microfonos' }
+                ])
+              )
+            )
+          )
+        );
+    }
+
     function isPreachingManager() {
       return isActive()
         && (
@@ -1244,7 +1272,37 @@ service cloud.firestore {
         'description',
         'date',
         'status',
+        'publicationStatus',
+        'weekLabel',
+        'bibleReading',
+        'startDate',
+        'endDate',
+        'meetingDate',
+        'publishedAt',
+        'location',
+        'meetingUrl',
+        'zoomMeetingId',
+        'zoomPasscode',
+        'organizerUid',
+        'organizerName',
+        'attendees',
+        'attendeeNames',
+        'assignedUserIds',
+        'cleaningAssignmentMode',
+        'cleaningGroupIds',
+        'cleaningGroupNames',
+        'searchableText',
         'notes',
+        'openingSong',
+        'openingPrayer',
+        'middleSong',
+        'closingSong',
+        'closingPrayer',
+        'chairman',
+        'sections',
+        'midweekSections',
+        'createdBy',
+        'updatedBy',
         'createdAt',
         'updatedAt'
       ];
@@ -1252,20 +1310,53 @@ service cloud.firestore {
 
     function validMeetingType(value) {
       return value is string
-        && value in ['midweek', 'weekend', 'cleaning', 'hospitality'];
+        && value in ['midweek', 'weekend', 'internal', 'external', 'review', 'training', 'cleaning', 'hospitality'];
     }
 
     function validMeetingData(data, congregationId) {
       return hasOnlyKeys(data, allowedMeetingKeys())
-        && hasAllKeys(data, ['congregationId', 'type', 'date'])
-        && data.congregationId == congregationId
+        && hasAllKeys(data, ['type', 'title', 'startDate', 'endDate', 'meetingDate', 'status'])
+        && (!('congregationId' in data) || data.congregationId == congregationId)
         && validMeetingType(data.type)
-        && isNonEmptyString(data.date)
-        && (!('meetingCategory' in data) || data.meetingCategory is string)
-        && (!('title' in data) || data.title is string)
+        && isNonEmptyString(data.title)
+        && data.startDate is timestamp
+        && data.endDate is timestamp
+        && data.meetingDate is timestamp
+        && data.startDate <= data.endDate
+        && data.status in ['pending', 'scheduled', 'in_progress', 'completed', 'cancelled']
+        && (!('meetingCategory' in data) || data.meetingCategory in ['general', 'midweek', 'weekend'])
+        && (!('publicationStatus' in data) || data.publicationStatus in ['draft', 'published'])
+        && (!('publishedAt' in data) || data.publishedAt is timestamp)
+        && (!('date' in data) || data.date is string)
         && (!('description' in data) || data.description is string)
-        && (!('status' in data) || data.status is string)
-        && (!('notes' in data) || data.notes is string);
+        && (!('weekLabel' in data) || data.weekLabel is string)
+        && (!('bibleReading' in data) || data.bibleReading is string)
+        && (!('location' in data) || data.location is string)
+        && (!('meetingUrl' in data) || data.meetingUrl is string)
+        && (!('zoomMeetingId' in data) || data.zoomMeetingId is string)
+        && (!('zoomPasscode' in data) || data.zoomPasscode is string)
+        && (!('organizerUid' in data) || data.organizerUid is string)
+        && (!('organizerName' in data) || data.organizerName is string)
+        && (!('attendees' in data) || data.attendees is list)
+        && (!('attendeeNames' in data) || data.attendeeNames is list)
+        && (!('assignedUserIds' in data) || data.assignedUserIds is list)
+        && (!('cleaningAssignmentMode' in data) || data.cleaningAssignmentMode in ['none', 'selected', 'all'])
+        && (!('cleaningGroupIds' in data) || data.cleaningGroupIds is list)
+        && (!('cleaningGroupNames' in data) || data.cleaningGroupNames is list)
+        && (!('searchableText' in data) || data.searchableText is string)
+        && (!('notes' in data) || data.notes is string)
+        && (!('openingSong' in data) || data.openingSong is string)
+        && (!('openingPrayer' in data) || data.openingPrayer is string)
+        && (!('middleSong' in data) || data.middleSong is string)
+        && (!('closingSong' in data) || data.closingSong is string)
+        && (!('closingPrayer' in data) || data.closingPrayer is string)
+        && (!('chairman' in data) || data.chairman is string)
+        && (!('sections' in data) || data.sections is list)
+        && (!('midweekSections' in data) || data.midweekSections is list)
+        && (!('createdBy' in data) || data.createdBy is string)
+        && (!('updatedBy' in data) || data.updatedBy is string)
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
     // =========================================================================
@@ -1895,6 +1986,176 @@ service cloud.firestore {
         && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000));
     }
 
+    function validPlanningMonthIds(value) {
+      return value is list
+        && value.size() > 0
+        && value.size() <= 2;
+    }
+
+    function validScheduleStatus(value) {
+      return value is string && value in ['draft', 'published', 'archived'];
+    }
+
+    function validScheduleItemStatus(value) {
+      return value is string && value in ['scheduled', 'cancelled', 'completed'];
+    }
+
+    function validPlanningMeetingType(value) {
+      return value is string && value in ['midweek', 'weekend'];
+    }
+
+    function validHospitalityRoleKey(value) {
+      return value is string
+        && value in [
+          'microphoneOne',
+          'microphoneTwo',
+          'attendantDoor',
+          'attendantAuditorium',
+          'watchtowerReader',
+          'midweekBibleStudyReader',
+          'audioVideo'
+        ];
+    }
+
+    function validPlanningScheduleData(data, congregationId) {
+      return hasOnlyKeys(data, [
+          'congregationId',
+          'title',
+          'startDate',
+          'endDate',
+          'monthIds',
+          'totalMeetings',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt',
+          'publishedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'title',
+          'startDate',
+          'endDate',
+          'monthIds',
+          'totalMeetings',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && isNonEmptyString(data.title)
+        && data.title.size() <= 120
+        && validDateKey(data.startDate)
+        && validDateKey(data.endDate)
+        && data.startDate <= data.endDate
+        && validPlanningMonthIds(data.monthIds)
+        && data.totalMeetings is int
+        && data.totalMeetings >= 1
+        && data.totalMeetings <= 20
+        && validScheduleStatus(data.status)
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('publishedAt' in data) || data.publishedAt is timestamp);
+    }
+
+    function validCleaningScheduleItemData(data, congregationId, scheduleId) {
+      return hasOnlyKeys(data, [
+          'congregationId',
+          'scheduleId',
+          'meetingId',
+          'meetingDate',
+          'meetingType',
+          'cleaningGroupId',
+          'cleaningGroupName',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'scheduleId',
+          'meetingDate',
+          'meetingType',
+          'cleaningGroupId',
+          'cleaningGroupName',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && data.scheduleId == scheduleId
+        && validDateKey(data.meetingDate)
+        && validPlanningMeetingType(data.meetingType)
+        && isNonEmptyString(data.cleaningGroupId)
+        && isNonEmptyString(data.cleaningGroupName)
+        && data.cleaningGroupName.size() <= 120
+        && validScheduleItemStatus(data.status)
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('meetingId' in data) || data.meetingId is string);
+    }
+
+    function validHospitalityScheduleItemData(data, congregationId, scheduleId) {
+      return hasOnlyKeys(data, [
+          'congregationId',
+          'scheduleId',
+          'meetingId',
+          'meetingDate',
+          'meetingType',
+          'roleKey',
+          'roleLabel',
+          'userId',
+          'userNameSnapshot',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'scheduleId',
+          'meetingDate',
+          'meetingType',
+          'roleKey',
+          'roleLabel',
+          'userId',
+          'userNameSnapshot',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && data.scheduleId == scheduleId
+        && validDateKey(data.meetingDate)
+        && validPlanningMeetingType(data.meetingType)
+        && validHospitalityRoleKey(data.roleKey)
+        && isNonEmptyString(data.roleLabel)
+        && data.roleLabel.size() <= 120
+        && isNonEmptyString(data.userId)
+        && isNonEmptyString(data.userNameSnapshot)
+        && data.userNameSnapshot.size() <= 160
+        && validScheduleItemStatus(data.status)
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('meetingId' in data) || data.meetingId is string);
+    }
+
     // =========================================================================
     // CHANGE LOGS
     // =========================================================================
@@ -2329,6 +2590,92 @@ service cloud.firestore {
         allow delete: if isAdmin()
           && canAccessCongregationData(congregationId)
           && resource.data.congregationId == congregationId;
+      }
+
+      // -----------------------------------------------------------------------
+      // CLEANING SCHEDULES
+      // -----------------------------------------------------------------------
+      match /cleaningSchedules/{scheduleId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canAccessCongregationData(congregationId)
+          && isCleaningManager()
+          && validPlanningScheduleData(request.resource.data, congregationId)
+          && request.resource.data.createdBy == currentUid()
+          && request.resource.data.updatedBy == currentUid();
+
+        allow update: if canAccessCongregationData(congregationId)
+          && isCleaningManager()
+          && resource.data.congregationId == congregationId
+          && validPlanningScheduleData(request.resource.data, congregationId)
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedBy == currentUid();
+
+        allow delete: if false;
+
+        match /items/{itemId} {
+          allow get, list: if canAccessCongregationData(congregationId);
+
+          allow create: if canAccessCongregationData(congregationId)
+            && isCleaningManager()
+            && validCleaningScheduleItemData(request.resource.data, congregationId, scheduleId)
+            && request.resource.data.createdBy == currentUid()
+            && request.resource.data.updatedBy == currentUid();
+
+          allow update: if canAccessCongregationData(congregationId)
+            && isCleaningManager()
+            && resource.data.congregationId == congregationId
+            && validCleaningScheduleItemData(request.resource.data, congregationId, scheduleId)
+            && request.resource.data.createdBy == resource.data.createdBy
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.updatedBy == currentUid();
+
+          allow delete: if false;
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // HOSPITALITY / MICROPHONES SCHEDULES
+      // -----------------------------------------------------------------------
+      match /hospitalitySchedules/{scheduleId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canAccessCongregationData(congregationId)
+          && isHospitalityMicrophonesManager()
+          && validPlanningScheduleData(request.resource.data, congregationId)
+          && request.resource.data.createdBy == currentUid()
+          && request.resource.data.updatedBy == currentUid();
+
+        allow update: if canAccessCongregationData(congregationId)
+          && isHospitalityMicrophonesManager()
+          && resource.data.congregationId == congregationId
+          && validPlanningScheduleData(request.resource.data, congregationId)
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedBy == currentUid();
+
+        allow delete: if false;
+
+        match /items/{itemId} {
+          allow get, list: if canAccessCongregationData(congregationId);
+
+          allow create: if canAccessCongregationData(congregationId)
+            && isHospitalityMicrophonesManager()
+            && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
+            && request.resource.data.createdBy == currentUid()
+            && request.resource.data.updatedBy == currentUid();
+
+          allow update: if canAccessCongregationData(congregationId)
+            && isHospitalityMicrophonesManager()
+            && resource.data.congregationId == congregationId
+            && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
+            && request.resource.data.createdBy == resource.data.createdBy
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.updatedBy == currentUid();
+
+          allow delete: if false;
+        }
       }
 
       // -----------------------------------------------------------------------

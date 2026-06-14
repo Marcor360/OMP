@@ -97,6 +97,10 @@ export function CleaningDashboardScreen() {
     router.push('/(protected)/cleaning/create');
   };
 
+  const handleSchedule = () => {
+    router.push('/(protected)/cleaning/schedule' as never);
+  };
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -128,10 +132,17 @@ export function CleaningDashboardScreen() {
       color: colors.textMuted,
       marginTop: 2,
     },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
     createBtn: {
-      width: 48,
-      height: 48,
-      borderRadius: 16,
+      height: 40,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      flexDirection: 'row',
+      gap: 6,
       backgroundColor: colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
@@ -140,6 +151,28 @@ export function CleaningDashboardScreen() {
       shadowOpacity: 0.3,
       shadowRadius: 8,
       elevation: 4,
+    },
+    secondaryHeaderBtn: {
+      height: 40,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      flexDirection: 'row',
+      gap: 6,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.primary + '66',
+      backgroundColor: colors.primary + '14',
+    },
+    headerBtnText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: colors.onPrimary,
+    },
+    secondaryHeaderBtnText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: colors.primary,
     },
     statsRow: {
       flexDirection: 'row',
@@ -226,14 +259,26 @@ export function CleaningDashboardScreen() {
         showBack
         actions={
           canManage ? (
-            <TouchableOpacity
-              style={styles.createBtn}
-              onPress={handleCreate}
-              accessibilityRole="button"
-              accessibilityLabel="Crear nuevo grupo de limpieza"
-            >
-              <Ionicons name="add" size={26} color={colors.onPrimary} />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.secondaryHeaderBtn}
+                onPress={handleSchedule}
+                accessibilityRole="button"
+                accessibilityLabel="Abrir programa de limpieza"
+              >
+                <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+                <Text style={styles.secondaryHeaderBtnText}>Programa</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.createBtn}
+                onPress={handleCreate}
+                accessibilityRole="button"
+                accessibilityLabel="Crear nuevo grupo de limpieza"
+              >
+                <Ionicons name="add" size={18} color={colors.onPrimary} />
+                <Text style={styles.headerBtnText}>Nuevo</Text>
+              </TouchableOpacity>
+            </View>
           ) : null
         }
       />

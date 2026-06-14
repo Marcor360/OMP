@@ -117,6 +117,16 @@ export function AssignmentsScreen() {
             {showReaders ? (
               <TouchableOpacity
                 style={styles.createButton}
+                onPress={() => router.push('/(protected)/assignments/hospitality-microphones' as never)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+                <ThemedText style={styles.createButtonText}>Plan</ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            {showReaders ? (
+              <TouchableOpacity
+                style={styles.createButton}
                 onPress={() => router.push('/(protected)/assignments/readers' as never)}
                 activeOpacity={0.8}
               >

@@ -71,6 +71,43 @@ node functions/scripts/migrate-legacy-plans-and-roles.js --write
 - La pantalla muestra `ErrorState` con mensaje claro y opcion de reintento.
 - Los errores de permisos se distinguen de otros errores Firestore para orientar mejor el diagnostico.
 
+### Planeacion Operativa De Reuniones
+
+- Se agrego una capa comun de planeacion para evitar duplicar logica entre reuniones, limpieza, acomodadores/microfonos y discursos externos:
+  - `src/utils/dates/date-key.ts`.
+  - `src/services/planning/operational-planning-service.ts`.
+  - `src/services/planning/planning-conflict-service.ts`.
+- Acomodadores y microfonos ahora cuentan con:
+  - Tipos dedicados en `src/types/hospitality-microphones.ts`.
+  - Servicio Firestore en `src/services/hospitality-microphones/hospitality-microphones-service.ts`.
+  - Pantalla propia en `src/modules/assignments/screens/HospitalityMicrophonesScheduleScreen.tsx`.
+  - Ruta protegida `/(protected)/assignments/hospitality-microphones`.
+  - Publicacion segura mediante Cloud Function `publishHospitalityScheduleByManager`.
+- Limpieza ahora cuenta con:
+  - Tipos dedicados en `src/types/cleaning-schedule.ts`.
+  - Servicio Firestore en `src/services/cleaning/cleaning-schedule-service.ts`.
+  - Pantalla propia en `src/modules/cleaning/screens/CleaningScheduleScreen.tsx`.
+  - Ruta protegida `/(protected)/cleaning/schedule`.
+  - Publicacion segura mediante Cloud Function `publishCleaningScheduleByManager`.
+- Las reuniones importan datos publicados de planeacion:
+  - Limpieza publicada.
+  - Acomodadores/microfonos publicados.
+  - Lectores controlados por el modulo de acomodadores/microfonos.
+- La sincronizacion hacia reuniones actualiza solo los campos controlados por cada modulo y conserva las secciones no relacionadas.
+- Los items de limpieza y acomodadores/microfonos usan IDs deterministas por fecha/tipo/rol para evitar duplicados al guardar borradores.
+- Los discursos externos ahora validan conflicto contra asignaciones de reuniones de fin de semana antes de programarse.
+
+### Firestore Rules, Indices Y Functions
+
+- `firestore.rules` incluye validaciones para:
+  - `cleaningSchedules`.
+  - `hospitalitySchedules`.
+  - Items de cada schedule.
+  - Modelo real de reuniones con compatibilidad legacy.
+- `firestore.indexes.json` incluye indices para reuniones, discursos externos y schedules publicados.
+- `functions/src/planning-schedules.ts` centraliza la publicacion segura y sincronizacion desde backend.
+- `functions/src/outgoing-talks.ts` bloquea conflictos de discursos externos con asignaciones de fin de semana.
+
 ### Validacion Ejecutada
 
 Se ejecuto la validacion completa:
@@ -314,6 +351,10 @@ Rutas principales:
 /congregations/{congregationId}/meetings/{meetingId}/assignments/{assignmentId}
 /congregations/{congregationId}/assignments/{assignmentId}
 /congregations/{congregationId}/cleaningGroups/{groupId}
+/congregations/{congregationId}/cleaningSchedules/{scheduleId}
+/congregations/{congregationId}/cleaningSchedules/{scheduleId}/items/{itemId}
+/congregations/{congregationId}/hospitalitySchedules/{scheduleId}
+/congregations/{congregationId}/hospitalitySchedules/{scheduleId}/items/{itemId}
 /congregations/{congregationId}/outgoingTalks/{outgoingTalkId}
 /congregations/{congregationId}/changeLogs/{changeLogId}
 /congregations/{congregationId}/notifications/{notificationId}

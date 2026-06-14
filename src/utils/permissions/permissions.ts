@@ -25,6 +25,7 @@ export const PERMISSION_DEPARTMENTS: PermissionDepartment[] = [
   'configuracion',
   'avisos',
   'asignaciones',
+  'acomodadores_microfonos',
   'organigrama',
 ];
 
@@ -69,6 +70,7 @@ export const DEPARTMENT_LABELS: Record<PermissionDepartment, string> = {
   configuracion: 'Configuracion',
   avisos: 'Avisos',
   asignaciones: 'Asignaciones',
+  acomodadores_microfonos: 'Acomodadores y Microfonos',
 };
 
 export const ACTION_LABELS: Record<PermissionAction, string> = {
@@ -102,6 +104,7 @@ export const SUPERVISOR_PERMISSION_TEMPLATE: Partial<Record<PermissionDepartment
   configuracion: ['view', 'edit', 'manage'],
   avisos: ['view', 'create', 'edit', 'delete', 'manage'],
   asignaciones: ['view', 'create', 'edit', 'delete', 'manage'],
+  acomodadores_microfonos: ['view', 'create', 'edit', 'delete', 'manage'],
 };
 
 export const hasRole = (
@@ -284,6 +287,7 @@ const assignmentToPermissions = (assignment: Pick<UserServiceAssignment, 'positi
 
   if (assignment.position === 'encargado' && assignment.department === 'acomodadores_microfonos') {
     return {
+      acomodadores_microfonos: { view: true, create: true, edit: true, manage: true },
       asignaciones: { view: true, create: true, edit: true, manage: true },
       reuniones: { view: true, edit: true },
     };
@@ -291,6 +295,7 @@ const assignmentToPermissions = (assignment: Pick<UserServiceAssignment, 'positi
 
   if (assignment.position === 'auxiliar' && assignment.department === 'acomodadores_microfonos') {
     return {
+      acomodadores_microfonos: { view: true, edit: true },
       asignaciones: { view: true, edit: true },
       reuniones: { view: true, edit: true },
     };
@@ -487,10 +492,10 @@ export const canManageHospitalityMicrophones = (
   isAdmin(user) ||
   hasServiceAssignment(user, 'encargado', 'acomodadores_microfonos') ||
   hasServiceAssignment(user, 'auxiliar', 'acomodadores_microfonos') ||
-  hasPermission(user, 'asignaciones', 'manage') ||
+  hasPermission(user, 'acomodadores_microfonos', 'manage') ||
   (
-    hasPermission(user, 'asignaciones', 'view') &&
-    hasPermission(user, 'asignaciones', 'edit')
+    hasPermission(user, 'acomodadores_microfonos', 'create') &&
+    hasPermission(user, 'acomodadores_microfonos', 'edit')
   );
 
 const hasPreachingAssignment = (

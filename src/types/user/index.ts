@@ -89,6 +89,7 @@ export type PermissionDepartment =
   | 'configuracion'
   | 'avisos'
   | 'asignaciones'
+  | 'acomodadores_microfonos'
   | 'organigrama';
 
 export type PermissionAction =

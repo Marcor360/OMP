@@ -34,6 +34,7 @@ import {
   resolveOutgoingTalkWeekRange,
 } from '@/src/modules/assignments/utils/outgoing-talks';
 import { getAllUsers } from '@/src/services/users/users-service';
+import { assertUserIsFreeForOutgoingTalk } from '@/src/services/meetings/weekend-assignment-conflict-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser } from '@/src/types/user';
 import { canManageOutgoingTalks } from '@/src/utils/permissions/permissions';
@@ -226,6 +227,13 @@ export function OutgoingTalksScreen() {
 
     setSaving(true);
     try {
+      await assertUserIsFreeForOutgoingTalk({
+        congregationId,
+        speakerUserId,
+        talkDate,
+        excludeOutgoingTalkId: editingTalk?.id,
+      });
+
       const payload = {
         congregationId,
         outgoingTalkId: editingTalk?.id,

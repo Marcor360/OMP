@@ -1,4 +1,4 @@
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 
 import { adminDb } from './config/firebaseAdmin.js';
@@ -246,6 +246,58 @@ const assertNoDuplicateScheduledTalk = async (params: {
   }
 };
 
+const isWeekendMeetingData = (data: Record<string, unknown>): boolean => {
+  const status = normalizeText(data.status);
+  const type = normalizeText(data.type);
+  const meetingCategory = normalizeText(data.meetingCategory);
+
+  return status !== 'cancelled' && (
+    meetingCategory === 'weekend' ||
+    type === 'weekend' ||
+    type === 'internal' ||
+    type === 'external' ||
+    type === 'review' ||
+    type === 'training'
+  );
+};
+
+const assertNoWeekendMeetingAssignmentConflict = async (params: {
+  congregationId: string;
+  speakerUserId: string;
+  weekStartDate: string;
+  weekEndDate: string;
+}) => {
+  const startDate = parseDateKey(params.weekStartDate);
+  const endDate = parseDateKey(params.weekEndDate);
+
+  if (!startDate || !endDate) {
+    throw new HttpsError('invalid-argument', 'Rango de semana invalido.');
+  }
+
+  endDate.setHours(23, 59, 59, 999);
+
+  const snapshot = await adminDb
+    .collection('congregations')
+    .doc(params.congregationId)
+    .collection('meetings')
+    .where('assignedUserIds', 'array-contains', params.speakerUserId)
+    .where('meetingDate', '>=', Timestamp.fromDate(startDate))
+    .where('meetingDate', '<=', Timestamp.fromDate(endDate))
+    .limit(20)
+    .get();
+
+  const conflict = snapshot.docs.find((doc) =>
+    isWeekendMeetingData(doc.data() as Record<string, unknown>)
+  );
+
+  if (conflict) {
+    throw new HttpsError(
+      'failed-precondition',
+      'No se puede asignar. Este hermano ya tiene una asignacion en la reunion de fin de semana de esa semana.'
+    );
+  }
+};
+
 const writeOutgoingTalk = async (params: {
   payload: OutgoingTalkPayload;
   requesterUid: string;
@@ -262,6 +314,12 @@ const writeOutgoingTalk = async (params: {
       speakerUserId: params.payload.speakerUserId,
       weekStartDate: week.weekStartDate,
       excludeOutgoingTalkId: params.payload.outgoingTalkId,
+    });
+    await assertNoWeekendMeetingAssignmentConflict({
+      congregationId: params.payload.congregationId,
+      speakerUserId: params.payload.speakerUserId,
+      weekStartDate: week.weekStartDate,
+      weekEndDate: week.weekEndDate,
     });
   }
 
