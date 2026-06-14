@@ -2063,12 +2063,11 @@ service cloud.firestore {
         || isSameUser(userId)
         || (canReadUsers() && storedDocInMyCongregation());
 
-      // list solo dentro de la propia congregacion.
-      // Firestore Security Rules no permiten inspeccionar filtros de query,
-      // por lo que la restriccion real se aplica en la app (siempre filtra por congregationId).
-      // myCongregationId() != null garantiza que el solicitante tiene perfil activo con congregacion.
       allow list: if isSuperAdmin() 
-        || (canListCongregationUsers() && myCongregationId() != null);
+        || (
+          canListCongregationUsers()
+          && resource.data.congregationId == myCongregationId()
+        );
 
       allow create: if isSuperAdmin() || (canCreateUsers()
         && validUserCreate(userId)

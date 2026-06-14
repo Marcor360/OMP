@@ -1,14 +1,19 @@
 import {
   deleteDoc,
+  getDocs,
+  limit,
   onSnapshot,
+  query as firestoreQuery,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
 import { functions } from '@/src/lib/firebase/app';
+import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import {
   logFirestoreListenerCreated,
   logFirestoreListenerDestroyed,
@@ -25,6 +30,7 @@ import {
 } from '@/src/services/repositories/session-cache';
 import { isSystemPrincipalUser } from '@/src/utils/users/user-protection';
 import {
+  usersCollectionRef,
   userDocRef,
 } from '@/src/lib/firebase/refs';
 import {
@@ -424,6 +430,30 @@ const listUsersForCurrentCongregation = async (
   );
 };
 
+const isListUsersFunctionUnavailable = (error: unknown): boolean =>
+  isFirebaseErrorCode(error, 'unimplemented') || isFirebaseErrorCode(error, 'not-found');
+
+const listUsersForCongregationFromFirestore = async (
+  congregationId: string,
+  options?: { activeOnly?: boolean }
+): Promise<AppUser[]> => {
+  const constraints = [
+    where('congregationId', '==', congregationId),
+    ...(options?.activeOnly ? [where('isActive', '==', true)] : []),
+    limit(500),
+  ];
+  const snap = await getDocs(firestoreQuery(usersCollectionRef(), ...constraints));
+
+  return sortUsers(
+    dedupeUsersByEmail(
+      snap.docs
+        .map((doc) => normalizeUser(doc.id, doc.data() as Record<string, unknown>))
+        .filter((user) => !options?.activeOnly || user.isActive)
+        .filter((user) => !isSystemPrincipalUser(user))
+    )
+  );
+};
+
 const getUsersForCurrentCongregationCached = async (
   congregationId: string,
   options?: { forceServer?: boolean; activeOnly?: boolean }
@@ -440,9 +470,22 @@ const getUsersForCurrentCongregationCached = async (
   }
 
   return runSingleFlight(requestKey, async () => {
-    const users = await listUsersForCurrentCongregation({
-      activeOnly: options?.activeOnly,
-    });
+    let users: AppUser[];
+
+    try {
+      users = await listUsersForCurrentCongregation({
+        activeOnly: options?.activeOnly,
+      });
+    } catch (error) {
+      if (!isListUsersFunctionUnavailable(error)) {
+        throw error;
+      }
+
+      users = await listUsersForCongregationFromFirestore(congregationId, {
+        activeOnly: options?.activeOnly,
+      });
+    }
+
     setSessionCachedValue(cacheKey, users);
     return users;
   });
