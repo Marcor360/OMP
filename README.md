@@ -12,6 +12,85 @@ OMP Suite no es una aplicacion oficial de JW.ORG, no esta afiliada, respaldada n
 - Backend: Firebase Authentication, Cloud Firestore, Cloud Functions, Expo Notifications y Firebase Admin Messaging.
 - Seguridad: aislamiento por `congregationId`, roles tecnicos, permisos por modulo y operaciones sensibles mediante Cloud Functions.
 
+## Cambios Recientes Aplicados
+
+Esta seccion resume las correcciones de estabilizacion realizadas en la ronda actual del proyecto.
+
+### Planes, Billing Y Limites De Usuarios
+
+- Se unifico el modelo de planes de congregacion con la fuente de billing actual:
+  - `omp_80`: 80 usuarios activos.
+  - `omp_150`: 150 usuarios activos.
+  - `omp_250`: 250 usuarios activos.
+- `src/types/congregation-plan.ts` ahora reutiliza los tipos, etiquetas y limites de `src/types/billing.ts`.
+- `src/services/congregations/congregations-service.ts` lee primero `congregations/{congregationId}.billing` y usa `/congregations/{congregationId}/private/plan` solo como fallback legacy.
+- `functions/src/users.ts` valida capacidad de usuarios activos con los nuevos planes y mantiene compatibilidad con planes antiguos `basic`, `intermediate`, `complete` y limites 70, 120, 200.
+- La validacion de capacidad en `createUserByAdmin` ahora consulta hasta `limite + 1` usuarios activos, en lugar de usar un limite fijo.
+- Se actualizo la documentacion de planes y billing en:
+  - `docs/congregation-plans.md`.
+  - `docs/billing-and-subscriptions.md`.
+
+### Migracion Legacy
+
+- Se agrego el script administrativo `functions/scripts/migrate-legacy-plans-and-roles.js`.
+- El script corre en dry-run por defecto:
+
+```bash
+node functions/scripts/migrate-legacy-plans-and-roles.js
+```
+
+- Para aplicar cambios reales requiere `--write` y credenciales administrativas configuradas fuera del repositorio:
+
+```bash
+node functions/scripts/migrate-legacy-plans-and-roles.js --write
+```
+
+- Normaliza roles legacy:
+  - `administrador` -> `admin`.
+  - `usuario` -> `user`.
+- Normaliza planes legacy:
+  - `basic` / 70 -> `omp_80`.
+  - `intermediate` / 120 -> `omp_150`.
+  - `complete` / 200 -> `omp_250`.
+
+### Usuarios Y Errores `internal`
+
+- `src/services/users/users-service.ts` ahora hace fallback seguro a consulta Firestore cuando la Cloud Function `listUsersForCurrentCongregation` falla por errores temporales o internos:
+  - `internal`.
+  - `unavailable`.
+  - `deadline-exceeded`.
+  - `not-found`.
+  - `unimplemented`.
+- El fallback sigue pasando por Firestore Rules, por lo que no abre acceso fuera de los permisos reales.
+- `src/screens/users/UsersListScreen.tsx` ahora muestra accion de reintento cuando ocurre un error al cargar usuarios.
+- `src/lib/firebase/errors.ts` evita mostrar mensajes crudos como `internal` y los convierte en mensajes humanos.
+
+### Organigrama
+
+- `src/modules/organization/components/OrganizationChart.tsx` ya no dispara un error no capturado si falla la carga de usuarios activos para editar el organigrama.
+- La pantalla muestra `ErrorState` con mensaje claro y opcion de reintento.
+- Los errores de permisos se distinguen de otros errores Firestore para orientar mejor el diagnostico.
+
+### Validacion Ejecutada
+
+Se ejecuto la validacion completa:
+
+```bash
+npm run validate
+```
+
+Resultado:
+
+- Lint de Expo: correcto.
+- TypeScript app: correcto.
+- Lint de Cloud Functions: correcto.
+- Build de Cloud Functions: correcto.
+- Tests de Cloud Functions: 75 pruebas correctas.
+
+### Nota De Seguridad Pendiente
+
+No se endurecieron todavia las reglas de `firestore.rules` para bloquear completamente valores legacy. Primero debe ejecutarse y verificarse la migracion real de roles y planes en Firestore. Despues de confirmar que no quedan valores antiguos, se pueden ajustar reglas y validaciones para aceptar solo los valores modernos.
+
 ## Inicio Rapido
 
 Requisitos:

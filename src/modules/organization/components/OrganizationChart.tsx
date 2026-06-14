@@ -48,6 +48,7 @@ export function OrganizationChart() {
   const orgChart = useOrganizationChart(canView ? congregationId : null);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [usersError, setUsersError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
   const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
@@ -63,7 +64,15 @@ export function OrganizationChart() {
 
     try {
       setUsersLoading(true);
+      setUsersError(null);
       setUsers(await getActiveOrganizationUsers(congregationId));
+    } catch (requestError) {
+      setUsers([]);
+      setUsersError(
+        isPermissionDeniedError(requestError)
+          ? 'No se pudo leer la lista de usuarios para editar el organigrama. Verifica permisos de usuarios y organigrama.'
+          : formatFirestoreError(requestError)
+      );
     } finally {
       setUsersLoading(false);
     }
@@ -198,6 +207,10 @@ export function OrganizationChart() {
 
   if (orgChart.error) {
     return <ErrorState message={orgChart.error} onRetry={refreshAll} />;
+  }
+
+  if (canManage && usersError) {
+    return <ErrorState message={usersError} onRetry={refreshAll} />;
   }
 
   const hasDepartments = orgChart.departments.some((department) => department.isActive);

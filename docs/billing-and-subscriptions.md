@@ -183,9 +183,9 @@ La pantalla de exito no confirma el pago por si misma; Firestore se considera la
 
 ## Migracion De Campos Antiguos
 
-Los planes actuales son `omp_80`, `omp_150` y `omp_250`. Si existen documentos antiguos con limites 70, 120 o 200 usuarios por planes anteriores, migrarlos a:
+Los planes actuales son `omp_80`, `omp_150` y `omp_250`. Si existen documentos antiguos con `basic`, `intermediate`, `complete` o limites 70, 120 o 200 usuarios, migrarlos a:
 
-- 70 usuarios anteriores -> revisar manualmente y asignar `omp_80` si corresponde.
+- `basic` / 70 usuarios anteriores -> `omp_80`.
 - 120 usuarios anteriores -> `omp_150`.
 - 200 usuarios anteriores -> `omp_250`.
 

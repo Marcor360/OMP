@@ -41,6 +41,13 @@ const isGenericSdkMessage = (message: string): boolean => {
   );
 };
 
+const isUnhelpfulSdkMessage = (message: string, code?: string): boolean => {
+  const normalized = message.toLowerCase();
+  const normalizedCode = code ? normalizeCode(code).toLowerCase() : undefined;
+
+  return normalized === 'internal' || Boolean(normalizedCode && normalized === normalizedCode);
+};
+
 const normalizeCode = (code: string): string => {
   if (code.includes('/')) {
     return code.split('/').pop() ?? code;
@@ -58,12 +65,25 @@ export const getFirebaseErrorMessage = (error: unknown): string => {
   const fb = error as FirebaseLikeError;
   const normalizedCode = fb?.code ? normalizeCode(fb.code) : undefined;
   const normalizedMessage = normalizeErrorMessage(fb?.message);
+  const fromCode = mapFirebaseErrorCode(normalizedCode);
 
-  if (normalizedMessage && !isGenericSdkMessage(normalizedMessage)) {
+  if (
+    fromCode &&
+    (!normalizedMessage ||
+      isGenericSdkMessage(normalizedMessage) ||
+      isUnhelpfulSdkMessage(normalizedMessage, normalizedCode))
+  ) {
+    return fromCode;
+  }
+
+  if (
+    normalizedMessage &&
+    !isGenericSdkMessage(normalizedMessage) &&
+    !isUnhelpfulSdkMessage(normalizedMessage, normalizedCode)
+  ) {
     return normalizedMessage;
   }
 
-  const fromCode = mapFirebaseErrorCode(normalizedCode);
   if (fromCode) return fromCode;
 
   if (normalizedMessage) return normalizedMessage;

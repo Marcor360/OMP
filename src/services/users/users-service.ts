@@ -430,8 +430,12 @@ const listUsersForCurrentCongregation = async (
   );
 };
 
-const isListUsersFunctionUnavailable = (error: unknown): boolean =>
-  isFirebaseErrorCode(error, 'unimplemented') || isFirebaseErrorCode(error, 'not-found');
+const shouldFallbackToFirestoreList = (error: unknown): boolean =>
+  isFirebaseErrorCode(error, 'unimplemented') ||
+  isFirebaseErrorCode(error, 'not-found') ||
+  isFirebaseErrorCode(error, 'internal') ||
+  isFirebaseErrorCode(error, 'unavailable') ||
+  isFirebaseErrorCode(error, 'deadline-exceeded');
 
 const listUsersForCongregationFromFirestore = async (
   congregationId: string,
@@ -477,10 +481,11 @@ const getUsersForCurrentCongregationCached = async (
         activeOnly: options?.activeOnly,
       });
     } catch (error) {
-      if (!isListUsersFunctionUnavailable(error)) {
+      if (!shouldFallbackToFirestoreList(error)) {
         throw error;
       }
 
+      console.warn('listUsersForCurrentCongregation failed; falling back to Firestore query.', error);
       users = await listUsersForCongregationFromFirestore(congregationId, {
         activeOnly: options?.activeOnly,
       });

@@ -1,16 +1,13 @@
-export type CongregationPlanId = 'basic' | 'intermediate' | 'complete';
+import {
+  BILLING_PLAN_LABELS,
+  BILLING_PLAN_LIMITS,
+  type BillingPlanKey,
+} from '@/src/types/billing';
 
-export const CONGREGATION_PLAN_LIMITS: Record<CongregationPlanId, number> = {
-  basic: 70,
-  intermediate: 120,
-  complete: 200,
-};
+export type CongregationPlanId = BillingPlanKey;
 
-export const CONGREGATION_PLAN_LABELS: Record<CongregationPlanId, string> = {
-  basic: 'OMP Basico',
-  intermediate: 'OMP Intermedio',
-  complete: 'OMP Completo',
-};
+export const CONGREGATION_PLAN_LIMITS = BILLING_PLAN_LIMITS;
+export const CONGREGATION_PLAN_LABELS = BILLING_PLAN_LABELS;
 
 export interface CongregationPlanUsage {
   congregationId: string;

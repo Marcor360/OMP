@@ -1,38 +1,67 @@
-# Planes por congregacion
+# Planes Por Congregacion
 
-Los datos privados del plan viven en:
+La fuente vigente del plan vive en el documento de la congregacion:
 
 ```text
-/congregations/{congregationId}/private/plan
+/congregations/{congregationId}.billing
 ```
 
-Campos recomendados:
+Campos relevantes:
 
-```json
-{
-  "planId": "basic",
-  "activeUsersLimit": 70,
-  "updatedAt": "server timestamp"
+```ts
+billing: {
+  provider: 'stripe' | 'exempt';
+  status: string;
+  planKey: 'omp_80' | 'omp_150' | 'omp_250';
+  activeUsersLimit: number;
+  userLimit: number;
 }
 ```
 
-Planes vigentes en codigo:
+Planes vigentes:
 
-- `basic`: OMP Basico, hasta 70 usuarios activos.
-- `intermediate`: OMP Intermedio, hasta 120 usuarios activos.
-- `complete`: OMP Completo, hasta 200 usuarios activos.
+| Plan | Usuarios activos | Precio mensual |
+| --- | ---: | ---: |
+| `omp_80` | 80 | 70 MXN |
+| `omp_150` | 150 | 120 MXN |
+| `omp_250` | 250 | 200 MXN |
 
-Los precios no deben duplicarse aqui hasta cerrar el flujo de cobro. Si se agregan, deben venir de una sola fuente de verdad usada por la app, Functions y el panel administrativo.
+## Compatibilidad
 
-Reglas actuales:
+El documento legacy `/congregations/{congregationId}/private/plan` ya no debe ser la fuente principal. El cliente y `createUserByAdmin` lo leen solamente como fallback para datos antiguos.
 
-- Solo ancianos activos de la misma congregacion pueden leer el documento privado.
-- La escritura directa esta bloqueada; debe hacerse desde consola segura, panel administrativo externo o Cloud Functions administrativas.
+Valores antiguos que deben migrarse:
+
+| Legacy | Actual |
+| --- | --- |
+| `basic` / 70 usuarios | `omp_80` |
+| `intermediate` / 120 usuarios | `omp_150` |
+| `complete` / 200 usuarios | `omp_250` |
+
+Durante la migracion, mantener `activeUsersLimit` y `userLimit` sincronizados para no romper pantallas antiguas ni validaciones backend.
+
+## Reglas Actuales
+
+- El limite se aplica sobre usuarios activos.
 - `createUserByAdmin` bloquea crear usuarios activos si la congregacion ya alcanzo el limite.
+- La escritura directa de planes desde cliente debe permanecer bloqueada; cambios de plan deben venir de Stripe webhook, consola segura, panel superadmin o script administrativo controlado.
+- Congregaciones con `billingExemption.exempt === true` no se bloquean por cobro, pero deben conservar un limite de usuarios activo.
 
-Pendientes tecnicos:
+## Pendientes Tecnicos
 
-- Panel administrativo externo para crear/gestionar congregaciones y actualizar `/private/plan`.
-- Metricas agregadas historicas por congregacion.
-- Enforcement completo de App Check en Functions cuando los clientes esten configurados.
-- Auditoria de listeners `onSnapshot` restantes para convertir vistas no criticas a lecturas bajo demanda.
+- Ejecutar migracion real de documentos legacy.
+- Confirmar que no quedan documentos con `basic`, `intermediate`, `complete`, 70, 120 o 200 como limites vigentes.
+- Endurecer reglas y validaciones despues de confirmar la migracion.
+- Panel administrativo externo para gestion de congregaciones, plan y billing.
+- Enforcement gradual de App Check en Functions cuando Android, iOS y Web esten configurados.
+
+## Script De Migracion
+
+Hay un script administrativo local para normalizar roles y planes:
+
+```bash
+node functions/scripts/migrate-legacy-plans-and-roles.js
+node functions/scripts/migrate-legacy-plans-and-roles.js --write
+```
+
+El primer comando es dry-run. Para aplicar cambios se requiere `--write` y credenciales administrativas de Firebase configuradas en el entorno local. No usar credenciales de servicio dentro del repositorio.

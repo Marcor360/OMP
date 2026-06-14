@@ -113,7 +113,7 @@ export function UsersListScreen() {
   };
 
   if (loading || loadingProfile) return <LoadingState message={t('users.loading')} />;
-  if (error) return <ErrorState message={error} />;
+  if (error) return <ErrorState message={error} onRetry={() => void loadUsers(true)} />;
 
   const canCreateUsers = hasPermission(appUser, 'usuarios', 'create') || hasPermission(appUser, 'usuarios', 'manage');
 

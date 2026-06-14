@@ -23,6 +23,7 @@ const CONGREGATION_DOMAIN_CACHE_TTL_MS = 10 * 60 * 1000;
 const CONGREGATION_NAME_CACHE_TTL_MS = 5 * 60 * 1000;
 const CONGREGATION_PLAN_CACHE_TTL_MS = 60 * 1000;
 const MAX_ACCESS_BLOCK_MS = 5 * 60 * 60 * 1000;
+const DEFAULT_PLAN_ID: CongregationPlanId = 'omp_80';
 
 const toTrimmedText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -30,9 +31,56 @@ const toTrimmedText = (value: unknown): string | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
+const isPlanId = (value: unknown): value is CongregationPlanId =>
+  value === 'omp_80' || value === 'omp_150' || value === 'omp_250';
+
 const normalizePlanId = (value: unknown): CongregationPlanId => {
-  if (value === 'intermediate' || value === 'complete') return value;
-  return 'basic';
+  if (isPlanId(value)) return value;
+  if (value === 'complete') return 'omp_250';
+  if (value === 'intermediate') return 'omp_150';
+  if (value === 'basic') return 'omp_80';
+  return DEFAULT_PLAN_ID;
+};
+
+const normalizePlanLimit = (value: unknown, fallbackPlanId: CongregationPlanId): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return CONGREGATION_PLAN_LIMITS[fallbackPlanId];
+  }
+
+  const normalized = Math.max(0, Math.floor(value));
+  if (normalized === 70) return CONGREGATION_PLAN_LIMITS.omp_80;
+  if (normalized === 120) return CONGREGATION_PLAN_LIMITS.omp_150;
+  if (normalized === 200) return CONGREGATION_PLAN_LIMITS.omp_250;
+  return normalized;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const resolvePlanData = (
+  congregationData: Record<string, unknown> | null | undefined,
+  privatePlanData: Record<string, unknown> | null | undefined
+): { planId: CongregationPlanId; activeUsersLimit: number } => {
+  const billing = asRecord(congregationData?.billing);
+  const planId = normalizePlanId(
+    billing?.planKey ??
+      congregationData?.planKey ??
+      privatePlanData?.planKey ??
+      privatePlanData?.planId
+  );
+  const activeUsersLimit = normalizePlanLimit(
+    billing?.activeUsersLimit ??
+      billing?.userLimit ??
+      congregationData?.activeUsersLimit ??
+      congregationData?.userLimit ??
+      privatePlanData?.activeUsersLimit ??
+      privatePlanData?.userLimit,
+    planId
+  );
+
+  return { planId, activeUsersLimit };
 };
 
 const normalizeAccessText = (value: unknown): string | undefined => {
@@ -380,21 +428,30 @@ export const getCongregationPlanUsage = async (
     return null;
   }
 
-  const planData = await getDocumentCacheFirst<Record<string, unknown>>({
-    cacheKey: `congregations/${congregationId}/private/plan`,
-    ref: congregationPrivatePlanDocRef(congregationId),
+  const congregationData = await getDocumentCacheFirst<Record<string, unknown>>({
+    cacheKey: `congregations/${congregationId}/billing-plan`,
+    ref: congregationDocRef(congregationId),
     maxAgeMs: CONGREGATION_PLAN_CACHE_TTL_MS,
     forceServer: options?.forceServer,
     mapSnapshot: (snapshot) => snapshot.data() as Record<string, unknown>,
   });
 
+  let privatePlanData: Record<string, unknown> | null = null;
+  try {
+    privatePlanData = await getDocumentCacheFirst<Record<string, unknown>>({
+      cacheKey: `congregations/${congregationId}/private/plan`,
+      ref: congregationPrivatePlanDocRef(congregationId),
+      maxAgeMs: CONGREGATION_PLAN_CACHE_TTL_MS,
+      forceServer: options?.forceServer,
+      mapSnapshot: (snapshot) => snapshot.data() as Record<string, unknown>,
+    });
+  } catch {
+    privatePlanData = null;
+  }
+
   const activeUsers = await getActiveUsers(congregationId);
 
-  const planId = normalizePlanId(planData?.planId);
-  const activeUsersLimit =
-    typeof planData?.activeUsersLimit === 'number' && Number.isFinite(planData.activeUsersLimit)
-      ? Math.max(0, Math.floor(planData.activeUsersLimit))
-      : CONGREGATION_PLAN_LIMITS[planId];
+  const { planId, activeUsersLimit } = resolvePlanData(congregationData, privatePlanData);
   const activeUsersCount = activeUsers.length;
 
   return {
