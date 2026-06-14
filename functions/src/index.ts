@@ -85,6 +85,7 @@ export {
   createStripeCheckoutSession,
   createStripePortalSession,
   getStripeBillingUsage,
+  scheduledBillingHistoryCleanup,
   sendBillingPaymentReminders,
   stripeWebhook,
 } from './billing/stripe.js';

@@ -55,6 +55,24 @@ const formatDate = (value: unknown): string => {
   }).format(date);
 };
 
+const getDaysUntil = (value: unknown): number | null => {
+  const date = toDate(value);
+  if (!date) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - today.getTime()) / 86400000);
+};
+
+const isPaymentAttentionStatus = (status: string | undefined): boolean =>
+  status === 'past_due' ||
+  status === 'payment_action_required' ||
+  status === 'unpaid' ||
+  status === 'incomplete' ||
+  status === 'incomplete_expired' ||
+  status === 'canceled';
+
 const openExternalUrl = async (url: string): Promise<void> => {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     window.location.assign(url);
@@ -79,6 +97,13 @@ export function BillingScreen() {
   const canPay = canPaySubscription(appUser);
   const canManage = canManageSubscription(appUser);
   const isExempt = summary?.billingExemption?.exempt === true;
+  const billingStatus = summary?.billing.status;
+  const graceDaysRemaining = getDaysUntil(summary?.billing.graceUntil);
+  const showPaymentAlert = !isExempt && isPaymentAttentionStatus(billingStatus);
+  const activeUserLimit =
+    summary?.billing.activeUsersLimit ??
+    summary?.billing.userLimit ??
+    (summary?.billing.planKey ? BILLING_PLAN_LIMITS[summary.billing.planKey] : undefined);
 
   const currentPlanLabel = useMemo(() => {
     const planKey = summary?.billing.planKey;
@@ -173,7 +198,7 @@ export function BillingScreen() {
           </View>
           <View style={[styles.statusBadge, isExempt && styles.exemptBadge]}>
             <ThemedText style={[styles.statusText, isExempt && styles.exemptText]}>
-              {isExempt ? t('billing.exempt') : summary?.billing.status ?? t('billing.noStatus')}
+              {isExempt ? t('billing.exempt') : billingStatus ?? t('billing.noStatus')}
             </ThemedText>
           </View>
         </View>
@@ -183,7 +208,7 @@ export function BillingScreen() {
           <Metric label={t('billing.currentPeriod')} value={formatDate(summary?.billing.currentPeriodEnd)} />
           <Metric
             label={t('billing.allowedUsers')}
-            value={String(summary?.billing.activeUsersLimit ?? '-')}
+            value={String(activeUserLimit ?? '-')}
           />
           <Metric
             label={t('billing.activeUsers')}
@@ -197,8 +222,34 @@ export function BillingScreen() {
             label={t('billing.lastPayment')}
             value={summary?.billing.lastPaymentStatus ?? '--'}
           />
+          <Metric
+            label={t('billing.graceRemaining')}
+            value={
+              graceDaysRemaining === null
+                ? '--'
+                : String(Math.max(0, graceDaysRemaining))
+            }
+          />
         </View>
       </View>
+
+      {showPaymentAlert ? (
+        <View style={styles.warningNotice}>
+          <Ionicons name="warning-outline" size={18} color={colors.warningDark} />
+          <View style={styles.noticeCopy}>
+            <ThemedText style={styles.noticeTitle}>
+              {summary?.billing.adminRestricted
+                ? t('billing.restrictedTitle')
+                : t('billing.graceTitle')}
+            </ThemedText>
+            <ThemedText style={styles.noticeText}>
+              {canPay
+                ? t('billing.paymentActionNotice')
+                : t('billing.paymentInfoNotice')}
+            </ThemedText>
+          </View>
+        </View>
+      ) : null}
 
       {isExempt ? (
         <View style={styles.notice}>
@@ -209,37 +260,60 @@ export function BillingScreen() {
         </View>
       ) : null}
 
-      <View style={styles.section}>
-        <ThemedText style={styles.sectionTitle}>{t('billing.choosePlan')}</ThemedText>
-        {BILLING_PLANS.map((plan) => (
-          <TouchableOpacity
-            key={plan}
-            style={[styles.planRow, (!canPay || isExempt) && styles.disabledRow]}
-            disabled={!canPay || isExempt || Boolean(actionLoading)}
-            onPress={() => void handleCheckout(plan)}
-            activeOpacity={0.82}
-          >
-            <View>
-              <ThemedText style={styles.planName}>{BILLING_PLAN_LABELS[plan]}</ThemedText>
-              <ThemedText style={styles.planDescription}>
-                {t('billing.planDescription', {
-                  price: BILLING_PLAN_PRICES_MXN[plan],
-                  limit: BILLING_PLAN_LIMITS[plan],
-                })}
-              </ThemedText>
-            </View>
-            {actionLoading === plan ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              <Ionicons name="card-outline" size={20} color={colors.primary} />
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
+      {summary?.billing.lastInvoiceUrl ? (
+        <TouchableOpacity
+          style={styles.invoiceLink}
+          onPress={() => void openExternalUrl(summary.billing.lastInvoiceUrl as string)}
+        >
+          <Ionicons name="document-text-outline" size={18} color={colors.primary} />
+          <ThemedText style={styles.invoiceLinkText}>{t('billing.lastInvoice')}</ThemedText>
+          <Ionicons name="open-outline" size={16} color={colors.primary} />
+        </TouchableOpacity>
+      ) : null}
+
+      {canPay && !isExempt ? (
+        <View style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>{t('billing.choosePlan')}</ThemedText>
+          {BILLING_PLANS.map((plan) => (
+            <TouchableOpacity
+              key={plan}
+              style={styles.planRow}
+              disabled={Boolean(actionLoading)}
+              onPress={() => void handleCheckout(plan)}
+              activeOpacity={0.82}
+            >
+              <View style={styles.planCopy}>
+                <ThemedText style={styles.planName}>{BILLING_PLAN_LABELS[plan]}</ThemedText>
+                <ThemedText style={styles.planDescription}>
+                  {t('billing.planDescription', {
+                    price: BILLING_PLAN_PRICES_MXN[plan],
+                    limit: BILLING_PLAN_LIMITS[plan],
+                  })}
+                </ThemedText>
+              </View>
+              {actionLoading === plan ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : (
+                <Ionicons name="card-outline" size={20} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.notice}>
+          <Ionicons name="information-circle-outline" size={18} color={colors.primary} />
+          <ThemedText style={styles.noticeText}>
+            {isExempt ? t('billing.exemptNoAction') : t('billing.viewOnlyNotice')}
+          </ThemedText>
+        </View>
+      )}
 
       <View style={styles.actions}>
         <TouchableOpacity
-          style={[styles.portalButton, (!canManage || isExempt || !summary?.billing.stripeCustomerId) && styles.disabledButton]}
+          style={[
+            styles.portalButton,
+            (!canManage || isExempt || !summary?.billing.stripeCustomerId) && styles.hiddenButton,
+          ]}
           disabled={!canManage || isExempt || !summary?.billing.stripeCustomerId || Boolean(actionLoading)}
           onPress={() => void handlePortal()}
         >
@@ -343,11 +417,48 @@ const createStyles = (colors: AppColors) =>
       padding: 12,
       marginTop: 14,
     },
+    warningNotice: {
+      flexDirection: 'row',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: colors.warningDark + '55',
+      backgroundColor: colors.warningLight,
+      borderRadius: 8,
+      padding: 12,
+      marginTop: 14,
+    },
+    noticeCopy: {
+      flex: 1,
+      gap: 3,
+    },
+    noticeTitle: {
+      color: colors.textPrimary,
+      fontSize: 13,
+      fontWeight: '800',
+    },
     noticeText: {
       color: colors.textPrimary,
       flex: 1,
       fontSize: 13,
       lineHeight: 18,
+    },
+    invoiceLink: {
+      minHeight: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      marginTop: 14,
+    },
+    invoiceLinkText: {
+      flex: 1,
+      color: colors.primary,
+      fontSize: 14,
+      fontWeight: '800',
     },
     section: {
       marginTop: 18,
@@ -370,8 +481,9 @@ const createStyles = (colors: AppColors) =>
       justifyContent: 'space-between',
       gap: 12,
     },
-    disabledRow: {
-      opacity: 0.55,
+    planCopy: {
+      flex: 1,
+      minWidth: 0,
     },
     planName: {
       color: colors.textPrimary,
@@ -398,6 +510,9 @@ const createStyles = (colors: AppColors) =>
     },
     disabledButton: {
       opacity: 0.5,
+    },
+    hiddenButton: {
+      display: 'none',
     },
     portalButtonText: {
       color: colors.onPrimary,

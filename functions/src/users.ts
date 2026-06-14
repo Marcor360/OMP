@@ -993,6 +993,66 @@ async function getRequesterProfile(uid: string): Promise<RequesterProfile> {
   };
 }
 
+const billingTimestampToMillis = (value: unknown): number | null => {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as { toMillis?: unknown };
+  if (typeof candidate.toMillis !== 'function') return null;
+  const millis = candidate.toMillis() as number;
+  return Number.isFinite(millis) ? millis : null;
+};
+
+const isBillingExemptionActive = (data: Record<string, unknown>): boolean => {
+  const exemption = data.billingExemption;
+  if (typeof exemption !== 'object' || exemption === null || Array.isArray(exemption)) {
+    return false;
+  }
+
+  const source = exemption as Record<string, unknown>;
+  if (source.exempt !== true) return false;
+
+  const expiresAt = billingTimestampToMillis(source.expiresAt);
+  return expiresAt === null || expiresAt > Date.now();
+};
+
+const assertAdministrativeBillingAccess = async (
+  congregationId: string
+): Promise<void> => {
+  const snap = await getFirestore().collection('congregations').doc(congregationId).get();
+  if (!snap.exists) return;
+
+  const data = snap.data() as Record<string, unknown>;
+  if (isBillingExemptionActive(data)) return;
+
+  const billing = data.billing;
+  if (typeof billing !== 'object' || billing === null || Array.isArray(billing)) {
+    return;
+  }
+
+  const source = billing as Record<string, unknown>;
+  const status = typeof source.status === 'string' ? source.status : '';
+  const graceUntil = billingTimestampToMillis(source.graceUntil);
+  const restricted =
+    source.provider === 'stripe' &&
+    (
+      source.adminRestricted === true ||
+      status === 'unpaid' ||
+      status === 'canceled' ||
+      status === 'incomplete_expired' ||
+      (
+        (status === 'past_due' || status === 'payment_action_required' || status === 'incomplete') &&
+        graceUntil !== null &&
+        graceUntil <= Date.now()
+      )
+    );
+
+  if (restricted) {
+    throw new HttpsError(
+      'failed-precondition',
+      'La facturacion de la congregacion requiere atencion antes de realizar cambios administrativos.'
+    );
+  }
+};
+
 const requesterHasPermission = (
   profile: Pick<RequesterProfile, 'role' | 'permissions'>,
   department: PermissionDepartment,
@@ -1454,6 +1514,7 @@ export const createUserByAdmin = onCall(
 
       step = 'requester-profile';
       const requester = await getRequesterProfile(request.auth.uid);
+      await assertAdministrativeBillingAccess(requester.congregationId);
 
       step = 'requester-permission';
       assertUserPermission(requester, 'create');
@@ -1581,6 +1642,7 @@ export const updateUserByAdmin = onCall(
     }
 
     const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(requester.congregationId);
     assertUserPermission(requester, 'edit');
 
     const payload = parseUpdateUserPayload(request.data);
@@ -1807,6 +1869,7 @@ export const updateUserPasswordByAdmin = onCall(
     }
 
     const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(requester.congregationId);
     assertUserPermission(requester, 'edit');
 
     const payload = parseUpdatePasswordPayload(request.data);
@@ -1855,6 +1918,7 @@ export const disableUserByAdmin = onCall(
     }
 
     const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(requester.congregationId);
     assertUserPermission(requester, 'edit');
 
     const uid = parseUidFromPayload(request.data ?? {});
@@ -1903,6 +1967,7 @@ export const deleteUserByAdmin = onCall(
     }
 
     const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(requester.congregationId);
     assertUserPermission(requester, 'delete');
 
     const uid = parseUidFromPayload(request.data ?? {});

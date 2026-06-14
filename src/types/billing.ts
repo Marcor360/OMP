@@ -11,25 +11,33 @@ export type BillingStatus =
   | 'canceled'
   | 'incomplete'
   | 'incomplete_expired'
+  | 'exempt'
   | string;
 
 export type CongregationBillingState = {
   enabled: boolean;
-  provider?: 'stripe' | string;
+  provider?: 'stripe' | 'exempt' | string;
   status: BillingStatus;
   billingDay?: number;
   billingCycle?: 'monthly' | string;
   planKey?: BillingPlanKey;
   activeUsersLimit?: number;
+  userLimit?: number;
   stripePriceId?: string;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   currentPeriodStart?: unknown;
   currentPeriodEnd?: unknown;
   nextPaymentDate?: unknown;
+  graceDays?: number;
+  graceStartedAt?: unknown;
+  graceUntil?: unknown;
+  adminRestricted?: boolean;
   cancelAtPeriodEnd?: boolean;
   lastPaymentStatus?: string;
+  lastInvoiceId?: string;
   lastInvoiceUrl?: string;
+  lastStripeEventId?: string;
   updatedAt?: unknown;
 };
 
@@ -38,6 +46,7 @@ export type BillingExemption = {
   reason?: string;
   grantedBy?: string;
   grantedAt?: unknown;
+  expiresAt?: unknown;
 };
 
 export const BILLING_PLAN_LABELS: Record<BillingPlanKey, string> = {

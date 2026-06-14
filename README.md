@@ -388,7 +388,7 @@ Fase 4:
 - Flujo de cobro completo.
 - Historial de pagos.
 - Alertas de vencimiento.
-- Stripe o flujo manual autorizado.
+- Stripe Billing con exenciones administradas.
 
 Fase 5:
 

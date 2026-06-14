@@ -34,12 +34,22 @@ type BillingState = {
   billingDay?: number;
   billingCycle?: string;
   planKey?: BillingPlanKey;
+  activeUsersLimit?: number;
+  userLimit?: number;
   stripePriceId?: string;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   currentPeriodStart?: Timestamp | null;
   currentPeriodEnd?: Timestamp | null;
   nextPaymentDate?: Timestamp | null;
+  graceDays?: number;
+  graceStartedAt?: Timestamp | null;
+  graceUntil?: Timestamp | null;
+  adminRestricted?: boolean;
+  lastPaymentStatus?: string;
+  lastInvoiceId?: string;
+  lastInvoiceUrl?: string | null;
+  lastStripeEventId?: string;
 };
 
 type CheckoutPayload = {
@@ -51,9 +61,21 @@ type PortalPayload = {
   congregationId?: string;
 };
 
+type StripeWebhookEvent = {
+  id: string;
+  type: string;
+  created: number;
+  data: {
+    object: unknown;
+  };
+};
+
 const REGION = 'us-central1';
 const BILLING_DAY = 1;
 const BILLING_CYCLE = 'monthly';
+const GRACE_DAYS = 5;
+const BILLING_HISTORY_COLLECTION = 'billingHistory';
+const BILLING_HISTORY_RETENTION_DAYS = 365;
 const STRIPE_SECRET_KEY = defineSecret('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
 const STRIPE_PRICE_OMP_80 = defineSecret('STRIPE_PRICE_OMP_80');
@@ -96,6 +118,20 @@ const PLAN_PRICES_MXN: Record<BillingPlanKey, number> = {
   omp_250: 200,
 };
 
+const GRACE_BILLING_STATUSES = new Set([
+  'past_due',
+  'payment_action_required',
+  'incomplete',
+]);
+
+const RESTRICTED_BILLING_STATUSES = new Set([
+  'unpaid',
+  'canceled',
+  'incomplete_expired',
+]);
+
+const OPEN_BILLING_STATUSES = new Set(['active', 'trialing', 'checkout_pending']);
+
 const getSecret = (secret: { name: string; value: () => string }): string => {
   const value = secret.value().trim();
   if (!value) {
@@ -122,6 +158,9 @@ const timestampFromSeconds = (seconds: unknown): Timestamp | null => {
   return Timestamp.fromMillis(seconds * 1000);
 };
 
+const timestampFromMillis = (millis: number): Timestamp =>
+  Timestamp.fromMillis(Math.max(0, Math.floor(millis)));
+
 const toMillis = (value: unknown): number | null => {
   if (!value) return null;
   if (value instanceof Timestamp) return value.toMillis();
@@ -134,6 +173,12 @@ const toMillis = (value: unknown): number | null => {
   }
   return null;
 };
+
+const addDays = (timestamp: Timestamp, days: number): Timestamp =>
+  Timestamp.fromMillis(timestamp.toMillis() + days * 86400000);
+
+const getEventTimestamp = (event?: Pick<StripeWebhookEvent, 'created'>): Timestamp =>
+  timestampFromSeconds(event?.created) ?? Timestamp.now();
 
 const getNextFirstOfMonthUnix = (from = new Date()): number => {
   const year = from.getUTCFullYear();
@@ -149,6 +194,11 @@ const getNextFirstOfMonthUnix = (from = new Date()): number => {
 const getDefaultUrl = (path: string): string => {
   const base = getSecret(APP_BILLING_RETURN_URL);
   return `${base.replace(/\/$/, '')}${path}`;
+};
+
+const isTimestampInFuture = (value: unknown): boolean => {
+  const millis = toMillis(value);
+  return millis === null || millis > Date.now();
 };
 
 const parseCheckoutPayload = (value: unknown): Required<CheckoutPayload> => {
@@ -230,22 +280,38 @@ const hasServiceAssignment = (
       )
   );
 
+const isAdminRole = (profile: RequesterProfile): boolean => profile.role === 'admin';
+
 const hasBillingPermission = (
   profile: RequesterProfile,
-  action: 'create' | 'manage'
+  action: 'view' | 'create' | 'manage'
 ): boolean =>
   profile.permissions?.pagos?.[action] === true ||
   profile.permissions?.pagos?.manage === true;
 
+const hasTreasuryManagerAssignment = (profile: RequesterProfile): boolean =>
+  hasServiceAssignment(profile, 'encargado', 'tesoreria');
+
+const hasAssistantTreasuryAssignment = (profile: RequesterProfile): boolean =>
+  hasServiceAssignment(profile, 'auxiliar', 'tesoreria');
+
+const hasCoordinatorOrSecretaryAssignment = (profile: RequesterProfile): boolean =>
+  hasServiceAssignment(profile, 'coordinador') || hasServiceAssignment(profile, 'secretario');
+
 const canOperateBilling = (profile: RequesterProfile): boolean =>
-  hasServiceAssignment(profile, 'coordinador') ||
-  hasServiceAssignment(profile, 'encargado', 'tesoreria') ||
+  hasCoordinatorOrSecretaryAssignment(profile) ||
+  hasTreasuryManagerAssignment(profile) ||
+  (
+    hasAssistantTreasuryAssignment(profile) &&
+    (hasBillingPermission(profile, 'create') || hasBillingPermission(profile, 'manage'))
+  ) ||
   hasBillingPermission(profile, 'create') ||
   hasBillingPermission(profile, 'manage');
 
 const canViewBilling = (profile: RequesterProfile): boolean =>
+  isAdminRole(profile) ||
   canOperateBilling(profile) ||
-  hasServiceAssignment(profile, 'auxiliar', 'tesoreria') ||
+  hasAssistantTreasuryAssignment(profile) ||
   profile.permissions?.pagos?.view === true;
 
 const assertBillingActor = async (
@@ -293,8 +359,52 @@ const isBillingExempt = (data: Record<string, unknown>): boolean => {
   return Boolean(
     typeof exemption === 'object' &&
       exemption !== null &&
-      (exemption as Record<string, unknown>).exempt === true
+      (exemption as Record<string, unknown>).exempt === true &&
+      isTimestampInFuture((exemption as Record<string, unknown>).expiresAt)
   );
+};
+
+const getBillingAccessUpdate = (
+  status: string | null | undefined,
+  existingBilling?: BillingState,
+  eventTimestamp = Timestamp.now()
+): Record<string, unknown> => {
+  const normalizedStatus = status ?? 'unknown';
+
+  if (OPEN_BILLING_STATUSES.has(normalizedStatus)) {
+    return {
+      'billing.graceDays': GRACE_DAYS,
+      'billing.graceStartedAt': null,
+      'billing.graceUntil': null,
+      'billing.adminRestricted': false,
+    };
+  }
+
+  if (GRACE_BILLING_STATUSES.has(normalizedStatus)) {
+    const existingGraceUntil = existingBilling?.graceUntil;
+    const graceUntil =
+      existingGraceUntil instanceof Timestamp && existingGraceUntil.toMillis() > eventTimestamp.toMillis()
+        ? existingGraceUntil
+        : addDays(eventTimestamp, GRACE_DAYS);
+
+    return {
+      'billing.graceDays': GRACE_DAYS,
+      'billing.graceStartedAt': existingBilling?.graceStartedAt ?? eventTimestamp,
+      'billing.graceUntil': graceUntil,
+      'billing.adminRestricted': graceUntil.toMillis() <= Date.now(),
+    };
+  }
+
+  if (RESTRICTED_BILLING_STATUSES.has(normalizedStatus)) {
+    return {
+      'billing.graceDays': GRACE_DAYS,
+      'billing.adminRestricted': true,
+    };
+  }
+
+  return {
+    'billing.graceDays': GRACE_DAYS,
+  };
 };
 
 const ensureStripeCustomer = async (params: {
@@ -381,7 +491,9 @@ const getSubscriptionPeriod = (subscription: Record<string, unknown>) => {
 
 const subscriptionToBillingUpdate = (
   subscription: Record<string, unknown>,
-  fallback?: Partial<BillingState>
+  fallback?: Partial<BillingState>,
+  existingBilling?: BillingState,
+  event?: Pick<StripeWebhookEvent, 'id' | 'created'>
 ): Record<string, unknown> => {
   const period = getSubscriptionPeriod(subscription);
   const price = getSubscriptionItems(subscription)[0]?.price;
@@ -395,15 +507,18 @@ const subscriptionToBillingUpdate = (
     (isBillingPlanKey(metadataPlanKey) ? metadataPlanKey : undefined) ??
     fallback?.planKey;
   const subscriptionId = asTrimmedString(subscription.id);
+  const status = asTrimmedString(subscription.status) ?? 'unknown';
+  const planLimit = planKey ? PLAN_LIMITS[planKey] : null;
 
   return {
     'billing.enabled': true,
     'billing.provider': 'stripe',
-    'billing.status': asTrimmedString(subscription.status) ?? 'unknown',
+    'billing.status': status,
     'billing.billingDay': BILLING_DAY,
     'billing.billingCycle': BILLING_CYCLE,
     'billing.planKey': planKey ?? null,
-    'billing.activeUsersLimit': planKey ? PLAN_LIMITS[planKey] : null,
+    'billing.activeUsersLimit': planLimit,
+    'billing.userLimit': planLimit,
     'billing.stripePriceId': priceId,
     'billing.stripeCustomerId': resolveCustomerId(subscription.customer),
     'billing.stripeSubscriptionId': subscriptionId,
@@ -411,14 +526,17 @@ const subscriptionToBillingUpdate = (
     'billing.currentPeriodEnd': period.end,
     'billing.nextPaymentDate': period.end,
     'billing.cancelAtPeriodEnd': subscription.cancel_at_period_end === true,
+    'billing.lastStripeEventId': event?.id ?? fallback?.lastStripeEventId ?? null,
     'billing.updatedAt': FieldValue.serverTimestamp(),
+    ...getBillingAccessUpdate(status, existingBilling, getEventTimestamp(event)),
   };
 };
 
 const updateCongregationFromSubscription = async (
   subscription: Record<string, unknown>,
-  fallback?: Partial<BillingState> & { congregationId?: string }
-): Promise<void> => {
+  fallback?: Partial<BillingState> & { congregationId?: string },
+  event?: Pick<StripeWebhookEvent, 'id' | 'created'>
+): Promise<string | null> => {
   const congregationId =
     asTrimmedString(getObjectMetadata(subscription).congregationId) ??
     asTrimmedString(fallback?.congregationId);
@@ -426,12 +544,21 @@ const updateCongregationFromSubscription = async (
     logger.warn('[billing] subscription without congregationId metadata', {
       subscriptionId: subscription.id,
     });
-    return;
+    return null;
   }
 
-  await getCongregationRef(congregationId).set(subscriptionToBillingUpdate(subscription, fallback), {
-    merge: true,
-  });
+  const ref = getCongregationRef(congregationId);
+  const snap = await ref.get();
+  const existingBilling = snap.exists
+    ? ((snap.data() as Record<string, unknown>).billing as BillingState | undefined)
+    : undefined;
+
+  await ref.set(
+    subscriptionToBillingUpdate(subscription, fallback, existingBilling, event),
+    { merge: true }
+  );
+
+  return congregationId;
 };
 
 const findCongregationBySubscription = async (
@@ -447,22 +574,24 @@ const findCongregationBySubscription = async (
 
 const handleCheckoutCompleted = async (
   stripe: ReturnType<typeof getStripe>,
-  session: Record<string, unknown>
-): Promise<void> => {
+  session: Record<string, unknown>,
+  event?: Pick<StripeWebhookEvent, 'id' | 'created'>
+): Promise<string | null> => {
   const subscriptionId = resolveSubscriptionId(session.subscription);
   const metadata = getObjectMetadata(session);
   const congregationId = asTrimmedString(metadata.congregationId);
-  if (!subscriptionId || !congregationId) return;
+  if (!subscriptionId || !congregationId) return null;
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
     expand: ['items.data.price'],
   });
-  await updateCongregationFromSubscription(
+  return updateCongregationFromSubscription(
     subscription as unknown as Record<string, unknown>,
     {
       congregationId,
       planKey: isBillingPlanKey(metadata.planKey) ? metadata.planKey : undefined,
-    }
+    },
+    event
   );
 };
 
@@ -472,24 +601,187 @@ const getInvoiceUrl = (invoice: Record<string, unknown>): string | null =>
 const handleInvoiceStatus = async (
   invoice: Record<string, unknown>,
   status: 'active' | 'past_due' | 'payment_action_required',
-  lastPaymentStatus: 'paid' | 'payment_failed' | 'action_required'
-): Promise<void> => {
+  lastPaymentStatus: 'paid' | 'payment_failed' | 'action_required',
+  event?: Pick<StripeWebhookEvent, 'id' | 'created'>
+): Promise<string | null> => {
   const rawInvoice = invoice as unknown as Record<string, unknown>;
   const subscriptionId = resolveSubscriptionId(rawInvoice.subscription);
-  if (!subscriptionId) return;
+  if (!subscriptionId) return null;
   const congregationId = await findCongregationBySubscription(subscriptionId);
-  if (!congregationId) return;
+  if (!congregationId) return null;
 
-  await getCongregationRef(congregationId).set(
+  const ref = getCongregationRef(congregationId);
+  const snap = await ref.get();
+  const existingBilling = snap.exists
+    ? ((snap.data() as Record<string, unknown>).billing as BillingState | undefined)
+    : undefined;
+  const eventTimestamp = getEventTimestamp(event);
+
+  await ref.set(
     {
       'billing.status': status,
       'billing.lastPaymentStatus': lastPaymentStatus,
       'billing.lastInvoiceId': asTrimmedString(invoice.id),
       'billing.lastInvoiceUrl': getInvoiceUrl(invoice),
+      'billing.lastStripeEventId': event?.id ?? null,
       'billing.updatedAt': FieldValue.serverTimestamp(),
+      ...getBillingAccessUpdate(status, existingBilling, eventTimestamp),
     },
     { merge: true }
   );
+
+  return congregationId;
+};
+
+const getStripeObjectId = (value: Record<string, unknown>): string | null =>
+  asTrimmedString(value.id);
+
+const getStripeObjectCurrency = (value: Record<string, unknown>): string | null => {
+  const currency = asTrimmedString(value.currency);
+  return currency ? currency.toUpperCase() : null;
+};
+
+const getStripeObjectAmount = (value: Record<string, unknown>): number | null => {
+  const cents =
+    typeof value.amount_paid === 'number'
+      ? value.amount_paid
+      : typeof value.amount_due === 'number'
+        ? value.amount_due
+        : typeof value.total === 'number'
+          ? value.total
+          : typeof value.amount === 'number'
+            ? value.amount
+            : null;
+
+  return typeof cents === 'number' && Number.isFinite(cents)
+    ? Math.round(cents) / 100
+    : null;
+};
+
+const getInvoiceSubscriptionId = (value: Record<string, unknown>): string | null =>
+  resolveSubscriptionId(value.subscription) ??
+  resolveSubscriptionId((value.parent as Record<string, unknown> | undefined)?.subscription_details);
+
+const getInvoiceCustomerId = (value: Record<string, unknown>): string | null =>
+  resolveCustomerId(value.customer);
+
+const getEventPlanKey = (
+  value: Record<string, unknown>,
+  currentBilling?: BillingState
+): BillingPlanKey | undefined => {
+  const metadataPlan = getObjectMetadata(value).planKey;
+  if (isBillingPlanKey(metadataPlan)) return metadataPlan;
+
+  const price = getSubscriptionItems(value)[0]?.price;
+  const priceId =
+    typeof price === 'object' && price !== null
+      ? asTrimmedString((price as Record<string, unknown>).id)
+      : null;
+
+  return priceToPlanKey(priceId) ?? currentBilling?.planKey;
+};
+
+const historyStatusForEvent = (
+  eventType: string,
+  value: Record<string, unknown>
+): string => {
+  if (eventType === 'invoice.paid') return 'paid';
+  if (eventType === 'invoice.payment_failed') return 'payment_failed';
+  if (eventType === 'invoice.payment_action_required') return 'payment_action_required';
+  return asTrimmedString(value.status) ?? eventType;
+};
+
+const writeBillingHistory = async (
+  congregationId: string,
+  event: StripeWebhookEvent,
+  object: Record<string, unknown>
+): Promise<void> => {
+  const congregationSnap = await getCongregationRef(congregationId).get();
+  const currentBilling = congregationSnap.exists
+    ? ((congregationSnap.data() as Record<string, unknown>).billing as BillingState | undefined)
+    : undefined;
+
+  const subscriptionId =
+    resolveSubscriptionId(object.subscription) ??
+    resolveSubscriptionId(object.id) ??
+    getInvoiceSubscriptionId(object) ??
+    currentBilling?.stripeSubscriptionId ??
+    null;
+
+  await getCongregationRef(congregationId)
+    .collection(BILLING_HISTORY_COLLECTION)
+    .doc(event.id)
+    .set(
+      {
+        provider: 'stripe',
+        type: event.type,
+        status: historyStatusForEvent(event.type, object),
+        amount: getStripeObjectAmount(object),
+        currency: getStripeObjectCurrency(object) ?? 'MXN',
+        planKey: getEventPlanKey(object, currentBilling) ?? null,
+        stripeEventId: event.id,
+        stripeInvoiceId: event.type.startsWith('invoice.') ? getStripeObjectId(object) : null,
+        stripeSubscriptionId: subscriptionId,
+        stripeCustomerId: getInvoiceCustomerId(object) ?? resolveCustomerId(object.customer) ?? currentBilling?.stripeCustomerId ?? null,
+        hostedInvoiceUrl: getInvoiceUrl(object),
+        createdAt: timestampFromSeconds(event.created) ?? FieldValue.serverTimestamp(),
+        processedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+};
+
+const createBillingNotification = async (params: {
+  congregationId: string;
+  userIds: string[];
+  title: string;
+  body: string;
+  metadata: Record<string, unknown>;
+}): Promise<void> => {
+  const uniqueUserIds = Array.from(new Set(params.userIds.filter((uid) => uid.trim().length > 0)));
+  if (uniqueUserIds.length === 0) return;
+
+  const batch = adminDb.batch();
+  const notificationsRef = getCongregationRef(params.congregationId).collection('notifications');
+
+  uniqueUserIds.forEach((userId) => {
+    const notificationRef = notificationsRef.doc();
+    batch.set(notificationRef, {
+      notificationId: notificationRef.id,
+      congregationId: params.congregationId,
+      userId,
+      type: 'billing',
+      category: 'platform',
+      title: params.title,
+      body: params.body,
+      isRead: false,
+      createdAt: FieldValue.serverTimestamp(),
+      data: {
+        url: '/(protected)/billing',
+      },
+      metadata: params.metadata,
+    });
+  });
+
+  await batch.commit();
+};
+
+const notifyPaymentFailed = async (
+  congregationId: string,
+  invoice: Record<string, unknown>
+): Promise<void> => {
+  const userIds = await getBillingReminderTargets(congregationId);
+  await createBillingNotification({
+    congregationId,
+    userIds,
+    title: 'Pago de OMP no procesado',
+    body: 'No se pudo procesar el pago de OMP Suite. Actualiza el metodo de pago para evitar restricciones administrativas.',
+    metadata: {
+      billingEvent: 'invoice.payment_failed',
+      invoiceId: asTrimmedString(invoice.id),
+      invoiceUrl: getInvoiceUrl(invoice),
+    },
+  });
 };
 
 export const getStripeBillingUsage = onCall(
@@ -523,6 +815,21 @@ export const createStripeCheckoutSession = onCall(
     const requester = await assertBillingActor(request.auth.uid, payload.congregationId);
     const { ref, data } = await readCongregation(payload.congregationId);
     if (isBillingExempt(data)) {
+      await ref.set(
+        {
+          billing: {
+            enabled: true,
+            provider: 'exempt',
+            status: 'exempt',
+            billingDay: BILLING_DAY,
+            billingCycle: BILLING_CYCLE,
+            graceDays: GRACE_DAYS,
+            adminRestricted: false,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+        },
+        { merge: true }
+      );
       throw new HttpsError('failed-precondition', 'Esta congregacion esta exenta de cobro.');
     }
 
@@ -545,6 +852,9 @@ export const createStripeCheckoutSession = onCall(
           billingCycle: BILLING_CYCLE,
           planKey: payload.planKey,
           activeUsersLimit: PLAN_LIMITS[payload.planKey],
+          userLimit: PLAN_LIMITS[payload.planKey],
+          graceDays: GRACE_DAYS,
+          adminRestricted: false,
           stripePriceId: getPriceId(payload.planKey),
           stripeCustomerId: customerId,
           updatedAt: FieldValue.serverTimestamp(),
@@ -599,8 +909,21 @@ export const createStripePortalSession = onCall(
 
     const payload = parsePortalPayload(request.data);
     await assertBillingActor(request.auth.uid, payload.congregationId);
-    const { data } = await readCongregation(payload.congregationId);
+    const { ref, data } = await readCongregation(payload.congregationId);
     if (isBillingExempt(data)) {
+      await ref.set(
+        {
+          billing: {
+            enabled: true,
+            provider: 'exempt',
+            status: 'exempt',
+            graceDays: GRACE_DAYS,
+            adminRestricted: false,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+        },
+        { merge: true }
+      );
       throw new HttpsError('failed-precondition', 'Esta congregacion esta exenta de cobro.');
     }
 
@@ -634,7 +957,7 @@ export const stripeWebhook = onRequest(
       return;
     }
 
-    let event: { type: string; data: { object: unknown } };
+    let event: StripeWebhookEvent;
     try {
       event = stripe.webhooks.constructEvent(
         request.rawBody,
@@ -654,28 +977,38 @@ export const stripeWebhook = onRequest(
     }
 
     try {
+      let congregationId: string | null = null;
+      const eventObject = event.data.object as unknown as Record<string, unknown>;
+
       if (event.type === 'checkout.session.completed') {
-        await handleCheckoutCompleted(stripe, event.data.object as Record<string, unknown>);
+        congregationId = await handleCheckoutCompleted(stripe, eventObject, event);
       } else if (
         event.type === 'customer.subscription.created' ||
         event.type === 'customer.subscription.updated' ||
         event.type === 'customer.subscription.deleted'
       ) {
-        await updateCongregationFromSubscription(event.data.object as Record<string, unknown>);
+        congregationId = await updateCongregationFromSubscription(eventObject, undefined, event);
       } else if (event.type === 'invoice.paid') {
-        await handleInvoiceStatus(event.data.object as Record<string, unknown>, 'active', 'paid');
+        congregationId = await handleInvoiceStatus(eventObject, 'active', 'paid', event);
       } else if (event.type === 'invoice.payment_failed') {
-        await handleInvoiceStatus(
-          event.data.object as Record<string, unknown>,
-          'past_due',
-          'payment_failed'
-        );
+        congregationId = await handleInvoiceStatus(eventObject, 'past_due', 'payment_failed', event);
+        if (congregationId) {
+          await notifyPaymentFailed(congregationId, eventObject);
+        }
       } else if (event.type === 'invoice.payment_action_required') {
-        await handleInvoiceStatus(
-          event.data.object as Record<string, unknown>,
+        congregationId = await handleInvoiceStatus(
+          eventObject,
           'payment_action_required',
-          'action_required'
+          'action_required',
+          event
         );
+        if (congregationId) {
+          await notifyPaymentFailed(congregationId, eventObject);
+        }
+      }
+
+      if (congregationId) {
+        await writeBillingHistory(congregationId, event, eventObject);
       }
 
       response.json({ received: true });
@@ -702,9 +1035,10 @@ const getBillingReminderTargets = async (congregationId: string): Promise<string
       snap.docs
         .map((doc) => ({ uid: doc.id, data: doc.data() as RequesterProfile }))
         .filter(({ data }) =>
-          hasServiceAssignment(data, 'coordinador') ||
-          hasServiceAssignment(data, 'encargado', 'tesoreria') ||
-          hasServiceAssignment(data, 'auxiliar', 'tesoreria') ||
+          isAdminRole(data) ||
+          hasCoordinatorOrSecretaryAssignment(data) ||
+          hasTreasuryManagerAssignment(data) ||
+          hasAssistantTreasuryAssignment(data) ||
           data.permissions?.pagos?.view === true ||
           data.permissions?.pagos?.manage === true
         )
@@ -754,31 +1088,17 @@ export const sendBillingPaymentReminders = onSchedule(
       const userIds = await getBillingReminderTargets(congregationDoc.id);
       if (userIds.length === 0) continue;
 
-      const notificationRef = adminDb
-        .collection('congregations')
-        .doc(congregationDoc.id)
-        .collection('notifications')
-        .doc();
       const title = days === 5 ? 'Pago proximo de OMP' : 'Pago de OMP vence hoy';
       const body =
         days === 5
-          ? 'Faltan 5 dias para el proximo pago de la congregacion.'
-          : 'El pago de la congregacion vence hoy.';
+          ? 'Se aproxima la fecha de cobro de OMP Suite para tu congregacion. El pago mensual se realizara el dia 1.'
+          : 'El pago mensual de OMP Suite vence hoy.';
 
-      await notificationRef.set({
-        notificationId: notificationRef.id,
+      await createBillingNotification({
         congregationId: congregationDoc.id,
-        userId: userIds[0],
         userIds,
-        type: 'billing',
-        category: 'platform',
         title,
         body,
-        isRead: false,
-        createdAt: FieldValue.serverTimestamp(),
-        data: {
-          url: '/(protected)/billing',
-        },
         metadata: {
           billingReminder: true,
           daysUntilPayment: days,
@@ -796,5 +1116,39 @@ export const sendBillingPaymentReminders = onSchedule(
     }
 
     logger.info('[billing] payment reminders processed', { created });
+  }
+);
+
+export const scheduledBillingHistoryCleanup = onSchedule(
+  {
+    region: REGION,
+    schedule: 'every day 03:30',
+    timeZone: 'America/Mexico_City',
+    timeoutSeconds: 300,
+    memory: '256MiB',
+  },
+  async () => {
+    const cutoff = timestampFromMillis(
+      Date.now() - BILLING_HISTORY_RETENTION_DAYS * 86400000
+    );
+    const snap = await adminDb
+      .collectionGroup(BILLING_HISTORY_COLLECTION)
+      .where('createdAt', '<', cutoff)
+      .orderBy('createdAt', 'asc')
+      .limit(250)
+      .get();
+
+    if (snap.empty) {
+      logger.info('[billing] history cleanup skipped; no expired records');
+      return;
+    }
+
+    const batch = adminDb.batch();
+    snap.docs.forEach((docSnap) => batch.delete(docSnap.ref));
+    await batch.commit();
+
+    logger.info('[billing] history cleanup completed', {
+      deleted: snap.size,
+    });
   }
 );

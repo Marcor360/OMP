@@ -137,27 +137,30 @@ service cloud.firestore {
     }
 
     function isCleaningManager() {
-      return isAdmin()
-        || hasPermission('limpieza', 'manage')
-        || (
-          hasPermission('limpieza', 'create')
-          && hasPermission('limpieza', 'edit')
-        )
-        || (
-          isActive()
-          && (
-            (
-              currentUserData().servicePosition == 'encargado'
-              && (
-                !('serviceDepartment' in currentUserData())
-                || currentUserData().serviceDepartment == 'limpieza'
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPermission('limpieza', 'manage')
+          || (
+            hasPermission('limpieza', 'create')
+            && hasPermission('limpieza', 'edit')
+          )
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && (
+                  !('serviceDepartment' in currentUserData())
+                  || currentUserData().serviceDepartment == 'limpieza'
+                )
               )
-            )
-            || (
-              currentUserData().serviceAssignments is list
-              && currentUserData().serviceAssignments.hasAny([
-                { 'position': 'encargado', 'department': 'limpieza', 'label': 'Encargado de Limpieza' }
-              ])
+              || (
+                currentUserData().serviceAssignments is list
+                && currentUserData().serviceAssignments.hasAny([
+                  { 'position': 'encargado', 'department': 'limpieza', 'label': 'Encargado de Limpieza' }
+                ])
+              )
             )
           )
         );
@@ -199,44 +202,50 @@ service cloud.firestore {
     }
 
     function isOutgoingTalksManager() {
-      return isAdmin()
-        || (
-          isActive()
-          && (
-            (
-              currentUserData().servicePosition == 'encargado'
-              && currentUserData().serviceDepartment == 'discursos'
-            )
-            || (
-              currentUserData().serviceAssignments is list
-              && currentUserData().serviceAssignments.hasAny([
-                { 'position': 'encargado', 'department': 'discursos', 'label': 'Encargado de Discursos' }
-              ])
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && currentUserData().serviceDepartment == 'discursos'
+              )
+              || (
+                currentUserData().serviceAssignments is list
+                && currentUserData().serviceAssignments.hasAny([
+                  { 'position': 'encargado', 'department': 'discursos', 'label': 'Encargado de Discursos' }
+                ])
+              )
             )
           )
         );
     }
 
     function isMeetingsManager() {
-      return isAdmin()
-        || isGlobalScreenAccess()
-        || hasPermission('reuniones', 'manage')
-        || (
-          hasPermission('reuniones', 'create')
-          && hasPermission('reuniones', 'edit')
-        )
-        || (
-          isActive()
-          && (
-            (
-              currentUserData().servicePosition == 'encargado'
-              && currentUserData().serviceDepartment == 'reuniones'
-            )
-            || (
-              currentUserData().serviceAssignments is list
-              && currentUserData().serviceAssignments.hasAny([
-                { 'position': 'encargado', 'department': 'reuniones', 'label': 'Encargado de Reuniones' }
-              ])
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('reuniones', 'manage')
+          || (
+            hasPermission('reuniones', 'create')
+            && hasPermission('reuniones', 'edit')
+          )
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && currentUserData().serviceDepartment == 'reuniones'
+              )
+              || (
+                currentUserData().serviceAssignments is list
+                && currentUserData().serviceAssignments.hasAny([
+                  { 'position': 'encargado', 'department': 'reuniones', 'label': 'Encargado de Reuniones' }
+                ])
+              )
             )
           )
         );
@@ -314,19 +323,23 @@ service cloud.firestore {
     }
 
     function canCreateTerritories() {
-      return isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('create');
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('create'));
     }
 
     function canEditTerritories() {
-      return isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('edit');
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('edit'));
     }
 
     function canDeactivateTerritories() {
-      return isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('delete');
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('delete'));
     }
 
     function canManageDepartments(congregationId) {
       return canAccessCongregationData(congregationId)
+        && administrativeWritesAllowed(congregationId)
         && (
           isAdmin()
           || hasServicePosition('coordinador')
@@ -337,17 +350,23 @@ service cloud.firestore {
     }
 
     function canManageTerritorySchedule() {
-      return isAdmin()
-        || hasPreachingAssignment('encargado')
-        || hasPermission('predicacion', 'manage')
-        || hasTerritoryPermission('manage')
-        || hasTerritoryPermission('assign');
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPreachingAssignment('encargado')
+          || hasPermission('predicacion', 'manage')
+          || hasTerritoryPermission('manage')
+          || hasTerritoryPermission('assign')
+        );
     }
 
     function canManagePreachingGroups() {
-      return isAdmin()
-        || hasPreachingAssignment('encargado')
-        || hasTerritoryPermission('manage');
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPreachingAssignment('encargado')
+          || hasTerritoryPermission('manage')
+        );
     }
 
     function canReadUsers() {
@@ -364,44 +383,56 @@ service cloud.firestore {
     }
 
     function canCreateUsers() {
-      return isAdmin() || hasPermission('usuarios', 'create') || hasPermission('usuarios', 'manage');
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPermission('usuarios', 'create') || hasPermission('usuarios', 'manage'));
     }
 
     function canEditUsers() {
-      return isAdmin() || hasPermission('usuarios', 'edit') || hasPermission('usuarios', 'manage');
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPermission('usuarios', 'edit') || hasPermission('usuarios', 'manage'));
     }
 
     function canDeleteUsers() {
-      return isAdmin() || hasPermission('usuarios', 'delete') || hasPermission('usuarios', 'manage');
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPermission('usuarios', 'delete') || hasPermission('usuarios', 'manage'));
     }
 
     function canManageEvents() {
-      return isAdmin()
-        || isGlobalScreenAccess()
-        || hasPermission('avisos', 'manage')
-        || (
-          hasPermission('avisos', 'create')
-          && hasPermission('avisos', 'edit')
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('avisos', 'manage')
+          || (
+            hasPermission('avisos', 'create')
+            && hasPermission('avisos', 'edit')
+          )
         );
     }
 
     function canManagePersons() {
-      return isAdmin()
-        || isGlobalScreenAccess()
-        || hasPermission('usuarios', 'manage')
-        || (
-          hasPermission('usuarios', 'create')
-          && hasPermission('usuarios', 'edit')
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('usuarios', 'manage')
+          || (
+            hasPermission('usuarios', 'create')
+            && hasPermission('usuarios', 'edit')
+          )
         );
     }
 
     function canManageAssignments() {
-      return isAdmin()
-        || isGlobalScreenAccess()
-        || hasPermission('asignaciones', 'manage')
-        || (
-          hasPermission('asignaciones', 'create')
-          && hasPermission('asignaciones', 'edit')
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('asignaciones', 'manage')
+          || (
+            hasPermission('asignaciones', 'create')
+            && hasPermission('asignaciones', 'edit')
+          )
         );
     }
 
@@ -494,6 +525,52 @@ service cloud.firestore {
             'mantenimiento'
           ]
         );
+    }
+
+    function billingExemptionActive(data) {
+      return 'billingExemption' in data
+        && data.billingExemption is map
+        && data.billingExemption.exempt == true
+        && (
+          !('expiresAt' in data.billingExemption)
+          || data.billingExemption.expiresAt == null
+          || (
+            data.billingExemption.expiresAt is timestamp
+            && data.billingExemption.expiresAt > request.time
+          )
+        );
+    }
+
+    function congregationBillingAdministrativeRestricted(congregationId) {
+      return isNonEmptyString(congregationId)
+        && exists(congregationPath(congregationId))
+        && !billingExemptionActive(get(congregationPath(congregationId)).data)
+        && 'billing' in get(congregationPath(congregationId)).data
+        && get(congregationPath(congregationId)).data.billing is map
+        && get(congregationPath(congregationId)).data.billing.provider == 'stripe'
+        && (
+          get(congregationPath(congregationId)).data.billing.adminRestricted == true
+          || get(congregationPath(congregationId)).data.billing.status in [
+            'unpaid',
+            'canceled',
+            'incomplete_expired'
+          ]
+          || (
+            get(congregationPath(congregationId)).data.billing.status in [
+              'past_due',
+              'payment_action_required',
+              'incomplete'
+            ]
+            && 'graceUntil' in get(congregationPath(congregationId)).data.billing
+            && get(congregationPath(congregationId)).data.billing.graceUntil is timestamp
+            && get(congregationPath(congregationId)).data.billing.graceUntil <= request.time
+          )
+        );
+    }
+
+    function administrativeWritesAllowed(congregationId) {
+      return !isNonEmptyString(congregationId)
+        || !congregationBillingAdministrativeRestricted(congregationId);
     }
 
     function systemMaintenanceBlocked() {
@@ -2372,6 +2449,22 @@ service cloud.firestore {
           && validPreachingReportWrite(request.resource.data, congregationId, monthId, userId);
 
         allow delete: if false;
+      }
+
+      // -----------------------------------------------------------------------
+      // BILLING HISTORY
+      // Historial de eventos Stripe. Escritura exclusiva de Cloud Functions.
+      // -----------------------------------------------------------------------
+      match /billingHistory/{eventId} {
+        allow get, list: if canAccessCongregationData(congregationId)
+          && (
+            isAdminOrSupervisor()
+            || isGlobalScreenAccess()
+            || hasPermission('pagos', 'view')
+            || hasPermission('pagos', 'manage')
+          );
+
+        allow create, update, delete: if false;
       }
 
       // -----------------------------------------------------------------------

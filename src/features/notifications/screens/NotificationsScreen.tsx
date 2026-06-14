@@ -16,7 +16,7 @@ import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
 const resolveAssignmentHref = (notification: AppNotification) => {
-  if (notification.type === 'event') {
+  if (notification.type === 'event' || notification.type === 'billing') {
     return (notification.data?.url ?? '/(protected)/(tabs)') as never;
   }
 

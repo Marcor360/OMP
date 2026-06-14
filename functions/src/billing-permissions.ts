@@ -40,17 +40,17 @@ type BillingUser = {
 export const hasServiceAssignment = (
   user: BillingUser | null | undefined,
   position: ServicePosition,
-  department: ServiceDepartment
+  department?: ServiceDepartment
 ): boolean =>
   Boolean(
     (
       user?.servicePosition === position &&
-      user.serviceDepartment === department
+      (department === undefined || user.serviceDepartment === department)
     ) ||
       user?.serviceAssignments?.some(
         (assignment) =>
           assignment.position === position &&
-          assignment.department === department
+          (department === undefined || assignment.department === department)
       )
   );
 
@@ -70,19 +70,39 @@ const hasPermission = (
   user?.permissions?.[department]?.[action] === true ||
   user?.permissions?.[department]?.manage === true;
 
+const isCoordinatorOrSecretary = (
+  user: BillingUser | null | undefined
+): boolean =>
+  hasServiceAssignment(user, 'coordinador') ||
+  hasServiceAssignment(user, 'secretario');
+
+const hasExplicitBillingOperationPermission = (
+  user: BillingUser | null | undefined
+): boolean => hasPermission(user, 'pagos', 'create') || hasPermission(user, 'pagos', 'manage');
+
 export const canViewBilling = (
   user: BillingUser | null | undefined
 ): boolean =>
-  hasPermission(user, 'pagos', 'view') || isTreasuryManager(user) || isAssistantTreasury(user);
+  user?.role === 'admin' ||
+  hasPermission(user, 'pagos', 'view') ||
+  isCoordinatorOrSecretary(user) ||
+  isTreasuryManager(user) ||
+  isAssistantTreasury(user);
 
 export const canPaySubscription = (
   user: BillingUser | null | undefined
 ): boolean =>
-  hasPermission(user, 'pagos', 'create') || isTreasuryManager(user) || isAssistantTreasury(user);
+  isCoordinatorOrSecretary(user) ||
+  isTreasuryManager(user) ||
+  (
+    isAssistantTreasury(user) &&
+    hasExplicitBillingOperationPermission(user)
+  ) ||
+  hasExplicitBillingOperationPermission(user);
 
 export const canManageSubscription = (
   user: BillingUser | null | undefined
-): boolean => hasPermission(user, 'pagos', 'manage') || isTreasuryManager(user);
+): boolean => canPaySubscription(user);
 
 export const canCancelSubscription = (
   user: BillingUser | null | undefined

@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 
-export type NotificationType = 'assignment' | 'event';
+export type NotificationType = 'assignment' | 'event' | 'billing';
 
 export type NotificationCategory = 'platform' | 'cleaning' | 'hospitality' | null;
 
@@ -27,6 +27,11 @@ export interface AppNotification {
     meetingId?: string | null;
     meetingType?: NotificationMeetingType;
     role?: string | null;
+    billingEvent?: string | null;
+    daysUntilPayment?: number | null;
+    nextPaymentDate?: string | null;
+    invoiceId?: string | null;
+    invoiceUrl?: string | null;
   };
   data?: {
     url?: string | null;

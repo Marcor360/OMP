@@ -62,7 +62,7 @@ const normalizeNotification = (
     return null;
   }
 
-  const type = raw.type === 'event' ? 'event' : 'assignment';
+  const type = raw.type === 'event' || raw.type === 'billing' ? raw.type : 'assignment';
 
   if (
     type === 'assignment' &&
@@ -128,6 +128,26 @@ const normalizeNotification = (
             role:
               typeof (raw.metadata as Record<string, unknown>).role === 'string'
                 ? ((raw.metadata as Record<string, unknown>).role as string)
+                : null,
+            billingEvent:
+              typeof (raw.metadata as Record<string, unknown>).billingEvent === 'string'
+                ? ((raw.metadata as Record<string, unknown>).billingEvent as string)
+                : null,
+            daysUntilPayment:
+              typeof (raw.metadata as Record<string, unknown>).daysUntilPayment === 'number'
+                ? ((raw.metadata as Record<string, unknown>).daysUntilPayment as number)
+                : null,
+            nextPaymentDate:
+              typeof (raw.metadata as Record<string, unknown>).nextPaymentDate === 'string'
+                ? ((raw.metadata as Record<string, unknown>).nextPaymentDate as string)
+                : null,
+            invoiceId:
+              typeof (raw.metadata as Record<string, unknown>).invoiceId === 'string'
+                ? ((raw.metadata as Record<string, unknown>).invoiceId as string)
+                : null,
+            invoiceUrl:
+              typeof (raw.metadata as Record<string, unknown>).invoiceUrl === 'string'
+                ? ((raw.metadata as Record<string, unknown>).invoiceUrl as string)
                 : null,
           }
         : undefined,

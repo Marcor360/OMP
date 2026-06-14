@@ -52,6 +52,7 @@ const normalizeBilling = (value: unknown): CongregationBillingState => {
         ? data.planKey
         : undefined,
     activeUsersLimit: typeof data.activeUsersLimit === 'number' ? data.activeUsersLimit : undefined,
+    userLimit: typeof data.userLimit === 'number' ? data.userLimit : undefined,
     stripePriceId: typeof data.stripePriceId === 'string' ? data.stripePriceId : undefined,
     stripeCustomerId: typeof data.stripeCustomerId === 'string' ? data.stripeCustomerId : undefined,
     stripeSubscriptionId:
@@ -59,10 +60,17 @@ const normalizeBilling = (value: unknown): CongregationBillingState => {
     currentPeriodStart: data.currentPeriodStart,
     currentPeriodEnd: data.currentPeriodEnd,
     nextPaymentDate: data.nextPaymentDate,
+    graceDays: typeof data.graceDays === 'number' ? data.graceDays : undefined,
+    graceStartedAt: data.graceStartedAt,
+    graceUntil: data.graceUntil,
+    adminRestricted: data.adminRestricted === true,
     cancelAtPeriodEnd: data.cancelAtPeriodEnd === true,
     lastPaymentStatus:
       typeof data.lastPaymentStatus === 'string' ? data.lastPaymentStatus : undefined,
+    lastInvoiceId: typeof data.lastInvoiceId === 'string' ? data.lastInvoiceId : undefined,
     lastInvoiceUrl: typeof data.lastInvoiceUrl === 'string' ? data.lastInvoiceUrl : undefined,
+    lastStripeEventId:
+      typeof data.lastStripeEventId === 'string' ? data.lastStripeEventId : undefined,
     updatedAt: data.updatedAt,
   };
 };
@@ -75,6 +83,7 @@ const normalizeExemption = (value: unknown): BillingExemption | undefined => {
     reason: typeof data.reason === 'string' ? data.reason : undefined,
     grantedBy: typeof data.grantedBy === 'string' ? data.grantedBy : undefined,
     grantedAt: data.grantedAt,
+    expiresAt: data.expiresAt,
   };
 };
 
@@ -86,11 +95,20 @@ export const getCongregationBillingSummary = async (
   const snap = await getDoc(congregationDocRef(congregationId));
   if (!snap.exists()) return null;
   const data = snap.data() as Record<string, unknown>;
+  const billingExemption = normalizeExemption(data.billingExemption);
+  const billing = normalizeBilling(data.billing);
+
+  if (billingExemption?.exempt === true) {
+    billing.enabled = true;
+    billing.provider = 'exempt';
+    billing.status = 'exempt';
+    billing.adminRestricted = false;
+  }
 
   return {
     congregationId,
-    billing: normalizeBilling(data.billing),
-    billingExemption: normalizeExemption(data.billingExemption),
+    billing,
+    billingExemption,
   };
 };
 
