@@ -16,6 +16,21 @@ OMP Suite no es una aplicacion oficial de JW.ORG, no esta afiliada, respaldada n
 
 Esta seccion resume las correcciones de estabilizacion realizadas en la ronda actual del proyecto.
 
+### UX De Creacion Y Edicion De Reuniones
+
+- `src/screens/meetings/MeetingFormScreen.tsx` se reorganizo como flujo guiado por pasos:
+  - Semana, tipo de reunion y dia exacto.
+  - Datos basicos de la reunion.
+  - Programa y asignaciones.
+  - Limpieza y modulos sincronizados.
+  - Revision final antes de publicar.
+- Se mantiene la posibilidad de guardar borrador desde cualquier paso.
+- La accion de publicar ahora pasa siempre por una pantalla de revision con resumen de tipo, semana, fecha, lugar, enlace, limpieza, secciones completas, asignaciones faltantes, usuarios bloqueados por salida a discursar y campos controlados por otros modulos.
+- Los errores de publicacion se muestran en un panel visual dentro de la pantalla y el formulario hace scroll al inicio para que el usuario los vea.
+- El selector de semana/dia muestra mejor la semana seleccionada, el dia exacto y advierte cuando ya existe una reunion del mismo tipo en el rango.
+- Los campos controlados por Acomodadores y microfonos explican por que estan bloqueados.
+- Se conservaron las integraciones existentes con reuniones, limpieza, publicacion, validacion de fin de semana y discursos externos.
+
 ### Planes, Billing Y Limites De Usuarios
 
 - Se unifico el modelo de planes de congregacion con la fuente de billing actual:

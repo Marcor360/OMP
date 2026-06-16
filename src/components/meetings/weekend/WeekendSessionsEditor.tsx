@@ -383,6 +383,11 @@ export function WeekendSessionsEditor({
                 }))
               }
             />
+            {lockWatchtowerReader ? (
+              <ThemedText style={styles.lockedText}>
+                Este campo se controla desde Acomodadores y microfonos.
+              </ThemedText>
+            ) : null}
           </View>
         </View>
       ))}
@@ -497,4 +502,5 @@ const createStyles = (colors: AppColorSet) =>
     userOptionEmail: { fontSize: 12, color: colors.textMuted },
     userOptionBlocked: { fontSize: 11, color: colors.warning, fontWeight: '700' },
     emptyUsers: { paddingHorizontal: 12, paddingVertical: 10, fontSize: 12, color: colors.textMuted },
+    lockedText: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
   });

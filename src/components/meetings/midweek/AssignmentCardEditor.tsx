@@ -234,7 +234,7 @@ export function AssignmentCardEditor({
       </View>
       {isLocked ? (
         <ThemedText style={styles.lockedText}>
-          Controlado desde acomodadores y microfonos.
+          Este campo se controla desde Acomodadores y microfonos.
         </ThemedText>
       ) : null}
     </View>
