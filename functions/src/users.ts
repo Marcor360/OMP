@@ -1,5 +1,5 @@
 import { getAuth } from 'firebase-admin/auth';
-import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { isSystemPrincipalUser, SYSTEM_ACTOR_LABEL } from './user-protection.js';
@@ -217,9 +217,11 @@ type BillingPlanKey = 'omp_80' | 'omp_150' | 'omp_250';
 
 const PLAN_LIMITS: Record<BillingPlanKey, number> = {
   omp_80: 80,
-  omp_150: 150,
-  omp_250: 250,
+  omp_150: 120,
+  omp_250: 200,
 };
+
+const USERS_QUERY_PAGE_SIZE = 200;
 
 const PERMISSION_DEPARTMENTS: PermissionDepartment[] = [
   'usuarios',
@@ -678,6 +680,47 @@ const shouldValidateAssignmentUniqueness = (
   );
 };
 
+const listCongregationUserDocs = async (params: {
+  congregationId: string;
+  activeOnly?: boolean;
+}): Promise<QueryDocumentSnapshot[]> => {
+  const db = getFirestore();
+  const docs: QueryDocumentSnapshot[] = [];
+  let lastDoc: QueryDocumentSnapshot | undefined;
+
+  while (true) {
+    let query = db
+      .collection('users')
+      .where('congregationId', '==', params.congregationId)
+      .orderBy('__name__')
+      .limit(USERS_QUERY_PAGE_SIZE);
+
+    if (params.activeOnly) {
+      query = db
+        .collection('users')
+        .where('congregationId', '==', params.congregationId)
+        .where('isActive', '==', true)
+        .orderBy('__name__')
+        .limit(USERS_QUERY_PAGE_SIZE);
+    }
+
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
+    }
+
+    const snap = await query.get();
+    docs.push(...snap.docs);
+
+    if (snap.size < USERS_QUERY_PAGE_SIZE) {
+      break;
+    }
+
+    lastDoc = snap.docs[snap.docs.length - 1];
+  }
+
+  return docs;
+};
+
 const assertAssignmentUniqueness = async (params: {
   congregationId: string;
   assignments: ServiceAssignment[];
@@ -692,16 +735,13 @@ const assertAssignmentUniqueness = async (params: {
     return;
   }
 
-  const db = getFirestore();
-  const snap = await db
-    .collection('users')
-    .where('congregationId', '==', congregationId)
-    .where('isActive', '==', true)
-    .limit(500)
-    .get();
+  const docs = await listCongregationUserDocs({
+    congregationId,
+    activeOnly: true,
+  });
 
   for (const assignment of targetAssignments) {
-    const owner = snap.docs.find((doc) => {
+    const owner = docs.find((doc) => {
       if (doc.id === excludeUid) return false;
       const data = doc.data() as Record<string, unknown>;
       const legacy = parseLegacyAssignmentLabel(normalizeText(data.department));
@@ -918,23 +958,12 @@ export const listUsersForCurrentCongregation = onCall(
     assertCanListUsers(requester);
 
     const payload = parseListUsersPayload(request.data);
-    const db = getFirestore();
-    let query = db
-      .collection('users')
-      .where('congregationId', '==', requester.congregationId)
-      .limit(500);
-
-    if (payload.activeOnly) {
-      query = db
-        .collection('users')
-        .where('congregationId', '==', requester.congregationId)
-        .where('isActive', '==', true)
-        .limit(500);
-    }
-
-    const snap = await query.get();
+    const docs = await listCongregationUserDocs({
+      congregationId: requester.congregationId,
+      activeOnly: payload.activeOnly,
+    });
     const users = sortListedUsers(
-      snap.docs
+      docs
         .map((doc) => sanitizeUserForList(doc.id, doc.data()))
         .filter((user) => !payload.activeOnly || isActiveUserListRecord(user))
     );
@@ -951,15 +980,12 @@ export const listOrgChartUsersForCurrentCongregation = onCall(
     }
 
     const requester = await getRequesterProfile(request.auth.uid);
-    const db = getFirestore();
-    const snap = await db
-      .collection('users')
-      .where('congregationId', '==', requester.congregationId)
-      .where('isActive', '==', true)
-      .limit(500)
-      .get();
+    const docs = await listCongregationUserDocs({
+      congregationId: requester.congregationId,
+      activeOnly: true,
+    });
     const users = sortListedUsers(
-      snap.docs
+      docs
         .map((doc) => sanitizeOrgChartUserForList(doc.id, doc.data()))
         .filter(isActiveUserListRecord)
     );

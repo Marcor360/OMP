@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https';
@@ -108,8 +108,8 @@ const PLAN_PRICE_SECRETS: Record<BillingPlanKey, typeof STRIPE_PRICE_OMP_80> = {
 
 const PLAN_LIMITS: Record<BillingPlanKey, number> = {
   omp_80: 80,
-  omp_150: 150,
-  omp_250: 250,
+  omp_150: 120,
+  omp_250: 200,
 };
 
 const PLAN_PRICES_MXN: Record<BillingPlanKey, number> = {
@@ -131,6 +131,7 @@ const RESTRICTED_BILLING_STATUSES = new Set([
 ]);
 
 const OPEN_BILLING_STATUSES = new Set(['active', 'trialing', 'checkout_pending']);
+const BILLING_SCAN_PAGE_SIZE = 200;
 
 const getSecret = (secret: { name: string; value: () => string }): string => {
   const value = secret.value().trim();
@@ -452,6 +453,65 @@ const priceToPlanKey = (priceId: string | null): BillingPlanKey | undefined => {
   return (Object.keys(PLAN_PRICE_SECRETS) as BillingPlanKey[]).find(
     (planKey) => getSecret(PLAN_PRICE_SECRETS[planKey]) === priceId
   );
+};
+
+const listActiveUserDocsForCongregation = async (
+  congregationId: string
+): Promise<QueryDocumentSnapshot[]> => {
+  const docs: QueryDocumentSnapshot[] = [];
+  let lastDoc: QueryDocumentSnapshot | undefined;
+
+  while (true) {
+    let query = adminDb
+      .collection('users')
+      .where('congregationId', '==', congregationId)
+      .where('isActive', '==', true)
+      .orderBy('__name__')
+      .limit(BILLING_SCAN_PAGE_SIZE);
+
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
+    }
+
+    const snap = await query.get();
+    docs.push(...snap.docs);
+
+    if (snap.size < BILLING_SCAN_PAGE_SIZE) {
+      break;
+    }
+
+    lastDoc = snap.docs[snap.docs.length - 1];
+  }
+
+  return docs;
+};
+
+const listBillingEnabledCongregationDocs = async (): Promise<QueryDocumentSnapshot[]> => {
+  const docs: QueryDocumentSnapshot[] = [];
+  let lastDoc: QueryDocumentSnapshot | undefined;
+
+  while (true) {
+    let query = adminDb
+      .collection('congregations')
+      .where('billing.enabled', '==', true)
+      .orderBy('__name__')
+      .limit(BILLING_SCAN_PAGE_SIZE);
+
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
+    }
+
+    const snap = await query.get();
+    docs.push(...snap.docs);
+
+    if (snap.size < BILLING_SCAN_PAGE_SIZE) {
+      break;
+    }
+
+    lastDoc = snap.docs[snap.docs.length - 1];
+  }
+
+  return docs;
 };
 
 const getObjectMetadata = (value: unknown): Record<string, string> => {
@@ -1023,16 +1083,11 @@ export const stripeWebhook = onRequest(
 );
 
 const getBillingReminderTargets = async (congregationId: string): Promise<string[]> => {
-  const snap = await adminDb
-    .collection('users')
-    .where('congregationId', '==', congregationId)
-    .where('isActive', '==', true)
-    .limit(500)
-    .get();
+  const docs = await listActiveUserDocsForCongregation(congregationId);
 
   return Array.from(
     new Set(
-      snap.docs
+      docs
         .map((doc) => ({ uid: doc.id, data: doc.data() as RequesterProfile }))
         .filter(({ data }) =>
           isAdminRole(data) ||
@@ -1061,14 +1116,10 @@ export const sendBillingPaymentReminders = onSchedule(
     timeZone: 'America/Mexico_City',
   },
   async () => {
-    const snap = await adminDb
-      .collection('congregations')
-      .where('billing.enabled', '==', true)
-      .limit(500)
-      .get();
+    const congregationDocs = await listBillingEnabledCongregationDocs();
     let created = 0;
 
-    for (const congregationDoc of snap.docs) {
+    for (const congregationDoc of congregationDocs) {
       const data = congregationDoc.data() as Record<string, unknown>;
       if (isBillingExempt(data)) continue;
 

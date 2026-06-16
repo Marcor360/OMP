@@ -263,7 +263,7 @@ Rules:
 
 Plan limits are based on active users:
 
-- OMP Basic: 70 active users.
+- OMP Basic: 80 active users.
 - OMP Intermediate: 120 active users.
 - OMP Complete: 200 active users.
 

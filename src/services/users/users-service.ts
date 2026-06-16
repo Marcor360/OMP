@@ -1,13 +1,17 @@
 import {
   deleteDoc,
+  documentId,
   getDocs,
   limit,
   onSnapshot,
+  orderBy,
   query as firestoreQuery,
   serverTimestamp,
   setDoc,
+  startAfter,
   updateDoc,
   where,
+  type QueryDocumentSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
@@ -437,20 +441,36 @@ const shouldFallbackToFirestoreList = (error: unknown): boolean =>
   isFirebaseErrorCode(error, 'unavailable') ||
   isFirebaseErrorCode(error, 'deadline-exceeded');
 
+const USERS_QUERY_PAGE_SIZE = 200;
+
 const listUsersForCongregationFromFirestore = async (
   congregationId: string,
   options?: { activeOnly?: boolean }
 ): Promise<AppUser[]> => {
-  const constraints = [
-    where('congregationId', '==', congregationId),
-    ...(options?.activeOnly ? [where('isActive', '==', true)] : []),
-    limit(500),
-  ];
-  const snap = await getDocs(firestoreQuery(usersCollectionRef(), ...constraints));
+  const docs: QueryDocumentSnapshot[] = [];
+  let lastDoc: QueryDocumentSnapshot | undefined;
+
+  while (true) {
+    const constraints = [
+      where('congregationId', '==', congregationId),
+      ...(options?.activeOnly ? [where('isActive', '==', true)] : []),
+      orderBy(documentId()),
+      ...(lastDoc ? [startAfter(lastDoc)] : []),
+      limit(USERS_QUERY_PAGE_SIZE),
+    ];
+    const snap = await getDocs(firestoreQuery(usersCollectionRef(), ...constraints));
+    docs.push(...snap.docs);
+
+    if (snap.size < USERS_QUERY_PAGE_SIZE) {
+      break;
+    }
+
+    lastDoc = snap.docs[snap.docs.length - 1];
+  }
 
   return sortUsers(
     dedupeUsersByEmail(
-      snap.docs
+      docs
         .map((doc) => normalizeUser(doc.id, doc.data() as Record<string, unknown>))
         .filter((user) => !options?.activeOnly || user.isActive)
         .filter((user) => !isSystemPrincipalUser(user))

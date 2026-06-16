@@ -35,12 +35,12 @@ Esta seccion resume las correcciones de estabilizacion realizadas en la ronda ac
 
 - Se unifico el modelo de planes de congregacion con la fuente de billing actual:
   - `omp_80`: 80 usuarios activos.
-  - `omp_150`: 150 usuarios activos.
-  - `omp_250`: 250 usuarios activos.
+  - `omp_150`: 120 usuarios activos.
+  - `omp_250`: 200 usuarios activos.
 - `src/types/congregation-plan.ts` ahora reutiliza los tipos, etiquetas y limites de `src/types/billing.ts`.
 - `src/services/congregations/congregations-service.ts` lee primero `congregations/{congregationId}.billing` y usa `/congregations/{congregationId}/private/plan` solo como fallback legacy.
-- `functions/src/users.ts` valida capacidad de usuarios activos con los nuevos planes y mantiene compatibilidad con planes antiguos `basic`, `intermediate`, `complete` y limites 70, 120, 200.
-- La validacion de capacidad en `createUserByAdmin` ahora consulta hasta `limite + 1` usuarios activos, en lugar de usar un limite fijo.
+- `functions/src/users.ts` valida capacidad de usuarios activos con los nuevos planes y mantiene compatibilidad con planes antiguos `basic`, `intermediate`, `complete` y limite legacy 70.
+- La validacion de capacidad en `createUserByAdmin` consulta hasta `limite + 1` usuarios activos, y los listados de usuarios usan paginacion interna en lugar de un limite fijo de 500.
 - Se actualizo la documentacion de planes y billing en:
   - `docs/congregation-plans.md`.
   - `docs/billing-and-subscriptions.md`.
