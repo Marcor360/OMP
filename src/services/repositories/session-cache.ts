@@ -63,6 +63,8 @@ export const clearSessionCacheByPrefix = (prefix: string): void => {
   void clearPersistentCacheByPrefix(prefix);
 };
 
+// No limpia cache persistente por diseno. Para logout o cambio de sesion
+// usar clearLocalSessionData(), que limpia memoria, persistencia y caches temporales.
 export const clearAllSessionCache = (): void => {
   valueCache.clear();
   inFlightCache.clear();

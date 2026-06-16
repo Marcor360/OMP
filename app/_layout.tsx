@@ -216,12 +216,19 @@ function AppLayout() {
 
   useEffect(() => {
     let cancelled = false;
+    const timer = setTimeout(() => {
+      if (!cancelled) {
+        console.warn('[AppLayout] Timeout de cache persistente alcanzado (2s). Continuando render.');
+        setPersistentCacheReady(true);
+      }
+    }, 2000);
 
     initializePersistentCacheCycle()
       .catch((error) => {
         console.warn('[AppLayout] No se pudo inicializar cache persistente.', error);
       })
       .finally(() => {
+        clearTimeout(timer);
         if (!cancelled) {
           setPersistentCacheReady(true);
         }
@@ -229,6 +236,7 @@ function AppLayout() {
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, []);
 

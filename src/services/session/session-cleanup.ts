@@ -26,25 +26,33 @@ const warnSessionCleanupError = (operation: string, error: unknown): void => {
   }
 };
 
-export const clearLocalSessionData = async (): Promise<void> => {
+const clearKnownSessionAsyncStorageCache = async (): Promise<void> => {
+  const keys = await AsyncStorage.getAllKeys();
+  const prefixMatches = keys.filter((key) =>
+    SESSION_ASYNC_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+  );
+
+  const keysToRemove = Array.from(
+    new Set<string>([...SESSION_ASYNC_STORAGE_KEYS, ...prefixMatches])
+  ).filter((key) => !PRESERVED_ASYNC_STORAGE_KEYS.has(key));
+
+  if (keysToRemove.length > 0) {
+    await AsyncStorage.multiRemove(keysToRemove);
+  }
+};
+
+export const clearTemporaryCacheData = async (): Promise<void> => {
   markFirestoreCacheSessionBoundary();
   clearAllSessionCache();
   await clearAllPersistentCache();
 
   try {
-    const keys = await AsyncStorage.getAllKeys();
-    const prefixMatches = keys.filter((key) =>
-      SESSION_ASYNC_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
-    );
-
-    const keysToRemove = Array.from(
-      new Set<string>([...SESSION_ASYNC_STORAGE_KEYS, ...prefixMatches])
-    ).filter((key) => !PRESERVED_ASYNC_STORAGE_KEYS.has(key));
-
-    if (keysToRemove.length > 0) {
-      await AsyncStorage.multiRemove(keysToRemove);
-    }
+    await clearKnownSessionAsyncStorageCache();
   } catch (error) {
     warnSessionCleanupError('clear local async storage', error);
   }
+};
+
+export const clearLocalSessionData = async (): Promise<void> => {
+  await clearTemporaryCacheData();
 };

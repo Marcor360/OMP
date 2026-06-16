@@ -92,7 +92,7 @@ const normalizeLayerCacheKey = (key: string): string => {
     );
   }
 
-  const congregationDomainMatch = /^(doc|query):(meetings|midweek|assignments|assignments-panel|outgoingTalks)\/([^/]+)\/(.+)$/.exec(key);
+  const congregationDomainMatch = /^(doc|query):(meetings|midweek|assignments|assignments-panel|outgoingTalks|cleaning|territories|preaching|notifications|departments|organization-chart|settings)\/([^/]+)\/(.+)$/.exec(key);
   if (congregationDomainMatch) {
     return buildCongregationCacheKey(
       congregationDomainMatch[3],
@@ -132,7 +132,7 @@ const normalizeLayerCachePrefix = (prefix: string): string => {
     );
   }
 
-  const domainPrefixMatch = /^(doc|query):(meetings|midweek|assignments|assignments-panel|outgoingTalks)\/([^/]+)\/(.*)$/.exec(prefix);
+  const domainPrefixMatch = /^(doc|query):(meetings|midweek|assignments|assignments-panel|outgoingTalks|cleaning|territories|preaching|notifications|departments|organization-chart|settings)\/([^/]+)\/(.*)$/.exec(prefix);
   if (domainPrefixMatch) {
     return buildCongregationCacheKey(
       domainPrefixMatch[3],

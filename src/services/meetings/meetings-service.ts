@@ -357,6 +357,7 @@ export const getMeetingById = async (
     mapSnapshot: (snapshot) =>
       normalizeMeeting(snapshot.id, snapshot.data() as Record<string, unknown>),
     maxAgeMs: MEETING_DOC_CACHE_TTL_MS,
+    persist: false,
   });
 };
 
@@ -405,6 +406,7 @@ export const getMeetingsByWeek = async (
     query: q,
     maxAgeMs: MEETINGS_RANGE_CACHE_TTL_MS,
     forceServer: options?.forceServer,
+    persist: false,
     mapSnapshot: (snapshot) =>
       sortMeetings(
         snapshot.docs.map((docSnapshot) =>

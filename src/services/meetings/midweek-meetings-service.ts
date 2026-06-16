@@ -436,6 +436,7 @@ export const getMidweekMeetingsByWeek = async (
       query: q,
       forceServer: options?.forceServer,
       maxAgeMs: MIDWEEK_RANGE_CACHE_TTL_MS,
+      persist: false,
       mapSnapshot: (snapshot) =>
         sortByStartDateDesc(
           snapshot.docs.map((docSnap) => toMidweekMeeting(congregationId, docSnap.id, docSnap.data()))
@@ -454,6 +455,7 @@ export const getMidweekMeetingsByWeek = async (
       query: fallbackQuery,
       forceServer: options?.forceServer,
       maxAgeMs: MIDWEEK_RANGE_CACHE_TTL_MS,
+      persist: false,
       mapSnapshot: (snapshot) =>
         sortByStartDateDesc(
           snapshot.docs.map((docSnap) => toMidweekMeeting(congregationId, docSnap.id, docSnap.data()))

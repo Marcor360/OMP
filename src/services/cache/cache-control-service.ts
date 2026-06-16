@@ -8,7 +8,7 @@ import {
 } from 'firebase/firestore';
 
 import { db } from '@/src/config/firebase/firebase';
-import { clearLocalSessionData } from '@/src/services/session/session-cleanup';
+import { clearTemporaryCacheData } from '@/src/services/session/session-cleanup';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
 const CACHE_CONTROL_DOC = doc(db, 'system', 'cacheControl');
@@ -223,7 +223,7 @@ const clearNativeTemporaryFiles = async (): Promise<void> => {
 };
 
 const clearTemporaryApplicationCache = async (): Promise<void> => {
-  await clearLocalSessionData();
+  await clearTemporaryCacheData();
   await clearWebTemporaryStorage();
   await clearFirestorePersistenceOnWeb();
   await clearNativeTemporaryFiles();
