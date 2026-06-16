@@ -108,8 +108,8 @@ const PLAN_PRICE_SECRETS: Record<BillingPlanKey, typeof STRIPE_PRICE_OMP_80> = {
 
 const PLAN_LIMITS: Record<BillingPlanKey, number> = {
   omp_80: 80,
-  omp_150: 120,
-  omp_250: 200,
+  omp_150: 150,
+  omp_250: 250,
 };
 
 const PLAN_PRICES_MXN: Record<BillingPlanKey, number> = {

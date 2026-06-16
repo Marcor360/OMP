@@ -400,14 +400,14 @@ service cloud.firestore {
     function canReadUsers() {
       return isAdmin()
         || isSupervisor()
+        || hasPermission('usuarios', 'view')
+        || hasPermission('usuarios', 'manage')
         || isGlobalScreenAccess()
         || (
           currentUserData().permissions is map
           && currentUserData().permissions.departments is map
           && currentUserData().permissions.departments.manage == true
-        )
-        || hasPermission('usuarios', 'view')
-        || hasPermission('usuarios', 'manage');
+        );
     }
 
     function canCreateUsers() {

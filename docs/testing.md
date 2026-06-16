@@ -6,23 +6,11 @@
 npm run validate
 ```
 
-Este comando ejecuta lint de la app, TypeScript, lint/build de Functions y tests de Functions.
+Este comando ejecuta lint de la app, TypeScript, tests frontend, lint/build de Functions y tests de Functions.
 
-## Frontend Pendiente
+## Frontend
 
-Agregar pruebas para:
-
-- Roles.
-- Permisos.
-- Rutas protegidas.
-- Helpers de Firestore.
-- Planes y limites.
-- Validaciones de usuario.
-- Navegacion.
-- Visibilidad de modulos.
-- Formatos de fecha.
-
-Comandos futuros sugeridos:
+Comandos:
 
 ```bash
 npm run test
@@ -30,18 +18,53 @@ npm run test:watch
 npm run test:coverage
 ```
 
-## Firestore Rules Pendiente
+Cobertura inicial agregada:
 
-Cubrir:
+- Planes y limites de usuarios activos.
+- Permisos por rol tecnico y asignacion de servicio.
+- Helpers de fecha `YYYY-MM-DD` y rango semanal.
+- Cache persistente AsyncStorage con ciclo anual, TTL, limpieza por valor y limpieza por congregacion.
 
-- Usuario activo puede leer su congregacion.
-- Usuario inactivo no puede acceder.
-- Usuario no puede leer otra congregacion.
+Pendiente ampliar pruebas para:
+
+Agregar pruebas para:
+
+- Roles.
+- Permisos.
+- Rutas protegidas.
+- Helpers de Firestore.
+- Validaciones de usuario.
+- Navegacion.
+- Visibilidad de modulos.
+
+## Firestore Rules
+
+Comando:
+
+```bash
+npm run test:rules
+```
+
+Este comando usa Firestore Emulator mediante `firebase emulators:exec`.
+
+Cobertura inicial agregada:
+
+- Usuario activo puede leer su propio perfil.
+- Usuario normal no lee otros perfiles de la misma congregacion.
+- Admin y supervisor leen usuarios de la misma congregacion.
+- Usuario de otra congregacion queda bloqueado.
+- Usuario inactivo no lee otros perfiles.
+- Congregacion suspendida bloquea acceso a datos de esa congregacion.
+- Push token solo puede escribirse por el usuario dueno.
+
+Pendiente ampliar:
+
 - Admin puede crear usuario.
 - Supervisor solo puede hacer lo permitido.
 - Usuario normal no puede editar roles.
 - Encargado puede gestionar su modulo.
-- Congregacion suspendida bloquea acceso.
+- Usuario con permiso `usuarios.view` lee usuarios de la misma congregacion sin agotar el presupuesto de expresiones de Rules.
+- Endurecimiento post-migracion de roles y planes legacy.
 
 ## Manual
 

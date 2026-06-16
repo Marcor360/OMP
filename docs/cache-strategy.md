@@ -116,8 +116,8 @@ persist: false
 
 | Tipo de dato                   |       Persistente | Motivo                              |
 | ------------------------------ | ----------------: | ----------------------------------- |
-| Perfil de usuario actual       | Si, con TTL corto | Mejora arranque                     |
-| Lista de usuarios activos      | Si, con TTL corto | Selectores mas rapidos              |
+| Perfil de usuario actual       |                No | Incluye rol, permisos y tokens      |
+| Lista de usuarios activos      | No por defecto    | Puede incluir permisos/roles        |
 | Reuniones publicadas por rango |                Si | Carga rapida                        |
 | Borradores de reuniones        |    No por defecto | Pueden ser sensibles/dinamicos      |
 | Billing/status de pago         |                No | Debe venir de servidor/webhook      |
@@ -145,10 +145,10 @@ buildUserCacheKey(uid, 'profile')
 
 ## Pruebas
 
-El proyecto raiz todavia no tiene runner de tests frontend configurado. Existe un archivo preparado en:
+La prueba real vive en:
 
 ```text
-docs/persistent-cache.test.ts.example
+src/services/repositories/__tests__/persistent-cache.test.ts
 ```
 
-Cuando se agregue Jest/Vitest para la app, moverlo a `src/services/repositories/__tests__/persistent-cache.test.ts`, configurar mocks de AsyncStorage y agregarlo al script de validacion frontend.
+Se ejecuta con `npm run test` y tambien forma parte de `npm run validate`.

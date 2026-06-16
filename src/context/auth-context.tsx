@@ -5,8 +5,10 @@ import { auth } from '@/src/config/firebase/firebase';
 import { loginWithEmail, logout } from '@/src/services/auth-service';
 import { clearLocalSessionData } from '@/src/services/session/session-cleanup';
 import { AuthContextType } from '@/src/types/auth.types';
+import { createLogger } from '@/src/utils/logger';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const authLogger = createLogger('AuthProvider');
 
 // Tiempo de inactividad antes de cerrar sesión automáticamente (15 minutos en ms)
 const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
@@ -61,10 +63,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Escuchar cambios en el estado de autenticación
   useEffect(() => {
-    console.log('[AuthProvider] Iniciando onAuthStateChanged listener');
+    authLogger.debug('Iniciando onAuthStateChanged listener');
 
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      console.log('[AuthProvider] onAuthStateChanged fired:', firebaseUser?.uid ?? 'null');
+      authLogger.debug('onAuthStateChanged fired', firebaseUser?.uid ?? 'null');
 
       setUser(firebaseUser);
       userRef.current = firebaseUser;
@@ -73,17 +75,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 
       if (firebaseUser) {
-        console.log('[AuthProvider] Usuario autenticado:', firebaseUser.uid);
+        authLogger.info('Usuario autenticado', firebaseUser.uid);
         resetInactivityTimer();
       } else {
-        console.log('[AuthProvider] Sin sesión activa');
+        authLogger.info('Sin sesion activa');
         clearInactivityTimer();
         void clearLocalSessionData();
       }
     });
 
     return () => {
-      console.log('[AuthProvider] Limpiando onAuthStateChanged listener');
+      authLogger.debug('Limpiando onAuthStateChanged listener');
       unsubscribe();
     };
   }, []);

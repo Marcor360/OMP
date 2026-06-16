@@ -51,14 +51,14 @@ export type BillingExemption = {
 
 export const BILLING_PLAN_LABELS: Record<BillingPlanKey, string> = {
   omp_80: 'OMP 80',
-  omp_150: 'OMP 120',
-  omp_250: 'OMP 200',
+  omp_150: 'OMP 150',
+  omp_250: 'OMP 250',
 };
 
 export const BILLING_PLAN_LIMITS: Record<BillingPlanKey, number> = {
   omp_80: 80,
-  omp_150: 120,
-  omp_250: 200,
+  omp_150: 150,
+  omp_250: 250,
 };
 
 export const BILLING_PLAN_PRICES_MXN: Record<BillingPlanKey, number> = {

@@ -35,8 +35,8 @@ Esta seccion resume las correcciones de estabilizacion realizadas en la ronda ac
 
 - Se unifico el modelo de planes de congregacion con la fuente de billing actual:
   - `omp_80`: 80 usuarios activos.
-  - `omp_150`: 120 usuarios activos.
-  - `omp_250`: 200 usuarios activos.
+  - `omp_150`: 150 usuarios activos.
+  - `omp_250`: 250 usuarios activos.
 - `src/types/congregation-plan.ts` ahora reutiliza los tipos, etiquetas y limites de `src/types/billing.ts`.
 - `src/services/congregations/congregations-service.ts` lee primero `congregations/{congregationId}.billing` y usa `/congregations/{congregationId}/private/plan` solo como fallback legacy.
 - `functions/src/users.ts` valida capacidad de usuarios activos con los nuevos planes y mantiene compatibilidad con planes antiguos `basic`, `intermediate`, `complete` y limite legacy 70.
@@ -65,8 +65,8 @@ node functions/scripts/migrate-legacy-plans-and-roles.js --write
   - `usuario` -> `user`.
 - Normaliza planes legacy:
   - `basic` / 70 -> `omp_80`.
-  - `intermediate` / 120 -> `omp_150`.
-  - `complete` / 200 -> `omp_250`.
+  - `intermediate` / 120 -> `omp_150` con limite vigente 150.
+  - `complete` / 200 -> `omp_250` con limite vigente 250.
 
 ### Usuarios Y Errores `internal`
 
@@ -94,7 +94,7 @@ node functions/scripts/migrate-legacy-plans-and-roles.js --write
 - Logout limpia cache de sesion y cache persistente sin romper el cierre de sesion si AsyncStorage falla.
 - El cambio de congregacion limpia el cache de la congregacion anterior para evitar mezclar datos.
 - Lecturas sensibles como billing/plan usan `persist: false`; el cache no es autoridad para permisos, pagos ni seguridad.
-- Se agrego documentacion en `docs/cache-strategy.md` y un ejemplo de pruebas en `docs/persistent-cache.test.ts.example`.
+- Se agrego documentacion en `docs/cache-strategy.md` y pruebas reales en `src/services/repositories/__tests__/persistent-cache.test.ts`.
 
 ### Organigrama
 
@@ -151,6 +151,7 @@ Resultado:
 
 - Lint de Expo: correcto.
 - TypeScript app: correcto.
+- Tests frontend: 14 pruebas correctas.
 - Lint de Cloud Functions: correcto.
 - Build de Cloud Functions: correcto.
 - Tests de Cloud Functions: 75 pruebas correctas.
@@ -212,10 +213,15 @@ La documentacion larga vive en `docs/`:
 
 - `docs/architecture.md`: arquitectura general, limites de carpetas y flujo cliente/backend.
 - `docs/permissions-model.md`: modelo formal de roles, permisos, privilegios y responsabilidades.
+- `docs/permissions-matrix.md`: matriz viva por modulo para UI, Functions y Rules.
 - `docs/firestore-security.md`: criterios de seguridad para reglas, datos y operaciones sensibles.
 - `docs/billing-and-subscriptions.md`: planes, limites, cobros y flujo pendiente.
 - `docs/deployment.md`: comandos de Firebase, Functions, Android y Web.
 - `docs/notifications.md`: tokens push, notificaciones internas y pruebas reales.
+- `docs/qa-notifications.md`: checklist QA de notificaciones reales.
+- `docs/qa-mobile-navigation.md`: checklist QA de navegacion movil profunda.
+- `docs/app-check-rollout.md`: plan gradual de App Check.
+- `docs/refactor-plan.md`: plan para separar pantallas grandes en hooks, validators y mappers.
 - `docs/ux-guidelines.md`: navegacion movil, estados vacios, errores y dashboard por perfil.
 - `docs/cache-strategy.md`: cache en memoria, cache persistente, ciclo anual e invalidacion.
 - `docs/testing.md`: estrategia de pruebas frontend, Functions y Firestore Rules.
@@ -273,6 +279,8 @@ npm run web
 npm run build:web
 npm run preview:web
 npm run lint
+npm run test
+npm run test:rules
 npm run validate
 ```
 

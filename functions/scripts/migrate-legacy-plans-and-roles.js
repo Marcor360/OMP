@@ -4,8 +4,8 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 const PLAN_LIMITS = {
   omp_80: 80,
-  omp_150: 120,
-  omp_250: 200,
+  omp_150: 150,
+  omp_250: 250,
 };
 
 const normalizeRole = (value) => {
@@ -23,8 +23,11 @@ const normalizePlanKey = (value) => {
 };
 
 const normalizePlanKeyFromLimit = (value) => {
+  if (value === 250) return 'omp_250';
   if (value === 200) return 'omp_250';
+  if (value === 150) return 'omp_150';
   if (value === 120) return 'omp_150';
+  if (value === 80) return 'omp_80';
   if (value === 70) return 'omp_80';
   return null;
 };

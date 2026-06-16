@@ -49,8 +49,11 @@ const normalizePlanLimit = (value: unknown, fallbackPlanId: CongregationPlanId):
 
   const normalized = Math.max(0, Math.floor(value));
   if (normalized === 70) return CONGREGATION_PLAN_LIMITS.omp_80;
+  if (normalized === 80) return CONGREGATION_PLAN_LIMITS.omp_80;
   if (normalized === 120) return CONGREGATION_PLAN_LIMITS.omp_150;
+  if (normalized === 150) return CONGREGATION_PLAN_LIMITS.omp_150;
   if (normalized === 200) return CONGREGATION_PLAN_LIMITS.omp_250;
+  if (normalized === 250) return CONGREGATION_PLAN_LIMITS.omp_250;
   return normalized;
 };
 

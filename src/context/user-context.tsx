@@ -15,6 +15,7 @@ import { getCurrentUserProfile } from '@/src/services/users/users-service';
 import { CongregationAccessState } from '@/src/types/congregation-access';
 import { AppUser, UserRole } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { createLogger } from '@/src/utils/logger';
 
 interface UserContextType {
   appUser: AppUser | null;
@@ -38,6 +39,7 @@ interface UserContextType {
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
+const userLogger = createLogger('UserContext');
 const PROFILE_LOAD_RETRY_DELAYS_MS = [0, 600, 1500] as const;
 
 const wait = (ms: number): Promise<void> =>
@@ -65,7 +67,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) {
-      console.log('[UserContext] Sin usuario autenticado, limpiando perfil');
+      userLogger.debug('Sin usuario autenticado, limpiando perfil');
       loadedUidRef.current = null;
       setAppUser(null);
       setCongregationAccess(null);
@@ -74,7 +76,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    console.log('[UserContext] Iniciando carga de perfil para:', user.uid);
+    userLogger.debug('Iniciando carga de perfil', user.uid);
     const isDifferentUser = loadedUidRef.current !== user.uid;
     loadedUidRef.current = user.uid;
 
@@ -120,14 +122,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
         if (cancelled) return;
 
-        console.log('[UserContext] Perfil cargado:', profile ? 'existe' : 'null');
+        userLogger.debug('Perfil cargado', profile ? 'existe' : 'null');
         loadedUidRef.current = user.uid;
         setAppUser(profile);
         setCongregationAccess(null);
 
         if (!profile) {
           const errorMsg = 'No se encontro el perfil del usuario autenticado.';
-          console.warn('[UserContext]', errorMsg);
+          userLogger.warn(errorMsg);
           setProfileError(errorMsg);
           setLoadingProfile(false);
           return;
@@ -135,12 +137,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
         if (!profile.isActive) {
           const errorMsg = 'Tu cuenta esta inactiva. Contacta a un administrador.';
-          console.warn('[UserContext]', errorMsg);
+          userLogger.warn(errorMsg);
           setProfileError(errorMsg);
           setCongregationAccess(null);
         } else if (!profile.congregationId) {
           const errorMsg = 'Tu cuenta no tiene congregacion asignada.';
-          console.warn('[UserContext]', errorMsg);
+          userLogger.warn(errorMsg);
           setProfileError(errorMsg);
           setCongregationAccess(null);
         } else {
@@ -150,7 +152,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           setCongregationAccess(accessState);
 
           if (accessState.isBlocked) {
-            console.warn('[UserContext]', accessState.message);
+            userLogger.warn(accessState.message);
             setProfileError(accessState.message);
             return;
           }
@@ -160,7 +162,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         if (cancelled) return;
         const formattedError = formatFirestoreError(error);
-        console.error('[UserContext] Error cargando perfil:', formattedError);
+        userLogger.error('Error cargando perfil', formattedError);
         if (isDifferentUser) {
           setAppUser(null);
           setCongregationAccess(null);
@@ -170,7 +172,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       } finally {
         if (!cancelled) {
           setLoadingProfile(false);
-          console.log('[UserContext] loadingProfile cambiado a false');
+          userLogger.debug('loadingProfile cambiado a false');
         }
       }
     };

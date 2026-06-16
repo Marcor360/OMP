@@ -23,8 +23,8 @@ Planes vigentes:
 | Plan | Usuarios activos | Precio mensual |
 | --- | ---: | ---: |
 | `omp_80` | 80 | 70 MXN |
-| `omp_150` | 120 | 120 MXN |
-| `omp_250` | 200 | 200 MXN |
+| `omp_150` | 150 | 120 MXN |
+| `omp_250` | 250 | 200 MXN |
 
 ## Compatibilidad
 
@@ -35,8 +35,8 @@ Valores antiguos que deben migrarse:
 | Legacy | Actual |
 | --- | --- |
 | `basic` / 70 usuarios | `omp_80` |
-| `intermediate` | `omp_150` |
-| `complete` | `omp_250` |
+| `intermediate` / 120 usuarios | `omp_150` con limite 150 |
+| `complete` / 200 usuarios | `omp_250` con limite 250 |
 
 Durante la migracion, mantener `activeUsersLimit` y `userLimit` sincronizados para no romper pantallas antiguas ni validaciones backend.
 
@@ -50,7 +50,7 @@ Durante la migracion, mantener `activeUsersLimit` y `userLimit` sincronizados pa
 ## Pendientes Tecnicos
 
 - Ejecutar migracion real de documentos legacy.
-- Confirmar que no quedan documentos con `basic`, `intermediate`, `complete` o 70 como limite vigente.
+- Confirmar que no quedan documentos con `basic`, `intermediate`, `complete` o limites legacy 70, 120 o 200 como limite vigente.
 - Endurecer reglas y validaciones despues de confirmar la migracion.
 - Panel administrativo externo para gestion de congregaciones, plan y billing.
 - Enforcement gradual de App Check en Functions cuando Android, iOS y Web esten configurados.

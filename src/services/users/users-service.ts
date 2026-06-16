@@ -530,6 +530,7 @@ export const getUserById = async (
     maxAgeMs: options?.maxAgeMs ?? USER_PROFILE_CACHE_TTL_MS,
     forceServer: options?.forceServer,
     isIncomplete: isIncompleteProfile,
+    persist: false,
   });
 };
 

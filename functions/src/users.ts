@@ -217,8 +217,8 @@ type BillingPlanKey = 'omp_80' | 'omp_150' | 'omp_250';
 
 const PLAN_LIMITS: Record<BillingPlanKey, number> = {
   omp_80: 80,
-  omp_150: 120,
-  omp_250: 200,
+  omp_150: 150,
+  omp_250: 250,
 };
 
 const USERS_QUERY_PAGE_SIZE = 200;
@@ -1497,8 +1497,11 @@ const normalizePlanLimit = (value: unknown, fallbackPlanKey: BillingPlanKey): nu
 
   const normalized = Math.max(0, Math.floor(value));
   if (normalized === 70) return PLAN_LIMITS.omp_80;
+  if (normalized === 80) return PLAN_LIMITS.omp_80;
   if (normalized === 120) return PLAN_LIMITS.omp_150;
+  if (normalized === 150) return PLAN_LIMITS.omp_150;
   if (normalized === 200) return PLAN_LIMITS.omp_250;
+  if (normalized === 250) return PLAN_LIMITS.omp_250;
   return normalized;
 };
 

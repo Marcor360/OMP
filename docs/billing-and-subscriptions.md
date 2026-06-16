@@ -7,8 +7,8 @@ El cobro de OMP es por congregacion, no por usuario individual. Solo se usa Stri
 | Plan | Usuarios activos | Precio mensual |
 | --- | ---: | ---: |
 | `omp_80` | 80 | 70 MXN |
-| `omp_150` | 120 | 120 MXN |
-| `omp_250` | 200 | 200 MXN |
+| `omp_150` | 150 | 120 MXN |
+| `omp_250` | 250 | 200 MXN |
 
 ## Firebase Functions Secrets
 
@@ -183,10 +183,10 @@ La pantalla de exito no confirma el pago por si misma; Firestore se considera la
 
 ## Migracion De Campos Antiguos
 
-Los planes actuales son `omp_80`, `omp_150` y `omp_250`, con limites de 80, 120 y 200 usuarios activos. Si existen documentos antiguos con `basic`, `intermediate`, `complete` o limite 70, migrarlos a:
+Los planes actuales son `omp_80`, `omp_150` y `omp_250`, con limites de 80, 150 y 250 usuarios activos. Si existen documentos antiguos con `basic`, `intermediate`, `complete` o limites legacy 70, 120 o 200, migrarlos a:
 
 - `basic` / 70 usuarios anteriores -> `omp_80`.
-- `intermediate` -> `omp_150`.
-- `complete` -> `omp_250`.
+- `intermediate` / 120 usuarios anteriores -> `omp_150` con limite vigente 150.
+- `complete` / 200 usuarios anteriores -> `omp_250` con limite vigente 250.
 
 Mantener `activeUsersLimit` y `userLimit` sincronizados durante la migracion para compatibilidad con pantallas antiguas y nuevas.
