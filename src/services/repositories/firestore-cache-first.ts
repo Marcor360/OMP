@@ -11,6 +11,10 @@ import {
 
 import { logFirestoreRead } from '@/src/services/firebase/firestore-debug';
 import {
+  getPersistentCachedValue,
+  setPersistentCachedValue,
+} from '@/src/services/repositories/persistent-cache';
+import {
   clearSessionCachedValue,
   getSessionCachedValue,
   runSingleFlight,
@@ -39,6 +43,7 @@ interface CacheFirstDocumentOptions<T> {
   maxAgeMs?: number;
   forceServer?: boolean;
   isIncomplete?: (value: T) => boolean;
+  persist?: boolean;
 }
 
 interface CacheFirstQueryOptions<T> {
@@ -48,6 +53,7 @@ interface CacheFirstQueryOptions<T> {
   maxAgeMs?: number;
   forceServer?: boolean;
   isIncomplete?: (value: T) => boolean;
+  persist?: boolean;
 }
 
 const isValueIncomplete = <T>(
@@ -56,6 +62,37 @@ const isValueIncomplete = <T>(
 ): boolean => {
   if (!isIncomplete) return false;
   return isIncomplete(value);
+};
+
+const isUsableDocumentValue = <T>(
+  value: T | null | undefined,
+  isIncomplete?: (candidate: T) => boolean
+): value is T | null => {
+  if (value === undefined) return false;
+  return !(value !== null && isValueIncomplete(value, isIncomplete));
+};
+
+const setCacheLayers = async <T>(
+  layerCacheKey: string,
+  value: T,
+  persist: boolean
+): Promise<void> => {
+  setSessionCachedValue(layerCacheKey, value);
+
+  if (persist) {
+    await setPersistentCachedValue(layerCacheKey, value);
+  }
+};
+
+const setValidCacheLayers = async <T>(
+  layerCacheKey: string,
+  value: T,
+  persist: boolean,
+  isIncomplete?: (candidate: T) => boolean
+): Promise<void> => {
+  if (!isValueIncomplete(value, isIncomplete)) {
+    await setCacheLayers(layerCacheKey, value, persist);
+  }
 };
 
 export const getDocumentCacheFirst = async <T>(
@@ -68,6 +105,7 @@ export const getDocumentCacheFirst = async <T>(
     maxAgeMs,
     forceServer: requestedForceServer = false,
     isIncomplete,
+    persist = true,
   } = options;
   const skipLocalCacheRead = shouldBypassLocalCache();
   const forceServer = requestedForceServer || skipLocalCacheRead;
@@ -78,42 +116,57 @@ export const getDocumentCacheFirst = async <T>(
   if (!forceServer) {
     const memoryValue = getSessionCachedValue<T | null>(memoryCacheKey, maxAgeMs);
 
-    if (
-      memoryValue !== undefined &&
-      !(memoryValue !== null && isValueIncomplete(memoryValue, isIncomplete))
-    ) {
+    if (isUsableDocumentValue(memoryValue, isIncomplete)) {
       logFirestoreRead(cacheKey, 'memory');
       return memoryValue;
     }
   }
 
   return runSingleFlight<T | null>(requestKey, async () => {
-    let cachedValue: T | null | CacheMiss =
-      fallbackMemoryValue !== undefined ? fallbackMemoryValue : CACHE_MISS;
+    let cachedValue: T | null | CacheMiss = isUsableDocumentValue(
+      fallbackMemoryValue,
+      isIncomplete
+    )
+      ? fallbackMemoryValue
+      : CACHE_MISS;
 
-    // Siempre intentamos cache local como posible respaldo.
-    // Si forceServer=true, NO retornamos desde cache; solo lo guardamos para fallback.
+    if (persist) {
+      try {
+        const persistentValue = await getPersistentCachedValue<T | null>(
+          memoryCacheKey,
+          maxAgeMs
+        );
+
+        if (isUsableDocumentValue(persistentValue, isIncomplete)) {
+          cachedValue = persistentValue;
+          setSessionCachedValue(memoryCacheKey, persistentValue);
+
+          if (!forceServer) {
+            logFirestoreRead(cacheKey, 'persistent');
+            return persistentValue;
+          }
+        }
+      } catch {
+        // AsyncStorage nunca debe impedir leer desde Firestore.
+      }
+    }
+
     if (!skipLocalCacheRead && (!forceServer || cachedValue === CACHE_MISS)) {
       try {
         const cacheSnapshot = await getDocFromCache(ref);
-
-        if (!cacheSnapshot.exists()) {
-          cachedValue = null;
-        } else {
-          cachedValue = mapSnapshot(cacheSnapshot);
-        }
-
-        setSessionCachedValue(memoryCacheKey, cachedValue);
+        const localValue = cacheSnapshot.exists() ? mapSnapshot(cacheSnapshot) : null;
         logFirestoreRead(cacheKey, 'cache');
 
-        if (
-          !forceServer &&
-          !(cachedValue !== null && isValueIncomplete(cachedValue, isIncomplete))
-        ) {
-          return cachedValue;
+        if (isUsableDocumentValue(localValue, isIncomplete)) {
+          cachedValue = localValue;
+          await setCacheLayers(memoryCacheKey, localValue, persist);
+
+          if (!forceServer) {
+            return localValue;
+          }
         }
       } catch {
-        // Mantener fallback previo (memoria) si existía.
+        // Mantener el mejor fallback disponible.
       }
     }
 
@@ -121,13 +174,13 @@ export const getDocumentCacheFirst = async <T>(
       const serverSnapshot = await getDocFromServer(ref);
 
       if (!serverSnapshot.exists()) {
-        setSessionCachedValue(memoryCacheKey, null);
+        await setCacheLayers(memoryCacheKey, null, persist);
         logFirestoreRead(cacheKey, 'server', 'exists=false');
         return null;
       }
 
       const mappedValue = mapSnapshot(serverSnapshot);
-      setSessionCachedValue(memoryCacheKey, mappedValue);
+      await setValidCacheLayers(memoryCacheKey, mappedValue, persist, isIncomplete);
       logFirestoreRead(cacheKey, 'server');
       return mappedValue;
     } catch (error) {
@@ -151,6 +204,7 @@ export const getQueryCacheFirst = async <T>(
     maxAgeMs,
     forceServer: requestedForceServer = false,
     isIncomplete,
+    persist = true,
   } = options;
   const skipLocalCacheRead = shouldBypassLocalCache();
   const forceServer = requestedForceServer || skipLocalCacheRead;
@@ -169,29 +223,51 @@ export const getQueryCacheFirst = async <T>(
 
   return runSingleFlight<T>(requestKey, async () => {
     let cachedValue: T | CacheMiss =
-      fallbackMemoryValue !== undefined ? fallbackMemoryValue : CACHE_MISS;
+      fallbackMemoryValue !== undefined && !isValueIncomplete(fallbackMemoryValue, isIncomplete)
+        ? fallbackMemoryValue
+        : CACHE_MISS;
 
-    // Siempre intentamos cache local como posible respaldo.
-    // Si forceServer=true, NO retornamos desde cache; solo lo guardamos para fallback.
+    if (persist) {
+      try {
+        const persistentValue = await getPersistentCachedValue<T>(memoryCacheKey, maxAgeMs);
+
+        if (persistentValue !== undefined && !isValueIncomplete(persistentValue, isIncomplete)) {
+          cachedValue = persistentValue;
+          setSessionCachedValue(memoryCacheKey, persistentValue);
+
+          if (!forceServer) {
+            logFirestoreRead(cacheKey, 'persistent');
+            return persistentValue;
+          }
+        }
+      } catch {
+        // AsyncStorage nunca debe impedir leer desde Firestore.
+      }
+    }
+
     if (!skipLocalCacheRead && (!forceServer || cachedValue === CACHE_MISS)) {
       try {
         const cacheSnapshot = await getDocsFromCache(query);
-        cachedValue = mapSnapshot(cacheSnapshot);
-        setSessionCachedValue(memoryCacheKey, cachedValue);
+        const localValue = mapSnapshot(cacheSnapshot);
         logFirestoreRead(cacheKey, 'cache');
 
-        if (!forceServer && !isValueIncomplete(cachedValue, isIncomplete)) {
-          return cachedValue;
+        if (!isValueIncomplete(localValue, isIncomplete)) {
+          cachedValue = localValue;
+          await setCacheLayers(memoryCacheKey, localValue, persist);
+
+          if (!forceServer) {
+            return localValue;
+          }
         }
       } catch {
-        // Mantener fallback previo (memoria) si existía.
+        // Mantener el mejor fallback disponible.
       }
     }
 
     try {
       const serverSnapshot = await getDocsFromServer(query);
       const mappedValue = mapSnapshot(serverSnapshot);
-      setSessionCachedValue(memoryCacheKey, mappedValue);
+      await setValidCacheLayers(memoryCacheKey, mappedValue, persist, isIncomplete);
       logFirestoreRead(cacheKey, 'server');
       return mappedValue;
     } catch (error) {

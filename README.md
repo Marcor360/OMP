@@ -80,6 +80,22 @@ node functions/scripts/migrate-legacy-plans-and-roles.js --write
 - `src/screens/users/UsersListScreen.tsx` ahora muestra accion de reintento cuando ocurre un error al cargar usuarios.
 - `src/lib/firebase/errors.ts` evita mostrar mensajes crudos como `internal` y los convierte en mensajes humanos.
 
+### Cache Persistente Y Cache-First
+
+- Se agrego cache persistente controlado con AsyncStorage en `src/services/repositories/persistent-cache.ts`.
+- `src/services/repositories/firestore-cache-first.ts` ahora lee en capas:
+  - memoria de sesion;
+  - cache persistente AsyncStorage;
+  - cache local de Firestore;
+  - servidor Firestore.
+- El cache persistente usa ciclo anual del 1 de septiembre al 31 de agosto y se limpia automaticamente si cambia el ciclo.
+- El cache persistente esta acotado a 300 entradas y 250 KB por entrada para evitar crecimiento indefinido.
+- La metadata guarda `schemaVersion`; si cambia el esquema, se reinicia solo el cache persistente de OMP.
+- Logout limpia cache de sesion y cache persistente sin romper el cierre de sesion si AsyncStorage falla.
+- El cambio de congregacion limpia el cache de la congregacion anterior para evitar mezclar datos.
+- Lecturas sensibles como billing/plan usan `persist: false`; el cache no es autoridad para permisos, pagos ni seguridad.
+- Se agrego documentacion en `docs/cache-strategy.md` y un ejemplo de pruebas en `docs/persistent-cache.test.ts.example`.
+
 ### Organigrama
 
 - `src/modules/organization/components/OrganizationChart.tsx` ya no dispara un error no capturado si falla la carga de usuarios activos para editar el organigrama.
@@ -201,6 +217,7 @@ La documentacion larga vive en `docs/`:
 - `docs/deployment.md`: comandos de Firebase, Functions, Android y Web.
 - `docs/notifications.md`: tokens push, notificaciones internas y pruebas reales.
 - `docs/ux-guidelines.md`: navegacion movil, estados vacios, errores y dashboard por perfil.
+- `docs/cache-strategy.md`: cache en memoria, cache persistente, ciclo anual e invalidacion.
 - `docs/testing.md`: estrategia de pruebas frontend, Functions y Firestore Rules.
 - `docs/predeploy-validation.md`: checklist de validacion antes de publicar.
 - `docs/deployment-mobile.md`: guia movil con EAS.

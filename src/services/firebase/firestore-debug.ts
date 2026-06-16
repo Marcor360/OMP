@@ -1,4 +1,4 @@
-type FirestoreReadSource = 'memory' | 'cache' | 'server' | 'server-fallback';
+type FirestoreReadSource = 'memory' | 'persistent' | 'cache' | 'server' | 'server-fallback';
 
 const LOG_PREFIX = '[FirestoreIO]';
 

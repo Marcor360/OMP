@@ -15,6 +15,7 @@ import { getAppColors } from '@/src/styles';
 import { useInitialPermissions } from '@/src/hooks/use-initial-permissions';
 import { useCacheControlCleanup } from '@/src/hooks/use-cache-control-cleanup';
 import { configureGlobalNotificationHandler } from '@/src/services/notifications/push-notifications.service';
+import { initializePersistentCacheCycle } from '@/src/services/repositories/persistent-cache';
 import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 import { buildPathWithParams, getSafeRedirectPath } from '@/src/utils/navigation/redirect';
 
@@ -200,6 +201,7 @@ function AppLayout() {
   const { colorScheme, isReady } = useAppTheme();
   const colors = getAppColors(colorScheme);
   const [forceReady, setForceReady] = useState(false);
+  const [persistentCacheReady, setPersistentCacheReady] = useState(false);
 
   // Timeout de seguridad: si el tema tarda más de 2s, ignoramos isReady
   useEffect(() => {
@@ -212,7 +214,25 @@ function AppLayout() {
     return () => clearTimeout(timer);
   }, [isReady]);
 
-  if (!isReady && !forceReady) {
+  useEffect(() => {
+    let cancelled = false;
+
+    initializePersistentCacheCycle()
+      .catch((error) => {
+        console.warn('[AppLayout] No se pudo inicializar cache persistente.', error);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPersistentCacheReady(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if ((!isReady && !forceReady) || !persistentCacheReady) {
     return null;
   }
 

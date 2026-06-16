@@ -1,3 +1,8 @@
+import {
+  clearPersistentCachedValue,
+  clearPersistentCacheByPrefix,
+} from '@/src/services/repositories/persistent-cache';
+
 type SessionCacheEntry<T> = {
   value: T;
   updatedAt: number;
@@ -37,6 +42,7 @@ export const setSessionCachedValue = <T>(key: string, value: T): void => {
 export const clearSessionCachedValue = (key: string): void => {
   valueCache.delete(key);
   inFlightCache.delete(key);
+  void clearPersistentCachedValue(key);
 };
 
 export const clearSessionCacheByPrefix = (prefix: string): void => {
@@ -53,6 +59,8 @@ export const clearSessionCacheByPrefix = (prefix: string): void => {
       inFlightCache.delete(key);
     }
   });
+
+  void clearPersistentCacheByPrefix(prefix);
 };
 
 export const clearAllSessionCache = (): void => {

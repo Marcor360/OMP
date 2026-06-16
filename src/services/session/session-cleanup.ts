@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { markFirestoreCacheSessionBoundary } from '@/src/services/repositories/firestore-cache-first';
+import { clearAllPersistentCache } from '@/src/services/repositories/persistent-cache';
 import { clearAllSessionCache } from '@/src/services/repositories/session-cache';
 
 const SESSION_ASYNC_STORAGE_KEYS = [
@@ -19,20 +20,31 @@ const PRESERVED_ASYNC_STORAGE_KEYS = new Set([
   '@omp/theme-mode',
 ]);
 
+const warnSessionCleanupError = (operation: string, error: unknown): void => {
+  if (__DEV__) {
+    console.warn(`[session-cleanup] ${operation}`, error);
+  }
+};
+
 export const clearLocalSessionData = async (): Promise<void> => {
   markFirestoreCacheSessionBoundary();
   clearAllSessionCache();
+  await clearAllPersistentCache();
 
-  const keys = await AsyncStorage.getAllKeys();
-  const prefixMatches = keys.filter((key) =>
-    SESSION_ASYNC_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
-  );
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const prefixMatches = keys.filter((key) =>
+      SESSION_ASYNC_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+    );
 
-  const keysToRemove = Array.from(
-    new Set<string>([...SESSION_ASYNC_STORAGE_KEYS, ...prefixMatches])
-  ).filter((key) => !PRESERVED_ASYNC_STORAGE_KEYS.has(key));
+    const keysToRemove = Array.from(
+      new Set<string>([...SESSION_ASYNC_STORAGE_KEYS, ...prefixMatches])
+    ).filter((key) => !PRESERVED_ASYNC_STORAGE_KEYS.has(key));
 
-  if (keysToRemove.length > 0) {
-    await AsyncStorage.multiRemove(keysToRemove);
+    if (keysToRemove.length > 0) {
+      await AsyncStorage.multiRemove(keysToRemove);
+    }
+  } catch (error) {
+    warnSessionCleanupError('clear local async storage', error);
   }
 };

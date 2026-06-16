@@ -10,6 +10,8 @@ import React, {
 
 import { useAuth } from '@/src/context/auth-context';
 import { getCongregationAccessState } from '@/src/services/congregations/congregations-service';
+import { clearPersistentCacheByPrefix } from '@/src/services/repositories/persistent-cache';
+import { clearAllSessionCache } from '@/src/services/repositories/session-cache';
 import { getCurrentUserProfile } from '@/src/services/users/users-service';
 import { CongregationAccessState } from '@/src/types/congregation-access';
 import { AppUser, UserRole } from '@/src/types/user';
@@ -55,6 +57,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const forceServerNextLoadRef = useRef(false);
   const loadedUidRef = useRef<string | null>(null);
+  const loadedCongregationIdRef = useRef<string | null>(null);
 
   const refreshProfile = useCallback(() => {
     forceServerNextLoadRef.current = true;
@@ -65,6 +68,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     if (!user) {
       console.log('[UserContext] Sin usuario autenticado, limpiando perfil');
       loadedUidRef.current = null;
+      loadedCongregationIdRef.current = null;
       setAppUser(null);
       setCongregationAccess(null);
       setProfileError(null);
@@ -120,6 +124,19 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
         console.log('[UserContext] Perfil cargado:', profile ? 'existe' : 'null');
         loadedUidRef.current = user.uid;
+        const previousCongregationId = loadedCongregationIdRef.current;
+        const nextCongregationId = profile?.congregationId ?? null;
+        loadedCongregationIdRef.current = nextCongregationId;
+
+        if (
+          previousCongregationId &&
+          nextCongregationId &&
+          previousCongregationId !== nextCongregationId
+        ) {
+          clearAllSessionCache();
+          void clearPersistentCacheByPrefix(`congregation:${previousCongregationId}:`);
+        }
+
         setAppUser(profile);
         setCongregationAccess(null);
 

@@ -433,6 +433,7 @@ export const getCongregationPlanUsage = async (
     ref: congregationDocRef(congregationId),
     maxAgeMs: CONGREGATION_PLAN_CACHE_TTL_MS,
     forceServer: options?.forceServer,
+    persist: false,
     mapSnapshot: (snapshot) => snapshot.data() as Record<string, unknown>,
   });
 
@@ -443,6 +444,7 @@ export const getCongregationPlanUsage = async (
       ref: congregationPrivatePlanDocRef(congregationId),
       maxAgeMs: CONGREGATION_PLAN_CACHE_TTL_MS,
       forceServer: options?.forceServer,
+      persist: false,
       mapSnapshot: (snapshot) => snapshot.data() as Record<string, unknown>,
     });
   } catch {
