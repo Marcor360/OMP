@@ -1,12 +1,13 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
     "esModuleInterop": true,
     "types": ["jest", "node"],
     "noUnusedLocals": false,
     "strict": true,
+    "isolatedModules": true,
     "allowArbitraryExtensions": true
   },
   "include": [
