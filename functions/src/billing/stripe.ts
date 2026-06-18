@@ -6,6 +6,13 @@ import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { adminDb } from '../config/firebaseAdmin.js';
+import {
+  claimWebhookEvent,
+  markWebhookEventProcessed,
+  releaseWebhookEvent,
+  WEBHOOK_EVENTS_COLLECTION,
+  type WebhookClaimResult,
+} from './webhook-idempotency.js';
 
 type BillingPlanKey = 'omp_80' | 'omp_150' | 'omp_250';
 type ServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar' | string;
@@ -141,7 +148,12 @@ const getSecret = (secret: { name: string; value: () => string }): string => {
   return value;
 };
 
-const getStripe = () => new Stripe(getSecret(STRIPE_SECRET_KEY));
+// Fijamos apiVersion al literal del SDK instalado para evitar cambios de
+// comportamiento silenciosos si la version por defecto de la cuenta Stripe cambia.
+// Si un upgrade del SDK retira este literal, el typecheck fallara en `new Stripe(...)`
+// de abajo, forzando revisar el pin de forma consciente.
+const STRIPE_API_VERSION = '2026-05-27.dahlia';
+const getStripe = () => new Stripe(getSecret(STRIPE_SECRET_KEY), { apiVersion: STRIPE_API_VERSION });
 
 const getPriceId = (planKey: BillingPlanKey): string => getSecret(PLAN_PRICE_SECRETS[planKey]);
 
@@ -1036,6 +1048,27 @@ export const stripeWebhook = onRequest(
       return;
     }
 
+    // Idempotencia: reclamamos el evento de forma atomica antes de procesarlo,
+    // para no manejarlo (ni notificar) dos veces ante reentregas de Stripe.
+    const eventClaimRef = adminDb.collection(WEBHOOK_EVENTS_COLLECTION).doc(event.id);
+    let claim: WebhookClaimResult;
+    try {
+      claim = await claimWebhookEvent(eventClaimRef, event.type);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('[billing] webhook claim failed', { eventId: event.id, message });
+      response.status(500).send('Webhook claim failed');
+      return;
+    }
+    if (claim === 'duplicate') {
+      logger.info('[billing] webhook duplicate ignored', {
+        eventId: event.id,
+        eventType: event.type,
+      });
+      response.json({ received: true, duplicate: true });
+      return;
+    }
+
     try {
       let congregationId: string | null = null;
       const eventObject = event.data.object as unknown as Record<string, unknown>;
@@ -1071,8 +1104,12 @@ export const stripeWebhook = onRequest(
         await writeBillingHistory(congregationId, event, eventObject);
       }
 
+      await markWebhookEventProcessed(eventClaimRef);
       response.json({ received: true });
     } catch (error) {
+      // Liberamos la reclamacion para que el reintento de Stripe vuelva a procesar
+      // un evento que fallo a mitad de camino.
+      await releaseWebhookEvent(eventClaimRef, event.id);
       logger.error('[billing] webhook processing failed', {
         eventType: event.type,
         message: error instanceof Error ? error.message : String(error),

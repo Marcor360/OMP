@@ -2867,5 +2867,15 @@ service cloud.firestore {
     match /notifications/{notificationId} {
       allow read, write: if isSuperAdmin();
     }
+
+    // =========================================================================
+    // REGLAS: STRIPE WEBHOOK EVENTS (ledger de idempotencia)
+    // Solo lo escribe Cloud Functions con el Admin SDK (omite reglas).
+    // Ningun cliente debe leer ni escribir aqui.
+    // =========================================================================
+
+    match /stripeWebhookEvents/{eventId} {
+      allow read, write: if false;
+    }
   }
 }
