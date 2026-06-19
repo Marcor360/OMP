@@ -570,6 +570,36 @@ const buildServiceAssignmentLabel = (position?: ServicePosition, department?: Se
   return undefined;
 };
 
+const requiresAdminElderPosition = (position?: ServicePosition): boolean =>
+  position === 'coordinador' || position === 'secretario';
+
+const serviceAssignmentsRequireAdminElder = (
+  assignments: Pick<StoredServiceAssignment, 'position'>[]
+): boolean =>
+  assignments.some((assignment) => requiresAdminElderPosition(assignment.position));
+
+const rawServiceAssignmentsRequireAdminElder = (value: unknown): boolean => {
+  if (!Array.isArray(value)) return false;
+
+  return value.some((item) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return false;
+    const position = parseServicePosition((item as Record<string, unknown>).position);
+    return requiresAdminElderPosition(position);
+  });
+};
+
+const ensureAdminElderPrivileges = (
+  privileges: UserPrivileges | undefined,
+  shouldRequire: boolean
+): UserPrivileges | undefined =>
+  shouldRequire
+    ? {
+      ...(privileges ?? {}),
+      isElder: true,
+      isMinisterialServant: false,
+    }
+    : privileges;
+
 const normalizeAssignmentForRole = (
   role: Role,
   position?: ServicePosition,
@@ -1310,8 +1340,8 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
   const requiredCongregationId = congregationId as string;
   const requiredPassword = password as string;
 
-  const role = data.role;
-  assertValidRole(role);
+  const requestedRole = data.role;
+  assertValidRole(requestedRole);
 
   if (requiredPassword.length < 6) {
     throw new HttpsError('invalid-argument', 'La contrasena debe tener al menos 6 caracteres.');
@@ -1320,10 +1350,17 @@ const parseCreateUserPayload = (raw: unknown): CreateUserPayload => {
   const legacyAssignment = parseLegacyAssignmentLabel(normalizeText(data.department));
   const rawPosition = parseServicePosition(data.servicePosition) ?? legacyAssignment.position;
   const rawDepartment = parseServiceDepartment(data.serviceDepartment) ?? legacyAssignment.department;
+  const role: Role =
+    requiresAdminElderPosition(rawPosition) || rawServiceAssignmentsRequireAdminElder(data.serviceAssignments)
+      ? 'admin'
+      : requestedRole;
   const assignment = normalizeAssignmentForRole(role, rawPosition, rawDepartment);
   const serviceAssignments = parseServiceAssignments(data.serviceAssignments, role, assignment);
   const primaryAssignment = serviceAssignments[0] ?? assignment;
-  const privileges = parsePrivilegesWithLegacyFlags(data.privileges, data);
+  const privileges = ensureAdminElderPrivileges(
+    parsePrivilegesWithLegacyFlags(data.privileges, data),
+    serviceAssignmentsRequireAdminElder(serviceAssignments)
+  );
   const responsibilities = parseResponsibilities(data.responsibilities);
   const permissions = parsePermissions(data.permissions);
 
@@ -1734,6 +1771,9 @@ export const updateUserByAdmin = onCall(
       serviceDepartment?: ServiceDepartment;
       department?: string;
       serviceAssignments?: StoredServiceAssignment[];
+      privileges?: UserPrivileges;
+      isElder?: boolean;
+      isMinisterialServant?: boolean;
     };
 
     if (target.congregationId !== requester.congregationId) {
@@ -1747,7 +1787,7 @@ export const updateUserByAdmin = onCall(
     const currentRole = target.role === 'admin' || target.role === 'supervisor' || target.role === 'user'
       ? target.role
       : 'user';
-    const nextRole = payload.role ?? currentRole;
+    const requestedRole = payload.role ?? currentRole;
     const currentIsActive = Boolean(target.isActive);
     const nextIsActive = typeof payload.isActive === 'boolean' ? payload.isActive : currentIsActive;
 
@@ -1769,11 +1809,23 @@ export const updateUserByAdmin = onCall(
       nextDepartment = payload.serviceDepartment;
     }
 
+    const requestedAssignmentsRequireAdminElder = payload.serviceAssignmentsProvided
+      ? rawServiceAssignmentsRequireAdminElder(payload.serviceAssignmentsRaw)
+      : requiresAdminElderPosition(nextPosition);
+    const nextRole: Role = requestedAssignmentsRequireAdminElder ? 'admin' : requestedRole;
     const normalizedAssignment = normalizeAssignmentForRole(nextRole, nextPosition, nextDepartment);
     const nextServiceAssignments = payload.serviceAssignmentsProvided
       ? parseServiceAssignments(payload.serviceAssignmentsRaw, nextRole)
       : parseServiceAssignments(target.serviceAssignments, nextRole, normalizedAssignment);
     const primaryAssignment = nextServiceAssignments[0];
+    const finalRole: Role = serviceAssignmentsRequireAdminElder(nextServiceAssignments)
+      ? 'admin'
+      : nextRole;
+    const currentPrivileges = parsePrivilegesWithLegacyFlags(target.privileges, target as Record<string, unknown>);
+    const nextPrivileges = ensureAdminElderPrivileges(
+      payload.privilegesProvided ? payload.privileges : currentPrivileges,
+      serviceAssignmentsRequireAdminElder(nextServiceAssignments)
+    );
 
     await assertAssignmentUniqueness({
       congregationId: target.congregationId,
@@ -1820,8 +1872,8 @@ export const updateUserByAdmin = onCall(
       }
     }
 
-    if (payload.role) {
-      docUpdates.role = payload.role;
+    if (payload.role || finalRole !== currentRole) {
+      docUpdates.role = finalRole;
     }
 
     if (typeof payload.isActive === 'boolean') {
@@ -1862,13 +1914,13 @@ export const updateUserByAdmin = onCall(
         nextServiceAssignments.length > 0 ? nextServiceAssignments : FieldValue.delete();
     }
 
-    if (payload.privilegesProvided) {
+    if (payload.privilegesProvided || serviceAssignmentsRequireAdminElder(nextServiceAssignments)) {
       docUpdates.privileges =
-        payload.privileges && Object.keys(payload.privileges).length > 0
-          ? payload.privileges
+        nextPrivileges && Object.keys(nextPrivileges).length > 0
+          ? nextPrivileges
           : FieldValue.delete();
-      docUpdates.isElder = payload.privileges?.isElder === true;
-      docUpdates.isMinisterialServant = payload.privileges?.isMinisterialServant === true;
+      docUpdates.isElder = nextPrivileges?.isElder === true;
+      docUpdates.isMinisterialServant = nextPrivileges?.isMinisterialServant === true;
     }
 
     if (payload.responsibilitiesProvided) {

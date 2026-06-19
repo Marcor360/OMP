@@ -164,6 +164,25 @@ const resolveServiceAssignmentFromUser = (
 const assignmentKey = (assignment: Pick<UserServiceAssignment, 'position' | 'department'>): string =>
   `${assignment.position}:${assignment.department ?? ''}`;
 
+const requiresAdminElderAssignment = (
+  assignments: Pick<UserServiceAssignment, 'position'>[]
+): boolean =>
+  assignments.some(
+    (assignment) => assignment.position === 'coordinador' || assignment.position === 'secretario'
+  );
+
+const ensureAdminElderPrivileges = (
+  assignments: Pick<UserServiceAssignment, 'position'>[],
+  current: UserPrivileges
+): UserPrivileges =>
+  requiresAdminElderAssignment(assignments)
+    ? {
+      ...current,
+      isElder: true,
+      isMinisterialServant: false,
+    }
+    : current;
+
 const GENDER_LABELS: Record<UserGender, string> = {
   masculino: 'Masculino',
   femenino: 'Femenino',
@@ -417,6 +436,26 @@ export function UserFormScreen() {
       : null;
   }, [serviceDepartmentDraft, servicePositionDraft]);
 
+  const assignmentsRequiringAdminElder = useMemo(
+    () =>
+      selectedDraftAssignment
+        ? [...serviceAssignments, selectedDraftAssignment]
+        : serviceAssignments,
+    [selectedDraftAssignment, serviceAssignments]
+  );
+  const requiresAdminElder = requiresAdminElderAssignment(assignmentsRequiringAdminElder);
+
+  useEffect(() => {
+    if (!requiresAdminElder) return;
+
+    setRole((current) => (current === 'admin' ? current : 'admin'));
+    setPrivileges((current) =>
+      current.isElder === true && current.isMinisterialServant !== true
+        ? current
+        : { ...current, isElder: true, isMinisterialServant: false }
+    );
+  }, [requiresAdminElder]);
+
   const addServiceAssignment = () => {
     if (!isAdmin || !selectedDraftAssignment) return;
     if (serviceAssignments.some((item) => assignmentKey(item) === assignmentKey(selectedDraftAssignment))) {
@@ -456,6 +495,14 @@ export function UserFormScreen() {
       return;
     }
     setServiceAssignments((current) => [...current, selectedDraftAssignment]);
+    if (requiresAdminElderAssignment([selectedDraftAssignment])) {
+      setRole('admin');
+      setPrivileges((current) => ({
+        ...current,
+        isElder: true,
+        isMinisterialServant: false,
+      }));
+    }
     setServicePositionDraft('none');
     setServiceDepartmentDraft('');
     setErrors((current) => ({ ...current, assignment: undefined }));
@@ -688,6 +735,8 @@ export function UserFormScreen() {
       const normalizedServicePosition = primaryAssignment?.position;
       const normalizedServiceDepartment = primaryAssignment?.department;
       const departmentLabel = primaryAssignment?.label;
+      const finalRole: UserRole = requiresAdminElderAssignment(finalServiceAssignments) ? 'admin' : role;
+      const finalPrivileges = ensureAdminElderPrivileges(finalServiceAssignments, privileges);
 
       if (mode === 'create') {
         const createdUser = await createUserByAdmin({
@@ -701,7 +750,7 @@ export function UserFormScreen() {
             .join(' ')
             .trim(),
           email: generatedEmailPreview,
-          role,
+          role: finalRole,
           congregationId,
           gender: selectedGender,
           phone: normalizedPhone,
@@ -709,11 +758,11 @@ export function UserFormScreen() {
           servicePosition: normalizedServicePosition,
           serviceDepartment: normalizedServiceDepartment,
           serviceAssignments: finalServiceAssignments,
-          privileges,
+          privileges: finalPrivileges,
           responsibilities,
-          permissions: role === 'supervisor' ? permissions : undefined,
-          isElder: privileges.isElder === true,
-          isMinisterialServant: privileges.isMinisterialServant === true,
+          permissions: finalRole === 'supervisor' ? permissions : undefined,
+          isElder: finalPrivileges.isElder === true,
+          isMinisterialServant: finalPrivileges.isMinisterialServant === true,
           isActive: true,
         });
         const verifiedUser = await getUserById(createdUser.uid, { forceServer: true });
@@ -730,18 +779,18 @@ export function UserFormScreen() {
       } else if (id) {
         const payload: UpdateUserDTO = isAdmin ? {
           displayName: displayName.trim(),
-          role,
+          role: finalRole,
           gender: selectedGender,
           phone: normalizedPhone,
           department: departmentLabel,
           servicePosition: normalizedServicePosition,
           serviceDepartment: normalizedServiceDepartment,
           serviceAssignments: finalServiceAssignments,
-          privileges,
+          privileges: finalPrivileges,
           responsibilities,
-          permissions: role === 'supervisor' ? permissions : {},
-          isElder: privileges.isElder === true,
-          isMinisterialServant: privileges.isMinisterialServant === true,
+          permissions: finalRole === 'supervisor' ? permissions : {},
+          isElder: finalPrivileges.isElder === true,
+          isMinisterialServant: finalPrivileges.isMinisterialServant === true,
         } : {
           displayName: displayName.trim(),
           gender: selectedGender,
@@ -764,7 +813,7 @@ export function UserFormScreen() {
         }
 
         if (isAdmin) {
-          const expectedPrivileges = privileges;
+          const expectedPrivileges = finalPrivileges;
           const privilegesMismatch =
             Boolean(verifiedUser.privileges?.isElder) !== Boolean(expectedPrivileges.isElder) ||
             Boolean(verifiedUser.privileges?.isMinisterialServant) !== Boolean(expectedPrivileges.isMinisterialServant) ||
@@ -937,20 +986,43 @@ export function UserFormScreen() {
 
         <Field label="Rol">
           <View style={styles.roleRow}>
-            {roles.map((item) => (
-              <TouchableOpacity
-                key={item}
-                style={[styles.roleChip, role === item && styles.roleChipActive]}
-                onPress={() => setRole(item)}
-                activeOpacity={0.8}
-                disabled={!isAdmin}
-              >
-                <ThemedText style={[styles.roleChipText, role === item && styles.roleChipTextActive]}>
-                  {ROLE_LABELS[item]}
-                </ThemedText>
-              </TouchableOpacity>
-            ))}
+            {roles.map((item) => {
+              const disabledByRequiredAssignment = requiresAdminElder && item !== 'admin';
+              const disabled = !isAdmin || disabledByRequiredAssignment;
+
+              return (
+                <TouchableOpacity
+                  key={item}
+                  style={[
+                    styles.roleChip,
+                    role === item && styles.roleChipActive,
+                    disabledByRequiredAssignment && styles.departmentChipDisabled,
+                  ]}
+                  onPress={() => {
+                    if (disabled) return;
+                    setRole(item);
+                  }}
+                  activeOpacity={0.8}
+                  disabled={disabled}
+                >
+                  <ThemedText
+                    style={[
+                      styles.roleChipText,
+                      role === item && styles.roleChipTextActive,
+                      disabledByRequiredAssignment && styles.departmentChipTextDisabled,
+                    ]}
+                  >
+                    {ROLE_LABELS[item]}
+                  </ThemedText>
+                </TouchableOpacity>
+              );
+            })}
           </View>
+          {requiresAdminElder ? (
+            <ThemedText style={styles.hintText}>
+              Coordinador y Secretario quedan como Administrador y Anciano.
+            </ThemedText>
+          ) : null}
         </Field>
 
         <Field label="Genero *" error={errors.gender}>
@@ -1166,13 +1238,13 @@ export function UserFormScreen() {
             <ToggleChip
               label={PRIVILEGE_LABELS.isElder}
               selected={Boolean(privileges.isElder)}
-              disabled={!isAdmin}
+              disabled={!isAdmin || requiresAdminElder}
               onPress={() => togglePrivilege('isElder')}
             />
             <ToggleChip
               label={PRIVILEGE_LABELS.isMinisterialServant}
               selected={Boolean(privileges.isMinisterialServant)}
-              disabled={!isAdmin}
+              disabled={!isAdmin || requiresAdminElder}
               onPress={() => togglePrivilege('isMinisterialServant')}
             />
             <ToggleChip
@@ -1188,6 +1260,11 @@ export function UserFormScreen() {
               onPress={() => togglePrivilege('isAuxiliaryPioneer')}
             />
           </View>
+          {requiresAdminElder ? (
+            <ThemedText style={styles.hintText}>
+              Este nombramiento requiere Anciano; Siervo Ministerial no puede combinarse.
+            </ThemedText>
+          ) : null}
         </Field>
 
         <TouchableOpacity
