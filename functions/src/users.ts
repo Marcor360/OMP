@@ -1933,11 +1933,14 @@ export const updateUserByAdmin = onCall(
           : FieldValue.delete();
     }
 
-    if (payload.permissionsProvided) {
-      docUpdates.permissions =
-        payload.permissions && Object.keys(payload.permissions).length > 0
-          ? payload.permissions
-          : FieldValue.delete();
+    // Permisos pegajosos: un payload ausente o vacio conserva el set actual.
+    // Para retirar permisos se desmarcan individualmente o se cambia el rol.
+    if (
+      payload.permissionsProvided &&
+      payload.permissions &&
+      Object.keys(payload.permissions).length > 0
+    ) {
+      docUpdates.permissions = payload.permissions;
     }
 
     await targetRef.update(docUpdates);

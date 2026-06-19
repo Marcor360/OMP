@@ -804,7 +804,7 @@ export function UserFormScreen() {
           serviceAssignments: finalServiceAssignments,
           privileges: finalPrivileges,
           responsibilities,
-          permissions: finalRole === 'supervisor' ? permissions : {},
+          permissions: finalRole === 'supervisor' ? permissions : undefined,
           isElder: finalPrivileges.isElder === true,
           isMinisterialServant: finalPrivileges.isMinisterialServant === true,
         } : {
