@@ -35,6 +35,9 @@ import type {
   SaveDayInput,
   SubmitMonthlyReportResult,
 } from '@/src/modules/field-service/types/field-service.types';
+import { createLogger } from '@/src/utils/logger';
+
+const log = createLogger('field-service-context');
 
 // ─── Tipos del contexto ───────────────────────────────────────────────────────
 
@@ -92,7 +95,7 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
         purgeExecutedThisSession: purgeExecuted,
       });
     } catch (err) {
-      console.error('[FieldServiceContext] Error hidratando:', err);
+      log.error('[FieldServiceContext] Error hidratando:', err);
       setState({
         store: null,
         loading: false,
@@ -112,7 +115,7 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
   const handleSaveDay = useCallback(async (input: SaveDayInput) => {
     const currentStore = storeRef.current;
     if (!currentStore) {
-      console.warn('[FieldServiceContext] saveDay llamado antes de hidratación.');
+      log.warn('[FieldServiceContext] saveDay llamado antes de hidratación.');
       return;
     }
     try {
@@ -121,7 +124,7 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
       storeRef.current = updated;
       setState((prev) => ({ ...prev, store: updated }));
     } catch (err) {
-      console.error('[FieldServiceContext] Error guardando día:', err);
+      log.error('[FieldServiceContext] Error guardando día:', err);
     }
   }, []);
 
@@ -129,7 +132,7 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
   const handleRemoveDay = useCallback(async (date: string) => {
     const currentStore = storeRef.current;
     if (!currentStore) {
-      console.warn('[FieldServiceContext] removeDay llamado antes de hidratación.');
+      log.warn('[FieldServiceContext] removeDay llamado antes de hidratación.');
       return;
     }
     try {
@@ -138,7 +141,7 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
       storeRef.current = updated;
       setState((prev) => ({ ...prev, store: updated }));
     } catch (err) {
-      console.error('[FieldServiceContext] Error eliminando día:', err);
+      log.error('[FieldServiceContext] Error eliminando día:', err);
     }
   }, []);
 
@@ -171,7 +174,7 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       return result;
     } catch (err) {
-      console.error('[FieldServiceContext] Error enviando informe mensual:', err);
+      log.error('[FieldServiceContext] Error enviando informe mensual:', err);
       return {
         ok: false,
         reason: 'OUTSIDE_WINDOW',

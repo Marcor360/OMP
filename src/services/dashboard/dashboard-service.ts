@@ -12,8 +12,10 @@ import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import { getAssignments as getPanelAssignments } from '@/src/modules/assignments/services/assignments.service';
 import { Assignment as PanelAssignment } from '@/src/modules/assignments/types/assignment.types';
 import { getAllUsers } from '@/src/services/users/users-service';
+import { createLogger } from '@/src/utils/logger';
 
 const PENDING_PANEL_STATUSES = new Set(['pending', 'assigned', 'in_progress', 'overdue']);
+const log = createLogger('dashboard-service');
 
 const MEETING_ASSIGNMENT_CATEGORIES = new Set(['midweek', 'weekend']);
 
@@ -246,7 +248,7 @@ export const getDashboardData = async (params: {
       isFirebaseErrorCode(error, 'failed-precondition');
 
     if (!canFallbackSilently && __DEV__) {
-      console.warn('Dashboard summary read failed, using fallback weekly mode:', error);
+      log.warn('Dashboard summary read failed, using fallback weekly mode:', error);
     }
   }
 

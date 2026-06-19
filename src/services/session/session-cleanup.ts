@@ -3,6 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { markFirestoreCacheSessionBoundary } from '@/src/services/repositories/firestore-cache-first';
 import { clearAllPersistentCache } from '@/src/services/repositories/persistent-cache';
 import { clearAllSessionCache } from '@/src/services/repositories/session-cache';
+import { createLogger } from '@/src/utils/logger';
+
+const log = createLogger('session-cleanup');
 
 const SESSION_ASYNC_STORAGE_KEYS = [
   '@cleaning_groups',
@@ -22,7 +25,7 @@ const PRESERVED_ASYNC_STORAGE_KEYS = new Set([
 
 const warnSessionCleanupError = (operation: string, error: unknown): void => {
   if (__DEV__) {
-    console.warn(`[session-cleanup] ${operation}`, error);
+    log.warn(`[session-cleanup] ${operation}`, error);
   }
 };
 

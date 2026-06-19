@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { createLogger } from '@/src/utils/logger';
+
 type PersistentCacheEntry<T> = {
   value: T;
   updatedAt: number;
@@ -23,6 +25,8 @@ const CACHE_SCHEMA_VERSION = 1;
 const MAX_PERSISTENT_CACHE_ENTRIES = 300;
 const MAX_PERSISTENT_CACHE_ENTRY_BYTES = 250 * 1024;
 
+const log = createLogger('persistent-cache');
+
 let initializationPromise: Promise<void> | null = null;
 
 export const getAnnualCacheCycleKey = (date = new Date()): string => {
@@ -45,13 +49,13 @@ export const buildUserCacheKey = (
 
 const warnPersistentCacheError = (operation: string, error: unknown): void => {
   if (__DEV__) {
-    console.warn(`[persistent-cache] ${operation}`, error);
+    log.warn(`[persistent-cache] ${operation}`, error);
   }
 };
 
 const debugPersistentCache = (message: string, key?: string): void => {
   if (__DEV__) {
-    console.debug(`[persistent-cache] ${message}${key ? ` ${key}` : ''}`);
+    log.debug(`[persistent-cache] ${message}${key ? ` ${key}` : ''}`);
   }
 };
 

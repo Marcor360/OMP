@@ -51,6 +51,9 @@ import {
   UserStatus,
 } from '@/src/types/user';
 import { PERMISSION_ACTIONS, PERMISSION_DEPARTMENTS } from '@/src/utils/permissions/permissions';
+import { createLogger } from '@/src/utils/logger';
+
+const log = createLogger('users-service');
 
 const isUserRole = (value: unknown): value is UserRole =>
   value === 'admin' || value === 'supervisor' || value === 'user';
@@ -505,7 +508,7 @@ const getUsersForCurrentCongregationCached = async (
         throw error;
       }
 
-      console.warn('listUsersForCurrentCongregation failed; falling back to Firestore query.', error);
+      log.warn('listUsersForCurrentCongregation failed; falling back to Firestore query.', error);
       users = await listUsersForCongregationFromFirestore(congregationId, {
         activeOnly: options?.activeOnly,
       });
@@ -657,7 +660,7 @@ export const subscribeToUsers = (
     })
     .catch((error) => {
       if (!cancelled) {
-        console.error('subscribeToUsers error:', error);
+        log.error('subscribeToUsers error:', error);
         onError?.(error);
       }
     });

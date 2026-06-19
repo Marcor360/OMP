@@ -10,9 +10,11 @@ import {
 import { db } from '@/src/config/firebase/firebase';
 import { clearTemporaryCacheData } from '@/src/services/session/session-cleanup';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { createLogger } from '@/src/utils/logger';
 
 const CACHE_CONTROL_DOC = doc(db, 'system', 'cacheControl');
 const CACHE_CONTROL_ACK_KEY = '@system_cache_control_ack_v1';
+const log = createLogger('cache-control');
 
 // Solo se eliminan llaves temporales conocidas.
 const WEB_LOCAL_STORAGE_TEMP_PREFIXES = ['@temp_', '@cache_', '@offline_', '@query_'] as const;
@@ -130,7 +132,7 @@ const clearWebTemporaryStorage = async (): Promise<void> => {
       }
     }
   } catch (error) {
-    console.warn('[CacheControl] localStorage cleanup:', formatFirestoreError(error));
+    log.warn('[CacheControl] localStorage cleanup:', formatFirestoreError(error));
   }
 
   try {
@@ -147,7 +149,7 @@ const clearWebTemporaryStorage = async (): Promise<void> => {
       );
     }
   } catch (error) {
-    console.warn('[CacheControl] Cache API cleanup:', formatFirestoreError(error));
+    log.warn('[CacheControl] Cache API cleanup:', formatFirestoreError(error));
   }
 
   try {
@@ -177,7 +179,7 @@ const clearWebTemporaryStorage = async (): Promise<void> => {
       }
     }
   } catch (error) {
-    console.warn('[CacheControl] IndexedDB cleanup:', formatFirestoreError(error));
+    log.warn('[CacheControl] IndexedDB cleanup:', formatFirestoreError(error));
   }
 };
 
@@ -190,7 +192,7 @@ const clearFirestorePersistenceOnWeb = async (): Promise<void> => {
     await terminate(db);
     await clearIndexedDbPersistence(db);
   } catch (error) {
-    console.warn(
+    log.warn(
       '[CacheControl] Firestore persistence cleanup:',
       formatFirestoreError(error)
     );
@@ -218,7 +220,7 @@ const clearNativeTemporaryFiles = async (): Promise<void> => {
 
     await Promise.allSettled(deletions);
   } catch (error) {
-    console.warn('[CacheControl] Native file cleanup:', formatFirestoreError(error));
+    log.warn('[CacheControl] Native file cleanup:', formatFirestoreError(error));
   }
 };
 
@@ -249,7 +251,7 @@ export const syncCacheCleanupControl = async (): Promise<{
 
     return { executed: true, reason: 'cleanup-applied' };
   } catch (error) {
-    console.warn('[CacheControl] Sync error:', formatFirestoreError(error));
+    log.warn('[CacheControl] Sync error:', formatFirestoreError(error));
     return { executed: false, reason: 'sync-error' };
   }
 };
