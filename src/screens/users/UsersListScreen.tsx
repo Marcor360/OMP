@@ -17,6 +17,9 @@ import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { useI18n } from '@/src/i18n/index';
 import { canViewUsers, hasPermission } from '@/src/utils/permissions/permissions';
+import { createLogger } from '@/src/utils/logger';
+
+const log = createLogger('users-list');
 
 export function UsersListScreen() {
   const router = useRouter();
@@ -61,7 +64,7 @@ export function UsersListScreen() {
       setUsers(data);
       setError(null);
     } catch (requestError) {
-      console.error('UsersListScreen load error:', requestError);
+      log.error('UsersListScreen load error:', requestError);
       setUsers([]);
       setError(formatFirestoreError(requestError));
     } finally {
@@ -99,7 +102,7 @@ export function UsersListScreen() {
         setRefreshing(false);
       },
       (requestError) => {
-        console.error('UsersListScreen subscription error:', requestError);
+        log.error('UsersListScreen subscription error:', requestError);
         void loadUsers(true);
       }
     );

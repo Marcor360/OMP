@@ -49,9 +49,11 @@ import {
 } from '@/src/services/meetings/meeting-program-utils';
 import { applyPublishedPlanningToMeeting } from '@/src/services/meetings/meeting-autofill-service';
 import { sanitizeForFirestore } from '@/src/services/meetings/firestore-payload';
+import { createLogger } from '@/src/utils/logger';
 
 type MidweekMeetingCategory = 'midweek';
 type MidweekMeetingType = 'midweek';
+const log = createLogger('midweek-meetings-service');
 
 export interface MidweekMeeting {
   id: string;
@@ -493,7 +495,7 @@ export const createMidweekMeeting = async (
     meetingDate: normalizedProgram.meetingDate.toDate(),
     sections: normalizedProgram.sections,
   }).catch((error) => {
-    console.warn('Midweek meeting planning autofill skipped:', error);
+    log.warn('Midweek meeting planning autofill skipped:', error);
     return null;
   });
   const plannedSections = planning?.sections ?? normalizedProgram.sections;
@@ -604,7 +606,7 @@ export const updateMidweekMeeting = async (
     meetingDate: normalizedProgram.meetingDate.toDate(),
     sections: normalizedProgram.sections,
   }).catch((error) => {
-    console.warn('Midweek meeting planning autofill skipped:', error);
+    log.warn('Midweek meeting planning autofill skipped:', error);
     return null;
   });
   const plannedSections = planning?.sections ?? normalizedProgram.sections;
@@ -711,7 +713,7 @@ export const subscribeToMidweekMeetings = (
       callback(meetings);
     },
     (error) => {
-      console.error('subscribeToMidweekMeetings error:', error);
+      log.error('subscribeToMidweekMeetings error:', error);
       onError?.(error);
     }
   );

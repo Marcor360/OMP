@@ -11,10 +11,12 @@ import {
   CleaningAssignableUser,
 } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { createLogger } from '@/src/utils/logger';
 
 const CACHE_KEY_GROUPS = '@cleaning_groups';
 const CACHE_KEY_USERS = '@cleaning_assignable_users';
 const CACHE_EXPIRATION_MS = 10 * 60 * 1000; // 10 minutos
+const log = createLogger('cleaning-cache');
 
 interface CacheState {
   groups: CleaningGroup[];
@@ -62,7 +64,7 @@ export const CleaningCacheProvider: React.FC<{ children: React.ReactNode }> = ({
           }));
         }
       } catch (err) {
-        console.warn('Error hidratando caché de limpieza:', err);
+        log.warn('Error hidratando caché de limpieza:', err);
         if (mounted) setState((prev) => ({ ...prev, loading: false }));
       }
     };
@@ -79,7 +81,7 @@ export const CleaningCacheProvider: React.FC<{ children: React.ReactNode }> = ({
         AsyncStorage.setItem(CACHE_KEY_USERS, JSON.stringify(users)),
       ]);
     } catch (e) {
-      console.warn('Error guardando en caché:', e);
+      log.warn('Error guardando en caché:', e);
     }
   };
 

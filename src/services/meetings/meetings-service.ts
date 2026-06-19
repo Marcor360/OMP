@@ -54,6 +54,9 @@ import {
   updateMeetingByManager,
 } from '@/src/services/meetings/manager-meetings-service';
 import { AppError } from '@/src/utils/errors/errors';
+import { createLogger } from '@/src/utils/logger';
+
+const log = createLogger('meetings-service');
 
 const isMeetingStatus = (value: unknown): value is MeetingStatus =>
   value === 'pending' ||
@@ -539,7 +542,7 @@ export const createMeeting = async (
         meetingDate: planningMeetingDate,
         sections: normalizedProgram.sections,
       }).catch((error) => {
-        console.warn('Meeting planning autofill skipped:', error);
+        log.warn('Meeting planning autofill skipped:', error);
         return null;
       })
     : null;
@@ -667,7 +670,7 @@ export const updateMeeting = async (
         meetingDate: planningMeetingDate,
         sections: normalizedProgram.sections,
       }).catch((error) => {
-        console.warn('Meeting planning autofill skipped:', error);
+        log.warn('Meeting planning autofill skipped:', error);
         return null;
       })
     : null;
@@ -856,7 +859,7 @@ export const subscribeToMeetings = (
       callback(meetings);
     },
     (error) => {
-      console.error('subscribeToMeetings error:', error);
+      log.error('subscribeToMeetings error:', error);
       onError?.(error);
     }
   );

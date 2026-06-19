@@ -18,6 +18,7 @@ import type {
   SaveDayInput,
   SubmitMonthlyReportResult,
 } from '@/src/modules/field-service/types/field-service.types';
+import { createLogger } from '@/src/utils/logger';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ const STORAGE_KEY = '@field_service_v1';
 
 /** Cantidad de meses para la política de limpieza automática semestral */
 const AUTO_PURGE_MONTHS = 6;
+const log = createLogger('field-service-storage');
 
 // ─── Helpers internos ─────────────────────────────────────────────────────────
 
@@ -164,7 +166,7 @@ export async function loadStore(): Promise<{
       parsed = JSON.parse(raw) as FieldServiceStore;
     } catch {
       // Archivo corrupto → recuperación segura
-      console.warn('[FieldService] Store corrupto detectado. Reiniciando...');
+      log.warn('[FieldService] Store corrupto detectado. Reiniciando...');
       const fresh = createEmptyStore();
       await saveStoreRaw(fresh);
       return { store: fresh, purgeExecuted: false };
@@ -172,7 +174,7 @@ export async function loadStore(): Promise<{
 
     // Validar estructura básica (migración futura si version > 1)
     if (parsed.version !== 1 || !parsed.entries || !parsed.meta) {
-      console.warn('[FieldService] Versión o estructura inválida. Reiniciando...');
+      log.warn('[FieldService] Versión o estructura inválida. Reiniciando...');
       const fresh = createEmptyStore();
       await saveStoreRaw(fresh);
       return { store: fresh, purgeExecuted: false };
@@ -188,7 +190,7 @@ export async function loadStore(): Promise<{
     // Se ejecuta en la primera inicialización del módulo posterior al umbral de 6 meses.
     // No depende de red, Firebase, cron ni procesos en servidor.
     if (shouldAutoPurge(normalized.meta.lastAutoPurgeAt)) {
-      console.info('[FieldService] Auto-purge semestral ejecutada.');
+      log.info('[FieldService] Auto-purge semestral ejecutada.');
       const purged: FieldServiceStore = {
         version: 1,
         entries: {},
@@ -207,7 +209,7 @@ export async function loadStore(): Promise<{
 
     return { store: normalized, purgeExecuted: false };
   } catch (err) {
-    console.error('[FieldService] Error inesperado al cargar store:', err);
+    log.error('[FieldService] Error inesperado al cargar store:', err);
     const fresh = createEmptyStore();
     return { store: fresh, purgeExecuted: false };
   }
@@ -218,7 +220,7 @@ async function saveStoreRaw(store: FieldServiceStore): Promise<void> {
   try {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(store));
   } catch (err) {
-    console.error('[FieldService] Error guardando store:', err);
+    log.error('[FieldService] Error guardando store:', err);
   }
 }
 
