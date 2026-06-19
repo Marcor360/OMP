@@ -644,11 +644,14 @@ const normalizeStoredAssignmentForRole = (
 ): StoredServiceAssignment | null => {
   const assignment = normalizeAssignmentForRole(role, position, department);
   if (!assignment.position || !assignment.label) return null;
-  return {
+  const stored: StoredServiceAssignment = {
     position: assignment.position,
-    department: assignment.department,
     label: assignment.label,
   };
+  if (assignment.department) {
+    stored.department = assignment.department;
+  }
+  return stored;
 };
 
 const parseServiceAssignments = (

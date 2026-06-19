@@ -27,6 +27,7 @@ const normalizeText = (value: unknown): string | undefined => {
 };
 
 type ServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar';
+type ServiceDepartment = 'limpieza';
 type UserPrivileges = {
   isElder?: boolean;
   isMinisterialServant?: boolean;
@@ -119,6 +120,35 @@ const ensureAdminElderPrivileges = (
       isMinisterialServant: false,
     }
     : privileges;
+
+const buildServiceAssignmentLabel = (
+  position?: ServicePosition,
+  department?: ServiceDepartment
+): string | undefined => {
+  if (!position) return undefined;
+  if (position === 'coordinador') return 'Coordinador';
+  if (position === 'secretario') return 'Secretario';
+  if (!department) return undefined;
+  if (position === 'encargado') return 'Encargado de Limpieza';
+  if (position === 'auxiliar') return 'Auxiliar de Limpieza';
+  return undefined;
+};
+
+const normalizeStoredAssignmentForRole = (
+  position?: ServicePosition,
+  department?: ServiceDepartment
+): { position: ServicePosition; department?: ServiceDepartment; label: string } | null => {
+  const label = buildServiceAssignmentLabel(position, department);
+  if (!position || !label) return null;
+  const stored: { position: ServicePosition; department?: ServiceDepartment; label: string } = {
+    position,
+    label,
+  };
+  if (department) {
+    stored.department = department;
+  }
+  return stored;
+};
 
 const parsePermissions = (
   value: unknown,
@@ -311,6 +341,17 @@ describe('coordinador/secretario requirements', () => {
     expect(
       rawServiceAssignmentsRequireAdminElder([{ position: 'encargado', label: 'Encargado' }])
     ).toBe(false);
+  });
+
+  it('omite department al guardar Coordinador o Secretario', () => {
+    expect(normalizeStoredAssignmentForRole('coordinador')).toEqual({
+      position: 'coordinador',
+      label: 'Coordinador',
+    });
+    expect(normalizeStoredAssignmentForRole('secretario')).toEqual({
+      position: 'secretario',
+      label: 'Secretario',
+    });
   });
 });
 
