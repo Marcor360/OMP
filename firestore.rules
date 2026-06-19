@@ -714,6 +714,9 @@ service cloud.firestore {
       return [
         'uid',
         'email',
+        // emailKey es el email normalizado (lowercase) escrito por createUserByAdmin via Admin SDK.
+        // Debe estar aqui para que request.resource.data no falle hasOnlyKeys en updates del cliente.
+        'emailKey',
         'firstName',
         'middleName',
         'lastName',
