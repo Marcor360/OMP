@@ -164,6 +164,19 @@ const resolveServiceAssignmentFromUser = (
 const assignmentKey = (assignment: Pick<UserServiceAssignment, 'position' | 'department'>): string =>
   `${assignment.position}:${assignment.department ?? ''}`;
 
+const normalizeServiceAssignmentForPayload = (
+  assignment: UserServiceAssignment
+): UserServiceAssignment => {
+  const normalized: UserServiceAssignment = {
+    position: assignment.position,
+    label: assignment.label,
+  };
+  if (assignment.department) {
+    normalized.department = assignment.department;
+  }
+  return normalized;
+};
+
 const requiresAdminElderAssignment = (
   assignments: Pick<UserServiceAssignment, 'position'>[]
 ): boolean =>
@@ -700,7 +713,7 @@ export function UserFormScreen() {
       const normalizedLastName = lastName.trim();
       const normalizedSecondLastName = secondLastName.trim() || undefined;
       const normalizedPhone = phone.trim() || undefined;
-      let finalServiceAssignments = serviceAssignments;
+      let finalServiceAssignments = serviceAssignments.map(normalizeServiceAssignmentForPayload);
 
       if (
         selectedDraftAssignment &&
@@ -728,7 +741,10 @@ export function UserFormScreen() {
           return;
         }
 
-        finalServiceAssignments = [...finalServiceAssignments, selectedDraftAssignment];
+        finalServiceAssignments = [
+          ...finalServiceAssignments,
+          normalizeServiceAssignmentForPayload(selectedDraftAssignment),
+        ];
       }
 
       const primaryAssignment = finalServiceAssignments[0];
