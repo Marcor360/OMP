@@ -3,5 +3,17 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
+  },
+  "workbench.colorCustomizations": {
+    "gitlens.graphLane1Color": "#3b82f6",
+    "gitlens.graphLane2Color": "#3b82f6",
+    "gitlens.graphLane3Color": "#3b82f6",
+    "gitlens.graphLane4Color": "#3b82f6",
+    "gitlens.graphLane5Color": "#3b82f6",
+    "gitlens.graphLane6Color": "#3b82f6",
+    "gitlens.graphLane7Color": "#3b82f6",
+    "gitlens.graphLane8Color": "#3b82f6",
+    "gitlens.graphLane9Color": "#3b82f6",
+    "gitlens.graphLane10Color": "#3b82f6"
   }
 }
