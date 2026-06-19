@@ -405,8 +405,12 @@ service cloud.firestore {
         || isGlobalScreenAccess()
         || (
           currentUserData().permissions is map
-          && currentUserData().permissions.departments is map
-          && currentUserData().permissions.departments.manage == true
+          && (
+            (currentUserData().permissions.departments is map
+              && currentUserData().permissions.departments.manage == true)
+            || (currentUserData().permissions.organigrama is map
+              && currentUserData().permissions.organigrama.manage == true)
+          )
         );
     }
 

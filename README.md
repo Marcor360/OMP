@@ -304,8 +304,6 @@ npx -y firebase-tools@latest use
 npx -y firebase-tools@latest emulators:start
 npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes
 npx -y firebase-tools@latest deploy --only functions
-npx -y firebase-tools@latest deploy --only hosting
-npx -y firebase-tools@latest deploy
 ```
 
 ## Build Android
@@ -341,9 +339,8 @@ npm run preview:web
 
 Deploy web:
 
-```bash
-npx -y firebase-tools@latest deploy --only hosting
-```
+Firebase Hosting esta deshabilitado para este proyecto. Publicar el resultado de
+`npm run build:web` usando el host externo configurado para OMP.
 
 ## Variables De Entorno
 

@@ -3,6 +3,7 @@ import {
   canManageMeetings,
   canManageUsers,
   getDefaultPermissionsByRole,
+  getEffectivePermissions,
   hasPermission,
   hasRole,
 } from '@/src/utils/permissions/permissions';
@@ -46,5 +47,32 @@ describe('permissions utilities', () => {
 
     expect(canManageCleaning(cleaningManager)).toBe(true);
     expect(canManageUsers(cleaningManager)).toBe(false);
+  });
+
+  it('mirrors org chart permissions from organigrama to departments', () => {
+    const user = {
+      role: 'user' as const,
+      permissions: { organigrama: { manage: true } },
+    };
+
+    expect(getEffectivePermissions(user).departments?.manage).toBe(true);
+    expect(hasPermission(user, 'departments', 'manage')).toBe(true);
+  });
+
+  it('mirrors org chart permissions from departments to organigrama', () => {
+    const user = {
+      role: 'user' as const,
+      permissions: { departments: { manage: true } },
+    };
+
+    expect(getEffectivePermissions(user).organigrama?.manage).toBe(true);
+    expect(hasPermission(user, 'organigrama', 'manage')).toBe(true);
+  });
+
+  it('keeps org chart permissions false when neither alias is granted', () => {
+    const user = { role: 'user' as const };
+
+    expect(hasPermission(user, 'departments', 'manage')).toBe(false);
+    expect(hasPermission(user, 'organigrama', 'manage')).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import {
   AppUser,
+  DepartmentPermissions,
   PermissionAction,
   PermissionDepartment,
   TerritoryPermissionAction,
@@ -320,16 +321,47 @@ export const getPermissionsFromServiceAssignments = (
   return mergePermissions(...assignments.map(assignmentToPermissions));
 };
 
+// Claves historicas equivalentes del organigrama. Se espejan para que cualquier
+// lector (frontend o reglas) vea el mismo valor efectivo sin importar bajo cual
+// clave se guardo el permiso. Evita fallos silenciosos por divergencia de taxonomia.
+const ORG_CHART_PERMISSION_ALIASES: PermissionDepartment[] = ['departments', 'organigrama'];
+
+const mirrorOrgChartPermissions = (permissions: UserPermissions): UserPermissions => {
+  const union: DepartmentPermissions = {};
+  let hasAny = false;
+
+  ORG_CHART_PERMISSION_ALIASES.forEach((key) => {
+    const dept = permissions[key];
+    if (!dept) return;
+    PERMISSION_ACTIONS.forEach((action) => {
+      if (dept[action] === true) {
+        union[action] = true;
+        hasAny = true;
+      }
+    });
+  });
+
+  if (!hasAny) return permissions;
+
+  ORG_CHART_PERMISSION_ALIASES.forEach((key) => {
+    permissions[key] = { ...(permissions[key] ?? {}), ...union };
+  });
+
+  return permissions;
+};
+
 export const getEffectivePermissions = (
   user:
     | Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
     | null
     | undefined
 ): UserPermissions =>
-  mergePermissions(
-    getDefaultPermissionsByRole(user?.role),
-    user?.permissions,
-    getPermissionsFromServiceAssignments(user)
+  mirrorOrgChartPermissions(
+    mergePermissions(
+      getDefaultPermissionsByRole(user?.role),
+      user?.permissions,
+      getPermissionsFromServiceAssignments(user)
+    )
   );
 
 export const hasPermission = (

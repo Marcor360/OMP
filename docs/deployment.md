@@ -36,8 +36,10 @@ npx -y firebase-tools@latest deploy --only functions
 ```bash
 npm run build:web
 npm run preview:web
-npx -y firebase-tools@latest deploy --only hosting
 ```
+
+Firebase Hosting esta deshabilitado para este proyecto. Subir la salida web al
+host externo configurado para OMP.
 
 ## Android
 
