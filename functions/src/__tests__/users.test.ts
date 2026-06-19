@@ -27,6 +27,12 @@ const normalizeText = (value: unknown): string | undefined => {
 };
 
 type ServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar';
+type UserPrivileges = {
+  isElder?: boolean;
+  isMinisterialServant?: boolean;
+  isRegularPioneer?: boolean;
+  isAuxiliaryPioneer?: boolean;
+};
 type PermissionDepartment =
   | 'usuarios'
   | 'reuniones'
@@ -88,6 +94,31 @@ const parseServicePosition = (value: unknown): ServicePosition | undefined => {
   }
   throw new HttpsError('invalid-argument', 'Asignacion de servicio invalida.');
 };
+
+const requiresAdminElderPosition = (position?: ServicePosition): boolean =>
+  position === 'coordinador' || position === 'secretario';
+
+const rawServiceAssignmentsRequireAdminElder = (value: unknown): boolean => {
+  if (!Array.isArray(value)) return false;
+
+  return value.some((item) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return false;
+    const position = parseServicePosition((item as Record<string, unknown>).position);
+    return requiresAdminElderPosition(position);
+  });
+};
+
+const ensureAdminElderPrivileges = (
+  privileges: UserPrivileges | undefined,
+  shouldRequire: boolean
+): UserPrivileges | undefined =>
+  shouldRequire
+    ? {
+      ...(privileges ?? {}),
+      isElder: true,
+      isMinisterialServant: false,
+    }
+    : privileges;
 
 const parsePermissions = (
   value: unknown,
@@ -260,6 +291,28 @@ describe('parseServicePosition', () => {
 });
 
 // ─── Tests: parseCreateUserPayload ───────────────────────────────────────────
+
+describe('coordinador/secretario requirements', () => {
+  it.each(['coordinador', 'secretario'] as const)(
+    'requiere rol admin y nombramiento de anciano para "%s"',
+    (position) => {
+      expect(requiresAdminElderPosition(position)).toBe(true);
+      expect(ensureAdminElderPrivileges({ isMinisterialServant: true }, true)).toEqual({
+        isElder: true,
+        isMinisterialServant: false,
+      });
+    }
+  );
+
+  it('detecta Coordinador o Secretario en serviceAssignments crudos', () => {
+    expect(
+      rawServiceAssignmentsRequireAdminElder([{ position: 'secretario', label: 'Secretario' }])
+    ).toBe(true);
+    expect(
+      rawServiceAssignmentsRequireAdminElder([{ position: 'encargado', label: 'Encargado' }])
+    ).toBe(false);
+  });
+});
 
 describe('parsePermissions', () => {
   it('trata permisos null como campo opcional ausente', () => {
