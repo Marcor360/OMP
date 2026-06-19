@@ -4,6 +4,9 @@
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
   },
+  "gitlens.graph.branchesVisibility": "current",
+  "gitlens.graph.commitOrdering": "topo",
+  "gitlens.graph.onlyFollowFirstParent": true,
   "workbench.colorCustomizations": {
     "gitlens.graphLane1Color": "#3b82f6",
     "gitlens.graphLane2Color": "#3b82f6",
