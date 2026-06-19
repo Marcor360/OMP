@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,7 +9,6 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 
 import { AssignmentCardEditorErrors } from '@/src/components/meetings/midweek/AssignmentCardEditor';
@@ -22,12 +21,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
 import { useMeetingsManagementPermission } from '@/src/hooks/use-meetings-management-permission';
-import { setMeetingPublicationStatus } from '@/src/services/meetings/meeting-publish-service';
-import { syncMeetingCleaningAssignmentsByManager } from '@/src/services/meetings/manager-meetings-service';
-import {
-  buildMeetingProgramFromMeeting,
-  validateMeetingBeforePublish,
-} from '@/src/services/meetings/meeting-program-utils';
+import { buildMeetingProgramFromMeeting } from '@/src/services/meetings/meeting-program-utils';
 import { getCleaningGroups } from '@/src/modules/cleaning/services/cleaning-service';
 import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types';
 import {
@@ -35,434 +29,68 @@ import {
   buildWeekendSectionsFromSessions,
   createEmptyWeekendMeetingSession,
   extractWeekendSessionsFromSections,
-  validateWeekendSessionsForPublish,
 } from '@/src/services/meetings/weekend-meeting-adapter';
 import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
 import {
   OUTGOING_TALK_BLOCK_MESSAGE,
   getBlockedOutgoingTalkUserIds,
 } from '@/src/modules/assignments/utils/outgoing-talks';
-import { isHospitalityMicrophonesControlledReader } from '@/src/modules/assignments/utils/meeting-readers';
-import { OutgoingTalk } from '@/src/modules/assignments/types/outgoing-talks.types';
 import { resolveMeetingTemplate } from '@/src/services/meetings/meeting-template';
-import {
-  createMeeting,
-  getMeetingById,
-  getMeetingsByWeek,
-  updateMeeting,
-} from '@/src/services/meetings/meetings-service';
+import { getMeetingById, getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
 import {
   ActiveCongregationUser,
   getActiveCongregationUsers,
 } from '@/src/services/users/active-users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
-  CreateMeetingDTO,
-  Meeting,
-  MeetingCleaningAssignmentMode,
   MeetingStatus,
   MEETING_STATUS_LABELS,
   MEETING_TYPE_LABELS,
-  UpdateMeetingDTO,
 } from '@/src/types/meeting';
 import {
-  MeetingProgramAssignment,
   MeetingProgramSection,
   MeetingProgramType,
   createDefaultSectionsForMeetingType,
   moveMeetingSection,
 } from '@/src/types/meeting/program';
-import {
-  MidweekAssignment,
-  MidweekMeetingSection,
-  ParticipantAssignment,
-} from '@/src/types/midweek-meeting';
 import { formatWeekLabel, getWeekStart, moveWeek } from '@/src/utils/dates/week-range';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-
-type Mode = 'create' | 'edit';
-type SaveIntent = 'draft' | 'published';
-type FormStepKey = 'date' | 'basic' | 'program' | 'cleaning' | 'review';
-type WeekendMeetingDay = 'saturday' | 'sunday';
-type MidweekMeetingDay = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday';
-type CleaningSelectionMode = MeetingCleaningAssignmentMode;
-
-interface MeetingFormErrors {
-  title?: string;
-}
-
-interface PublishPanelItem {
-  id: string;
-  message: string;
-}
-
-interface MeetingConflictNotice {
-  id: string;
-  title: string;
-  dateLabel: string;
-}
-
-interface MarkerState {
-  publishNotificationSentAt?: Timestamp;
-  reminderSentAt?: Timestamp;
-}
-
-const STATUS_OPTIONS: MeetingStatus[] = ['pending', 'scheduled', 'in_progress', 'completed', 'cancelled'];
-const TYPE_OPTIONS: MeetingProgramType[] = ['midweek', 'weekend'];
-
-const FORM_STEPS: { key: FormStepKey; title: string; subtitle: string }[] = [
-  { key: 'date', title: 'Semana', subtitle: 'Tipo y dia' },
-  { key: 'basic', title: 'Datos', subtitle: 'Lugar y enlace' },
-  { key: 'program', title: 'Programa', subtitle: 'Asignaciones' },
-  { key: 'cleaning', title: 'Limpieza', subtitle: 'Modulos' },
-  { key: 'review', title: 'Revision', subtitle: 'Publicacion' },
-];
-
-const DEFAULT_TITLE_BY_TYPE: Record<MeetingProgramType, string> = {
-  midweek: 'Reunion Vida y Ministerio Cristianos',
-  weekend: 'Reunion del fin de semana',
-};
-
-const WEEKEND_MEETING_DAY_LABELS: Record<WeekendMeetingDay, string> = {
-  saturday: 'Sabado',
-  sunday: 'Domingo',
-};
-
-const MIDWEEK_MEETING_DAY_LABELS: Record<MidweekMeetingDay, string> = {
-  monday: 'Lunes',
-  tuesday: 'Martes',
-  wednesday: 'Miercoles',
-  thursday: 'Jueves',
-  friday: 'Viernes',
-};
-
-const MIDWEEK_MEETING_DAY_OPTIONS: { value: MidweekMeetingDay; offset: number }[] = [
-  { value: 'monday', offset: 0 },
-  { value: 'tuesday', offset: 1 },
-  { value: 'wednesday', offset: 2 },
-  { value: 'thursday', offset: 3 },
-  { value: 'friday', offset: 4 },
-];
-
-const pad = (value: number): string => String(value).padStart(2, '0');
-
-const formatDateInput = (value: Date): string => {
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
-};
-
-const normalizeText = (value: string): string | undefined => {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-};
-
-const normalizeUrl = (value: string): string | undefined => {
-  const trimmed = normalizeText(value);
-  if (!trimmed) return undefined;
-
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return trimmed;
-    }
-    return undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-const getTodayStart = (): Date => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
-};
-
-const toDateFromDateLike = (value?: Timestamp | Date): Date => {
-  if (!value) {
-    return new Date();
-  }
-
-  return value instanceof Date ? value : value.toDate();
-};
-
-const isSameCalendarDay = (left: Date, right: Date): boolean =>
-  left.getFullYear() === right.getFullYear() &&
-  left.getMonth() === right.getMonth() &&
-  left.getDate() === right.getDate();
-
-const inferWeekendMeetingDay = (
-  meetingDate: Date,
-  range: { startDate: Date; endDate: Date }
-): WeekendMeetingDay => {
-  if (isSameCalendarDay(meetingDate, range.endDate) || meetingDate.getDay() === 0) {
-    return 'sunday';
-  }
-
-  return 'saturday';
-};
-
-const inferMidweekMeetingDay = (
-  meetingDate: Date,
-  range: { startDate: Date }
-): MidweekMeetingDay => {
-  const meetingDateStart = new Date(meetingDate);
-  meetingDateStart.setHours(0, 0, 0, 0);
-
-  const rangeStart = new Date(range.startDate);
-  rangeStart.setHours(0, 0, 0, 0);
-
-  const millisPerDay = 24 * 60 * 60 * 1000;
-  const diffDays = Math.round((meetingDateStart.getTime() - rangeStart.getTime()) / millisPerDay);
-  const normalizedOffset = Math.min(4, Math.max(0, diffDays));
-
-  const option = MIDWEEK_MEETING_DAY_OPTIONS.find((item) => item.offset === normalizedOffset);
-  return option?.value ?? 'monday';
-};
-
-const sectionMarkerMap = (section: MeetingProgramSection): Map<string, MarkerState> => {
-  const map = new Map<string, MarkerState>();
-  section.assignments.forEach((assignment) => {
-    assignment.assignees.forEach((assignee) => {
-      map.set(`${assignment.assignmentKey}::${assignee.id}`, {
-        publishNotificationSentAt: assignee.publishNotificationSentAt,
-        reminderSentAt: assignee.reminderSentAt,
-      });
-    });
-  });
-  return map;
-};
-
-const programAssignmentToEditorAssignment = (assignment: MeetingProgramAssignment): MidweekAssignment => ({
-  id: assignment.assignmentKey,
-  sectionId: assignment.sectionKey as MidweekAssignment['sectionId'],
-  order: 0,
-  title: assignment.title,
-  theme: assignment.roleLabel,
-  durationMinutes: assignment.durationMinutes,
-  notes: undefined,
-  roomKey: undefined,
-  startTime: undefined,
-  endTime: undefined,
-  assignmentScope: assignment.assignmentScope,
-  controlledBy:
-    assignment.controlledBy ??
-    (isHospitalityMicrophonesControlledReader(assignment) ? 'hospitalityMicrophones' : undefined),
-  lockedFromMeetingEditor:
-    assignment.lockedFromMeetingEditor === true ||
-    isHospitalityMicrophonesControlledReader(assignment),
-  sourceModule:
-    assignment.sourceModule ??
-    (isHospitalityMicrophonesControlledReader(assignment) ? 'hospitalityMicrophones' : undefined),
-  participants: assignment.assignees.map((assignee) => {
-    if (assignee.assigneeType === 'registeredUser') {
-      return {
-        id: assignee.id,
-        mode: 'user',
-        userId: assignee.assigneeUserId,
-        displayName: assignee.assigneeNameSnapshot ?? '',
-        specialRoleKey: undefined,
-        roleLabel: undefined,
-        gender: undefined,
-        isAssistant: false,
-      } as ParticipantAssignment;
-    }
-
-    return {
-      id: assignee.id,
-      mode: 'manual',
-      userId: undefined,
-      displayName: assignee.assigneeNameSnapshot ?? '',
-      specialRoleKey: undefined,
-      roleLabel: undefined,
-      gender: undefined,
-      isAssistant: false,
-    } as ParticipantAssignment;
-  }),
-  isOptional: false,
-  assignmentType: undefined,
-  allowCircuitOverseerOption: false,
-});
-
-const programSectionToEditorSection = (section: MeetingProgramSection): MidweekMeetingSection => ({
-  id: section.sectionKey as MidweekMeetingSection['id'],
-  title: section.title,
-  order: section.order,
-  sectionType: section.sectionType,
-  isRequired: section.isRequired,
-  isEnabled: section.isEnabled,
-  colorToken: section.colorToken,
-  items: section.assignments.map((assignment, index) => ({
-    ...programAssignmentToEditorAssignment(assignment),
-    order: index,
-  })),
-});
-const editorParticipantToProgramAssignee = (
-  participant: ParticipantAssignment,
-  assignmentKey: string,
-  markers: Map<string, MarkerState>
-): MeetingProgramAssignment['assignees'][number] => {
-  const marker = markers.get(`${assignmentKey}::${participant.id}`);
-
-  if (participant.mode === 'user') {
-    return {
-      id: participant.id,
-      assigneeType: 'registeredUser',
-      assigneeUserId: normalizeText(participant.userId ?? ''),
-      assigneeNameSnapshot: normalizeText(participant.displayName),
-      specialRoleKey: undefined,
-      publishNotificationSentAt: marker?.publishNotificationSentAt,
-      reminderSentAt: marker?.reminderSentAt,
-    };
-  }
-
-  return {
-    id: participant.id,
-    assigneeType: 'informational',
-    assigneeUserId: undefined,
-    assigneeNameSnapshot: normalizeText(participant.displayName),
-    specialRoleKey: undefined,
-    publishNotificationSentAt: marker?.publishNotificationSentAt,
-    reminderSentAt: marker?.reminderSentAt,
-  };
-};
-
-const editorSectionToProgramSection = (
-  editorSection: MidweekMeetingSection,
-  currentSection: MeetingProgramSection
-): MeetingProgramSection => {
-  const markers = sectionMarkerMap(currentSection);
-
-  return {
-    sectionKey: currentSection.sectionKey,
-    title: editorSection.title,
-    order: currentSection.order,
-    sectionType: currentSection.sectionType,
-    isRequired: currentSection.isRequired,
-    isEnabled: editorSection.isEnabled !== false,
-    colorToken: currentSection.colorToken,
-    assignments: editorSection.items.map((assignment, index) => {
-      const currentAssignment = currentSection.assignments.find(
-        (item) => item.assignmentKey === assignment.id
-      );
-      const participants =
-        editorSection.id === 'livingAsChristians'
-          ? assignment.participants.slice(0, 2)
-          : assignment.participants;
-
-      return {
-        assignmentKey: assignment.id,
-        sectionKey: currentSection.sectionKey,
-        title: assignment.title,
-        roleLabel: normalizeText(assignment.theme ?? ''),
-        assignmentScope: assignment.assignmentScope ?? 'internal',
-        controlledBy: currentAssignment?.controlledBy ?? assignment.controlledBy,
-        lockedFromMeetingEditor:
-          currentAssignment?.lockedFromMeetingEditor ?? assignment.lockedFromMeetingEditor,
-        sourceModule: currentAssignment?.sourceModule ?? assignment.sourceModule,
-        assignees: participants.map((participant) =>
-          editorParticipantToProgramAssignee(participant, assignment.id, markers)
-        ),
-        roomKey: undefined,
-        startTime: undefined,
-        endTime: undefined,
-        durationMinutes: assignment.durationMinutes,
-        allowCircuitOverseerOption: false,
-        notes: undefined,
-      };
-    }),
-  };
-};
-
-const inferProgramTypeFromMeeting = (meeting: Meeting): MeetingProgramType =>
-  meeting.type === 'midweek' || meeting.meetingCategory === 'midweek' ? 'midweek' : 'weekend';
-
-const getDateFromMeetingValue = (value?: Timestamp | Date): Date | null => {
-  if (!value) return null;
-  const date = value instanceof Date ? value : value.toDate();
-  return Number.isNaN(date.getTime()) ? null : date;
-};
-
-const formatHumanDate = (value: Date): string =>
-  value.toLocaleDateString('es-MX', {
-    weekday: 'long',
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
-
-const meetingMatchesProgramType = (meeting: Meeting, meetingType: MeetingProgramType): boolean =>
-  inferProgramTypeFromMeeting(meeting) === meetingType;
-
-const toPanelItems = (messages: string[]): PublishPanelItem[] =>
-  Array.from(new Set(messages.filter((item) => normalizeText(item))))
-    .map((message) => message
-      .replace('La reunion debe tener tipo.', 'Elige el tipo de reunion antes de publicar.')
-      .replace('La reunion debe pertenecer a una congregacion valida.', 'No se encontro una congregacion valida para esta reunion.')
-      .replace('La reunion debe tener una fecha valida.', 'Elige una fecha valida para la reunion.')
-      .replace('La reunion debe incluir al menos una seccion.', 'Agrega al menos una seccion al programa.'))
-    .map((message, index) => ({ id: `${index}-${message}`, message }));
-
-const collectMissingAssignmentLabels = (sections: MeetingProgramSection[]): string[] => {
-  const missing: string[] = [];
-
-  sections
-    .filter((section) => section.isEnabled !== false)
-    .forEach((section) => {
-      if (section.assignments.length === 0) {
-        missing.push(`${section.title || 'Seccion sin nombre'}: falta agregar al menos una parte.`);
-      }
-
-      section.assignments.forEach((assignment) => {
-        if (!normalizeText(assignment.title)) {
-          missing.push(`${section.title || 'Seccion sin nombre'}: falta el titulo de una parte.`);
-        }
-
-        if (assignment.assignmentScope !== 'internal') {
-          return;
-        }
-
-        assignment.assignees.forEach((assignee) => {
-          if (assignee.assigneeType !== 'registeredUser' || !normalizeText(assignee.assigneeUserId ?? '')) {
-            missing.push(`${assignment.title || section.title}: falta seleccionar un usuario.`);
-          }
-        });
-      });
-    });
-
-  return Array.from(new Set(missing));
-};
-
-const collectControlledFieldLabels = (sections: MeetingProgramSection[]): string[] =>
-  Array.from(
-    new Set(
-      sections.flatMap((section) =>
-        section.assignments
-          .filter((assignment) => assignment.lockedFromMeetingEditor === true)
-          .map((assignment) => `${section.title}: ${assignment.roleLabel ?? assignment.title}`)
-      )
-    )
-  );
-
-const collectBlockedAssignedUserNames = (
-  sections: MeetingProgramSection[],
-  blockedUserIds: Set<string>,
-  users: ActiveCongregationUser[]
-): string[] => {
-  const usersById = new Map(users.map((item) => [item.uid, item.displayName]));
-  const names = new Set<string>();
-
-  sections.forEach((section) => {
-    section.assignments.forEach((assignment) => {
-      assignment.assignees.forEach((assignee) => {
-        const userId = normalizeText(assignee.assigneeUserId ?? '');
-        if (userId && blockedUserIds.has(userId)) {
-          names.add(usersById.get(userId) ?? assignee.assigneeNameSnapshot ?? userId);
-        }
-      });
-    });
-  });
-
-  return Array.from(names);
-};
+import {
+  CleaningSelectionMode,
+  DEFAULT_TITLE_BY_TYPE,
+  FORM_STEPS,
+  FormStepKey,
+  MIDWEEK_MEETING_DAY_LABELS,
+  MIDWEEK_MEETING_DAY_OPTIONS,
+  MeetingConflictNotice,
+  Mode,
+  STATUS_OPTIONS,
+  TYPE_OPTIONS,
+  WEEKEND_MEETING_DAY_LABELS,
+  WeekendMeetingDay,
+  MidweekMeetingDay,
+  editorSectionToProgramSection,
+  formatDateInput,
+  formatHumanDate,
+  getDateFromMeetingValue,
+  getTodayStart,
+  inferMidweekMeetingDay,
+  inferProgramTypeFromMeeting,
+  inferWeekendMeetingDay,
+  meetingMatchesProgramType,
+  normalizeText,
+  programSectionToEditorSection,
+  toDateFromDateLike,
+} from '@/src/screens/meetings/meeting-form/meeting-form.mapper';
+import {
+  MeetingFormErrors,
+  PublishPanelItem,
+  collectMissingAssignmentLabels,
+  toPanelItems,
+} from '@/src/screens/meetings/meeting-form/meeting-form.validators';
+import { useMeetingFormState } from '@/src/screens/meetings/meeting-form/useMeetingFormState';
+import { useMeetingPublishFlow } from '@/src/screens/meetings/meeting-form/useMeetingPublishFlow';
+import { useMeetingValidation } from '@/src/screens/meetings/meeting-form/useMeetingValidation';
 
 export function MeetingFormScreen() {
   const { id, type: typeParam } = useLocalSearchParams<{ id?: string; type?: string }>();
@@ -478,44 +106,60 @@ export function MeetingFormScreen() {
   const initialType: MeetingProgramType = typeParam === 'midweek' ? 'midweek' : 'weekend';
   const initialWeekStart = getWeekStart(new Date());
 
-  const [title, setTitle] = useState(DEFAULT_TITLE_BY_TYPE[initialType]);
-  const [description, setDescription] = useState('');
-  const [meetingType, setMeetingType] = useState<MeetingProgramType>(initialType);
-  const [weekendMeetingDay, setWeekendMeetingDay] = useState<WeekendMeetingDay>(
-    'sunday'
-  );
-  const [midweekMeetingDay, setMidweekMeetingDay] = useState<MidweekMeetingDay>(
-    'monday'
-  );
-  const [status, setStatus] = useState<MeetingStatus>('scheduled');
-  const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(initialWeekStart);
-  const [location, setLocation] = useState('');
-  const [meetingUrl, setMeetingUrl] = useState('');
-  const [notes, setNotes] = useState('');
-  const [sections, setSections] = useState<MeetingProgramSection[]>(() =>
-    createDefaultSectionsForMeetingType(initialType)
-  );
-  const [weekendSessions, setWeekendSessions] = useState<WeekendMeetingSessionDraft[]>(() =>
-    initialType === 'weekend'
-      ? extractWeekendSessionsFromSections(createDefaultSectionsForMeetingType('weekend'))
-      : [createEmptyWeekendMeetingSession(0)]
-  );
-  const [availableUsers, setAvailableUsers] = useState<ActiveCongregationUser[]>([]);
-  const [outgoingTalks, setOutgoingTalks] = useState<OutgoingTalk[]>([]);
-  const [cleaningGroups, setCleaningGroups] = useState<CleaningGroup[]>([]);
-  const [cleaningSelectionMode, setCleaningSelectionMode] = useState<CleaningSelectionMode>('none');
-  const [selectedCleaningGroupIds, setSelectedCleaningGroupIds] = useState<string[]>([]);
-  const [errors, setErrors] = useState<MeetingFormErrors>({});
-  const [midweekAssignmentErrors, setMidweekAssignmentErrors] = useState<
-    Record<string, AssignmentCardEditorErrors>
-  >({});
-  const [publishErrors, setPublishErrors] = useState<PublishPanelItem[]>([]);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState<FormStepKey>('date');
-  const [duplicateMeetingHint, setDuplicateMeetingHint] = useState<MeetingConflictNotice | null>(null);
-  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
-  const [loading, setLoading] = useState(mode === 'edit');
-  const [savingIntent, setSavingIntent] = useState<SaveIntent | null>(null);
+  const {
+    title,
+    setTitle,
+    description,
+    setDescription,
+    meetingType,
+    setMeetingType,
+    weekendMeetingDay,
+    setWeekendMeetingDay,
+    midweekMeetingDay,
+    setMidweekMeetingDay,
+    status,
+    setStatus,
+    selectedWeekStart,
+    setSelectedWeekStart,
+    location,
+    setLocation,
+    meetingUrl,
+    setMeetingUrl,
+    notes,
+    setNotes,
+    sections,
+    setSections,
+    weekendSessions,
+    setWeekendSessions,
+    availableUsers,
+    setAvailableUsers,
+    outgoingTalks,
+    setOutgoingTalks,
+    cleaningGroups,
+    setCleaningGroups,
+    cleaningSelectionMode,
+    setCleaningSelectionMode,
+    selectedCleaningGroupIds,
+    setSelectedCleaningGroupIds,
+    errors,
+    setErrors,
+    midweekAssignmentErrors,
+    setMidweekAssignmentErrors,
+    publishErrors,
+    setPublishErrors,
+    saveError,
+    setSaveError,
+    currentStep,
+    setCurrentStep,
+    duplicateMeetingHint,
+    setDuplicateMeetingHint,
+    checkingDuplicate,
+    setCheckingDuplicate,
+    loading,
+    setLoading,
+    savingIntent,
+    setSavingIntent,
+  } = useMeetingFormState({ mode, initialType, initialWeekStart });
 
   useEffect(() => {
     if (loadingPermissions) return;
@@ -589,7 +233,31 @@ export function MeetingFormScreen() {
     return () => {
       cancelled = true;
     };
-  }, [canManage, congregationId, id, loadingPermissions, mode, router]);
+  }, [
+    canManage,
+    congregationId,
+    id,
+    loadingPermissions,
+    mode,
+    router,
+    setAvailableUsers,
+    setCleaningGroups,
+    setCleaningSelectionMode,
+    setDescription,
+    setLoading,
+    setLocation,
+    setMeetingType,
+    setMeetingUrl,
+    setMidweekMeetingDay,
+    setNotes,
+    setSections,
+    setSelectedCleaningGroupIds,
+    setSelectedWeekStart,
+    setStatus,
+    setTitle,
+    setWeekendMeetingDay,
+    setWeekendSessions,
+  ]);
 
   const missingTemplateSections = useMemo(() => {
     if (meetingType === 'weekend') return [];
@@ -691,7 +359,7 @@ export function MeetingFormScreen() {
     return () => {
       cancelled = true;
     };
-  }, [congregationId, resolvedMeetingDate]);
+  }, [congregationId, resolvedMeetingDate, setOutgoingTalks]);
 
   const blockedOutgoingTalkUserIds = useMemo(
     () => getBlockedOutgoingTalkUserIds(resolvedMeetingDate, outgoingTalks),
@@ -758,6 +426,8 @@ export function MeetingFormScreen() {
     resolvedMeetingDate,
     resolvedMeetingDateRange.endDate,
     resolvedMeetingDateRange.startDate,
+    setCheckingDuplicate,
+    setDuplicateMeetingHint,
   ]);
 
   const currentStepIndex = FORM_STEPS.findIndex((step) => step.key === currentStep);
@@ -765,28 +435,22 @@ export function MeetingFormScreen() {
   const canGoBackStep = currentStepIndex > 0;
   const canGoNextStep = currentStepIndex < FORM_STEPS.length - 1;
 
-  const missingAssignmentLabels = useMemo(
-    () => collectMissingAssignmentLabels(effectiveSections),
-    [effectiveSections]
-  );
-
-  const blockedAssignedUserNames = useMemo(
-    () => collectBlockedAssignedUserNames(effectiveSections, blockedOutgoingTalkUserIds, availableUsers),
-    [availableUsers, blockedOutgoingTalkUserIds, effectiveSections]
-  );
-
-  const controlledFieldLabels = useMemo(
-    () => collectControlledFieldLabels(effectiveSections),
-    [effectiveSections]
-  );
-
-  const canGoToPreviousWeek = useMemo(() => {
-    if (mode === 'edit') return true;
-
-    const previousWeekStart = moveWeek(selectedWeekStart, -1);
-    const previousRange = activeMeetingTemplate.getMeetingDateRange(previousWeekStart);
-    return previousRange.endDate >= getTodayStart();
-  }, [activeMeetingTemplate, mode, selectedWeekStart]);
+  const {
+    missingAssignmentLabels,
+    blockedAssignedUserNames,
+    controlledFieldLabels,
+    canGoToPreviousWeek,
+    validateTopLevel,
+  } = useMeetingValidation({
+    title,
+    mode,
+    selectedWeekStart,
+    activeMeetingTemplate,
+    resolvedMeetingDateRange,
+    effectiveSections,
+    blockedOutgoingTalkUserIds,
+    availableUsers,
+  });
 
   const shiftWeek = (offset: number) => {
     if (!canManage) return;
@@ -821,22 +485,6 @@ export function MeetingFormScreen() {
     setSaveError(null);
   };
 
-  const validateTopLevel = (): { isValid: boolean; startDate?: Date; endDate?: Date } => {
-    const nextErrors: MeetingFormErrors = {};
-
-    if (!normalizeText(title)) {
-      nextErrors.title = 'El titulo es obligatorio.';
-    }
-
-    setErrors(nextErrors);
-
-    return {
-      isValid: Object.keys(nextErrors).length === 0,
-      startDate: resolvedMeetingDateRange.startDate,
-      endDate: resolvedMeetingDateRange.endDate,
-    };
-  };
-
   const setTypeForCreate = (nextType: MeetingProgramType) => {
     if (mode === 'edit') return;
     const defaults = createDefaultSectionsForMeetingType(nextType);
@@ -867,310 +515,49 @@ export function MeetingFormScreen() {
     });
   };
 
-  const validateMidweekParticipantInputs = (): string[] => {
-    const errorsBuffer: string[] = [];
-    const usersById = new Set(availableUsers.map((user) => user.uid));
-
-    sections.forEach((section) => {
-      if (section.isEnabled === false) {
-        return;
-      }
-
-      const editorSection = programSectionToEditorSection(section);
-
-      editorSection.items.forEach((assignment, assignmentIndex) => {
-        const assignmentLabel = `${editorSection.title} - Parte ${assignmentIndex + 1}`;
-        const participants =
-          editorSection.id === 'livingAsChristians'
-            ? assignment.participants.slice(0, 2)
-            : assignment.participants;
-
-        participants.forEach((participant, participantIndex) => {
-          if (participant.mode === 'user') {
-            const userId = normalizeText(participant.userId ?? '');
-            if (!userId) {
-              errorsBuffer.push(
-                `${assignmentLabel}: Falta seleccionar usuario en participante ${participantIndex + 1}.`
-              );
-              return;
-            }
-
-            if (!usersById.has(userId)) {
-              errorsBuffer.push(
-                `${assignmentLabel}: El usuario del participante ${participantIndex + 1} no existe o esta inactivo.`
-              );
-            } else if (blockedOutgoingTalkUserIds.has(userId)) {
-              errorsBuffer.push(
-                `${assignmentLabel}: ${participant.displayName || 'El usuario'} no esta disponible por salida a discursar esta semana.`
-              );
-            }
-            return;
-          }
-
-          const manualName = normalizeText(participant.displayName);
-          if (!manualName) {
-            errorsBuffer.push(
-              `${assignmentLabel}: El nombre manual del participante ${participantIndex + 1} es obligatorio.`
-            );
-          }
-        });
-
-        if (editorSection.id === 'livingAsChristians' && assignment.participants.length > 2) {
-          errorsBuffer.push(`${assignmentLabel}: Solo se permiten dos participantes.`);
-        }
-      });
-    });
-
-    return Array.from(new Set(errorsBuffer));
-  };
-
-  const validateMidweekAssignmentTitles = (): string[] => {
-    const errorsBuffer: string[] = [];
-    const nextAssignmentErrors: Record<string, AssignmentCardEditorErrors> = {};
-
-    sections.forEach((section) => {
-      if (section.isEnabled === false) {
-        return;
-      }
-
-      section.assignments.forEach((assignment, assignmentIndex) => {
-        if (normalizeText(assignment.title)) {
-          return;
-        }
-
-        nextAssignmentErrors[assignment.assignmentKey] = {
-          ...nextAssignmentErrors[assignment.assignmentKey],
-          title: 'El titulo de la parte es obligatorio.',
-        };
-        errorsBuffer.push(
-          `${section.title || 'Seccion sin titulo'} - Parte ${assignmentIndex + 1}: falta el titulo.`
-        );
-      });
-    });
-
-    setMidweekAssignmentErrors(nextAssignmentErrors);
-    return Array.from(new Set(errorsBuffer));
-  };
-
-  const buildPayload = (startDate: Date, endDate: Date, actorUid: string): CreateMeetingDTO => {
-    const startTimestamp = Timestamp.fromDate(startDate);
-    const endTimestamp = Timestamp.fromDate(endDate);
-    const meetingDateTimestamp = Timestamp.fromDate(resolvedMeetingDate);
-
-    return {
-      title: normalizeText(title) ?? DEFAULT_TITLE_BY_TYPE[meetingType],
-      description: normalizeText(description),
-      type: meetingType,
-      meetingCategory: meetingType,
-      weekLabel: meetingType === 'midweek' ? selectedWeekLabel : undefined,
-      status,
-      publicationStatus: 'draft',
-      startDate: startTimestamp,
-      endDate: endTimestamp,
-      meetingDate: meetingDateTimestamp,
-      location: normalizeText(location),
-      meetingUrl: normalizeUrl(meetingUrl),
-      notes: normalizeText(notes),
-      sections: effectiveSections,
-      cleaningAssignmentMode: cleaningSelectionMode,
-      cleaningGroupIds: selectedCleaningGroups.map((group) => group.id),
-      cleaningGroupNames: selectedCleaningGroups.map((group) => group.name),
-      attendees: [actorUid],
-      createdBy: actorUid,
-      updatedBy: actorUid,
-    };
-  };
-
-  const persistMeeting = async (intent: SaveIntent): Promise<string | null> => {
-    if (!congregationId) {
-      showPanelErrors(['No se encontro la congregacion del usuario actual.']);
-      return null;
-    }
-
-    const validation = validateTopLevel();
-    if (!validation.isValid || !validation.startDate || !validation.endDate) {
-      showPanelErrors(['Corrige los campos marcados antes de guardar.']);
-      setCurrentStep('basic');
-      return null;
-    }
-
-    const actorUid = normalizeText(user?.uid ?? uid ?? '');
-    if (!actorUid) {
-      showPanelErrors(['Tu sesion no tiene un UID valido para guardar. Cierra sesion e inicia nuevamente.']);
-      return null;
-    }
-
-    if (meetingType === 'midweek') {
-      const titleErrors = validateMidweekAssignmentTitles();
-      if (titleErrors.length > 0) {
-        showPanelErrors(titleErrors);
-        setCurrentStep('program');
-        return null;
-      }
-    } else {
-      setMidweekAssignmentErrors({});
-    }
-
-    const payload = buildPayload(validation.startDate, validation.endDate, actorUid);
-    const blockedAssignedUsers = new Set(
-      (payload.sections ?? [])
-        .flatMap((section) => section.assignments)
-        .flatMap((assignment) => assignment.assignees)
-        .map((assignee) => assignee.assigneeUserId)
-        .filter((candidate): candidate is string => Boolean(candidate))
-        .filter((candidate) => blockedOutgoingTalkUserIds.has(candidate))
-    );
-
-    if (blockedAssignedUsers.size > 0) {
-      const blockedErrors = Array.from(blockedAssignedUsers).map((userId) => {
-        const name = availableUsers.find((item) => item.uid === userId)?.displayName ?? userId;
-        return `${name}: ${OUTGOING_TALK_BLOCK_MESSAGE}.`;
-      });
-      showPanelErrors(blockedErrors);
-      return null;
-    }
-
-    if (intent === 'published') {
-      if (meetingType === 'midweek') {
-        const midweekParticipantErrors = validateMidweekParticipantInputs();
-        if (midweekParticipantErrors.length > 0) {
-          showPanelErrors(midweekParticipantErrors);
-          setCurrentStep('program');
-          return null;
-        }
-      }
-
-      if (meetingType === 'weekend') {
-        const weekendValidationErrors = validateWeekendSessionsForPublish(
-          weekendSessions,
-          availableUsers
-        );
-        const weekendBlockedErrors = weekendSessions.flatMap((session, index) => {
-          const blockedNames = [
-            session.publicTalk.speaker.userId,
-            session.watchtowerStudy.conductor.userId,
-            session.watchtowerStudy.reader.userId,
-          ]
-            .filter((candidate): candidate is string => Boolean(candidate))
-            .filter((candidate) => blockedOutgoingTalkUserIds.has(candidate))
-            .map((candidate) => availableUsers.find((item) => item.uid === candidate)?.displayName ?? candidate);
-
-          return blockedNames.map(
-            (name) => `Sesion ${index + 1}: ${name} - ${OUTGOING_TALK_BLOCK_MESSAGE}.`
-          );
-        });
-
-        if (weekendValidationErrors.length > 0 || weekendBlockedErrors.length > 0) {
-          const allErrors = [...weekendValidationErrors, ...weekendBlockedErrors];
-          showPanelErrors(allErrors);
-          setCurrentStep('program');
-          return null;
-        }
-      }
-
-      const publishValidation = validateMeetingBeforePublish({
-        meetingType,
-        congregationId,
-        meetingDate: payload.meetingDate,
-        sections: payload.sections ?? [],
-        activeUsers: availableUsers,
-      });
-
-      if (!publishValidation.isValid) {
-        showPanelErrors(publishValidation.errors);
-        return null;
-      }
-
-      clearPanelErrors();
-    }
-
-    if (mode === 'create') {
-      return createMeeting(
-        congregationId,
-        payload,
-        actorUid,
-        appUser?.displayName ?? user?.email ?? 'Usuario'
-      );
-    }
-
-    if (!id) {
-      return null;
-    }
-
-    const updatePayload: UpdateMeetingDTO = { ...payload, updatedBy: actorUid };
-    await updateMeeting(congregationId, id, updatePayload);
-    return id;
-  };
-
-  const handleSave = async (intent: SaveIntent) => {
-    if (intent === 'published' && !isReviewStep) {
-      clearPanelErrors();
-      setCurrentStep('review');
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({ y: 0, animated: true });
-      });
-      return;
-    }
-
-    setSavingIntent(intent);
-    setSaveError(null);
-
-    try {
-      const meetingId = await persistMeeting(intent);
-      if (!meetingId || !congregationId) {
-        setSaveError('No se pudo guardar la reunion. Revisa los campos e intenta nuevamente.');
-        scrollRef.current?.scrollTo({ y: 0, animated: true });
-        return;
-      }
-
-      await syncMeetingCleaningAssignmentsByManager({
-        congregationId,
-        meetingId,
-        mode: cleaningSelectionMode,
-        groups: selectedCleaningGroups.map((group) => ({ id: group.id, name: group.name })),
-        meetingTitle: normalizeText(title) ?? DEFAULT_TITLE_BY_TYPE[meetingType],
-        meetingDate: Timestamp.fromDate(resolvedMeetingDate),
-        assignedByName: appUser?.displayName ?? user?.email ?? 'Usuario',
-      });
-
-      if (intent === 'draft') {
-        if (mode === 'edit') {
-          await setMeetingPublicationStatus({
-            congregationId,
-            meetingId,
-            publicationStatus: 'draft',
-          });
-        }
-
-        router.replace('/(protected)/meetings/manage' as never);
-        return;
-      }
-
-      const publishResult = await setMeetingPublicationStatus({
-        congregationId,
-        meetingId,
-        publicationStatus: 'published',
-      });
-
-      if (!publishResult.ok) {
-        showPanelErrors(publishResult.errors);
-
-        if (mode === 'create') {
-          router.replace(`/(protected)/meetings/edit/${meetingId}` as never);
-        }
-
-        return;
-      }
-
-      router.replace('/(protected)/meetings/manage' as never);
-    } catch (requestError) {
-      const message = formatFirestoreError(requestError);
-      setSaveError(message);
-      showPanelErrors([message]);
-    } finally {
-      setSavingIntent(null);
-    }
-  };
+  const { handleSave } = useMeetingPublishFlow({
+    mode,
+    id,
+    congregationId,
+    uid,
+    authUid: user?.uid,
+    authEmail: user?.email,
+    appUserDisplayName: appUser?.displayName,
+    isReviewStep,
+    meetingType,
+    title,
+    description,
+    selectedWeekLabel,
+    status,
+    location,
+    meetingUrl,
+    notes,
+    effectiveSections,
+    sections,
+    weekendSessions,
+    availableUsers,
+    blockedOutgoingTalkUserIds,
+    cleaningSelectionMode,
+    selectedCleaningGroups,
+    resolvedMeetingDate,
+    validateTopLevel: () => {
+      const validation = validateTopLevel();
+      setErrors(validation.errors);
+      return validation;
+    },
+    setMidweekAssignmentErrors,
+    setCurrentStep,
+    setSavingIntent,
+    setSaveError,
+    showPanelErrors,
+    clearPanelErrors,
+    scrollToTop: () => {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    },
+    replaceRoute: (href) => {
+      router.replace(href as never);
+    },
+  });
 
   if (loading || loadingPermissions) {
     return <LoadingState message="Cargando formulario de reuniones..." />;
