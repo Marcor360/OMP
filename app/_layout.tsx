@@ -109,15 +109,11 @@ function RootLayoutNav() {
     if (!appReady) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    const inLanding = segments[0] === 'landing';
     const inLanguageSetup = segments[0] === 'language-setup';
     const inProtectedGroup = segments[0] === '(protected)';
     const currentPath = buildPathWithParams(pathname, searchParams);
 
     if (!hasCompletedLanguageOnboarding) {
-      if (Platform.OS === 'web' && inLanding) {
-        return;
-      }
       if (!inLanguageSetup) {
         router.replace('/language-setup');
       }
@@ -135,9 +131,9 @@ function RootLayoutNav() {
         pathname: '/login',
         params: { redirectTo: currentPath },
       });
-    } else if (!user && !inAuthGroup && !inLanding) {
-      // Sin sesion: en web mostramos la landing publica; en nativo vamos directo a login.
-      router.replace(Platform.OS === 'web' ? '/landing' : '/login');
+    } else if (!user && !inAuthGroup) {
+      // Sin sesion: ir directo a login.
+      router.replace('/login');
     } else if (user && inAuthGroup) {
       // Con sesión y en pantalla de auth → ir a tabs
       router.replace(getSafeRedirectPath(searchParams.redirectTo) as any);
@@ -163,7 +159,6 @@ function RootLayoutNav() {
   return (
     <Stack>
       <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="landing" options={{ headerShown: false }} />
       <Stack.Screen name="language-setup" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(protected)" options={{ headerShown: false }} />
