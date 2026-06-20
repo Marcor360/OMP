@@ -3,6 +3,7 @@ import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { ThemedText } from '@/src/components/themed-text';
+import { useOptionalI18n } from '@/src/i18n';
 import { useAppColors } from '@/src/styles';
 
 // Prevenir auto-hide en web también
@@ -12,6 +13,8 @@ if (Platform.OS === 'web') {
 
 export default function Index() {
   const colors = useAppColors();
+  const i18n = useOptionalI18n();
+  const t = i18n ? i18n.t : (key: string) => key;
 
   // Este componente se muestra mientras app/_layout.tsx decide la navegación
   // El splash se oculta desde RootLayoutNav cuando appReady === true
@@ -19,7 +22,7 @@ export default function Index() {
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundDark }]}>
       <ActivityIndicator size="large" color={colors.primary} />
-      <ThemedText style={styles.loadingText}>Cargando...</ThemedText>
+      <ThemedText style={styles.loadingText}>{t('common.loading')}</ThemedText>
     </View>
   );
 }

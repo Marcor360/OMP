@@ -7,6 +7,7 @@ import {
   ASSIGNMENT_CATEGORY_LABELS,
 } from '@/src/modules/assignments/types/assignment.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { useI18n } from '@/src/i18n';
 
 const TABS: AssignmentTab[] = [
   'all',
@@ -24,6 +25,7 @@ interface AssignmentTabsProps {
 export function AssignmentTabs({ activeTab, onChange }: AssignmentTabsProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
 
   return (
     <View style={styles.container}>
@@ -38,7 +40,7 @@ export function AssignmentTabs({ activeTab, onChange }: AssignmentTabsProps) {
             activeOpacity={0.85}
           >
             <ThemedText style={[styles.tabText, isActive && styles.tabTextActive]}>
-              {ASSIGNMENT_CATEGORY_LABELS[tab]}
+              {t(`assignments.categories.${tab}` as any)}
             </ThemedText>
           </TouchableOpacity>
         );

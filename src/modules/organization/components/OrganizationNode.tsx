@@ -5,6 +5,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { UserIcon } from '@/src/modules/organization/components/UserIcon';
 import type { OrganizationTreeNode } from '@/src/modules/organization/types/organization.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { useOptionalI18n } from '@/src/i18n';
 
 type OrganizationNodeProps = {
   node: OrganizationTreeNode;
@@ -23,6 +24,8 @@ export function OrganizationNode({
 }: OrganizationNodeProps) {
   const colors = useAppColors();
   const styles = createStyles(colors, compact);
+  const i18n = useOptionalI18n();
+  const t = i18n ? i18n.t : (key: string) => key;
   const isDepartment = node.type === 'department';
 
   return (
@@ -67,7 +70,7 @@ export function OrganizationNode({
       {node.departmentName ? (
         <View style={styles.badge}>
           <ThemedText style={styles.badgeText} numberOfLines={1}>
-            {isDepartment ? 'Departamento' : node.departmentName}
+            {isDepartment ? t('organization.department') : node.departmentName}
           </ThemedText>
         </View>
       ) : null}

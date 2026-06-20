@@ -655,6 +655,34 @@ export const es = {
     successSent: 'Informe de {{month}} enviado correctamente.',
     errorAlreadySent: 'Este informe mensual ya fue enviado.',
     errorOutsideWindow: 'Fuera de ventana. Solo se puede enviar durante los primeros {{days}} días del mes.',
+    managerPanel: {
+      noPermissions: 'No tienes permisos para ver el panel de predicación.',
+      title: 'Panel de predicación',
+      selectedMonth: 'Mes seleccionado',
+      loadingReports: 'Cargando informes...',
+      publishers: 'Publicadores',
+      submitted: 'Enviados',
+      missing: 'Faltantes',
+      hours: 'Horas',
+      studies: 'Estudios',
+      courses: 'Cursos',
+      submittedReports: 'Informes enviados',
+      noReports: 'Sin informes',
+      noReportsDesc: 'Aún no hay informes enviados para este mes.',
+      participated: 'Sí participó',
+      notParticipated: 'No participó',
+      pioneerType: 'Tipo de precursor',
+      pioneerRegular: 'Regular',
+      pioneerAuxiliary: 'Auxiliar',
+      pioneerNone: 'No precursor',
+      comments: 'Comentarios',
+      submissionDate: 'Fecha de envío',
+      allSubmittedTitle: 'Todos han informado',
+      allSubmittedDesc: 'No hay publicadores faltantes para este mes.',
+      missingReportPill: 'Falta informe',
+      privileges: 'Privilegios',
+      noPrivileges: 'Sin privilegios registrados',
+    }
   },
   // Hospitality
   hospitality: {
@@ -723,6 +751,38 @@ export const es = {
       goHome: 'Ir al inicio',
     },
   },
+  // Meetings
+  meetings: {
+    participantSelector: {
+      remove: 'Quitar',
+      modeUser: 'Usuario',
+      modeManual: 'Manual',
+      labelManual: 'Nombre manual',
+      placeholderManual: 'Nombre del participante',
+      labelSystemUser: 'Usuario del sistema',
+      placeholderUser: 'Seleccionar usuario',
+      emptyActiveUsers: 'No hay usuarios activos.',
+    }
+  },
+  // System
+  system: {
+    announcements: {
+      info: 'Información',
+      update: 'Actualización',
+      warning: 'Aviso importante',
+      maintenance: 'Mantenimiento',
+      understood: 'Entendido',
+      dismissAccessibility: 'Cerrar aviso del sistema',
+    },
+    modal: {
+      title: 'Este es un modal',
+      goHome: 'Ir a la pantalla de inicio',
+    }
+  },
+  // Organization
+  organization: {
+    department: 'Departamento',
+  }
 } as const;
 
 export type EsTranslations = typeof es;

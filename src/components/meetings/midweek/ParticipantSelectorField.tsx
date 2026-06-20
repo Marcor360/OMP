@@ -5,8 +5,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/src/components/themed-text';
 import { OUTGOING_TALK_BLOCK_MESSAGE } from '@/src/modules/assignments/utils/outgoing-talks';
 import { ActiveCongregationUser } from '@/src/services/users/active-users-service';
-import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { useAppColors, type AppColors as AppColorSet } from '@/src/styles';
 import { ParticipantAssignment } from '@/src/types/midweek-meeting';
+import { useI18n } from '@/src/i18n';
 
 interface ParticipantSelectorFieldProps {
   participant: ParticipantAssignment;
@@ -36,6 +37,7 @@ export function ParticipantSelectorField({
   const colors = useAppColors();
   const styles = createStyles(colors);
   const [expanded, setExpanded] = useState(false);
+  const { t } = useI18n();
 
   const selectedUser = useMemo(
     () => users.find((user) => user.uid === participant.userId),
@@ -79,7 +81,7 @@ export function ParticipantSelectorField({
         {canRemove && onRemove ? (
           <TouchableOpacity onPress={onRemove} disabled={disabled} style={styles.removeButton}>
             <Ionicons name="trash-outline" size={16} color={colors.error} />
-            <ThemedText style={styles.removeText}>Quitar</ThemedText>
+            <ThemedText style={styles.removeText}>{t('meetings.participantSelector.remove')}</ThemedText>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -92,7 +94,7 @@ export function ParticipantSelectorField({
           disabled={disabled}
         >
           <ThemedText style={[styles.modeText, currentMode === 'user' && styles.modeTextActive]}>
-            Usuario
+            {t('meetings.participantSelector.modeUser')}
           </ThemedText>
         </TouchableOpacity>
 
@@ -104,7 +106,7 @@ export function ParticipantSelectorField({
             disabled={disabled}
           >
             <ThemedText style={[styles.modeText, currentMode === 'manual' && styles.modeTextActive]}>
-              Manual
+              {t('meetings.participantSelector.modeManual')}
             </ThemedText>
           </TouchableOpacity>
         ) : null}
@@ -112,7 +114,7 @@ export function ParticipantSelectorField({
 
       {currentMode === 'manual' ? (
         <View style={styles.fieldWrap}>
-          <ThemedText style={styles.label}>Nombre manual</ThemedText>
+          <ThemedText style={styles.label}>{t('meetings.participantSelector.labelManual')}</ThemedText>
           <TextInput
             style={[styles.input, error && styles.inputError]}
             value={participant.displayName}
@@ -126,14 +128,14 @@ export function ParticipantSelectorField({
                 roleLabel: undefined,
               })
             }
-            placeholder="Nombre del participante"
+            placeholder={t('meetings.participantSelector.placeholderManual')}
             placeholderTextColor={colors.textDisabled}
             editable={!disabled}
           />
         </View>
       ) : (
         <View style={styles.fieldWrap}>
-          <ThemedText style={styles.label}>Usuario del sistema</ThemedText>
+          <ThemedText style={styles.label}>{t('meetings.participantSelector.labelSystemUser')}</ThemedText>
           <TouchableOpacity
             style={[styles.userSelectButton, error && styles.inputError]}
             onPress={() => setExpanded((current) => !current)}
@@ -141,7 +143,7 @@ export function ParticipantSelectorField({
             disabled={disabled}
           >
             <ThemedText style={styles.userSelectText} numberOfLines={1}>
-              {selectedLabel || 'Seleccionar usuario'}
+              {selectedLabel || t('meetings.participantSelector.placeholderUser')}
             </ThemedText>
             <Ionicons
               name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
@@ -153,7 +155,7 @@ export function ParticipantSelectorField({
           {expanded ? (
             <View style={styles.userListWrap}>
               {users.length === 0 ? (
-                <ThemedText style={styles.emptyUsers}>No hay usuarios activos.</ThemedText>
+                <ThemedText style={styles.emptyUsers}>{t('meetings.participantSelector.emptyActiveUsers')}</ThemedText>
               ) : (
                 <ScrollView
                   style={styles.userList}

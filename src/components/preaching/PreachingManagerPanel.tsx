@@ -15,32 +15,34 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { MissingPreachingReportUser, PreachingReportSubmission } from '@/src/types/preaching-report.types';
 import { PRIVILEGE_LABELS, UserPrivileges } from '@/src/types/user';
 import { formatDateTime } from '@/src/utils/dates/dates';
+import { useI18n } from '@/src/i18n';
 
 interface PreachingManagerPanelProps {
   congregationId: string | null;
   enabled: boolean;
 }
 
-const formatPioneerType = (submission: PreachingReportSubmission): string => {
-  if (submission.pioneerType === 'regular') return 'Regular';
-  if (submission.pioneerType === 'auxiliary') return 'Auxiliar';
-  return 'No precursor';
-};
-
-const privilegeLabels = (privileges?: UserPrivileges): string => {
-  const labels = [
-    privileges?.isElder ? PRIVILEGE_LABELS.isElder : null,
-    privileges?.isMinisterialServant ? PRIVILEGE_LABELS.isMinisterialServant : null,
-    privileges?.isRegularPioneer ? PRIVILEGE_LABELS.isRegularPioneer : null,
-    privileges?.isAuxiliaryPioneer ? PRIVILEGE_LABELS.isAuxiliaryPioneer : null,
-  ].filter(Boolean);
-
-  return labels.length > 0 ? labels.join(', ') : 'Sin privilegios registrados';
-};
-
 export function PreachingManagerPanel({ congregationId, enabled }: PreachingManagerPanelProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
+
+  const formatPioneerType = (submission: PreachingReportSubmission): string => {
+    if (submission.pioneerType === 'regular') return t('fieldService.managerPanel.pioneerRegular');
+    if (submission.pioneerType === 'auxiliary') return t('fieldService.managerPanel.pioneerAuxiliary');
+    return t('fieldService.managerPanel.pioneerNone');
+  };
+
+  const privilegeLabels = (privileges?: UserPrivileges): string => {
+    const labels = [
+      privileges?.isElder ? PRIVILEGE_LABELS.isElder : null,
+      privileges?.isMinisterialServant ? PRIVILEGE_LABELS.isMinisterialServant : null,
+      privileges?.isRegularPioneer ? PRIVILEGE_LABELS.isRegularPioneer : null,
+      privileges?.isAuxiliaryPioneer ? PRIVILEGE_LABELS.isAuxiliaryPioneer : null,
+    ].filter(Boolean);
+
+    return labels.length > 0 ? labels.join(', ') : t('fieldService.managerPanel.noPrivileges');
+  };
   const {
     monthId,
     setMonthId,
@@ -54,7 +56,7 @@ export function PreachingManagerPanel({ congregationId, enabled }: PreachingMana
 
   if (!enabled) {
     return (
-      <ErrorState message="No tienes permisos para ver el panel de predicacion." />
+      <ErrorState message={t('fieldService.managerPanel.noPermissions')} />
     );
   }
 
@@ -71,7 +73,7 @@ export function PreachingManagerPanel({ congregationId, enabled }: PreachingMana
           <Ionicons name="chevron-back" size={18} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.monthTitleWrap}>
-          <ThemedText style={styles.monthLabel}>Mes seleccionado</ThemedText>
+          <ThemedText style={styles.monthLabel}>{t('fieldService.managerPanel.selectedMonth')}</ThemedText>
           <ThemedText style={styles.monthTitle}>{getMonthName(monthId)}</ThemedText>
         </View>
         <TouchableOpacity
@@ -86,29 +88,29 @@ export function PreachingManagerPanel({ congregationId, enabled }: PreachingMana
       {loading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator color={colors.primary} />
-          <ThemedText style={styles.loadingText}>Cargando informes...</ThemedText>
+          <ThemedText style={styles.loadingText}>{t('fieldService.managerPanel.loadingReports')}</ThemedText>
         </View>
       ) : null}
 
       <View style={styles.statsGrid}>
-        <StatCard title="Publicadores" value={summary.totalActivePublishers} icon="people-outline" color={colors.primary} />
-        <StatCard title="Enviados" value={summary.totalSubmitted} icon="checkmark-circle-outline" color={colors.success} />
+        <StatCard title={t('fieldService.managerPanel.publishers')} value={summary.totalActivePublishers} icon="people-outline" color={colors.primary} />
+        <StatCard title={t('fieldService.managerPanel.submitted')} value={summary.totalSubmitted} icon="checkmark-circle-outline" color={colors.success} />
       </View>
       <View style={styles.statsGrid}>
-        <StatCard title="Faltantes" value={summary.totalMissing} icon="alert-circle-outline" color={colors.warning} />
-        <StatCard title="Horas" value={summary.totalPioneerHours} icon="time-outline" color={colors.accent} />
+        <StatCard title={t('fieldService.managerPanel.missing')} value={summary.totalMissing} icon="alert-circle-outline" color={colors.warning} />
+        <StatCard title={t('fieldService.managerPanel.hours')} value={summary.totalPioneerHours} icon="time-outline" color={colors.accent} />
       </View>
       <View style={styles.statsGrid}>
-        <StatCard title="Estudios" value={summary.totalBibleStudies} icon="book-outline" color={colors.secondary} />
-        <StatCard title="Cursos" value={summary.totalReturnVisits} icon="return-down-forward-outline" color={colors.info} />
+        <StatCard title={t('fieldService.managerPanel.studies')} value={summary.totalBibleStudies} icon="book-outline" color={colors.secondary} />
+        <StatCard title={t('fieldService.managerPanel.courses')} value={summary.totalReturnVisits} icon="return-down-forward-outline" color={colors.info} />
       </View>
 
-      <SectionTitle title="Informes enviados" count={submissions.length} />
+      <SectionTitle title={t('fieldService.managerPanel.submittedReports')} count={submissions.length} />
       {submissions.length === 0 ? (
         <EmptyState
           icon="document-text-outline"
-          title="Sin informes"
-          description="Aun no hay informes enviados para este mes."
+          title={t('fieldService.managerPanel.noReports')}
+          description={t('fieldService.managerPanel.noReportsDesc')}
         />
       ) : (
         <View style={styles.list}>
@@ -117,35 +119,35 @@ export function PreachingManagerPanel({ congregationId, enabled }: PreachingMana
               <View style={styles.cardHeader}>
                 <ThemedText style={styles.cardTitle}>{submission.userName}</ThemedText>
                 <ThemedText style={styles.statusPill}>
-                  {submission.participated ? 'Si participo' : 'No participo'}
+                  {submission.participated ? t('fieldService.managerPanel.participated') : t('fieldService.managerPanel.notParticipated')}
                 </ThemedText>
               </View>
-              <InfoLine label="Estudios" value={String(submission.bibleStudies)} />
-              <InfoLine label="Cursos" value={String(submission.returnVisits)} />
-              <InfoLine label="Tipo de precursor" value={formatPioneerType(submission)} />
+              <InfoLine label={t('fieldService.managerPanel.studies')} value={String(submission.bibleStudies)} />
+              <InfoLine label={t('fieldService.managerPanel.courses')} value={String(submission.returnVisits)} />
+              <InfoLine label={t('fieldService.managerPanel.pioneerType')} value={formatPioneerType(submission)} />
               {submission.isPioneer ? (
-                <InfoLine label="Horas" value={String(submission.hours ?? 0)} />
+                <InfoLine label={t('fieldService.managerPanel.hours')} value={String(submission.hours ?? 0)} />
               ) : null}
               {submission.comments ? (
-                <InfoLine label="Comentarios" value={submission.comments} />
+                <InfoLine label={t('fieldService.managerPanel.comments')} value={submission.comments} />
               ) : null}
-              <InfoLine label="Fecha de envio" value={formatDateTime(submission.updatedAt)} />
+              <InfoLine label={t('fieldService.managerPanel.submissionDate')} value={formatDateTime(submission.updatedAt)} />
             </View>
           ))}
         </View>
       )}
 
-      <SectionTitle title="Faltantes" count={missingUsers.length} />
+      <SectionTitle title={t('fieldService.managerPanel.missing')} count={missingUsers.length} />
       {missingUsers.length === 0 ? (
         <EmptyState
           icon="checkmark-done-outline"
-          title="Todos han informado"
-          description="No hay publicadores faltantes para este mes."
+          title={t('fieldService.managerPanel.allSubmittedTitle')}
+          description={t('fieldService.managerPanel.allSubmittedDesc')}
         />
       ) : (
         <View style={styles.list}>
           {missingUsers.map((user) => (
-            <MissingUserCard key={user.uid} user={user} />
+            <MissingUserCard key={user.uid} user={user} privilegeLabelsFn={privilegeLabels} />
           ))}
         </View>
       )}
@@ -177,17 +179,18 @@ function InfoLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MissingUserCard({ user }: { user: MissingPreachingReportUser }) {
+function MissingUserCard({ user, privilegeLabelsFn }: { user: MissingPreachingReportUser, privilegeLabelsFn: (privileges?: UserPrivileges) => string }) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
 
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <ThemedText style={styles.cardTitle}>{user.displayName}</ThemedText>
-        <ThemedText style={styles.missingPill}>Falta informe</ThemedText>
+        <ThemedText style={styles.missingPill}>{t('fieldService.managerPanel.missingReportPill')}</ThemedText>
       </View>
-      <InfoLine label="Privilegios" value={privilegeLabels(user.privileges)} />
+      <InfoLine label={t('fieldService.managerPanel.privileges')} value={privilegeLabelsFn(user.privileges)} />
     </View>
   );
 }

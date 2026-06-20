@@ -610,6 +610,13 @@ export const en = {
       createdAt: 'Created at',
       updatedAt: 'Updated at',
       noDate: 'No date',
+    },
+    categories: {
+      all: 'All',
+      midweek: 'Midweek',
+      weekend: 'Weekend',
+      cleaning: 'Cleaning',
+      hospitality: 'Hospitality',
     }
   },
   // Field Service
@@ -654,7 +661,35 @@ export const en = {
     modalSave: 'Save',
     successSent: 'Report for {{month}} sent successfully.',
     errorAlreadySent: 'This monthly report was already sent.',
-    errorOutsideWindow: 'Outside of window. You can only send it during the first {{days}} days of the month.',
+    errorOutsideWindow: 'Outside window. Can only be sent during the first {{days}} days of the month.',
+    managerPanel: {
+      noPermissions: 'You do not have permissions to view the field service panel.',
+      title: 'Field Service Panel',
+      selectedMonth: 'Selected month',
+      loadingReports: 'Loading reports...',
+      publishers: 'Publishers',
+      submitted: 'Submitted',
+      missing: 'Missing',
+      hours: 'Hours',
+      studies: 'Studies',
+      courses: 'Courses',
+      submittedReports: 'Submitted reports',
+      noReports: 'No reports',
+      noReportsDesc: 'There are no submitted reports for this month yet.',
+      participated: 'Did participate',
+      notParticipated: 'Did not participate',
+      pioneerType: 'Pioneer type',
+      pioneerRegular: 'Regular',
+      pioneerAuxiliary: 'Auxiliary',
+      pioneerNone: 'Not a pioneer',
+      comments: 'Comments',
+      submissionDate: 'Submission date',
+      allSubmittedTitle: 'Everyone has reported',
+      allSubmittedDesc: 'There are no missing publishers for this month.',
+      missingReportPill: 'Missing report',
+      privileges: 'Privileges',
+      noPrivileges: 'No registered privileges',
+    }
   },
   // Hospitality
   hospitality: {
@@ -723,6 +758,38 @@ export const en = {
       goHome: 'Go to Home',
     },
   },
+  // Meetings
+  meetings: {
+    participantSelector: {
+      remove: 'Remove',
+      modeUser: 'User',
+      modeManual: 'Manual',
+      labelManual: 'Manual name',
+      placeholderManual: 'Participant name',
+      labelSystemUser: 'System user',
+      placeholderUser: 'Select user',
+      emptyActiveUsers: 'No active users available.',
+    }
+  },
+  // System
+  system: {
+    announcements: {
+      info: 'Information',
+      update: 'Update',
+      warning: 'Important notice',
+      maintenance: 'Maintenance',
+      understood: 'Understood',
+      dismissAccessibility: 'Close system notice',
+    },
+    modal: {
+      title: 'This is a modal',
+      goHome: 'Go to home screen',
+    }
+  },
+  // Organization
+  organization: {
+    department: 'Department',
+  }
 } as const;
 
 export type EnTranslations = typeof en;

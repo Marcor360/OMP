@@ -11,6 +11,7 @@ import {
 import { type EdgeInsets, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/src/components/themed-text';
+import { useI18n } from '@/src/i18n';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import type {
   SystemAnnouncement,
@@ -37,25 +38,25 @@ const typeConfig: Record<
 > = {
   info: {
     icon: 'information-circle-outline',
-    label: 'Informacion',
+    label: 'info',
     colorKey: 'info',
     backgroundKey: 'infoLight',
   },
   success: {
     icon: 'checkmark-circle-outline',
-    label: 'Actualizacion',
+    label: 'update',
     colorKey: 'success',
     backgroundKey: 'successLight',
   },
   warning: {
     icon: 'warning-outline',
-    label: 'Aviso importante',
+    label: 'warning',
     colorKey: 'warning',
     backgroundKey: 'warningLight',
   },
   maintenance: {
     icon: 'construct-outline',
-    label: 'Mantenimiento',
+    label: 'maintenance',
     colorKey: 'error',
     backgroundKey: 'errorLight',
   },
@@ -70,6 +71,7 @@ export function SystemAnnouncementModal({
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const cardHeight = Math.min(Math.max(320, height - insets.top - insets.bottom - 48), 560);
+  const { t } = useI18n();
   const styles = useMemo(
     () => createStyles(colors, insets, cardHeight),
     [cardHeight, colors, insets]
@@ -106,7 +108,7 @@ export function SystemAnnouncementModal({
             </View>
             <View style={styles.headerText}>
               <ThemedText style={[styles.kicker, { color: accentColor }]}>
-                {config.label}
+                {t(`system.announcements.${config.label}` as any)}
               </ThemedText>
               <ThemedText style={styles.title}>{announcement.title}</ThemedText>
             </View>
@@ -123,7 +125,7 @@ export function SystemAnnouncementModal({
           <View style={styles.footer}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Cerrar aviso del sistema"
+              accessibilityLabel={t('system.announcements.dismissAccessibility')}
               onPress={onClose}
               style={({ pressed }) => [
                 styles.button,
@@ -131,7 +133,7 @@ export function SystemAnnouncementModal({
                 pressed && styles.buttonPressed,
               ]}
             >
-              <ThemedText style={styles.buttonText}>Entendido</ThemedText>
+              <ThemedText style={styles.buttonText}>{t('system.announcements.understood')}</ThemedText>
             </Pressable>
           </View>
         </View>
