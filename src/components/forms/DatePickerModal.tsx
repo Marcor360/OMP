@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { useOptionalI18n } from '@/src/i18n/index';
 
 interface DatePickerModalProps {
   visible: boolean;
@@ -76,8 +77,8 @@ const formatMonth = (year: number, monthIndex: number): string =>
     year: 'numeric',
   }).format(new Date(year, monthIndex, 1));
 
-const formatSelectedDate = (date: string | null): string => {
-  if (!date) return 'Selecciona una fecha';
+const formatSelectedDate = (date: string | null, i18n: any): string => {
+  if (!date) return i18n?.t('common.datePickerNoSelection') ?? 'Selecciona una fecha';
 
   return new Intl.DateTimeFormat('es-MX', {
     weekday: 'long',
@@ -89,13 +90,15 @@ const formatSelectedDate = (date: string | null): string => {
 export function DatePickerModal({
   visible,
   selectedDate,
-  title = 'Seleccionar fecha',
+  title,
   minDate,
   onSelectDate,
   onClose,
 }: DatePickerModalProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const i18n = useOptionalI18n();
+  const resolvedTitle = title ?? i18n?.t('common.datePickerDefaultTitle') ?? 'Seleccionar fecha';
   const initialDate = useMemo(() => parseDateInput(selectedDate), [selectedDate]);
   const [visibleMonth, setVisibleMonth] = useState(
     new Date(initialDate.getFullYear(), initialDate.getMonth(), 1)
@@ -134,9 +137,9 @@ export function DatePickerModal({
         <Pressable style={styles.panel}>
           <View style={styles.topRow}>
             <View>
-              <ThemedText style={styles.title}>{title}</ThemedText>
+              <ThemedText style={styles.title}>{resolvedTitle}</ThemedText>
               <ThemedText style={styles.selectedLabel}>
-                {formatSelectedDate(selectedDate)}
+                {formatSelectedDate(selectedDate, i18n)}
               </ThemedText>
             </View>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>

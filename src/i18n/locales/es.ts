@@ -21,6 +21,28 @@ export const es = {
     retry: 'Reintentar',
     somethingWentWrong: 'Algo salió mal',
     unexpectedError: 'Ocurrió un error. Intenta nuevamente.',
+    permissionOpenSettings: 'Abrir Ajustes',
+    permissionAllow: 'Permitir',
+    permissionA11yLabel: '{{action}} permiso de {{title}}',
+    datePickerDefaultTitle: 'Seleccionar fecha',
+    datePickerNoSelection: 'Selecciona una fecha',
+  },
+  components: {
+    cards: {
+      assignmentOverdue: 'Vencida:',
+      eventFromTo: 'Del {{start}} al {{end}}',
+      eventSuperintendentDefault: 'Superintendente de Circuito',
+      eventDate: 'Fecha:',
+      eventLocation: 'Lugar:',
+      eventWife: 'Esposa:',
+      meetingNoLabel: 'Semana sin etiqueta',
+      meetingReading: 'Lectura:',
+      meetingNoReading: 'No definida',
+      meetingSections: '{{count}} sección',
+      meetingSections_plural: '{{count}} secciones',
+      meetingParts: '{{count}} parte',
+      meetingParts_plural: '{{count}} partes',
+    }
   },
 
   // Tabs

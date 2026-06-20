@@ -8,6 +8,7 @@ import {
   EVENT_TYPE_LABELS,
 } from '@/src/types/event';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { useOptionalI18n } from '@/src/i18n/index';
 
 interface EventCardProps {
   event: CongregationEvent;
@@ -23,7 +24,7 @@ const formatDate = (date: Date): string =>
     timeZone: 'America/Mexico_City',
   }).format(date);
 
-const resolveDateLabel = (event: CongregationEvent): string => {
+const resolveDateLabel = (event: CongregationEvent, i18n: any): string => {
   const start = event.startDate.toDate();
   const end = event.endDate.toDate();
   const sameDay =
@@ -44,12 +45,13 @@ const resolveDateLabel = (event: CongregationEvent): string => {
     return formatDate(start);
   }
 
-  return `Del ${formatDate(start)} al ${formatDate(end)}`;
+  const template = i18n?.t('components.cards.eventFromTo') ?? 'Del {start} al {end}';
+  return template.replace('{start}', formatDate(start)).replace('{end}', formatDate(end)).replace('{{start}}', formatDate(start)).replace('{{end}}', formatDate(end));
 };
 
-const resolveMainText = (event: CongregationEvent): string => {
+const resolveMainText = (event: CongregationEvent, i18n: any): string => {
   if (event.type === 'visita_superintendente') {
-    return event.superintendentName ?? 'Superintendente de Circuito';
+    return event.superintendentName ?? (i18n?.t('components.cards.eventSuperintendentDefault') ?? 'Superintendente de Circuito');
   }
 
   return event.title ?? EVENT_TYPE_LABELS[event.type];
@@ -63,6 +65,7 @@ export function EventCard({
 }: EventCardProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const i18n = useOptionalI18n();
   const accent = event.color;
 
   return (
@@ -94,16 +97,16 @@ export function EventCard({
         ) : null}
       </View>
 
-      <ThemedText style={styles.title}>{resolveMainText(event)}</ThemedText>
+      <ThemedText style={styles.title}>{resolveMainText(event, i18n)}</ThemedText>
       <View style={styles.metaRow}>
         <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
-        <ThemedText style={styles.metaText}>Fecha: {resolveDateLabel(event)}</ThemedText>
+        <ThemedText style={styles.metaText}>{i18n?.t('components.cards.eventDate') ?? 'Fecha:'} {resolveDateLabel(event, i18n)}</ThemedText>
       </View>
 
       {event.location ? (
         <View style={styles.metaRow}>
           <Ionicons name="location-outline" size={14} color={colors.textMuted} />
-          <ThemedText style={styles.metaText}>Lugar: {event.location}</ThemedText>
+          <ThemedText style={styles.metaText}>{i18n?.t('components.cards.eventLocation') ?? 'Lugar:'} {event.location}</ThemedText>
         </View>
       ) : null}
 
@@ -111,7 +114,7 @@ export function EventCard({
         <View style={styles.metaRow}>
           <Ionicons name="people-outline" size={14} color={colors.textMuted} />
           <ThemedText style={styles.metaText}>
-            Esposa: {event.superintendentWifeName}
+            {i18n?.t('components.cards.eventWife') ?? 'Esposa:'} {event.superintendentWifeName}
           </ThemedText>
         </View>
       ) : null}

@@ -8,6 +8,7 @@ import { StatusBadge, assignmentStatusColor, priorityColor } from '@/src/compone
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Assignment, ASSIGNMENT_PRIORITY_LABELS, ASSIGNMENT_STATUS_LABELS } from '@/src/types/assignment';
 import { formatDate, isOverdue } from '@/src/utils/dates/dates';
+import { useOptionalI18n } from '@/src/i18n/index';
 
 interface AssignmentCardProps {
   assignment: Assignment;
@@ -41,6 +42,7 @@ export function AssignmentCard({ assignment, onPress }: AssignmentCardProps) {
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const i18n = useOptionalI18n();
   const dateOverdue = isOverdue(getOverdueDate(assignment));
   const effectiveStatus =
     assignment.status === 'overdue' && !dateOverdue ? 'pending' : assignment.status;
@@ -96,7 +98,7 @@ export function AssignmentCard({ assignment, onPress }: AssignmentCardProps) {
               color={overdue ? colors.error : colors.textMuted}
             />
             <ThemedText style={[styles.meta, overdue && { color: colors.error }]}>
-              {overdue ? 'Vencida: ' : ''}
+              {overdue ? `${i18n?.t('components.cards.assignmentOverdue') ?? 'Vencida:'} ` : ''}
               {formatDate(assignment.dueDate)}
             </ThemedText>
           </View>

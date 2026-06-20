@@ -20,7 +20,29 @@ export const en = {
     no: 'No',
     retry: 'Try again',
     somethingWentWrong: 'Something went wrong',
-    unexpectedError: 'An error occurred. Try again.',
+    unexpectedError: 'An unexpected error occurred. Try again.',
+    permissionOpenSettings: 'Open Settings',
+    permissionAllow: 'Allow',
+    permissionA11yLabel: '{{action}} {{title}} permission',
+    datePickerDefaultTitle: 'Select date',
+    datePickerNoSelection: 'Select a date',
+  },
+  components: {
+    cards: {
+      assignmentOverdue: 'Overdue:',
+      eventFromTo: 'From {{start}} to {{end}}',
+      eventSuperintendentDefault: 'Circuit Overseer',
+      eventDate: 'Date:',
+      eventLocation: 'Location:',
+      eventWife: 'Wife:',
+      meetingNoLabel: 'Unlabeled week',
+      meetingReading: 'Reading:',
+      meetingNoReading: 'Not defined',
+      meetingSections: '{{count}} section',
+      meetingSections_plural: '{{count}} sections',
+      meetingParts: '{{count}} part',
+      meetingParts_plural: '{{count}} parts',
+    }
   },
 
   // Tabs

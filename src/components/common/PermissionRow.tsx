@@ -86,12 +86,12 @@ export function PermissionRow({
   const isInteractive = status === 'undetermined' || status === 'denied';
   const btnLabel =
     status === 'denied'
-      ? i18n?.t('permission.action.openSettings') ?? 'Abrir Ajustes'
+      ? i18n?.t('common.permissionOpenSettings') ?? 'Abrir Ajustes'
       : status === 'granted'
         ? ''
-        : i18n?.t('permission.action.allow') ?? 'Permitir';
+        : i18n?.t('common.permissionAllow') ?? 'Permitir';
   const statusLabel = i18n?.t(cfg.labelKey) ?? cfg.labelKey;
-  const accessibilityLabel = (i18n?.t('permission.accessibilityLabel') ?? '{action} permiso de {title}')
+  const accessibilityLabel = (i18n?.t('common.permissionA11yLabel') ?? '{action} permiso de {title}')
     .replace('{action}', btnLabel)
     .replace('{title}', title);
 

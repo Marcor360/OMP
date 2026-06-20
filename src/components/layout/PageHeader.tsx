@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/src/components/themed-text';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { useOptionalI18n } from '@/src/i18n/index';
 
 interface PageHeaderProps {
   title: string;
@@ -32,6 +33,7 @@ export function PageHeader({
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const i18n = useOptionalI18n();
   const headerAction = actions ?? rightAction;
   const handleBack = () => {
     if (router.canGoBack?.()) {
@@ -51,7 +53,7 @@ export function PageHeader({
             onPress={handleBack}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Volver"
+            accessibilityLabel={i18n?.t('common.back') ?? "Volver"}
           >
             <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>

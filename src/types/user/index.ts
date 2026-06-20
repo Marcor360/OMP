@@ -50,8 +50,6 @@ export const USER_SERVICE_DEPARTMENT_LABELS: Record<UserServiceDepartment, strin
 };
 
 export const USER_SERVICE_DEPARTMENTS: UserServiceDepartment[] = [
-  'coordinacion',
-  'secretaria',
   'limpieza',
   'literatura',
   'tesoreria',

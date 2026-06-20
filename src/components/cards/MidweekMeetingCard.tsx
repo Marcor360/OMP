@@ -9,6 +9,7 @@ import { MidweekMeeting } from '@/src/services/meetings/midweek-meetings-service
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { MEETING_STATUS_LABELS } from '@/src/types/meeting';
 import { formatDate, formatTime } from '@/src/utils/dates/dates';
+import { useOptionalI18n } from '@/src/i18n/index';
 
 interface MidweekMeetingCardProps {
   meeting: MidweekMeeting;
@@ -19,6 +20,7 @@ export function MidweekMeetingCard({ meeting, onPress }: MidweekMeetingCardProps
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const i18n = useOptionalI18n();
 
   const totalAssignments = meeting.midweekSections.reduce(
     (total, section) => total + section.items.length,
@@ -42,7 +44,7 @@ export function MidweekMeetingCard({ meeting, onPress }: MidweekMeetingCardProps
         </View>
 
         <View style={styles.headerInfo}>
-          <ThemedText style={styles.weekLabel}>{meeting.weekLabel || 'Semana sin etiqueta'}</ThemedText>
+          <ThemedText style={styles.weekLabel}>{meeting.weekLabel || (i18n?.t('components.cards.meetingNoLabel') ?? 'Semana sin etiqueta')}</ThemedText>
           <ThemedText style={styles.title} numberOfLines={2}>
             {meeting.title}
           </ThemedText>
@@ -58,7 +60,7 @@ export function MidweekMeetingCard({ meeting, onPress }: MidweekMeetingCardProps
       <View style={styles.metaRow}>
         <Ionicons name="library-outline" size={13} color={colors.textMuted} />
         <ThemedText style={styles.metaText} numberOfLines={1}>
-          Lectura: {meeting.bibleReading || 'No definida'}
+          {i18n?.t('components.cards.meetingReading') ?? 'Lectura:'} {meeting.bibleReading || (i18n?.t('components.cards.meetingNoReading') ?? 'No definida')}
         </ThemedText>
       </View>
 
@@ -71,10 +73,14 @@ export function MidweekMeetingCard({ meeting, onPress }: MidweekMeetingCardProps
 
       <View style={styles.footer}>
         <View style={styles.footerChip}>
-          <ThemedText style={styles.footerText}>{meeting.midweekSections.length} secciones</ThemedText>
+          <ThemedText style={styles.footerText}>
+            {i18n?.t('components.cards.meetingSections', { count: meeting.midweekSections.length, defaultValue: `${meeting.midweekSections.length} secciones` })}
+          </ThemedText>
         </View>
         <View style={styles.footerChip}>
-          <ThemedText style={styles.footerText}>{totalAssignments} partes</ThemedText>
+          <ThemedText style={styles.footerText}>
+            {i18n?.t('components.cards.meetingParts', { count: totalAssignments, defaultValue: `${totalAssignments} partes` })}
+          </ThemedText>
         </View>
       </View>
     </TouchableOpacity>
