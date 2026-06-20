@@ -16,6 +16,7 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
+import { useI18n } from '@/src/i18n/index';
 import {
   getCleaningGroups,
 } from '@/src/modules/cleaning/services/cleaning-service';
@@ -128,6 +129,7 @@ export function CleaningScheduleScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { appUser, congregationId, uid, loadingProfile, profileError } = useUser();
+  const { t } = useI18n();
   const canManage = canManageCleaning(appUser);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -136,7 +138,7 @@ export function CleaningScheduleScreen() {
   const [groups, setGroups] = useState<CleaningGroup[]>([]);
   const [schedules, setSchedules] = useState<CleaningSchedule[]>([]);
   const [selectedSchedule, setSelectedSchedule] = useState<CleaningSchedule | null>(null);
-  const [title, setTitle] = useState('Programa de limpieza');
+  const [title, setTitle] = useState(t('cleaning.scheduleTitle'));
   const [startDate, setStartDate] = useState(todayKey());
   const [endDate, setEndDate] = useState(addDaysKey(todayKey(), 45));
   const [rows, setRows] = useState<CleaningPlanningRow[]>([]);
@@ -170,7 +172,7 @@ export function CleaningScheduleScreen() {
       const parsedStart = parseDateKey(rangeStart);
       const parsedEnd = parseDateKey(rangeEnd);
       if (!parsedStart || !parsedEnd || parsedStart > parsedEnd) {
-        Alert.alert('Rango invalido', 'Usa fechas validas en formato YYYY-MM-DD.');
+        Alert.alert(t('cleaning.scheduleInvalidRangeTitle'), t('cleaning.scheduleInvalidRangeMsg'));
         return;
       }
 
@@ -260,13 +262,13 @@ export function CleaningScheduleScreen() {
 
   const saveDraft = useCallback(async (): Promise<CleaningSchedule> => {
     if (!congregationId || !uid) {
-      throw new Error('No hay congregacion activa.');
+      throw new Error(t('dashboard.noCongregation'));
     }
 
     const parsedStart = parseDateKey(startDate);
     const parsedEnd = parseDateKey(endDate);
     if (!parsedStart || !parsedEnd || parsedStart > parsedEnd) {
-      throw new Error('Usa un rango valido en formato YYYY-MM-DD.');
+      throw new Error(t('cleaning.scheduleInvalidRangeMsg'));
     }
 
     const scheduleId =
@@ -304,7 +306,7 @@ export function CleaningScheduleScreen() {
     });
 
     if (items.length === 0) {
-      throw new Error('Asigna al menos un grupo antes de guardar.');
+      throw new Error(t('cleaning.scheduleRequireGroup'));
     }
 
     await saveCleaningScheduleItems({
@@ -333,13 +335,13 @@ export function CleaningScheduleScreen() {
     setSaving(true);
     try {
       await saveDraft();
-      Alert.alert('Borrador guardado', 'El programa de limpieza quedo guardado.');
+      Alert.alert(t('cleaning.scheduleDraftSavedTitle'), t('cleaning.scheduleDraftSavedMsg'));
     } catch (requestError) {
-      Alert.alert('No se pudo guardar', formatFirestoreError(requestError));
+      Alert.alert(t('cleaning.scheduleSaveFailed'), formatFirestoreError(requestError));
     } finally {
       setSaving(false);
     }
-  }, [saveDraft]);
+  }, [saveDraft, t]);
 
   const handlePublish = useCallback(async () => {
     if (!congregationId || !uid) return;
@@ -357,26 +359,26 @@ export function CleaningScheduleScreen() {
       });
       await loadSchedules();
       Alert.alert(
-        'Programa publicado',
-        `Se sincronizaron ${result.syncedMeetings} reuniones. Pendientes sin reunion: ${result.missingMeetings}.`
+        t('cleaning.schedulePublishedTitle'),
+        t('cleaning.schedulePublishedMsg', { synced: result.syncedMeetings, missing: result.missingMeetings })
       );
     } catch (requestError) {
-      Alert.alert('No se pudo publicar', formatFirestoreError(requestError));
+      Alert.alert(t('cleaning.schedulePublishFailed'), formatFirestoreError(requestError));
     } finally {
       setPublishing(false);
     }
-  }, [congregationId, endDate, loadSchedules, saveDraft, startDate, uid]);
+  }, [congregationId, endDate, loadSchedules, saveDraft, startDate, uid, t]);
 
   if (loadingProfile || loading) {
-    return <LoadingState message="Cargando programa de limpieza..." />;
+    return <LoadingState message={t('cleaning.scheduleLoading')} />;
   }
 
   if (!congregationId) {
-    return <ErrorState message={profileError ?? 'No hay congregacion activa.'} />;
+    return <ErrorState message={profileError ?? t('dashboard.noCongregation')} />;
   }
 
   if (!canManage) {
-    return <ErrorState message="No tienes permiso para programar limpieza." />;
+    return <ErrorState message={t('cleaning.scheduleNoPermission')} />;
   }
 
   if (error) {
@@ -386,8 +388,8 @@ export function CleaningScheduleScreen() {
   return (
     <ScreenContainer scrollable={false} padded={false}>
       <PageHeader
-        title="Programa de limpieza"
-        subtitle="Planeacion mensual o bimestral"
+        title={t('cleaning.scheduleTitle')}
+        subtitle={t('cleaning.scheduleSubtitle')}
         showBack
         actions={
           <TouchableOpacity
@@ -407,12 +409,12 @@ export function CleaningScheduleScreen() {
         ListHeaderComponent={
           <View style={styles.topStack}>
             <View style={styles.panel}>
-              <ThemedText style={styles.sectionTitle}>Lista de trabajo</ThemedText>
+              <ThemedText style={styles.sectionTitle}>{t('cleaning.scheduleWorkList')}</ThemedText>
               <TextInput
                 style={styles.input}
                 value={title}
                 onChangeText={setTitle}
-                placeholder="Titulo"
+                placeholder={t('cleaning.scheduleTitlePlaceholder')}
                 placeholderTextColor={colors.textDisabled}
               />
               <View style={styles.dateRow}>
@@ -440,7 +442,7 @@ export function CleaningScheduleScreen() {
                   disabled={saving || publishing}
                 >
                   <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-                  <ThemedText style={styles.secondaryButtonText}>Cargar reuniones</ThemedText>
+                  <ThemedText style={styles.secondaryButtonText}>{t('cleaning.scheduleLoadMeetings')}</ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.secondaryButton}
@@ -449,7 +451,7 @@ export function CleaningScheduleScreen() {
                 >
                   <Ionicons name="save-outline" size={16} color={colors.primary} />
                   <ThemedText style={styles.secondaryButtonText}>
-                    {saving ? 'Guardando...' : 'Guardar'}
+                    {saving ? t('cleaning.scheduleSaving') : t('cleaning.scheduleSave')}
                   </ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -459,7 +461,7 @@ export function CleaningScheduleScreen() {
                 >
                   <Ionicons name="cloud-upload-outline" size={16} color={colors.onPrimary} />
                   <ThemedText style={styles.primaryButtonText}>
-                    {publishing ? 'Publicando...' : 'Publicar'}
+                    {publishing ? t('cleaning.schedulePublishing') : t('cleaning.schedulePublish')}
                   </ThemedText>
                 </TouchableOpacity>
               </View>
@@ -492,7 +494,7 @@ export function CleaningScheduleScreen() {
                         schedule.status === 'published' && styles.publishedText,
                       ]}
                     >
-                      {schedule.status === 'published' ? 'Publicada' : 'Borrador'}
+                      {schedule.status === 'published' ? t('cleaning.scheduleStatusPublished') : t('cleaning.scheduleStatusDraft')}
                     </ThemedText>
                   </TouchableOpacity>
                 ))}
@@ -502,7 +504,7 @@ export function CleaningScheduleScreen() {
             <View style={styles.counterPill}>
               <View style={styles.counterDot} />
               <ThemedText style={styles.counterText}>
-                {rows.length} reunion{rows.length === 1 ? '' : 'es'} en el rango
+                {t(rows.length === 1 ? 'cleaning.scheduleMeetingsInRange' : 'cleaning.scheduleMeetingsInRange_plural', { count: rows.length })}
               </ThemedText>
             </View>
           </View>
@@ -517,7 +519,7 @@ export function CleaningScheduleScreen() {
                 <View style={styles.meetingTitleWrap}>
                   <ThemedText style={styles.meetingTitle}>{item.meetingTitle}</ThemedText>
                   <ThemedText style={styles.meetingMeta}>
-                    {item.meetingDate} · {item.meetingType === 'midweek' ? 'Entre semana' : 'Fin de semana'}
+                    {item.meetingDate} · {item.meetingType === 'midweek' ? t('cleaning.scheduleMidweek') : t('cleaning.scheduleWeekend')}
                   </ThemedText>
                 </View>
               </View>
@@ -528,9 +530,9 @@ export function CleaningScheduleScreen() {
                   onPress={() => setExpandedMeetingId(expanded ? null : item.meetingId)}
                 >
                   <View style={styles.roleTextWrap}>
-                    <ThemedText style={styles.roleTitle}>Grupo asignado</ThemedText>
+                    <ThemedText style={styles.roleTitle}>{t('cleaning.scheduleAssignedGroup')}</ThemedText>
                     <ThemedText style={styles.roleUser}>
-                      {selectedGroup?.name ?? 'Sin asignar'}
+                      {selectedGroup?.name ?? t('cleaning.scheduleUnassigned')}
                     </ThemedText>
                   </View>
                   <Ionicons
@@ -549,7 +551,7 @@ export function CleaningScheduleScreen() {
                         setExpandedMeetingId(null);
                       }}
                     >
-                      <ThemedText style={styles.groupOptionName}>Sin asignar</ThemedText>
+                      <ThemedText style={styles.groupOptionName}>{t('cleaning.scheduleUnassigned')}</ThemedText>
                     </TouchableOpacity>
                     {activeGroups.map((group) => (
                       <TouchableOpacity
@@ -562,7 +564,7 @@ export function CleaningScheduleScreen() {
                       >
                         <ThemedText style={styles.groupOptionName}>{group.name}</ThemedText>
                         <ThemedText style={styles.groupOptionMeta}>
-                          {group.memberCount} integrante{group.memberCount === 1 ? '' : 's'}
+                          {t(group.memberCount === 1 ? 'cleaning.membersCount' : 'cleaning.membersCount_plural', { count: group.memberCount })}
                         </ThemedText>
                       </TouchableOpacity>
                     ))}
@@ -576,8 +578,8 @@ export function CleaningScheduleScreen() {
         ListEmptyComponent={
           <EmptyState
             icon="calendar-clear-outline"
-            title="Sin reuniones en el rango"
-            description="Ajusta las fechas y carga las reuniones para generar el programa."
+            title={t('cleaning.scheduleEmptyTitle')}
+            description={t('cleaning.scheduleEmptyDesc')}
           />
         }
         showsVerticalScrollIndicator={false}

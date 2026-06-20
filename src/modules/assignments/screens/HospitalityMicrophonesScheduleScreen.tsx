@@ -16,6 +16,7 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
+import { useI18n } from '@/src/i18n/index';
 import { useUser } from '@/src/context/user-context';
 import {
   createHospitalitySchedule,
@@ -49,15 +50,7 @@ type PlanningRow = {
   assignments: Partial<Record<HospitalityRoleKey, string>>;
 };
 
-const ROLE_LABELS: Record<HospitalityRoleKey, string> = {
-  microphoneOne: 'Microfono 1',
-  microphoneTwo: 'Microfono 2',
-  attendantDoor: 'Acomodador de puerta',
-  attendantAuditorium: 'Acomodador de auditorio',
-  watchtowerReader: 'Lector Atalaya',
-  midweekBibleStudyReader: 'Lector estudio biblico',
-  audioVideo: 'Audio y video',
-};
+
 
 const COMMON_ROLES: HospitalityRoleKey[] = [
   'microphoneOne',
@@ -136,6 +129,7 @@ const buildItemsFromRows = (params: {
   rows: PlanningRow[];
   usersById: Map<string, ActiveCongregationUser>;
   actorUid: string;
+  t: (key: any) => string;
 }): Omit<HospitalityScheduleItem, 'id' | 'createdAt' | 'updatedAt'>[] =>
   params.rows.flatMap((row) =>
     rolesForMeetingType(row.meetingType).flatMap((roleKey) => {
@@ -150,7 +144,7 @@ const buildItemsFromRows = (params: {
         meetingDate: row.meetingDate,
         meetingType: row.meetingType,
         roleKey,
-        roleLabel: ROLE_LABELS[roleKey],
+        roleLabel: params.t(`hospitality.roles.${roleKey}`),
         userId: user.uid,
         userNameSnapshot: user.displayName,
         status: 'scheduled' as const,
@@ -164,6 +158,7 @@ export function HospitalityMicrophonesScheduleScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { appUser, congregationId, uid, loadingProfile, profileError } = useUser();
+  const { t } = useI18n();
   const canManage = canManageHospitalityMicrophones(appUser);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -172,7 +167,7 @@ export function HospitalityMicrophonesScheduleScreen() {
   const [users, setUsers] = useState<ActiveCongregationUser[]>([]);
   const [schedules, setSchedules] = useState<HospitalitySchedule[]>([]);
   const [selectedSchedule, setSelectedSchedule] = useState<HospitalitySchedule | null>(null);
-  const [title, setTitle] = useState('Acomodadores y microfonos');
+  const [title, setTitle] = useState(t('hospitality.scheduleTitle'));
   const [startDate, setStartDate] = useState(todayKey());
   const [endDate, setEndDate] = useState(addDaysKey(todayKey(), 45));
   const [rows, setRows] = useState<PlanningRow[]>([]);
@@ -202,7 +197,7 @@ export function HospitalityMicrophonesScheduleScreen() {
       const parsedStart = parseDateKey(rangeStart);
       const parsedEnd = parseDateKey(rangeEnd);
       if (!parsedStart || !parsedEnd || parsedStart > parsedEnd) {
-        Alert.alert('Rango invalido', 'Usa fechas validas en formato YYYY-MM-DD.');
+        Alert.alert(t('hospitality.scheduleInvalidRangeTitle'), t('hospitality.scheduleInvalidRangeMsg'));
         return;
       }
 
@@ -299,13 +294,13 @@ export function HospitalityMicrophonesScheduleScreen() {
 
   const saveDraft = useCallback(async (): Promise<HospitalitySchedule> => {
     if (!congregationId || !uid) {
-      throw new Error('No hay congregacion activa.');
+      throw new Error(t('dashboard.noCongregation'));
     }
 
     const parsedStart = parseDateKey(startDate);
     const parsedEnd = parseDateKey(endDate);
     if (!parsedStart || !parsedEnd || parsedStart > parsedEnd) {
-      throw new Error('Usa un rango valido en formato YYYY-MM-DD.');
+      throw new Error(t('hospitality.scheduleInvalidRangeMsg'));
     }
 
     const scheduleId =
@@ -340,10 +335,11 @@ export function HospitalityMicrophonesScheduleScreen() {
       rows,
       usersById,
       actorUid: uid,
+      t,
     });
 
     if (items.length === 0) {
-      throw new Error('Asigna al menos una responsabilidad antes de guardar.');
+      throw new Error(t('hospitality.scheduleRequireAssignment'));
     }
 
     await saveHospitalityScheduleItems({
@@ -372,13 +368,13 @@ export function HospitalityMicrophonesScheduleScreen() {
     setSaving(true);
     try {
       await saveDraft();
-      Alert.alert('Borrador guardado', 'La lista quedo guardada correctamente.');
+      Alert.alert(t('hospitality.scheduleDraftSavedTitle'), t('hospitality.scheduleDraftSavedMsg'));
     } catch (requestError) {
-      Alert.alert('No se pudo guardar', formatFirestoreError(requestError));
+      Alert.alert(t('hospitality.scheduleSaveFailed'), formatFirestoreError(requestError));
     } finally {
       setSaving(false);
     }
-  }, [saveDraft]);
+  }, [saveDraft, t]);
 
   const handlePublish = useCallback(async () => {
     if (!congregationId || !uid) return;
@@ -396,26 +392,26 @@ export function HospitalityMicrophonesScheduleScreen() {
       });
       await loadSchedules();
       Alert.alert(
-        'Lista publicada',
-        `Se sincronizaron ${result.syncedMeetings} reuniones. Pendientes sin reunion: ${result.missingMeetings}.`
+        t('hospitality.schedulePublishedTitle'),
+        t('hospitality.schedulePublishedMsg', { synced: result.syncedMeetings, missing: result.missingMeetings })
       );
     } catch (requestError) {
-      Alert.alert('No se pudo publicar', formatFirestoreError(requestError));
+      Alert.alert(t('hospitality.schedulePublishFailed'), formatFirestoreError(requestError));
     } finally {
       setPublishing(false);
     }
-  }, [congregationId, endDate, loadSchedules, saveDraft, startDate, uid]);
+  }, [congregationId, endDate, loadSchedules, saveDraft, startDate, uid, t]);
 
   if (loadingProfile || loading) {
-    return <LoadingState message="Cargando acomodadores y microfonos..." />;
+    return <LoadingState message={t('hospitality.scheduleLoading')} />;
   }
 
   if (!congregationId) {
-    return <ErrorState message={profileError ?? 'No hay congregacion activa.'} />;
+    return <ErrorState message={profileError ?? t('dashboard.noCongregation')} />;
   }
 
   if (!canManage) {
-    return <ErrorState message="No tienes permiso para gestionar acomodadores y microfonos." />;
+    return <ErrorState message={t('hospitality.scheduleNoPermission')} />;
   }
 
   if (error) {
@@ -425,8 +421,8 @@ export function HospitalityMicrophonesScheduleScreen() {
   return (
     <ScreenContainer scrollable={false} padded={false}>
       <PageHeader
-        title="Acomodadores"
-        subtitle="Planeacion y microfonos"
+        title={t('hospitality.scheduleTitle')}
+        subtitle={t('hospitality.scheduleSubtitle')}
         showBack
         actions={
           <View style={styles.headerActions}>
@@ -448,12 +444,12 @@ export function HospitalityMicrophonesScheduleScreen() {
         ListHeaderComponent={
           <View style={styles.topStack}>
             <View style={styles.panel}>
-              <ThemedText style={styles.sectionTitle}>Lista de trabajo</ThemedText>
+              <ThemedText style={styles.sectionTitle}>{t('hospitality.scheduleWorkList')}</ThemedText>
               <TextInput
                 style={styles.input}
                 value={title}
                 onChangeText={setTitle}
-                placeholder="Titulo"
+                placeholder={t('hospitality.scheduleTitlePlaceholder')}
                 placeholderTextColor={colors.textDisabled}
               />
               <View style={styles.dateRow}>
@@ -481,7 +477,7 @@ export function HospitalityMicrophonesScheduleScreen() {
                   disabled={saving || publishing}
                 >
                   <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-                  <ThemedText style={styles.secondaryButtonText}>Cargar reuniones</ThemedText>
+                  <ThemedText style={styles.secondaryButtonText}>{t('hospitality.scheduleLoadMeetings')}</ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.secondaryButton}
@@ -490,7 +486,7 @@ export function HospitalityMicrophonesScheduleScreen() {
                 >
                   <Ionicons name="save-outline" size={16} color={colors.primary} />
                   <ThemedText style={styles.secondaryButtonText}>
-                    {saving ? 'Guardando...' : 'Guardar'}
+                    {saving ? t('hospitality.scheduleSaving') : t('hospitality.scheduleSave')}
                   </ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -500,7 +496,7 @@ export function HospitalityMicrophonesScheduleScreen() {
                 >
                   <Ionicons name="cloud-upload-outline" size={16} color={colors.onPrimary} />
                   <ThemedText style={styles.primaryButtonText}>
-                    {publishing ? 'Publicando...' : 'Publicar'}
+                    {publishing ? t('hospitality.schedulePublishing') : t('hospitality.schedulePublish')}
                   </ThemedText>
                 </TouchableOpacity>
               </View>
@@ -533,7 +529,7 @@ export function HospitalityMicrophonesScheduleScreen() {
                         schedule.status === 'published' && styles.publishedText,
                       ]}
                     >
-                      {schedule.status === 'published' ? 'Publicada' : 'Borrador'}
+                      {schedule.status === 'published' ? t('hospitality.scheduleStatusPublished') : t('hospitality.scheduleStatusDraft')}
                     </ThemedText>
                   </TouchableOpacity>
                 ))}
@@ -543,7 +539,7 @@ export function HospitalityMicrophonesScheduleScreen() {
             <View style={styles.counterPill}>
               <View style={styles.counterDot} />
               <ThemedText style={styles.counterText}>
-                {rows.length} reunion{rows.length === 1 ? '' : 'es'} en el rango
+                {t(rows.length === 1 ? 'hospitality.scheduleMeetingsInRange' : 'hospitality.scheduleMeetingsInRange_plural', { count: rows.length })}
               </ThemedText>
             </View>
           </View>
@@ -554,7 +550,7 @@ export function HospitalityMicrophonesScheduleScreen() {
               <View style={styles.meetingTitleWrap}>
                 <ThemedText style={styles.meetingTitle}>{item.meetingTitle}</ThemedText>
                 <ThemedText style={styles.meetingMeta}>
-                  {item.meetingDate} · {item.meetingType === 'midweek' ? 'Entre semana' : 'Fin de semana'}
+                  {item.meetingDate} · {item.meetingType === 'midweek' ? t('hospitality.scheduleMidweek') : t('hospitality.scheduleWeekend')}
                 </ThemedText>
               </View>
             </View>
@@ -572,9 +568,9 @@ export function HospitalityMicrophonesScheduleScreen() {
                     onPress={() => setExpandedKey(expanded ? null : optionKey)}
                   >
                     <View style={styles.roleTextWrap}>
-                      <ThemedText style={styles.roleTitle}>{ROLE_LABELS[roleKey]}</ThemedText>
+                      <ThemedText style={styles.roleTitle}>{t(`hospitality.roles.${roleKey}` as any)}</ThemedText>
                       <ThemedText style={styles.roleUser}>
-                        {selectedUser?.displayName ?? 'Sin asignar'}
+                        {selectedUser?.displayName ?? t('hospitality.scheduleUnassigned')}
                       </ThemedText>
                     </View>
                     <Ionicons
@@ -593,7 +589,7 @@ export function HospitalityMicrophonesScheduleScreen() {
                           setExpandedKey(null);
                         }}
                       >
-                        <ThemedText style={styles.userOptionName}>Sin asignar</ThemedText>
+                        <ThemedText style={styles.userOptionName}>{t('hospitality.scheduleUnassigned')}</ThemedText>
                       </TouchableOpacity>
                       {users.map((user) => (
                         <TouchableOpacity
@@ -621,8 +617,8 @@ export function HospitalityMicrophonesScheduleScreen() {
         ListEmptyComponent={
           <EmptyState
             icon="calendar-clear-outline"
-            title="Sin reuniones en el rango"
-            description="Ajusta las fechas y carga las reuniones para generar la lista."
+            title={t('hospitality.scheduleEmptyTitle')}
+            description={t('hospitality.scheduleEmptyDesc')}
           />
         }
         showsVerticalScrollIndicator={false}

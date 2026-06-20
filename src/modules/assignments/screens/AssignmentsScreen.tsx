@@ -9,6 +9,7 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
+import { useI18n } from '@/src/i18n/index';
 import { AssignmentCard } from '@/src/modules/assignments/components/AssignmentCard';
 import { AssignmentSummaryCards } from '@/src/modules/assignments/components/AssignmentSummaryCards';
 import { AssignmentTabs } from '@/src/modules/assignments/components/AssignmentTabs';
@@ -31,6 +32,7 @@ export function AssignmentsScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { appUser, congregationId, loadingProfile, profileError, uid } = useUser();
+  const { t } = useI18n();
   const showOutgoingTalks = canManageOutgoingTalks(appUser);
   const showReaders = canManageHospitalityMicrophones(appUser);
   const canCreateAssignments = canManageAssignments(appUser);
@@ -81,15 +83,15 @@ export function AssignmentsScreen() {
   const keyExtractor = useCallback((item: Assignment) => item.sourceKey, []);
 
   if (loadingProfile) {
-    return <LoadingState message="Cargando perfil..." />;
+    return <LoadingState message={t('assignments.loadingProfile')} />;
   }
 
   if (!congregationId) {
-    return <ErrorState message={profileError ?? 'No hay congregacion activa para consultar asignaciones.'} />;
+    return <ErrorState message={profileError ?? t('assignments.noActiveCongregationConsult')} />;
   }
 
   if (loading) {
-    return <LoadingState message="Cargando asignaciones..." />;
+    return <LoadingState message={t('assignments.loadingAssignments')} />;
   }
 
   if (error) {
@@ -99,8 +101,8 @@ export function AssignmentsScreen() {
   return (
     <ScreenContainer scrollable={false} padded={false}>
       <PageHeader
-        title="Asignaciones"
-        subtitle="Panel de solo lectura"
+        title={t('dashboard.assignments')}
+        subtitle={t('assignments.readOnlyPanel')}
         showBack
         actions={
           <View style={styles.actionsRow}>
@@ -111,7 +113,7 @@ export function AssignmentsScreen() {
                 activeOpacity={0.8}
               >
                 <Ionicons name="exit-outline" size={16} color={colors.primary} />
-                <ThemedText style={styles.createButtonText}>Salidas</ThemedText>
+                <ThemedText style={styles.createButtonText}>{t('assignments.btnOutgoingTalks')}</ThemedText>
               </TouchableOpacity>
             ) : null}
             {showReaders ? (
@@ -121,7 +123,7 @@ export function AssignmentsScreen() {
                 activeOpacity={0.8}
               >
                 <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-                <ThemedText style={styles.createButtonText}>Plan</ThemedText>
+                <ThemedText style={styles.createButtonText}>{t('assignments.btnPlan')}</ThemedText>
               </TouchableOpacity>
             ) : null}
             {showReaders ? (
@@ -131,7 +133,7 @@ export function AssignmentsScreen() {
                 activeOpacity={0.8}
               >
                 <Ionicons name="book-outline" size={16} color={colors.primary} />
-                <ThemedText style={styles.createButtonText}>Lectores</ThemedText>
+                <ThemedText style={styles.createButtonText}>{t('assignments.btnReaders')}</ThemedText>
               </TouchableOpacity>
             ) : null}
             {canCreateAssignments ? (
@@ -141,7 +143,7 @@ export function AssignmentsScreen() {
                 activeOpacity={0.8}
               >
                 <Ionicons name="add" size={16} color={colors.primary} />
-                <ThemedText style={styles.createButtonText}>Nuevo</ThemedText>
+                <ThemedText style={styles.createButtonText}>{t('assignments.btnNew')}</ThemedText>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -168,8 +170,7 @@ export function AssignmentsScreen() {
               <View style={styles.counterPill}>
                 <View style={styles.counterDot} />
                 <ThemedText style={styles.counterText}>
-                  {assignments.length} resultado{assignments.length === 1 ? '' : 's'} en{' '}
-                  {ASSIGNMENT_CATEGORY_LABELS[activeTab].toLowerCase()}
+                  {t(assignments.length === 1 ? 'assignments.resultCount' : 'assignments.resultCount_plural', { count: assignments.length, category: ASSIGNMENT_CATEGORY_LABELS[activeTab].toLowerCase() })}
                 </ThemedText>
               </View>
             </View>
@@ -179,8 +180,8 @@ export function AssignmentsScreen() {
           <View style={styles.emptyWrap}>
             <EmptyState
               icon="list-outline"
-              title="Sin asignaciones para este filtro"
-              description="Ajusta los filtros o cambia de categoria para ver resultados."
+              title={t('assignments.emptyFilterTitle')}
+              description={t('assignments.emptyFilterDesc')}
             />
           </View>
         }

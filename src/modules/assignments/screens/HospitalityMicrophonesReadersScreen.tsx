@@ -7,6 +7,7 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
+import { useI18n } from '@/src/i18n/index';
 import { useUser } from '@/src/context/user-context';
 import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
 import {
@@ -62,6 +63,7 @@ export function HospitalityMicrophonesReadersScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { appUser, congregationId, uid, loadingProfile } = useUser();
+  const { t } = useI18n();
   const canManage = canManageHospitalityMicrophones(appUser);
   const [users, setUsers] = useState<ActiveCongregationUser[]>([]);
   const [meetings, setMeetings] = useState<MeetingWithSlots[]>([]);
@@ -166,15 +168,15 @@ export function HospitalityMicrophonesReadersScreen() {
   );
 
   if (loadingProfile || loading) {
-    return <LoadingState message="Cargando lectores..." />;
+    return <LoadingState message={t('hospitality.readersLoading')} />;
   }
 
   if (!congregationId) {
-    return <ErrorState message="No hay congregacion activa." />;
+    return <ErrorState message={t('dashboard.noCongregation')} />;
   }
 
   if (!canManage) {
-    return <ErrorState message="No tienes permiso para controlar lectores." />;
+    return <ErrorState message={t('hospitality.scheduleNoPermission')} />;
   }
 
   if (error) {
@@ -183,11 +185,11 @@ export function HospitalityMicrophonesReadersScreen() {
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
-      <PageHeader title="Lectores" subtitle="Acomodadores y microfonos" showBack />
+      <PageHeader title={t('hospitality.readersTitle')} subtitle={t('hospitality.readersSubtitle')} showBack />
       <ScrollView contentContainerStyle={styles.content}>
         {meetings.length === 0 ? (
           <View style={styles.empty}>
-            <ThemedText style={styles.emptyText}>No hay reuniones proximas con lectores configurables.</ThemedText>
+            <ThemedText style={styles.emptyText}>{t('hospitality.readersEmpty')}</ThemedText>
           </View>
         ) : (
           meetings.map(({ meeting, slots }) => {
@@ -202,8 +204,8 @@ export function HospitalityMicrophonesReadersScreen() {
                   <View style={styles.typePill}>
                     <ThemedText style={styles.typePillText}>
                       {meeting.type === 'midweek' || meeting.meetingCategory === 'midweek'
-                        ? 'Entre semana'
-                        : 'Fin de semana'}
+                        ? t('hospitality.scheduleMidweek')
+                        : t('hospitality.scheduleWeekend')}
                     </ThemedText>
                   </View>
                 </View>
@@ -214,7 +216,7 @@ export function HospitalityMicrophonesReadersScreen() {
                   const selectedName =
                     slot.assignedUserName ??
                     (slot.assignedUserId ? usersById.get(slot.assignedUserId)?.displayName : undefined) ??
-                    'Sin asignar';
+                    t('hospitality.scheduleUnassigned');
                   const isSaving = savingKey === slotKey;
 
                   return (

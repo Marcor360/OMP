@@ -6,6 +6,7 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
+import { useI18n } from '@/src/i18n/index';
 import { useUser } from '@/src/context/user-context';
 import { AssignmentDetailSection } from '@/src/modules/assignments/components/AssignmentDetailSection';
 import { getAssignmentById } from '@/src/modules/assignments/services/assignments.service';
@@ -19,6 +20,7 @@ export function AssignmentDetailScreen() {
     source?: 'meeting' | 'congregation';
   }>();
   const { congregationId, loadingProfile, profileError } = useUser();
+  const { t } = useI18n();
 
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,7 +30,7 @@ export function AssignmentDetailScreen() {
     if (loadingProfile) return;
 
     if (!congregationId || !id) {
-      setError(profileError ?? 'No se pudo cargar el detalle de la asignacion.');
+      setError(profileError ?? t('assignments.errorLoadDetail'));
       setLoading(false);
       return;
     }
@@ -48,7 +50,7 @@ export function AssignmentDetailScreen() {
 
         if (!result) {
           setAssignment(null);
-          setError('Asignacion no encontrada.');
+          setError(t('assignments.errorNotFound'));
           return;
         }
 
@@ -73,16 +75,16 @@ export function AssignmentDetailScreen() {
   }, [congregationId, id, loadingProfile, meetingId, profileError, source]);
 
   if (loading || loadingProfile) {
-    return <LoadingState message="Cargando detalle..." />;
+    return <LoadingState message={t('assignments.loadingDetail')} />;
   }
 
   if (error || !assignment) {
-    return <ErrorState message={error ?? 'Asignacion no encontrada.'} />;
+    return <ErrorState message={error ?? t('assignments.errorNotFound')} />;
   }
 
   return (
     <ScreenContainer>
-      <PageHeader title="Detalle de asignacion" subtitle="Solo lectura" showBack />
+      <PageHeader title={t('assignments.detailTitle')} subtitle={t('assignments.detailSubtitle')} showBack />
 
       {assignment.title ? (
         <ThemedText
