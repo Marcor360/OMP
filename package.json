@@ -16,7 +16,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:rules": "npx -y firebase-tools@latest emulators:exec --only firestore \"jest --config jest.rules.config.js --runInBand\"",
-    "validate": "npm run lint && tsc --noEmit && npm test -- --runInBand && npm --prefix functions run lint && npm --prefix functions run build && npm --prefix functions test -- --runInBand"
+    "validate": "npm run lint && tsc --noEmit && npm test -- --runInBand && npm --prefix functions run lint && npm --prefix functions run build && npm --prefix functions test -- --runInBand",
+    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:all": "npm run deploy:rules && npm run deploy:functions"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
