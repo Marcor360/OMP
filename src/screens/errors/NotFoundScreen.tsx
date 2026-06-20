@@ -5,11 +5,13 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { useI18n } from '@/src/i18n';
 
 export function NotFoundScreen() {
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
 
   return (
     <View style={styles.container}>
@@ -17,15 +19,15 @@ export function NotFoundScreen() {
       <View style={styles.iconWrap}>
         <Ionicons name="search-outline" size={40} color={colors.textDisabled} />
       </View>
-      <ThemedText style={styles.title}>Pagina no encontrada</ThemedText>
-      <ThemedText style={styles.description}>La ruta que buscas no existe o fue movida.</ThemedText>
+      <ThemedText style={styles.title}>{t('errors.notFound.title')}</ThemedText>
+      <ThemedText style={styles.description}>{t('errors.notFound.description')}</ThemedText>
       <TouchableOpacity
         style={styles.button}
         onPress={() => router.replace('/(protected)/(tabs)/' as any)}
         activeOpacity={0.8}
       >
         <Ionicons name="home-outline" size={18} color={colors.onPrimary} />
-        <ThemedText style={styles.buttonText}>Ir al inicio</ThemedText>
+        <ThemedText style={styles.buttonText}>{t('errors.notFound.goHome')}</ThemedText>
       </TouchableOpacity>
     </View>
   );

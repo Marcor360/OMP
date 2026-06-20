@@ -7,6 +7,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { useAppColors, type AppColors as AppColorSet } from '@/src/styles';
 import { MyCleaningDashboardSummary } from '@/src/modules/cleaning/services/my-cleaning-dashboard-service';
 import { ASSIGNMENT_STATUS_LABELS } from '@/src/modules/assignments/types/assignment.types';
+import { useI18n } from '@/src/i18n';
 
 interface MyCleaningDashboardCardProps {
   summary: MyCleaningDashboardSummary | null;
@@ -15,9 +16,9 @@ interface MyCleaningDashboardCardProps {
   canOpenDetails?: boolean;
 }
 
-const formatCleaningDate = (value: string): string => {
+const formatCleaningDate = (value: string, t: any): string => {
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return 'Sin fecha';
+  if (Number.isNaN(parsed.getTime())) return t('cleaning.dashboardCard.noDate');
 
   return parsed.toLocaleDateString('es-MX', {
     weekday: 'long',
@@ -35,6 +36,7 @@ export function MyCleaningDashboardCard({
   const colors = useAppColors();
   const router = useRouter();
   const styles = createStyles(colors);
+  const { t } = useI18n();
   const hasGroup = Boolean(summary?.groupId);
 
   const handlePress = () => {
@@ -55,9 +57,9 @@ export function MyCleaningDashboardCard({
           <Ionicons name="sparkles-outline" size={18} color={colors.warning} />
         </View>
         <View style={styles.headerText}>
-          <ThemedText style={styles.label}>Limpieza</ThemedText>
+          <ThemedText style={styles.label}>{t('cleaning.dashboardCard.title')}</ThemedText>
           <ThemedText style={styles.title} numberOfLines={1}>
-            {hasGroup ? summary?.groupName ?? 'Mi grupo' : 'Sin grupo asignado'}
+            {hasGroup ? summary?.groupName ?? t('cleaning.dashboardCard.myGroupFallback') : t('cleaning.dashboardCard.noGroup')}
           </ThemedText>
         </View>
         {canOpenDetails && summary?.groupId ? (
@@ -68,14 +70,14 @@ export function MyCleaningDashboardCard({
       {error ? (
         <ThemedText style={styles.mutedText}>{error}</ThemedText>
       ) : loading && !summary ? (
-        <ThemedText style={styles.mutedText}>Cargando tus dias de limpieza...</ThemedText>
+        <ThemedText style={styles.mutedText}>{t('cleaning.dashboardCard.loadingDays')}</ThemedText>
       ) : hasGroup && summary?.days.length ? (
         <View style={styles.days}>
           {summary.days.map((day, index) => (
             <View key={`${day.sourceKey}:${day.date}:${index}`} style={styles.dayRow}>
               <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
               <ThemedText style={styles.dayText} numberOfLines={1}>
-                {formatCleaningDate(day.date)}
+                {formatCleaningDate(day.date, t)}
               </ThemedText>
               {day.status ? (
                 <View style={styles.statusPill}>
@@ -89,11 +91,11 @@ export function MyCleaningDashboardCard({
         </View>
       ) : hasGroup ? (
         <ThemedText style={styles.mutedText}>
-          No hay dias de limpieza proximos para tu grupo.
+          {t('cleaning.dashboardCard.noDaysUpcoming')}
         </ThemedText>
       ) : (
         <ThemedText style={styles.mutedText}>
-          Cuando te agreguen a un grupo, aqui apareceran tus proximos dias.
+          {t('cleaning.dashboardCard.noGroupAssignedDesc')}
         </ThemedText>
       )}
     </TouchableOpacity>

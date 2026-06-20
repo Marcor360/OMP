@@ -7,6 +7,7 @@ import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
 import { CongregationAccessState } from '@/src/types/congregation-access';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { useI18n } from '@/src/i18n';
 
 interface CongregationBlockedScreenProps {
   access: CongregationAccessState;
@@ -18,6 +19,7 @@ export function CongregationBlockedScreen({ access }: CongregationBlockedScreenP
   const [now, setNow] = useState(() => Date.now());
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
   const blockedUntilMs = useMemo(() => {
     if (!access.blockedUntil) return null;
     const parsed = new Date(access.blockedUntil).getTime();
@@ -46,23 +48,22 @@ export function CongregationBlockedScreen({ access }: CongregationBlockedScreenP
         <Ionicons name="business-outline" size={46} color={colors.error} />
       </View>
 
-      <ThemedText style={styles.title}>Congregacion desactivada</ThemedText>
+      <ThemedText style={styles.title}>{t('errors.congregationBlocked.title')}</ThemedText>
 
       <View style={styles.details}>
-        <InfoLine label="Congregacion" value={access.congregationName} />
-        <InfoLine label="ID en Firebase" value={access.firebaseName} />
-        <InfoLine label="Motivo" value={access.reasonLabel} />
+        <InfoLine label={t('errors.congregationBlocked.labelCongregation')} value={access.congregationName} />
+        <InfoLine label={t('errors.congregationBlocked.labelFirebaseId')} value={access.firebaseName} />
+        <InfoLine label={t('errors.congregationBlocked.labelReason')} value={access.reasonLabel} />
       </View>
 
       <ThemedText style={styles.description}>
-        No se puede acceder a esta congregacion hasta que sea reactivada desde la
-        administracion general.
+        {t('errors.congregationBlocked.description')}
       </ThemedText>
 
       {remainingMs !== null ? (
         <View style={styles.countdownCard}>
           <ThemedText style={styles.countdownLabel}>
-            O bien, terminando el tiempo de:
+            {t('errors.congregationBlocked.countdownLabel')}
           </ThemedText>
           <ThemedText style={styles.countdownValue}>
             {formatRemainingTime(remainingMs)}
@@ -72,7 +73,7 @@ export function CongregationBlockedScreen({ access }: CongregationBlockedScreenP
 
       <TouchableOpacity style={styles.button} onPress={logout} activeOpacity={0.85}>
         <Ionicons name="log-out-outline" size={18} color={colors.onPrimary} />
-        <ThemedText style={styles.buttonText}>Cerrar sesion</ThemedText>
+        <ThemedText style={styles.buttonText}>{t('errors.congregationBlocked.logout')}</ThemedText>
       </TouchableOpacity>
     </View>
   );

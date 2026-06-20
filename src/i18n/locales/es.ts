@@ -466,6 +466,23 @@ export const es = {
     saveSelection: 'Guardar selección',
     addUsersCount: 'Agregar {{count}} usuario',
     addUsersCount_plural: 'Agregar {{count}} usuarios',
+    groupCard: {
+      active: 'Activo',
+      inactive: 'Inactivo',
+      familyGroup: 'Grupo familiar',
+      membersCount: '{{count}} integrante',
+      membersCount_plural: '{{count}} integrantes',
+      a11yLabel: 'Grupo de limpieza: {{name}}',
+    },
+    dashboardCard: {
+      title: 'Limpieza',
+      noGroup: 'Sin grupo asignado',
+      myGroupFallback: 'Mi grupo',
+      loadingDays: 'Cargando tus días de limpieza...',
+      noDaysUpcoming: 'No hay días de limpieza próximos para tu grupo.',
+      noGroupAssignedDesc: 'Cuando te agreguen a un grupo, aquí aparecerán tus próximos días.',
+      noDate: 'Sin fecha',
+    }
   },
   // Dashboard
   dashboard: {
@@ -575,6 +592,25 @@ export const es = {
     errorNotFound: 'Asignación no encontrada.',
     detailTitle: 'Detalle de asignación',
     detailSubtitle: 'Solo lectura',
+    detailSection: {
+      category: 'Categoría',
+      date: 'Fecha',
+      congregation: 'Congregación',
+      assignedPeople: 'Personas asignadas',
+      unassigned: 'Sin asignar',
+      meetingType: 'Tipo de reunión',
+      meetingTypeMidweek: 'Entre semana',
+      meetingTypeWeekend: 'Fin de semana',
+      subType: 'Subtipo',
+      noSubType: 'Sin subtipo',
+      notes: 'Notas',
+      noNotes: 'Sin notas',
+      status: 'Estado',
+      title: 'Título',
+      createdAt: 'Creada',
+      updatedAt: 'Actualizada',
+      noDate: 'Sin fecha',
+    }
   },
   // Field Service
   fieldService: {
@@ -664,6 +700,28 @@ export const es = {
       midweekBibleStudyReader: 'Lector estudio bíblico',
       audioVideo: 'Audio y video',
     }
+  },
+  // Errors
+  errors: {
+    congregationBlocked: {
+      title: 'Congregación desactivada',
+      labelCongregation: 'Congregación',
+      labelFirebaseId: 'ID en Firebase',
+      labelReason: 'Motivo',
+      description: 'No se puede acceder a esta congregación hasta que sea reactivada desde la administración general.',
+      countdownLabel: 'O bien, terminando el tiempo de:',
+      logout: 'Cerrar sesión',
+    },
+    notFound: {
+      title: 'Página no encontrada',
+      description: 'La ruta que buscas no existe o fue movida.',
+      goHome: 'Ir al inicio',
+    },
+    unauthorized: {
+      title: 'Acceso denegado',
+      description: 'No tienes permisos para acceder a esta sección.\nContacta a un administrador si crees que es un error.',
+      goHome: 'Ir al inicio',
+    },
   },
 } as const;
 

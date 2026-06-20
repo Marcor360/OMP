@@ -466,6 +466,23 @@ export const en = {
     saveSelection: 'Save selection',
     addUsersCount: 'Add {{count}} user',
     addUsersCount_plural: 'Add {{count}} users',
+    groupCard: {
+      active: 'Active',
+      inactive: 'Inactive',
+      familyGroup: 'Family group',
+      membersCount: '{{count}} member',
+      membersCount_plural: '{{count}} members',
+      a11yLabel: 'Cleaning group: {{name}}',
+    },
+    dashboardCard: {
+      title: 'Cleaning',
+      noGroup: 'No assigned group',
+      myGroupFallback: 'My group',
+      loadingDays: 'Loading your cleaning days...',
+      noDaysUpcoming: 'There are no upcoming cleaning days for your group.',
+      noGroupAssignedDesc: 'When you are added to a group, your upcoming days will appear here.',
+      noDate: 'No date',
+    }
   },
   // Dashboard
   dashboard: {
@@ -575,6 +592,25 @@ export const en = {
     errorNotFound: 'Assignment not found.',
     detailTitle: 'Assignment detail',
     detailSubtitle: 'Read only',
+    detailSection: {
+      category: 'Category',
+      date: 'Date',
+      congregation: 'Congregation',
+      assignedPeople: 'Assigned people',
+      unassigned: 'Unassigned',
+      meetingType: 'Meeting type',
+      meetingTypeMidweek: 'Midweek',
+      meetingTypeWeekend: 'Weekend',
+      subType: 'Subtype',
+      noSubType: 'No subtype',
+      notes: 'Notes',
+      noNotes: 'No notes',
+      status: 'Status',
+      title: 'Title',
+      createdAt: 'Created at',
+      updatedAt: 'Updated at',
+      noDate: 'No date',
+    }
   },
   // Field Service
   fieldService: {
@@ -664,6 +700,28 @@ export const en = {
       midweekBibleStudyReader: 'Congregation Bible Study reader',
       audioVideo: 'Audio and video',
     }
+  },
+  // Errors
+  errors: {
+    congregationBlocked: {
+      title: 'Congregation deactivated',
+      labelCongregation: 'Congregation',
+      labelFirebaseId: 'Firebase ID',
+      labelReason: 'Reason',
+      description: 'You cannot access this congregation until it is reactivated from the general administration.',
+      countdownLabel: 'Or wait for the remaining time:',
+      logout: 'Log out',
+    },
+    notFound: {
+      title: 'Page not found',
+      description: 'The route you are looking for does not exist or was moved.',
+      goHome: 'Go to Home',
+    },
+    unauthorized: {
+      title: 'Access denied',
+      description: 'You do not have permissions to access this section.\nContact an administrator if you believe this is an error.',
+      goHome: 'Go to Home',
+    },
   },
 } as const;
 

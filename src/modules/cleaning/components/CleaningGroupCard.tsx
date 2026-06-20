@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAppColors } from '@/src/styles';
 import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types';
+import { useI18n } from '@/src/i18n';
 
 interface CleaningGroupCardProps {
   group: CleaningGroup;
@@ -18,6 +19,7 @@ interface CleaningGroupCardProps {
 /** Tarjeta que resume un grupo de limpieza en el listado del dashboard. */
 export function CleaningGroupCard({ group, onPress }: CleaningGroupCardProps) {
   const colors = useAppColors();
+  const { t } = useI18n();
 
   const styles = StyleSheet.create({
     card: {
@@ -114,7 +116,7 @@ export function CleaningGroupCard({ group, onPress }: CleaningGroupCardProps) {
   const isFamilyGroup = group.groupType === 'family';
   const statusBg = isActive ? colors.successLight : colors.surfaceRaised;
   const statusColor = isActive ? colors.success : colors.textMuted;
-  const statusLabel = isActive ? 'Activo' : 'Inactivo';
+  const statusLabel = isActive ? t('cleaning.groupCard.active') : t('cleaning.groupCard.inactive');
 
   return (
     <TouchableOpacity
@@ -122,7 +124,7 @@ export function CleaningGroupCard({ group, onPress }: CleaningGroupCardProps) {
       onPress={() => onPress(group)}
       activeOpacity={0.75}
       accessibilityRole="button"
-      accessibilityLabel={`Grupo de limpieza: ${group.name}`}
+      accessibilityLabel={t('cleaning.groupCard.a11yLabel', { name: group.name })}
     >
       <View style={styles.header}>
         <View style={styles.nameRow}>
@@ -151,7 +153,7 @@ export function CleaningGroupCard({ group, onPress }: CleaningGroupCardProps) {
       {isFamilyGroup ? (
         <View style={styles.typeBadge}>
           <Ionicons name="home-outline" size={12} color={colors.primary} />
-          <Text style={styles.typeText}>Grupo familiar</Text>
+          <Text style={styles.typeText}>{t('cleaning.groupCard.familyGroup')}</Text>
         </View>
       ) : null}
 
@@ -159,7 +161,7 @@ export function CleaningGroupCard({ group, onPress }: CleaningGroupCardProps) {
         <View style={styles.memberRow}>
           <Ionicons name="people-outline" size={14} color={colors.textMuted} />
           <Text style={styles.memberCount}>
-            {group.memberCount} {group.memberCount === 1 ? 'integrante' : 'integrantes'}
+            {t('cleaning.groupCard.membersCount', { count: group.memberCount })}
           </Text>
         </View>
         <Ionicons

@@ -5,21 +5,22 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { useI18n } from '@/src/i18n';
 
 export function UnauthorizedScreen() {
   const router = useRouter();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
 
   return (
     <View style={styles.container}>
       <View style={styles.iconWrap}>
         <Ionicons name="lock-closed" size={48} color={colors.error} />
       </View>
-      <ThemedText style={styles.title}>Acceso denegado</ThemedText>
+      <ThemedText style={styles.title}>{t('errors.unauthorized.title')}</ThemedText>
       <ThemedText style={styles.description}>
-        No tienes permisos para acceder a esta seccion.{"\n"}
-        Contacta a un administrador si crees que es un error.
+        {t('errors.unauthorized.description')}
       </ThemedText>
       <TouchableOpacity
         style={styles.button}
@@ -27,7 +28,7 @@ export function UnauthorizedScreen() {
         activeOpacity={0.8}
       >
         <Ionicons name="home-outline" size={18} color={colors.onPrimary} />
-        <ThemedText style={styles.buttonText}>Ir al inicio</ThemedText>
+        <ThemedText style={styles.buttonText}>{t('errors.unauthorized.goHome')}</ThemedText>
       </TouchableOpacity>
     </View>
   );
