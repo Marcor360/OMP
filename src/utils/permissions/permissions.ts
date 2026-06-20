@@ -97,8 +97,7 @@ export const SUPERVISOR_PERMISSION_TEMPLATE: Partial<Record<PermissionDepartment
   usuarios: ['view', 'create', 'edit', 'delete'],
   reuniones: ['view', 'create', 'edit', 'delete', 'manage'],
   limpieza: ['view', 'create', 'edit', 'delete', 'manage'],
-  departments: ['view', 'create', 'edit', 'delete', 'manage'],
-  organigrama: ['view', 'create', 'edit', 'delete', 'manage'],
+  // departments y organigrama removidos: el area de coordinacion no es un permiso delegable.
   predicacion: ['view', 'approve', 'export', 'manage'],
   tesoreria: ['view', 'create', 'edit', 'delete', 'manage'],
   pagos: ['view', 'create', 'approve', 'manage'],
@@ -484,7 +483,21 @@ export const canViewOrgChart = (
 
 export const canManageDepartments = (
   user:
-    | Pick<AppUser, 'role' | 'isActive' | 'congregationId' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | Pick<
+        AppUser,
+        | 'role'
+        | 'isActive'
+        | 'congregationId'
+        | 'permissions'
+        | 'servicePosition'
+        | 'serviceDepartment'
+        | 'serviceAssignments'
+        | 'protectedFromDeletion'
+        | 'isSystemUser'
+        | 'isPrimaryAdmin'
+        | 'isRootAdmin'
+        | 'systemProtected'
+      >
     | null
     | undefined
 ): boolean =>
@@ -493,12 +506,9 @@ export const canManageDepartments = (
       typeof user.congregationId === 'string' &&
       user.congregationId.trim().length > 0 &&
       (
-        user.role === 'admin' ||
-        String(user.role) === 'administrador' ||
+        hasGlobalScreenAccess(user) ||
         hasServiceAssignment(user, 'coordinador') ||
-        hasServiceAssignment(user, 'secretario') ||
-        user.permissions?.departments?.manage === true ||
-        user.permissions?.organigrama?.manage === true
+        hasServiceAssignment(user, 'secretario')
       )
   );
 

@@ -538,6 +538,50 @@ const parsePermissions = (
   return Object.keys(permissions).length > 0 ? permissions : {};
 };
 
+const hasCoordinatorOrSecretaryAssignment = (
+  assignments: ReadonlyArray<{ position?: string }> | undefined
+): boolean =>
+  Array.isArray(assignments) &&
+  assignments.some((assignment) => assignment?.position === 'coordinador' || assignment?.position === 'secretario');
+
+const isSystemRootUser = (flags: {
+  isSystemUser?: boolean;
+  isPrimaryAdmin?: boolean;
+  isRootAdmin?: boolean;
+  systemProtected?: boolean;
+}): boolean =>
+  flags.isSystemUser === true ||
+  flags.isPrimaryAdmin === true ||
+  flags.isRootAdmin === true ||
+  flags.systemProtected === true;
+
+/**
+ * Quita organigrama.manage / departments.manage salvo que el usuario resultante
+ * sea coordinador/secretario o admin de sistema. No toca ninguna otra clave.
+ */
+export const stripOrgChartManageUnlessAuthorized = (
+  permissions: UserPermissions | undefined,
+  assignments: ReadonlyArray<{ position?: string }> | undefined,
+  flags: { isSystemUser?: boolean; isPrimaryAdmin?: boolean; isRootAdmin?: boolean; systemProtected?: boolean }
+): UserPermissions | undefined => {
+  if (!permissions) return permissions;
+  if (hasCoordinatorOrSecretaryAssignment(assignments) || isSystemRootUser(flags)) {
+    return permissions;
+  }
+
+  for (const key of ['departments', 'organigrama'] as const) {
+    const block = permissions[key];
+    if (block?.manage === true) {
+      delete block.manage;
+      if (Object.keys(block).length === 0) {
+        delete permissions[key];
+      }
+    }
+  }
+
+  return permissions;
+};
+
 const parseLegacyAssignmentLabel = (
   label: string | undefined
 ): { position?: ServicePosition; department?: ServiceDepartment } => {
@@ -1716,8 +1760,13 @@ export const createUserByAdmin = onCall(
         if (payload.responsibilities && Object.keys(payload.responsibilities).length > 0) {
           userDoc.responsibilities = payload.responsibilities;
         }
-        if (payload.permissions && Object.keys(payload.permissions).length > 0) {
-          userDoc.permissions = payload.permissions;
+        const safePermissions = stripOrgChartManageUnlessAuthorized(
+          payload.permissions,
+          payload.serviceAssignments,
+          {}
+        );
+        if (safePermissions && Object.keys(safePermissions).length > 0) {
+          userDoc.permissions = safePermissions;
         }
 
         await db.collection('users').doc(userRecord.uid).set(userDoc);
@@ -1777,6 +1826,10 @@ export const updateUserByAdmin = onCall(
       privileges?: UserPrivileges;
       isElder?: boolean;
       isMinisterialServant?: boolean;
+      isSystemUser?: boolean;
+      isPrimaryAdmin?: boolean;
+      isRootAdmin?: boolean;
+      systemProtected?: boolean;
     };
 
     if (target.congregationId !== requester.congregationId) {
@@ -1940,7 +1993,19 @@ export const updateUserByAdmin = onCall(
       payload.permissions &&
       Object.keys(payload.permissions).length > 0
     ) {
-      docUpdates.permissions = payload.permissions;
+      const safePermissions = stripOrgChartManageUnlessAuthorized(
+        payload.permissions,
+        nextServiceAssignments,
+        {
+          isSystemUser: target.isSystemUser,
+          isPrimaryAdmin: target.isPrimaryAdmin,
+          isRootAdmin: target.isRootAdmin,
+          systemProtected: target.systemProtected,
+        }
+      );
+      if (safePermissions && Object.keys(safePermissions).length > 0) {
+        docUpdates.permissions = safePermissions;
+      }
     }
 
     await targetRef.update(docUpdates);

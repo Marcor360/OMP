@@ -12,6 +12,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
 } from 'firebase/firestore';
 
 let testEnv: RulesTestEnvironment;
@@ -29,6 +30,7 @@ type SeedUser = {
   permissions?: Record<string, unknown>;
   servicePosition?: string;
   serviceDepartment?: string;
+  serviceAssignments?: Record<string, unknown>[];
 };
 
 const userDoc = ({
@@ -39,6 +41,7 @@ const userDoc = ({
   permissions,
   servicePosition,
   serviceDepartment,
+  serviceAssignments,
 }: SeedUser) => ({
   ...{
     uid,
@@ -50,7 +53,7 @@ const userDoc = ({
     congregationId,
     servicePosition: servicePosition ?? '',
     serviceDepartment: serviceDepartment ?? '',
-    serviceAssignments: [],
+    serviceAssignments: serviceAssignments ?? [],
     protectedFromDeletion: false,
     isSystemUser: false,
     isPrimaryAdmin: false,
@@ -113,6 +116,26 @@ beforeEach(async () => {
       }),
       setDoc(doc(db, 'users/admin'), userDoc({ uid: 'admin', role: 'admin', congregationId: 'c1' })),
       setDoc(doc(db, 'users/supervisor'), userDoc({ uid: 'supervisor', role: 'supervisor', congregationId: 'c1' })),
+      setDoc(doc(db, 'users/orgSupervisor'), userDoc({
+        uid: 'orgSupervisor',
+        role: 'supervisor',
+        congregationId: 'c1',
+        permissions: { organigrama: { manage: true } },
+      })),
+      setDoc(doc(db, 'users/coordinator'), userDoc({
+        uid: 'coordinator',
+        role: 'admin',
+        congregationId: 'c1',
+        servicePosition: 'coordinador',
+        serviceAssignments: [{ position: 'coordinador', label: 'Coordinador' }],
+      })),
+      setDoc(doc(db, 'users/secretary'), userDoc({
+        uid: 'secretary',
+        role: 'admin',
+        congregationId: 'c1',
+        servicePosition: 'secretario',
+        serviceAssignments: [{ position: 'secretario', label: 'Secretario' }],
+      })),
       setDoc(doc(db, 'users/member'), userDoc({ uid: 'member', role: 'user', congregationId: 'c1' })),
       setDoc(doc(db, 'users/manager'), userDoc({
         uid: 'manager',
@@ -192,5 +215,81 @@ describe('push token rules', () => {
       isActive: true,
       updatedAt: Timestamp.now(),
     }));
+  });
+});
+
+const departmentDoc = (createdBy: string) => ({
+  congregationId: 'c1',
+  name: 'Limpieza',
+  order: 10,
+  isActive: true,
+  allowMultipleManagers: false,
+  allowMultipleAssistants: true,
+  createdAt: Timestamp.now(),
+  updatedAt: Timestamp.now(),
+  createdBy,
+  updatedBy: createdBy,
+});
+
+describe('org chart department rules', () => {
+  it('blocks supervisor legacy organigrama.manage from creating departments', async () => {
+    await assertFails(
+      setDoc(
+        doc(authedDb('orgSupervisor'), 'congregations/c1/departments/limpieza'),
+        departmentDoc('orgSupervisor')
+      )
+    );
+  });
+
+  it('blocks common admins without coordinator/secretary assignment from creating departments', async () => {
+    await assertFails(
+      setDoc(
+        doc(authedDb('admin'), 'congregations/c1/departments/limpieza'),
+        departmentDoc('admin')
+      )
+    );
+  });
+
+  it('allows coordinator and secretary to create departments', async () => {
+    await assertSucceeds(
+      setDoc(
+        doc(authedDb('coordinator'), 'congregations/c1/departments/coordinador-test'),
+        departmentDoc('coordinator')
+      )
+    );
+    await assertSucceeds(
+      setDoc(
+        doc(authedDb('secretary'), 'congregations/c1/departments/secretario-test'),
+        departmentDoc('secretary')
+      )
+    );
+  });
+
+  it('allows coordinator to sync organization service assignments', async () => {
+    await assertSucceeds(
+      updateDoc(doc(authedDb('coordinator'), 'users/member'), {
+        serviceAssignments: [
+          { position: 'encargado', department: 'limpieza', label: 'Encargado de Limpieza' },
+        ],
+        servicePosition: 'encargado',
+        serviceDepartment: 'limpieza',
+        department: 'Encargado de Limpieza',
+        updatedAt: Timestamp.now(),
+      })
+    );
+  });
+
+  it('blocks supervisor legacy organigrama.manage from syncing organization service assignments', async () => {
+    await assertFails(
+      updateDoc(doc(authedDb('orgSupervisor'), 'users/member'), {
+        serviceAssignments: [
+          { position: 'encargado', department: 'limpieza', label: 'Encargado de Limpieza' },
+        ],
+        servicePosition: 'encargado',
+        serviceDepartment: 'limpieza',
+        department: 'Encargado de Limpieza',
+        updatedAt: Timestamp.now(),
+      })
+    );
   });
 });

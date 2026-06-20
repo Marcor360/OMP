@@ -9,6 +9,7 @@
  */
 
 import { HttpsError } from 'firebase-functions/v2/https';
+import { stripOrgChartManageUnlessAuthorized } from '../users.js';
 
 // ─── Helpers replicados ───────────────────────────────────────────────────────
 
@@ -395,6 +396,45 @@ describe('parsePermissions', () => {
         { strict: false }
       )
     ).not.toThrow();
+  });
+});
+
+describe('stripOrgChartManageUnlessAuthorized', () => {
+  it('strips organigrama/departments manage from non coordinator supervisor and keeps other permissions', () => {
+    const permissions = {
+      organigrama: { manage: true, view: true },
+      departments: { manage: true },
+      limpieza: { manage: true },
+    };
+
+    expect(stripOrgChartManageUnlessAuthorized(permissions, [], {})).toEqual({
+      organigrama: { view: true },
+      limpieza: { manage: true },
+    });
+  });
+
+  it('keeps org chart manage for coordinator assignments', () => {
+    const permissions = { organigrama: { manage: true } };
+
+    expect(
+      stripOrgChartManageUnlessAuthorized(
+        permissions,
+        [{ position: 'coordinador' }],
+        {}
+      )
+    ).toEqual({ organigrama: { manage: true } });
+  });
+
+  it('keeps org chart manage for system admins', () => {
+    const permissions = { departments: { manage: true } };
+
+    expect(
+      stripOrgChartManageUnlessAuthorized(
+        permissions,
+        [],
+        { isPrimaryAdmin: true }
+      )
+    ).toEqual({ departments: { manage: true } });
   });
 });
 

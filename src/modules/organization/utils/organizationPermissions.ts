@@ -1,8 +1,20 @@
 import type { AppUser } from '@/src/types/user';
+import { canManageOrgChart } from '@/src/utils/permissions/permissions';
 
 type OrganizationPermissionUser = Pick<
   AppUser,
-  'role' | 'isActive' | 'congregationId' | 'permissions' | 'servicePosition' | 'serviceAssignments'
+  | 'role'
+  | 'isActive'
+  | 'congregationId'
+  | 'permissions'
+  | 'servicePosition'
+  | 'serviceDepartment'
+  | 'serviceAssignments'
+  | 'protectedFromDeletion'
+  | 'isSystemUser'
+  | 'isPrimaryAdmin'
+  | 'isRootAdmin'
+  | 'systemProtected'
 >;
 
 export const canViewOrganizationChart = (
@@ -16,22 +28,4 @@ export const canViewOrganizationChart = (
 
 export const canManageOrganizationChart = (
   user: OrganizationPermissionUser | null | undefined
-): boolean =>
-  Boolean(
-    user?.isActive === true &&
-      typeof user.congregationId === 'string' &&
-      user.congregationId.trim().length > 0 &&
-      (
-        user.role === 'admin' ||
-        String(user.role) === 'administrador' ||
-        user.servicePosition === 'coordinador' ||
-        user.servicePosition === 'secretario' ||
-        user.serviceAssignments?.some(
-          (assignment) =>
-            assignment.position === 'coordinador' ||
-            assignment.position === 'secretario'
-        ) ||
-        user.permissions?.organigrama?.manage === true ||
-        user.permissions?.departments?.manage === true
-      )
-  );
+): boolean => canManageOrgChart(user);

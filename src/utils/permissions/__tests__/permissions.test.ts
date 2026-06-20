@@ -1,7 +1,10 @@
 import {
+  SUPERVISOR_PERMISSION_TEMPLATE,
+  canManageDepartments,
   canManageCleaning,
   canManageMeetings,
   canManageUsers,
+  canViewOrgChart,
   getDefaultPermissionsByRole,
   getEffectivePermissions,
   hasPermission,
@@ -74,5 +77,62 @@ describe('permissions utilities', () => {
 
     expect(hasPermission(user, 'departments', 'manage')).toBe(false);
     expect(hasPermission(user, 'organigrama', 'manage')).toBe(false);
+  });
+
+  it('does not let supervisor org chart manage permissions administer departments', () => {
+    expect(
+      canManageDepartments({
+        role: 'supervisor',
+        isActive: true,
+        congregationId: 'c1',
+        permissions: { organigrama: { manage: true } },
+      })
+    ).toBe(false);
+  });
+
+  it('does not let a common admin administer departments without service assignment or system flags', () => {
+    expect(
+      canManageDepartments({
+        role: 'admin',
+        isActive: true,
+        congregationId: 'c1',
+      })
+    ).toBe(false);
+  });
+
+  it('lets coordinator, secretary and primary admin administer departments', () => {
+    expect(
+      canManageDepartments({
+        role: 'admin',
+        isActive: true,
+        congregationId: 'c1',
+        serviceAssignments: [{ position: 'coordinador', label: 'Coordinador' }],
+      })
+    ).toBe(true);
+    expect(
+      canManageDepartments({
+        role: 'admin',
+        isActive: true,
+        congregationId: 'c1',
+        serviceAssignments: [{ position: 'secretario', label: 'Secretario' }],
+      })
+    ).toBe(true);
+    expect(
+      canManageDepartments({
+        role: 'admin',
+        isActive: true,
+        congregationId: 'c1',
+        isPrimaryAdmin: true,
+      })
+    ).toBe(true);
+  });
+
+  it('keeps coordination permissions out of the supervisor template', () => {
+    expect(SUPERVISOR_PERMISSION_TEMPLATE.departments).toBeUndefined();
+    expect(SUPERVISOR_PERMISSION_TEMPLATE.organigrama).toBeUndefined();
+  });
+
+  it('keeps org chart visible to active congregation users', () => {
+    expect(canViewOrgChart({ isActive: true, congregationId: 'c1' })).toBe(true);
   });
 });

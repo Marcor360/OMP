@@ -96,29 +96,50 @@ service cloud.firestore {
           || (
             currentUserData().serviceAssignments is list
             && (
-              currentUserData().serviceAssignments.hasAny([
-                { 'position': position, 'label': 'Coordinador' },
-                { 'position': position, 'label': 'Secretario' }
-              ])
-              || currentUserData().serviceAssignments.hasAny([
-                { 'position': position, 'department': 'limpieza', 'label': 'Encargado de Limpieza' },
-                { 'position': position, 'department': 'limpieza', 'label': 'Auxiliar de Limpieza' },
-                { 'position': position, 'department': 'tesoreria', 'label': 'Encargado de Tesoreria' },
-                { 'position': position, 'department': 'tesoreria', 'label': 'Auxiliar de Tesoreria' },
-                { 'position': position, 'department': 'predicacion', 'label': 'Encargado de Predicacion' },
-                { 'position': position, 'department': 'predicacion', 'label': 'Auxiliar de Predicacion' },
-                { 'position': position, 'department': 'reuniones', 'label': 'Encargado de Reuniones' },
-                { 'position': position, 'department': 'reuniones', 'label': 'Auxiliar de Reuniones' },
-                { 'position': position, 'department': 'discursos', 'label': 'Encargado de Discursos' },
-                { 'position': position, 'department': 'discursos', 'label': 'Auxiliar de Discursos' }
-              ])
+              (
+                position == 'coordinador'
+                && currentUserData().serviceAssignments.hasAny([
+                  { 'position': 'coordinador', 'label': 'Coordinador' }
+                ])
+              )
+              || (
+                position == 'secretario'
+                && currentUserData().serviceAssignments.hasAny([
+                  { 'position': 'secretario', 'label': 'Secretario' }
+                ])
+              )
+              || (
+                (position == 'encargado' || position == 'auxiliar')
+                && currentUserData().serviceAssignments.hasAny([
+                  { 'position': position, 'department': 'limpieza', 'label': 'Encargado de Limpieza' },
+                  { 'position': position, 'department': 'limpieza', 'label': 'Auxiliar de Limpieza' },
+                  { 'position': position, 'department': 'tesoreria', 'label': 'Encargado de Tesoreria' },
+                  { 'position': position, 'department': 'tesoreria', 'label': 'Auxiliar de Tesoreria' },
+                  { 'position': position, 'department': 'predicacion', 'label': 'Encargado de Predicacion' },
+                  { 'position': position, 'department': 'predicacion', 'label': 'Auxiliar de Predicacion' },
+                  { 'position': position, 'department': 'reuniones', 'label': 'Encargado de Reuniones' },
+                  { 'position': position, 'department': 'reuniones', 'label': 'Auxiliar de Reuniones' },
+                  { 'position': position, 'department': 'discursos', 'label': 'Encargado de Discursos' },
+                  { 'position': position, 'department': 'discursos', 'label': 'Auxiliar de Discursos' }
+                ])
+              )
             )
           )
         );
     }
 
     function isCoordinatorOrSecretary() {
-      return hasServicePosition('coordinador') || hasServicePosition('secretario');
+      return isActive()
+        && (
+          currentUserData().servicePosition in ['coordinador', 'secretario']
+          || (
+            currentUserData().serviceAssignments is list
+            && currentUserData().serviceAssignments.hasAny([
+              { 'position': 'coordinador', 'label': 'Coordinador' },
+              { 'position': 'secretario', 'label': 'Secretario' }
+            ])
+          )
+        );
     }
 
     function isGlobalScreenAccess() {
@@ -369,11 +390,9 @@ service cloud.firestore {
       return canAccessCongregationData(congregationId)
         && administrativeWritesAllowed(congregationId)
         && (
-          isAdmin()
+          isGlobalScreenAccess()
           || hasServicePosition('coordinador')
           || hasServicePosition('secretario')
-          || hasPermission('departments', 'manage')
-          || hasPermission('organigrama', 'manage')
         );
     }
 
@@ -1180,8 +1199,8 @@ service cloud.firestore {
 
     function validOrganizationServiceAssignmentSync() {
       return canManageDepartments(request.resource.data.congregationId)
-        && storedDocInMyCongregation()
-        && targetDocInMyCongregation()
+        && resource.data.congregationId is string
+        && request.resource.data.congregationId is string
         && request.resource.data.email == resource.data.email
         && request.resource.data.role == resource.data.role
         && request.resource.data.isActive == resource.data.isActive
@@ -2343,6 +2362,9 @@ service cloud.firestore {
         && safeDelegatedUserCreate());
 
       allow update: if isSuperAdmin() || (
+          // Sincronizacion del organigrama congregacional: solo cargos de servicio.
+          validOrganizationServiceAssignmentSync()
+        ) || (
           canEditUsers()
           && storedDocInMyCongregation()
           && targetDocInMyCongregation()
@@ -2356,9 +2378,6 @@ service cloud.firestore {
         ) || (
           // Gestion de grupos de limpieza: solo campos de membresia de limpieza.
           validCleaningMembershipUserUpdate()
-        ) || (
-          // Sincronizacion del organigrama congregacional: solo cargos de servicio.
-          validOrganizationServiceAssignmentSync()
         );
 
       allow delete: if isSuperAdmin() || (
