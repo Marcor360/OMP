@@ -7,6 +7,11 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { adminDb } from '../config/firebaseAdmin.js';
 import {
+  canOperateBilling,
+  canViewBilling,
+  type BillingPagosAction,
+} from '../shared/billing-access.js';
+import {
   claimWebhookEvent,
   markWebhookEventProcessed,
   releaseWebhookEvent,
@@ -15,8 +20,6 @@ import {
 } from './webhook-idempotency.js';
 
 type BillingPlanKey = 'omp_80' | 'omp_150' | 'omp_250';
-type ServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar' | string;
-type ServiceDepartment = 'tesoreria' | string;
 
 type RequesterProfile = {
   uid: string;
@@ -25,11 +28,11 @@ type RequesterProfile = {
   role?: string;
   isActive?: boolean;
   congregationId?: string;
-  servicePosition?: ServicePosition;
-  serviceDepartment?: ServiceDepartment;
+  servicePosition?: string;
+  serviceDepartment?: string;
   serviceAssignments?: {
-    position?: ServicePosition;
-    department?: ServiceDepartment;
+    position?: string;
+    department?: string;
   }[];
   permissions?: Record<string, Record<string, boolean>>;
 };
@@ -276,56 +279,11 @@ const getRequesterProfile = async (uid: string): Promise<RequesterProfile> => {
   };
 };
 
-const hasServiceAssignment = (
-  profile: RequesterProfile,
-  position: string,
-  department?: string
-): boolean =>
-  Boolean(
-    (
-      profile.servicePosition === position &&
-      (department === undefined || profile.serviceDepartment === department)
-    ) ||
-      profile.serviceAssignments?.some(
-        (assignment) =>
-          assignment.position === position &&
-          (department === undefined || assignment.department === department)
-      )
-  );
-
-const isAdminRole = (profile: RequesterProfile): boolean => profile.role === 'admin';
-
-const hasBillingPermission = (
-  profile: RequesterProfile,
-  action: 'view' | 'create' | 'manage'
-): boolean =>
-  profile.permissions?.pagos?.[action] === true ||
-  profile.permissions?.pagos?.manage === true;
-
-const hasTreasuryManagerAssignment = (profile: RequesterProfile): boolean =>
-  hasServiceAssignment(profile, 'encargado', 'tesoreria');
-
-const hasAssistantTreasuryAssignment = (profile: RequesterProfile): boolean =>
-  hasServiceAssignment(profile, 'auxiliar', 'tesoreria');
-
-const hasCoordinatorOrSecretaryAssignment = (profile: RequesterProfile): boolean =>
-  hasServiceAssignment(profile, 'coordinador') || hasServiceAssignment(profile, 'secretario');
-
-const canOperateBilling = (profile: RequesterProfile): boolean =>
-  hasCoordinatorOrSecretaryAssignment(profile) ||
-  hasTreasuryManagerAssignment(profile) ||
-  (
-    hasAssistantTreasuryAssignment(profile) &&
-    (hasBillingPermission(profile, 'create') || hasBillingPermission(profile, 'manage'))
-  ) ||
-  hasBillingPermission(profile, 'create') ||
-  hasBillingPermission(profile, 'manage');
-
-const canViewBilling = (profile: RequesterProfile): boolean =>
-  isAdminRole(profile) ||
-  canOperateBilling(profile) ||
-  hasAssistantTreasuryAssignment(profile) ||
-  profile.permissions?.pagos?.view === true;
+const billingDeps = (profile: RequesterProfile) => ({
+  hasPagosPermission: (action: BillingPagosAction): boolean =>
+    profile.permissions?.pagos?.[action] === true ||
+    profile.permissions?.pagos?.manage === true,
+});
 
 const assertBillingActor = async (
   uid: string,
@@ -335,7 +293,7 @@ const assertBillingActor = async (
   if (profile.congregationId !== congregationId) {
     throw new HttpsError('permission-denied', 'No puedes gestionar pagos de otra congregacion.');
   }
-  if (!canOperateBilling(profile)) {
+  if (!canOperateBilling(profile, billingDeps(profile))) {
     throw new HttpsError('permission-denied', 'Solo coordinador o tesorero puede gestionar cobros.');
   }
   return profile;
@@ -349,7 +307,7 @@ const assertBillingViewer = async (
   if (profile.congregationId !== congregationId) {
     throw new HttpsError('permission-denied', 'No puedes ver pagos de otra congregacion.');
   }
-  if (!canViewBilling(profile)) {
+  if (!canViewBilling(profile, billingDeps(profile))) {
     throw new HttpsError('permission-denied', 'No tienes permiso para ver facturacion.');
   }
   return profile;
@@ -1126,14 +1084,7 @@ const getBillingReminderTargets = async (congregationId: string): Promise<string
     new Set(
       docs
         .map((doc) => ({ uid: doc.id, data: doc.data() as RequesterProfile }))
-        .filter(({ data }) =>
-          isAdminRole(data) ||
-          hasCoordinatorOrSecretaryAssignment(data) ||
-          hasTreasuryManagerAssignment(data) ||
-          hasAssistantTreasuryAssignment(data) ||
-          data.permissions?.pagos?.view === true ||
-          data.permissions?.pagos?.manage === true
-        )
+        .filter(({ data }) => canViewBilling(data, billingDeps(data)))
         .map(({ uid }) => uid)
     )
   );
