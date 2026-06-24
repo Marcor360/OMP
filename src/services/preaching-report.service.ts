@@ -1,15 +1,8 @@
 import {
-  getDoc,
-  getDocs,
-  serverTimestamp,
-  setDoc,
-  type Timestamp,
-} from 'firebase/firestore';
-
-import {
   preachingReportSubmissionDocRef,
-  preachingReportSubmissionsCollectionRef,
 } from '@/src/lib/firebase/refs';
+import { firestorePreachingReportRepository } from '@/src/services/repositories/firestore/firestore-preaching-report-repository';
+import type { PreachingReportRepository } from '@/src/services/repositories/ports/preaching-report-repository.port';
 import { getActiveUsers } from '@/src/services/users/users-service';
 import {
   MissingPreachingReportUser,
@@ -20,6 +13,18 @@ import {
 import { AppUser, getPioneerType, isPioneer } from '@/src/types/user';
 
 const MONTH_ID_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+let preachingReportRepository: PreachingReportRepository = firestorePreachingReportRepository;
+
+export const __setPreachingReportRepositoryForTests = (
+  repo: PreachingReportRepository
+): void => {
+  preachingReportRepository = repo;
+};
+
+export const __resetPreachingReportRepositoryForTests = (): void => {
+  preachingReportRepository = firestorePreachingReportRepository;
+};
 
 const normalizeNonNegativeInteger = (value: number, fieldName: string): number => {
   if (!Number.isInteger(value) || value < 0) {
@@ -99,8 +104,8 @@ const normalizeSubmission = (
       ? data.pioneerType
       : null,
   hours: typeof data.hours === 'number' ? data.hours : null,
-  submittedAt: data.submittedAt as Timestamp,
-  updatedAt: data.updatedAt as Timestamp,
+  submittedAt: data.submittedAt as PreachingReportSubmission['submittedAt'],
+  updatedAt: data.updatedAt as PreachingReportSubmission['updatedAt'],
   submittedBy: typeof data.submittedBy === 'string' ? data.submittedBy : id,
 });
 
@@ -122,8 +127,11 @@ export const submitPreachingReport = async ({
 
   const userIsPioneer = isPioneer(user);
   const normalizedHours = userIsPioneer ? normalizeHours(hours) : null;
-  const docRef = getPreachingReportRef(user.congregationId, monthId, user.uid);
-  const existing = await getDoc(docRef);
+  const existing = await preachingReportRepository.getSubmission(
+    user.congregationId,
+    monthId,
+    user.uid
+  );
 
   const payload: Record<string, unknown> = {
     userId: user.uid,
@@ -137,16 +145,11 @@ export const submitPreachingReport = async ({
     comments: normalizeComments(comments),
     isPioneer: userIsPioneer,
     pioneerType: getPioneerType(user),
-    updatedAt: serverTimestamp(),
     submittedBy: user.uid,
   };
 
   if (congregationName) {
     payload.congregationName = congregationName;
-  }
-
-  if (!existing.exists()) {
-    payload.submittedAt = serverTimestamp();
   }
 
   if (userIsPioneer) {
@@ -155,7 +158,13 @@ export const submitPreachingReport = async ({
     payload.hours = null;
   }
 
-  await setDoc(docRef, payload, { merge: true });
+  await preachingReportRepository.upsertSubmission(
+    user.congregationId,
+    monthId,
+    user.uid,
+    payload,
+    { includeSubmittedAt: !existing }
+  );
 };
 
 export const getMyPreachingReport = async (
@@ -166,8 +175,8 @@ export const getMyPreachingReport = async (
   if (!congregationId || !monthId || !userId) return null;
   assertValidMonthId(monthId);
 
-  const snap = await getDoc(getPreachingReportRef(congregationId, monthId, userId));
-  return snap.exists() ? normalizeSubmission(snap.id, snap.data()) : null;
+  const submission = await preachingReportRepository.getSubmission(congregationId, monthId, userId);
+  return submission ? normalizeSubmission(submission.id, submission.data) : null;
 };
 
 export const getMonthlyPreachingReportsForManager = async (
@@ -177,9 +186,9 @@ export const getMonthlyPreachingReportsForManager = async (
   if (!congregationId || !monthId) return [];
   assertValidMonthId(monthId);
 
-  const snap = await getDocs(preachingReportSubmissionsCollectionRef(congregationId, monthId));
-  return snap.docs
-    .map((docSnap) => normalizeSubmission(docSnap.id, docSnap.data()))
+  const submissions = await preachingReportRepository.listMonthlySubmissions(congregationId, monthId);
+  return submissions
+    .map((submission) => normalizeSubmission(submission.id, submission.data))
     .sort((left, right) => left.userName.localeCompare(right.userName, 'es'));
 };
 

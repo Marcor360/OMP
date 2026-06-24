@@ -1,10 +1,5 @@
-import { doc, getDocFromServer } from 'firebase/firestore';
-import {
-  congregationDocRef,
-  congregationPrivatePlanDocRef,
-} from '@/src/lib/firebase/refs';
-import { db } from '@/src/lib/firebase/app';
-import { getDocumentCacheFirst } from '@/src/services/repositories/firestore-cache-first';
+import { firestoreCongregationRepository } from '@/src/services/repositories/firestore/firestore-congregation-repository';
+import type { CongregationRepository } from '@/src/services/repositories/ports/congregation-repository.port';
 import {
   CONGREGATION_PLAN_LABELS,
   CONGREGATION_PLAN_LIMITS,
@@ -19,11 +14,18 @@ import {
 import { getActiveUsers } from '@/src/services/users/users-service';
 import { resolveCongregationEmailDomain } from '@/src/utils/congregations/domain';
 
-const CONGREGATION_DOMAIN_CACHE_TTL_MS = 10 * 60 * 1000;
-const CONGREGATION_NAME_CACHE_TTL_MS = 5 * 60 * 1000;
-const CONGREGATION_PLAN_CACHE_TTL_MS = 60 * 1000;
 const MAX_ACCESS_BLOCK_MS = 5 * 60 * 60 * 1000;
 const DEFAULT_PLAN_ID: CongregationPlanId = 'omp_80';
+
+let congregationRepository: CongregationRepository = firestoreCongregationRepository;
+
+export const __setCongregationRepositoryForTests = (repo: CongregationRepository): void => {
+  congregationRepository = repo;
+};
+
+export const __resetCongregationRepositoryForTests = (): void => {
+  congregationRepository = firestoreCongregationRepository;
+};
 
 const toTrimmedText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -297,20 +299,8 @@ export const getCongregationEmailDomain = async (
   }
 
   try {
-    const domain = await getDocumentCacheFirst<string>({
-      cacheKey: `congregations/${congregationId}/email-domain`,
-      ref: congregationDocRef(congregationId),
-      maxAgeMs: CONGREGATION_DOMAIN_CACHE_TTL_MS,
-      forceServer: options?.forceServer,
-      mapSnapshot: (snapshot) =>
-        resolveCongregationEmailDomain(
-          congregationId,
-          snapshot.data() as Record<string, unknown>
-        ),
-      isIncomplete: (value) => value.trim().length === 0,
-    });
-
-    return domain ?? resolveCongregationEmailDomain(congregationId);
+    const data = await congregationRepository.getEmailDomainData(congregationId, options);
+    return resolveCongregationEmailDomain(congregationId, data ?? undefined);
   } catch {
     return resolveCongregationEmailDomain(congregationId);
   }
@@ -325,20 +315,8 @@ export const getCongregationDisplayName = async (
   }
 
   try {
-    const displayName = await getDocumentCacheFirst<string>({
-      cacheKey: `congregations/${congregationId}/display-name`,
-      ref: congregationDocRef(congregationId),
-      maxAgeMs: CONGREGATION_NAME_CACHE_TTL_MS,
-      forceServer: options?.forceServer,
-      mapSnapshot: (snapshot) =>
-        resolveCongregationDisplayName(
-          congregationId,
-          snapshot.data() as Record<string, unknown>
-        ),
-      isIncomplete: (value) => value.trim().length === 0,
-    });
-
-    return displayName ?? resolveCongregationDisplayName(congregationId);
+    const data = await congregationRepository.getDisplayNameData(congregationId, options);
+    return resolveCongregationDisplayName(congregationId, data ?? undefined);
   } catch {
     return resolveCongregationDisplayName(congregationId);
   }
@@ -364,10 +342,7 @@ export const getCongregationAccessState = async (
   let congregationName = fallbackName;
 
   try {
-    const congregationSnap = await getDocFromServer(congregationDocRef(congregationId));
-    congregationData = congregationSnap.exists()
-      ? (congregationSnap.data() as Record<string, unknown>)
-      : {};
+    congregationData = await congregationRepository.getAccessData(congregationId) ?? {};
     congregationName = resolveCongregationDisplayName(congregationId, congregationData);
   } catch {
     congregationName = fallbackName;
@@ -378,18 +353,13 @@ export const getCongregationAccessState = async (
     normalizeAccessText(congregationData.firebaseName) ??
     congregationId;
 
-  const systemDocRefs = [
-    doc(db, 'system', 'maintenance'),
-    doc(db, 'system', 'congregationAccess'),
-    doc(db, 'system', 'platform'),
-  ];
+  const systemDocIds = ['maintenance', 'congregationAccess', 'platform'];
 
-  for (const systemDocRef of systemDocRefs) {
+  for (const systemDocId of systemDocIds) {
     try {
-      const systemSnap = await getDocFromServer(systemDocRef);
-      if (!systemSnap.exists()) continue;
+      const systemData = await congregationRepository.getSystemData(systemDocId);
+      if (!systemData) continue;
 
-      const systemData = systemSnap.data() as Record<string, unknown>;
       if (!isSystemMaintenanceEnabled(systemData)) continue;
       if (isBlockedTimeExpired(systemData)) continue;
 
@@ -431,25 +401,14 @@ export const getCongregationPlanUsage = async (
     return null;
   }
 
-  const congregationData = await getDocumentCacheFirst<Record<string, unknown>>({
-    cacheKey: `congregations/${congregationId}/billing-plan`,
-    ref: congregationDocRef(congregationId),
-    maxAgeMs: CONGREGATION_PLAN_CACHE_TTL_MS,
-    forceServer: options?.forceServer,
-    persist: false,
-    mapSnapshot: (snapshot) => snapshot.data() as Record<string, unknown>,
-  });
+  const congregationData = await congregationRepository.getBillingPlanData(
+    congregationId,
+    options
+  );
 
   let privatePlanData: Record<string, unknown> | null = null;
   try {
-    privatePlanData = await getDocumentCacheFirst<Record<string, unknown>>({
-      cacheKey: `congregations/${congregationId}/private/plan`,
-      ref: congregationPrivatePlanDocRef(congregationId),
-      maxAgeMs: CONGREGATION_PLAN_CACHE_TTL_MS,
-      forceServer: options?.forceServer,
-      persist: false,
-      mapSnapshot: (snapshot) => snapshot.data() as Record<string, unknown>,
-    });
+    privatePlanData = await congregationRepository.getPrivatePlanData(congregationId, options);
   } catch {
     privatePlanData = null;
   }

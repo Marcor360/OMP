@@ -86,6 +86,8 @@ export const preachingReportSubmissionDocRef = (
 export const dashboardSummaryDocRef = (congregationId: string) =>
   doc(db, 'dashboardSummary', congregationId);
 
+export const systemDocRef = (docId: string) => doc(db, 'system', docId);
+
 // Módulo de limpieza
 export const cleaningGroupsCollectionRef = () => collection(db, 'cleaningGroups');
 export const cleaningGroupDocRef = (groupId: string) => doc(db, 'cleaningGroups', groupId);
