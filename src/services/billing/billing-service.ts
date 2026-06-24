@@ -1,8 +1,5 @@
-import { getDoc } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-
-import { functions } from '@/src/lib/firebase/app';
-import { congregationDocRef } from '@/src/lib/firebase/refs';
+import { firestoreBillingRepository } from '@/src/services/repositories/firestore/firestore-billing-repository';
+import type { BillingRepository } from '@/src/services/repositories/ports/billing-repository.port';
 import type {
   BillingExemption,
   BillingPlanKey,
@@ -24,12 +21,14 @@ type PortalPayload = {
   congregationId: string;
 };
 
-type UrlResult = {
-  url?: string;
+let billingRepository: BillingRepository = firestoreBillingRepository;
+
+export const __setBillingRepositoryForTests = (repo: BillingRepository): void => {
+  billingRepository = repo;
 };
 
-type BillingUsageResult = {
-  activeUsersCount?: number;
+export const __resetBillingRepositoryForTests = (): void => {
+  billingRepository = firestoreBillingRepository;
 };
 
 const normalizeBilling = (value: unknown): CongregationBillingState => {
@@ -92,9 +91,9 @@ export const getCongregationBillingSummary = async (
 ): Promise<CongregationBillingSummary | null> => {
   if (!congregationId.trim()) return null;
 
-  const snap = await getDoc(congregationDocRef(congregationId));
-  if (!snap.exists()) return null;
-  const data = snap.data() as Record<string, unknown>;
+  const data = await billingRepository.getCongregationDoc(congregationId);
+  if (!data) return null;
+
   const billingExemption = normalizeExemption(data.billingExemption);
   const billing = normalizeBilling(data.billing);
 
@@ -113,29 +112,13 @@ export const getCongregationBillingSummary = async (
 };
 
 export const createStripeCheckoutSession = async (payload: CheckoutPayload): Promise<string> => {
-  const callable = httpsCallable<CheckoutPayload, UrlResult>(
-    functions,
-    'createStripeCheckoutSession'
-  );
-  const result = await callable(payload);
-  if (!result.data?.url) throw new Error('Stripe no devolvio URL de pago.');
-  return result.data.url;
+  return billingRepository.createCheckoutSession(payload);
 };
 
 export const createStripePortalSession = async (payload: PortalPayload): Promise<string> => {
-  const callable = httpsCallable<PortalPayload, UrlResult>(functions, 'createStripePortalSession');
-  const result = await callable(payload);
-  if (!result.data?.url) throw new Error('Stripe no devolvio URL de portal.');
-  return result.data.url;
+  return billingRepository.createPortalSession(payload);
 };
 
 export const getStripeBillingUsage = async (payload: PortalPayload): Promise<number | null> => {
-  const callable = httpsCallable<PortalPayload, BillingUsageResult>(
-    functions,
-    'getStripeBillingUsage'
-  );
-  const result = await callable(payload);
-  return typeof result.data?.activeUsersCount === 'number'
-    ? result.data.activeUsersCount
-    : null;
+  return billingRepository.getBillingUsage(payload);
 };

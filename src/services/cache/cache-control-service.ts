@@ -1,18 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import {
-  clearIndexedDbPersistence,
-  doc,
-  getDocFromServer,
-  terminate,
-} from 'firebase/firestore';
 
-import { db } from '@/src/config/firebase/firebase';
+import { firestoreCacheControlRepository } from '@/src/services/repositories/firestore/firestore-cache-control-repository';
+import type { CacheControlRepository } from '@/src/services/repositories/ports/cache-control-repository.port';
 import { clearTemporaryCacheData } from '@/src/services/session/session-cleanup';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { createLogger } from '@/src/utils/logger';
 
-const CACHE_CONTROL_DOC = doc(db, 'system', 'cacheControl');
 const CACHE_CONTROL_ACK_KEY = '@system_cache_control_ack_v1';
 const log = createLogger('cache-control');
 
@@ -20,10 +14,6 @@ const log = createLogger('cache-control');
 const WEB_LOCAL_STORAGE_TEMP_PREFIXES = ['@temp_', '@cache_', '@offline_', '@query_'] as const;
 const WEB_CACHE_API_TEMP_PREFIXES = ['temp-', 'runtime-', 'offline-temp-'] as const;
 const WEB_INDEXED_DB_TEMP_PREFIXES = ['omp-temp-'] as const;
-
-// Activar solo si quieres limpiar la persistencia de Firestore en web
-// al inicio de la app (cold start) y antes de listeners activos.
-const ENABLE_FIRESTORE_WEB_PERSISTENCE_PURGE = false;
 
 type RemoteCacheControl = {
   cacheVersion: number;
@@ -34,6 +24,16 @@ type LocalCacheControlAck = {
   cacheVersion: number;
   lastCleanupRequestAtMillis: number | null;
   acknowledgedAt: string;
+};
+
+let cacheControlRepository: CacheControlRepository = firestoreCacheControlRepository;
+
+export const __setCacheControlRepositoryForTests = (repo: CacheControlRepository): void => {
+  cacheControlRepository = repo;
+};
+
+export const __resetCacheControlRepositoryForTests = (): void => {
+  cacheControlRepository = firestoreCacheControlRepository;
 };
 
 const toMillis = (value: unknown): number | null => {
@@ -52,10 +52,9 @@ const toMillis = (value: unknown): number | null => {
 };
 
 const readRemoteCacheControl = async (): Promise<RemoteCacheControl | null> => {
-  const snapshot = await getDocFromServer(CACHE_CONTROL_DOC);
-  if (!snapshot.exists()) return null;
+  const data = await cacheControlRepository.getControlFromServer();
+  if (!data) return null;
 
-  const data = snapshot.data() as Record<string, unknown>;
   const cacheVersion = typeof data.cacheVersion === 'number' ? data.cacheVersion : 0;
   const lastCleanupRequestAtMillis = toMillis(data.lastCleanupRequestAt);
 
@@ -183,22 +182,6 @@ const clearWebTemporaryStorage = async (): Promise<void> => {
   }
 };
 
-const clearFirestorePersistenceOnWeb = async (): Promise<void> => {
-  if (Platform.OS !== 'web' || !ENABLE_FIRESTORE_WEB_PERSISTENCE_PURGE) {
-    return;
-  }
-
-  try {
-    await terminate(db);
-    await clearIndexedDbPersistence(db);
-  } catch (error) {
-    log.warn(
-      '[CacheControl] Firestore persistence cleanup:',
-      formatFirestoreError(error)
-    );
-  }
-};
-
 const clearNativeTemporaryFiles = async (): Promise<void> => {
   if (Platform.OS === 'web') return;
 
@@ -227,7 +210,7 @@ const clearNativeTemporaryFiles = async (): Promise<void> => {
 const clearTemporaryApplicationCache = async (): Promise<void> => {
   await clearTemporaryCacheData();
   await clearWebTemporaryStorage();
-  await clearFirestorePersistenceOnWeb();
+  await cacheControlRepository.purgeWebPersistence();
   await clearNativeTemporaryFiles();
 };
 

@@ -1,14 +1,5 @@
-import {
-  Timestamp,
-  getDoc,
-  getDocs,
-  query,
-  where,
-} from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-
-import { functions } from '@/src/lib/firebase/app';
-import { eventDocRef, eventsCollectionRef } from '@/src/lib/firebase/refs';
+import { firestoreEventRepository } from '@/src/services/repositories/firestore/firestore-event-repository';
+import type { EventRepository } from '@/src/services/repositories/ports/event-repository.port';
 import {
   CongregationEvent,
   CongregationEventFormValues,
@@ -16,6 +7,16 @@ import {
   OPTIONAL_END_DATE_EVENT_TYPES,
   SINGLE_DAY_EVENT_TYPES,
 } from '@/src/types/event';
+
+let eventRepository: EventRepository = firestoreEventRepository;
+
+export const __setEventRepositoryForTests = (repo: EventRepository): void => {
+  eventRepository = repo;
+};
+
+export const __resetEventRepositoryForTests = (): void => {
+  eventRepository = firestoreEventRepository;
+};
 
 const MEXICO_CITY_OFFSET = '-06:00';
 
@@ -31,7 +32,7 @@ const toMexicoCityDate = (value: string): Date => {
   return new Date(`${trimmed}T00:00:00${MEXICO_CITY_OFFSET}`);
 };
 
-const toDateInput = (value: Timestamp): string => {
+const toDateInput = (value: { toDate(): Date }): string => {
   const date = value.toDate();
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Mexico_City',
@@ -112,19 +113,11 @@ export const validateEventForm = (
 export const getActiveEvents = async (
   congregationId: string
 ): Promise<CongregationEvent[]> => {
-  const now = Timestamp.now();
-  const q = query(
-    eventsCollectionRef(),
-    where('congregationId', '==', congregationId)
-  );
-  const snap = await getDocs(q);
+  const nowMs = Date.now();
+  const events = await eventRepository.listByCongregation(congregationId);
 
-  return snap.docs
-    .map((docSnap) => ({
-      id: docSnap.id,
-      ...(docSnap.data() as Omit<CongregationEvent, 'id'>),
-    }))
-    .filter((event) => event.deleteAt.toMillis() > now.toMillis())
+  return events
+    .filter((event) => event.deleteAt.toMillis() > nowMs)
     .sort(
       (a, b) =>
         a.startDate.toMillis() - b.startDate.toMillis() ||
@@ -135,16 +128,7 @@ export const getActiveEvents = async (
 export const getEventById = async (
   eventId: string
 ): Promise<CongregationEvent | null> => {
-  const snap = await getDoc(eventDocRef(eventId));
-
-  if (!snap.exists()) {
-    return null;
-  }
-
-  return {
-    id: snap.id,
-    ...(snap.data() as Omit<CongregationEvent, 'id'>),
-  };
+  return eventRepository.getById(eventId);
 };
 
 export const createEvent = async (params: {
@@ -157,19 +141,10 @@ export const createEvent = async (params: {
     throw new Error(errors.join('\n'));
   }
 
-  const callable = httpsCallable<
-    {
-      congregationId: string;
-      eventData: CongregationEventFormValues;
-    },
-    { eventId: string }
-  >(functions, 'createEventByManager');
-  const response = await callable({
+  return eventRepository.create({
     congregationId: params.congregationId,
     eventData: params.values,
   });
-
-  return response.data.eventId;
 };
 
 export const updateEvent = async (params: {
@@ -183,15 +158,7 @@ export const updateEvent = async (params: {
     throw new Error(errors.join('\n'));
   }
 
-  const callable = httpsCallable<
-    {
-      congregationId: string;
-      eventId: string;
-      eventData: CongregationEventFormValues;
-    },
-    { ok: true }
-  >(functions, 'updateEventByManager');
-  await callable({
+  await eventRepository.update({
     congregationId: params.congregationId,
     eventId: params.eventId,
     eventData: params.values,
@@ -202,12 +169,5 @@ export const deleteEvent = async (params: {
   eventId: string;
   congregationId: string;
 }): Promise<void> => {
-  const callable = httpsCallable<
-    {
-      congregationId: string;
-      eventId: string;
-    },
-    { ok: true }
-  >(functions, 'deleteEventByManager');
-  await callable(params);
+  await eventRepository.delete(params);
 };
