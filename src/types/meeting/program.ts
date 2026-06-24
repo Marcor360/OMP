@@ -68,7 +68,7 @@ export interface MeetingProgramSection {
   assignments: MeetingProgramAssignment[];
 }
 
-type SectionTemplate = {
+export type SectionTemplate = {
   sectionKey: string;
   title: string;
   sectionType: MeetingSectionType;
@@ -97,7 +97,7 @@ export const WEEKEND_REQUIRED_SECTION_KEYS = [
   'weekendAssignments',
 ] as const;
 
-const MIDWEEK_SECTION_TEMPLATES: SectionTemplate[] = [
+export const MIDWEEK_SECTION_TEMPLATES: SectionTemplate[] = [
   {
     sectionKey: 'treasuresOfTheBible',
     title: 'TESOROS DE LA BIBLIA',
@@ -150,7 +150,7 @@ const MIDWEEK_SECTION_TEMPLATES: SectionTemplate[] = [
   },
 ];
 
-const WEEKEND_SECTION_TEMPLATES: SectionTemplate[] = [
+export const WEEKEND_SECTION_TEMPLATES: SectionTemplate[] = [
   {
     sectionKey: 'publicTalk',
     title: 'DISCURSO PUBLICO',
@@ -192,6 +192,33 @@ const WEEKEND_SECTION_TEMPLATES: SectionTemplate[] = [
     ],
   },
 ];
+
+export interface MeetingProgramTypeDefinition {
+  type: MeetingProgramType;
+  sectionTemplates: SectionTemplate[];
+  requiredSectionKeys: readonly string[];
+}
+
+const MEETING_PROGRAM_TYPE_DEFINITIONS: Record<MeetingProgramType, MeetingProgramTypeDefinition> = {
+  midweek: {
+    type: 'midweek',
+    sectionTemplates: MIDWEEK_SECTION_TEMPLATES,
+    requiredSectionKeys: MIDWEEK_REQUIRED_SECTION_KEYS,
+  },
+  weekend: {
+    type: 'weekend',
+    sectionTemplates: WEEKEND_SECTION_TEMPLATES,
+    requiredSectionKeys: WEEKEND_REQUIRED_SECTION_KEYS,
+  },
+};
+
+export const getMeetingProgramTypeDefinition = (
+  meetingType: MeetingProgramType
+): MeetingProgramTypeDefinition => MEETING_PROGRAM_TYPE_DEFINITIONS[meetingType];
+
+export const MEETING_PROGRAM_TYPES = Object.keys(
+  MEETING_PROGRAM_TYPE_DEFINITIONS
+) as MeetingProgramType[];
 
 const normalizeText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -262,12 +289,10 @@ const createSectionFromTemplate = (
 
 export const createDefaultSectionsForMeetingType = (
   meetingType: MeetingProgramType
-): MeetingProgramSection[] => {
-  const templates =
-    meetingType === 'midweek' ? MIDWEEK_SECTION_TEMPLATES : WEEKEND_SECTION_TEMPLATES;
-
-  return templates.map((template, index) => createSectionFromTemplate(template, index));
-};
+): MeetingProgramSection[] =>
+  getMeetingProgramTypeDefinition(meetingType).sectionTemplates.map((template, index) =>
+    createSectionFromTemplate(template, index)
+  );
 
 const normalizeAssignee = (value: unknown, fallbackOrder: number): MeetingAssignmentAssignee => {
   const raw = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
@@ -393,10 +418,9 @@ export const normalizeMeetingSections = (
       })),
     }));
 
-  const requiredSectionKeys =
-    meetingType === 'midweek'
-      ? new Set<string>(MIDWEEK_REQUIRED_SECTION_KEYS)
-      : new Set<string>(WEEKEND_REQUIRED_SECTION_KEYS);
+  const requiredSectionKeys = new Set<string>(
+    getMeetingProgramTypeDefinition(meetingType).requiredSectionKeys
+  );
 
   const merged = [...normalized];
 
