@@ -1,35 +1,22 @@
-import {
-  Timestamp,
-  addDoc,
-  deleteDoc,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-  type Unsubscribe,
-} from 'firebase/firestore';
-
-import { congregationMeetingsCollectionRef, meetingDocRef } from '@/src/lib/firebase/refs';
 import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
+import { applyPublishedPlanningToMeeting } from '@/src/services/meetings/meeting-autofill-service';
 import {
-  logFirestoreListenerCreated,
-  logFirestoreListenerDestroyed,
-} from '@/src/services/firebase/firestore-debug';
+  convertProgramSectionsToLegacyMidweekSections,
+  normalizeMeetingProgramPayload,
+} from '@/src/services/meetings/meeting-program-utils';
 import {
-  getDocumentCacheFirst,
-  getQueryCacheFirst,
-  invalidateCacheEntry,
-} from '@/src/services/repositories/firestore-cache-first';
-import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
+  createCurrentMeetingTimestamp,
+  timestampToDate,
+} from '@/src/services/meetings/meeting.mapper';
+import { firestoreMeetingRepository } from '@/src/services/repositories/firestore/firestore-meeting-repository';
+import type {
+  MeetingRepository,
+  Unsubscribe,
+} from '@/src/services/repositories/ports/meeting-repository.port';
 import {
   CreateMeetingDTO,
   Meeting,
   MeetingCategory,
-  MeetingCleaningAssignmentMode,
   MeetingStatus,
   MeetingType,
   UpdateMeetingDTO,
@@ -37,185 +24,22 @@ import {
 import {
   buildMeetingSearchableText,
   collectAssignedUserIds,
-  createDefaultSectionsForMeetingType,
   MeetingPublicationStatus,
-  normalizeMeetingSections,
 } from '@/src/types/meeting/program';
-import {
-  convertLegacyMidweekSectionsToProgramSections,
-  convertProgramSectionsToLegacyMidweekSections,
-  normalizeMeetingProgramPayload,
-} from '@/src/services/meetings/meeting-program-utils';
-import { applyPublishedPlanningToMeeting } from '@/src/services/meetings/meeting-autofill-service';
-import { sanitizeForFirestore } from '@/src/services/meetings/firestore-payload';
-import {
-  createMeetingByManager,
-  deleteMeetingByManager,
-  updateMeetingByManager,
-} from '@/src/services/meetings/manager-meetings-service';
 import { AppError } from '@/src/utils/errors/errors';
 import { createLogger } from '@/src/utils/logger';
 
 const log = createLogger('meetings-service');
 
-const isMeetingStatus = (value: unknown): value is MeetingStatus =>
-  value === 'pending' ||
-  value === 'scheduled' ||
-  value === 'in_progress' ||
-  value === 'completed' ||
-  value === 'cancelled';
+let meetingRepository: MeetingRepository = firestoreMeetingRepository;
 
-const isMeetingType = (value: unknown): value is MeetingType =>
-  value === 'internal' ||
-  value === 'external' ||
-  value === 'review' ||
-  value === 'training' ||
-  value === 'midweek' ||
-  value === 'weekend';
-
-const isMeetingCategory = (value: unknown): value is MeetingCategory =>
-  value === 'general' || value === 'midweek' || value === 'weekend';
-
-const isPublicationStatus = (value: unknown): value is MeetingPublicationStatus =>
-  value === 'draft' || value === 'published';
-
-const isCleaningAssignmentMode = (value: unknown): value is MeetingCleaningAssignmentMode =>
-  value === 'none' || value === 'selected' || value === 'all';
-
-const toStringArray = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return [];
-
-  return value.filter(
-    (item): item is string => typeof item === 'string' && item.trim().length > 0
-  );
+export const __setMeetingRepositoryForTests = (repo: MeetingRepository): void => {
+  meetingRepository = repo;
 };
 
-const normalizeMeeting = (id: string, data: Record<string, unknown>): Meeting => {
-  const rawType = isMeetingType(data.type) ? data.type : 'weekend';
-  const meetingCategory = isMeetingCategory(data.meetingCategory)
-    ? data.meetingCategory
-    : rawType === 'midweek'
-      ? 'midweek'
-      : rawType === 'weekend'
-        ? 'weekend'
-      : 'general';
-  const inferredProgramType =
-    rawType === 'midweek' || meetingCategory === 'midweek' ? 'midweek' : 'weekend';
-  const normalizedSections = Array.isArray(data.sections)
-    ? normalizeMeetingSections(data.sections, inferredProgramType)
-    : inferredProgramType === 'midweek' && Array.isArray(data.midweekSections)
-      ? convertLegacyMidweekSectionsToProgramSections(data.midweekSections as never)
-      : createDefaultSectionsForMeetingType(inferredProgramType);
-  const title = typeof data.title === 'string' ? data.title : '';
-  const description =
-    typeof data.description === 'string' ? data.description : undefined;
-
-  return {
-    id,
-    title,
-    description,
-    type: meetingCategory === 'midweek' ? 'midweek' : rawType,
-    meetingCategory,
-    status: isMeetingStatus(data.status) ? data.status : 'scheduled',
-    publicationStatus: isPublicationStatus(data.publicationStatus)
-      ? data.publicationStatus
-      : 'published',
-    weekLabel: typeof data.weekLabel === 'string' ? data.weekLabel : undefined,
-    bibleReading:
-      typeof data.bibleReading === 'string' ? data.bibleReading : undefined,
-    startDate: (data.startDate as Meeting['startDate']) ?? Timestamp.now(),
-    endDate: (data.endDate as Meeting['endDate']) ?? Timestamp.now(),
-    meetingDate:
-      (data.meetingDate as Meeting['meetingDate']) ??
-      (data.startDate as Meeting['startDate']) ??
-      Timestamp.now(),
-    publishedAt: data.publishedAt as Meeting['publishedAt'],
-    location: typeof data.location === 'string' ? data.location : undefined,
-    meetingUrl: typeof data.meetingUrl === 'string' ? data.meetingUrl : undefined,
-    zoomMeetingId:
-      typeof data.zoomMeetingId === 'string' ? data.zoomMeetingId : undefined,
-    zoomPasscode:
-      typeof data.zoomPasscode === 'string' ? data.zoomPasscode : undefined,
-    organizerUid: typeof data.organizerUid === 'string' ? data.organizerUid : '',
-    organizerName:
-      typeof data.organizerName === 'string' ? data.organizerName : 'Sistema',
-    attendees: Array.isArray(data.attendees)
-      ? data.attendees.filter((value): value is string => typeof value === 'string')
-      : [],
-    attendeeNames: Array.isArray(data.attendeeNames)
-      ? data.attendeeNames.filter((value): value is string => typeof value === 'string')
-      : undefined,
-    assignedUserIds:
-      toStringArray(data.assignedUserIds).length > 0
-        ? toStringArray(data.assignedUserIds)
-        : collectAssignedUserIds(normalizedSections),
-    cleaningAssignmentMode: isCleaningAssignmentMode(data.cleaningAssignmentMode)
-      ? data.cleaningAssignmentMode
-      : 'none',
-    cleaningGroupIds: toStringArray(data.cleaningGroupIds),
-    cleaningGroupNames: toStringArray(data.cleaningGroupNames),
-    searchableText:
-      typeof data.searchableText === 'string'
-        ? data.searchableText
-        : buildMeetingSearchableText({
-            title,
-            description,
-            sections: normalizedSections,
-          }),
-    notes: typeof data.notes === 'string' ? data.notes : undefined,
-    openingSong: typeof data.openingSong === 'string' ? data.openingSong : undefined,
-    openingPrayer:
-      typeof data.openingPrayer === 'string' ? data.openingPrayer : undefined,
-    closingSong: typeof data.closingSong === 'string' ? data.closingSong : undefined,
-    closingPrayer:
-      typeof data.closingPrayer === 'string' ? data.closingPrayer : undefined,
-    chairman: typeof data.chairman === 'string' ? data.chairman : undefined,
-    sections: normalizedSections,
-    midweekSections: Array.isArray(data.midweekSections)
-      ? (data.midweekSections as Meeting['midweekSections'])
-      : undefined,
-    createdBy: typeof data.createdBy === 'string' ? data.createdBy : undefined,
-    updatedBy: typeof data.updatedBy === 'string' ? data.updatedBy : undefined,
-    createdAt: (data.createdAt as Meeting['createdAt']) ?? Timestamp.now(),
-    updatedAt: (data.updatedAt as Meeting['updatedAt']) ?? Timestamp.now(),
-  };
+export const __resetMeetingRepositoryForTests = (): void => {
+  meetingRepository = firestoreMeetingRepository;
 };
-
-const getMeetingTime = (meeting: Meeting): number => {
-  const raw: unknown = meeting.meetingDate ?? meeting.startDate;
-
-  if (!raw) return 0;
-
-  if (raw instanceof Date) {
-    return raw.getTime();
-  }
-
-  if (
-    typeof raw === 'object' &&
-    raw !== null &&
-    'toDate' in raw &&
-    typeof (raw as { toDate?: unknown }).toDate === 'function'
-  ) {
-    return (raw as { toDate: () => Date }).toDate().getTime();
-  }
-
-  if (typeof raw === 'string' || typeof raw === 'number') {
-    const parsed = new Date(raw).getTime();
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  return 0;
-};
-
-const sortMeetings = (items: Meeting[]): Meeting[] => {
-  return [...items].sort((a, b) => getMeetingTime(a) - getMeetingTime(b));
-};
-
-const MEETINGS_RANGE_CACHE_TTL_MS = 60 * 1000;
-const MEETING_DOC_CACHE_TTL_MS = 60 * 1000;
-
-const toRangeKey = (startDate: Date, endDate: Date): string =>
-  `${startDate.toISOString()}::${endDate.toISOString()}`;
 
 const isInvalidDateRange = (startDate: Date, endDate: Date): boolean =>
   Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate > endDate;
@@ -233,33 +57,10 @@ const filterByPublicationStatus = (
 
 type MeetingProgramKind = 'midweek' | 'weekend';
 
-const resolveProgramKindFromMeeting = (meeting: Pick<Meeting, 'type' | 'meetingCategory'>): MeetingProgramKind =>
+const resolveProgramKindFromMeeting = (
+  meeting: Pick<Meeting, 'type' | 'meetingCategory'>
+): MeetingProgramKind =>
   meeting.type === 'midweek' || meeting.meetingCategory === 'midweek' ? 'midweek' : 'weekend';
-
-const timestampToDate = (value: unknown): Date | null => {
-  if (!value) return null;
-
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-
-  if (
-    typeof value === 'object' &&
-    value !== null &&
-    'toDate' in value &&
-    typeof (value as { toDate?: unknown }).toDate === 'function'
-  ) {
-    const converted = (value as { toDate: () => Date }).toDate();
-    return Number.isNaN(converted.getTime()) ? null : converted;
-  }
-
-  if (typeof value === 'string' || typeof value === 'number') {
-    const converted = new Date(value);
-    return Number.isNaN(converted.getTime()) ? null : converted;
-  }
-
-  return null;
-};
 
 const startOfToday = (): Date => {
   const today = new Date();
@@ -292,31 +93,13 @@ const findMeetingConflictByRange = async (params: {
     return null;
   }
 
-  const byMeetingDateQuery = query(
-    congregationMeetingsCollectionRef(params.congregationId),
-    where('meetingDate', '>=', Timestamp.fromDate(params.rangeStart)),
-    where('meetingDate', '<=', Timestamp.fromDate(params.rangeEnd)),
-    limit(60)
+  const meetings = await meetingRepository.getByDateRangeMerged(
+    params.congregationId,
+    params.rangeStart,
+    params.rangeEnd
   );
 
-  const byStartDateQuery = query(
-    congregationMeetingsCollectionRef(params.congregationId),
-    where('startDate', '>=', Timestamp.fromDate(params.rangeStart)),
-    where('startDate', '<=', Timestamp.fromDate(params.rangeEnd)),
-    limit(60)
-  );
-
-  const [meetingDateSnap, startDateSnap] = await Promise.all([
-    getDocs(byMeetingDateQuery),
-    getDocs(byStartDateQuery),
-  ]);
-
-  const byId = new Map<string, Meeting>();
-  [...meetingDateSnap.docs, ...startDateSnap.docs].forEach((docSnap) => {
-    byId.set(docSnap.id, normalizeMeeting(docSnap.id, docSnap.data()));
-  });
-
-  const conflict = Array.from(byId.values()).find((meeting) => {
+  const conflict = meetings.find((meeting) => {
     if (params.excludeMeetingId && meeting.id === params.excludeMeetingId) {
       return false;
     }
@@ -354,14 +137,7 @@ export const getMeetingById = async (
     return null;
   }
 
-  return getDocumentCacheFirst<Meeting>({
-    cacheKey: `meetings/${congregationId}/doc/${id}`,
-    ref: meetingDocRef(congregationId, id),
-    mapSnapshot: (snapshot) =>
-      normalizeMeeting(snapshot.id, snapshot.data() as Record<string, unknown>),
-    maxAgeMs: MEETING_DOC_CACHE_TTL_MS,
-    persist: false,
-  });
+  return meetingRepository.getById(congregationId, id);
 };
 
 /** Obtiene todas las reuniones ordenadas por fecha */
@@ -370,8 +146,7 @@ export const getAllMeetings = async (congregationId: string): Promise<Meeting[]>
     return [];
   }
 
-  const snap = await getDocs(congregationMeetingsCollectionRef(congregationId));
-  return sortMeetings(snap.docs.map((docSnap) => normalizeMeeting(docSnap.id, docSnap.data())));
+  return meetingRepository.getAllByCongregation(congregationId);
 };
 
 /** Obtiene reuniones del rango visible (semana/rango) con cache-first */
@@ -394,28 +169,9 @@ export const getMeetingsByWeek = async (
     return [];
   }
 
-  const maxItems = options?.maxItems ?? 60;
-  const rangeKey = toRangeKey(startDate, endDate);
-  const q = query(
-    congregationMeetingsCollectionRef(congregationId),
-    where('meetingDate', '>=', Timestamp.fromDate(startDate)),
-    where('meetingDate', '<=', Timestamp.fromDate(endDate)),
-    orderBy('meetingDate', 'asc'),
-    limit(maxItems)
-  );
-
-  const meetings = await getQueryCacheFirst<Meeting[]>({
-    cacheKey: `meetings/${congregationId}/range/${rangeKey}/limit/${maxItems}`,
-    query: q,
-    maxAgeMs: MEETINGS_RANGE_CACHE_TTL_MS,
+  const meetings = await meetingRepository.getByRange(congregationId, startDate, endDate, {
     forceServer: options?.forceServer,
-    persist: false,
-    mapSnapshot: (snapshot) =>
-      sortMeetings(
-        snapshot.docs.map((docSnapshot) =>
-          normalizeMeeting(docSnapshot.id, docSnapshot.data())
-        )
-      ),
+    maxItems: options?.maxItems,
   });
 
   const byStatus = filterByPublicationStatus(meetings, options?.publicationStatus);
@@ -433,43 +189,13 @@ export const getMeetingsByWeek = async (
 export const getMeetingsByStatus = async (
   congregationId: string,
   status: MeetingStatus
-): Promise<Meeting[]> => {
-  const q = query(
-    congregationMeetingsCollectionRef(congregationId),
-    where('status', '==', status),
-    orderBy('meetingDate', 'asc')
-  );
-  const snap = await getDocs(q);
-  return sortMeetings(snap.docs.map((docSnap) => normalizeMeeting(docSnap.id, docSnap.data())));
-};
+): Promise<Meeting[]> => meetingRepository.getByStatus(congregationId, status);
 
 /** Obtiene reuniones donde el usuario es organizador o asistente */
 export const getMeetingsByUser = async (
   congregationId: string,
   uid: string
-): Promise<Meeting[]> => {
-  const meetingsRef = congregationMeetingsCollectionRef(congregationId);
-
-  const [organizerSnap, attendeeSnap] = await Promise.all([
-    getDocs(
-      query(meetingsRef, where('organizerUid', '==', uid), orderBy('meetingDate', 'asc'))
-    ),
-    getDocs(
-      query(
-        meetingsRef,
-        where('attendees', 'array-contains', uid),
-        orderBy('meetingDate', 'asc')
-      )
-    ),
-  ]);
-
-  const byId = new Map<string, Meeting>();
-  [...organizerSnap.docs, ...attendeeSnap.docs].forEach((docSnap) => {
-    byId.set(docSnap.id, normalizeMeeting(docSnap.id, docSnap.data()));
-  });
-
-  return sortMeetings(Array.from(byId.values()));
-};
+): Promise<Meeting[]> => meetingRepository.getByUser(congregationId, uid);
 
 /** Crea una reunion */
 export const createMeeting = async (
@@ -488,6 +214,10 @@ export const createMeeting = async (
   const meetingRangeEnd = timestampToDate(data.endDate) ?? meetingRangeStart;
 
   if (!meetingRangeStart || !meetingRangeEnd) {
+    throw new AppError('La reunion debe tener un rango de fechas valido.');
+  }
+
+  if (isInvalidDateRange(meetingRangeStart, meetingRangeEnd)) {
     throw new AppError('La reunion debe tener un rango de fechas valido.');
   }
 
@@ -602,43 +332,11 @@ export const createMeeting = async (
     status: data.status ?? ('scheduled' as MeetingStatus),
     createdBy: data.createdBy ?? organizerUid,
     updatedBy: data.updatedBy ?? organizerUid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
   };
 
-  const createViaFunction = async (): Promise<string> => {
-    const managerPayload = { ...rawPayload };
-    delete managerPayload.createdAt;
-    delete managerPayload.updatedAt;
-
-    const meetingId = await createMeetingByManager({
-      congregationId,
-      meetingData: managerPayload,
-    });
-
-    clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
-    return meetingId;
-  };
-
-  if (shouldUseManagerFunction) {
-    return createViaFunction();
-  }
-
-  try {
-    const ref = await addDoc(
-      congregationMeetingsCollectionRef(congregationId),
-      sanitizeForFirestore(rawPayload)
-    );
-
-    clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
-    return ref.id;
-  } catch (error) {
-    if (!isFirebaseErrorCode(error, 'permission-denied')) {
-      throw error;
-    }
-
-    return createViaFunction();
-  }
+  return meetingRepository.create(congregationId, rawPayload, {
+    requiresManager: shouldUseManagerFunction,
+  });
 };
 
 /** Actualiza una reunion */
@@ -649,7 +347,8 @@ export const updateMeeting = async (
 ): Promise<void> => {
   const inferredType =
     data.type === 'midweek' || data.meetingCategory === 'midweek' ? 'midweek' : 'weekend';
-  const fallbackStartDate = data.startDate ?? Timestamp.now();
+  const fallbackStartDate =
+    data.startDate ?? data.meetingDate ?? createCurrentMeetingTimestamp();
 
   const normalizedProgram = normalizeMeetingProgramPayload({
     meetingType: inferredType,
@@ -720,7 +419,6 @@ export const updateMeeting = async (
       description: data.description,
       sections: plannedSections,
     }),
-    updatedAt: serverTimestamp(),
   };
 
   if (inferredType === 'midweek') {
@@ -769,37 +467,9 @@ export const updateMeeting = async (
     }
   }
 
-  const payload = sanitizeForFirestore(rawPayload);
-  const updateViaFunction = async (): Promise<void> => {
-    const managerPayload = { ...rawPayload };
-    delete managerPayload.updatedAt;
-
-    await updateMeetingByManager({
-      congregationId,
-      meetingId: id,
-      meetingData: managerPayload,
-    });
-  };
-
-  if (shouldUseManagerFunction) {
-    await updateViaFunction();
-    invalidateCacheEntry(`meetings/${congregationId}/doc/${id}`);
-    clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
-    return;
-  }
-
-  try {
-    await updateDoc(meetingDocRef(congregationId, id), payload);
-  } catch (error) {
-    if (!isFirebaseErrorCode(error, 'permission-denied')) {
-      throw error;
-    }
-
-    await updateViaFunction();
-  }
-
-  invalidateCacheEntry(`meetings/${congregationId}/doc/${id}`);
-  clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
+  await meetingRepository.update(congregationId, id, rawPayload, {
+    requiresManager: shouldUseManagerFunction,
+  });
 };
 
 /** Elimina una reunion */
@@ -807,33 +477,14 @@ export const deleteMeeting = async (
   congregationId: string,
   id: string
 ): Promise<void> => {
-  try {
-    await deleteDoc(meetingDocRef(congregationId, id));
-  } catch (error) {
-    if (!isFirebaseErrorCode(error, 'permission-denied')) {
-      throw error;
-    }
-
-    await deleteMeetingByManager({
-      congregationId,
-      meetingId: id,
-    });
-  }
-
-  invalidateCacheEntry(`meetings/${congregationId}/doc/${id}`);
-  clearSessionCacheByPrefix(`query:meetings/${congregationId}/`);
+  await meetingRepository.delete(congregationId, id);
 };
 
 /** Cuenta reuniones por estado */
 export const getMeetingsCount = async (
   congregationId: string,
   status?: MeetingStatus
-): Promise<number> => {
-  const meetingsRef = congregationMeetingsCollectionRef(congregationId);
-  const q = status ? query(meetingsRef, where('status', '==', status)) : meetingsRef;
-  const snap = await getDocs(q);
-  return snap.size;
-};
+): Promise<number> => meetingRepository.count(congregationId, status);
 
 /** Suscripcion en tiempo real a todas las reuniones */
 export const subscribeToMeetings = (
@@ -843,29 +494,8 @@ export const subscribeToMeetings = (
 ): Unsubscribe => {
   if (!congregationId || typeof congregationId !== 'string') {
     onError?.(new Error('No existe congregationId para cargar reuniones.'));
-    return () => {};
+    return () => undefined;
   }
 
-  const q = query(congregationMeetingsCollectionRef(congregationId));
-  const listenerKey = `meetings:congregation:${congregationId}`;
-  logFirestoreListenerCreated(listenerKey);
-
-  const unsubscribe = onSnapshot(
-    q,
-    (snap) => {
-      const meetings = sortMeetings(
-        snap.docs.map((docSnap) => normalizeMeeting(docSnap.id, docSnap.data()))
-      );
-      callback(meetings);
-    },
-    (error) => {
-      log.error('subscribeToMeetings error:', error);
-      onError?.(error);
-    }
-  );
-
-  return () => {
-    logFirestoreListenerDestroyed(listenerKey);
-    unsubscribe();
-  };
+  return meetingRepository.subscribeToMeetings(congregationId, callback, onError);
 };
