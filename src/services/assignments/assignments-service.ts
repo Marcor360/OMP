@@ -1,206 +1,74 @@
-import {
-  Timestamp,
-  addDoc,
-  collection,
-  collectionGroup,
-  deleteDoc,
-  documentId,
-  getDoc,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  where,
-  type Query,
-  type QueryConstraint,
-  type QuerySnapshot,
-  type Unsubscribe,
-} from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-
-import {
-  assignmentDocRef,
-  congregationMeetingsCollectionRef,
-  meetingAssignmentsCollectionRef,
-} from '@/src/lib/firebase/refs';
-import { db, functions } from '@/src/lib/firebase/app';
-import {
-  logFirestoreListenerCreated,
-  logFirestoreListenerDestroyed,
-} from '@/src/services/firebase/firestore-debug';
-import { getQueryCacheFirst } from '@/src/services/repositories/firestore-cache-first';
-import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
-import {
+import type {
   Assignment,
-  CreateCleaningAssignmentDTO,
   AssignmentStatus,
   CreateAssignmentDTO,
+  CreateCleaningAssignmentDTO,
   UpdateAssignmentDTO,
 } from '@/src/types/assignment';
+import type {
+  AssignmentFilters,
+} from '@/src/services/assignments/assignment.mapper';
+import { firestoreAssignmentRepository } from '@/src/services/repositories/firestore/firestore-assignment-repository';
+import type {
+  AssignmentRepository,
+  Unsubscribe,
+} from '@/src/services/repositories/ports/assignment-repository.port';
 
-type AssignmentFilters = {
-  userUid?: string;
-  status?: AssignmentStatus;
+let assignmentRepository: AssignmentRepository = firestoreAssignmentRepository;
+
+export const __setAssignmentRepositoryForTests = (repo: AssignmentRepository): void => {
+  assignmentRepository = repo;
 };
 
-type SerializableTimestamp = {
-  seconds: number;
-  nanoseconds: number;
-};
-
-const ASSIGNMENTS_CACHE_TTL_MS = 60 * 1000;
-
-type MeetingIdsOptions = {
-  startDate?: Date;
-  endDate?: Date;
-  maxItems?: number;
-  forceServer?: boolean;
+export const __resetAssignmentRepositoryForTests = (): void => {
+  assignmentRepository = firestoreAssignmentRepository;
 };
 
 const isInvalidRange = (startDate: Date, endDate: Date): boolean =>
-  Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate > endDate;
+  Number.isNaN(startDate.getTime()) ||
+  Number.isNaN(endDate.getTime()) ||
+  startDate > endDate;
 
-const assignmentSortByDueDate = (a: Assignment, b: Assignment): number => {
-  const aDue = a.dueDate?.toMillis?.() ?? 0;
-  const bDue = b.dueDate?.toMillis?.() ?? 0;
-  return aDue - bDue;
-};
+const isBlank = (value: string | null | undefined): boolean =>
+  !value || value.trim().length === 0;
 
-const normalizeAssignment = (
-  meetingId: string,
-  id: string,
-  data: Record<string, unknown>
-): Assignment => {
-  const base = { id, ...data } as Assignment;
-  return {
-    ...base,
-    meetingId: base.meetingId ?? meetingId,
-  };
-};
-
-const toSerializableTimestamp = (value: Timestamp): SerializableTimestamp => ({
-  seconds: value.seconds,
-  nanoseconds: value.nanoseconds,
-});
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> => {
-  if (!value || typeof value !== 'object') return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-};
-
-const toCallableSafe = (value: unknown): unknown => {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  if (value instanceof Timestamp) return toSerializableTimestamp(value);
-  if (Array.isArray(value)) {
-    return value.map((item) => toCallableSafe(item)).filter((item) => item !== undefined);
-  }
-  if (isPlainObject(value)) {
-    const output: Record<string, unknown> = {};
-    Object.entries(value).forEach(([key, child]) => {
-      const safeChild = toCallableSafe(child);
-      if (safeChild !== undefined) output[key] = safeChild;
-    });
-    return output;
-  }
-  return value;
-};
-
-const applyAssignmentFilters = (
-  assignments: Assignment[],
-  filters?: AssignmentFilters
-): Assignment[] => {
-  if (!filters) return assignments;
-
-  return assignments.filter((assignment) => {
-    if (filters.userUid && assignment.assignedToUid !== filters.userUid) {
-      return false;
-    }
-
-    if (filters.status && assignment.status !== filters.status) {
-      return false;
-    }
-
-    return true;
-  });
-};
-
-const dedupeAssignments = (assignments: Assignment[]): Assignment[] => {
-  const byId = new Map<string, Assignment>();
-
-  assignments.forEach((assignment) => {
-    const key = `${assignment.meetingId ?? 'none'}:${assignment.id}`;
-    byId.set(key, assignment);
-  });
-
-  return Array.from(byId.values());
-};
-
-const getMeetingIds = async (
-  congregationId: string,
-  options?: MeetingIdsOptions
-): Promise<string[]> => {
-  const maxItems = options?.maxItems ?? 120;
-  const constraints: QueryConstraint[] = [orderBy('startDate', 'desc'), limit(maxItems)];
-
-  if (options?.startDate && options?.endDate && !isInvalidRange(options.startDate, options.endDate)) {
-    constraints.unshift(
-      where('startDate', '>=', Timestamp.fromDate(options.startDate)),
-      where('startDate', '<=', Timestamp.fromDate(options.endDate))
-    );
-  }
-
-  const rangeKey =
-    options?.startDate && options?.endDate
-      ? `${options.startDate.toISOString()}::${options.endDate.toISOString()}`
-      : 'all';
-
-  return getQueryCacheFirst<string[]>({
-    cacheKey: `assignments/${congregationId}/meeting-ids/${rangeKey}/limit/${maxItems}`,
-    query: query(congregationMeetingsCollectionRef(congregationId), ...constraints),
-    maxAgeMs: ASSIGNMENTS_CACHE_TTL_MS,
-    forceServer: options?.forceServer,
-    mapSnapshot: (snapshot) => snapshot.docs.map((docSnap) => docSnap.id),
-  });
-};
-
-const buildAssignmentsQuery = (
+const assertCreateAssignmentInput = (
   congregationId: string,
   meetingId: string,
-  extraConstraints: QueryConstraint[]
-): Query => {
-  return query(
-    meetingAssignmentsCollectionRef(congregationId, meetingId),
-    ...extraConstraints
-  );
+  data: CreateAssignmentDTO
+): void => {
+  if (isBlank(congregationId)) {
+    throw new Error('No hay congregacion activa.');
+  }
+
+  if (isBlank(meetingId)) {
+    throw new Error('No hay reunion vinculada a la asignacion.');
+  }
+
+  if (isBlank(data.title)) {
+    throw new Error('El titulo de la asignacion es obligatorio.');
+  }
+
+  if (isBlank(data.assignedToUid) || isBlank(data.assignedToName)) {
+    throw new Error('La persona asignada es obligatoria.');
+  }
 };
 
-const getAssignmentsForMeetings = async (
+const assertCleaningAssignmentInput = (
   congregationId: string,
-  constraintsFactory: (meetingId: string) => QueryConstraint[],
-  options?: MeetingIdsOptions
-): Promise<Assignment[]> => {
-  const meetingIds = await getMeetingIds(congregationId, options);
+  data: CreateCleaningAssignmentDTO
+): void => {
+  if (isBlank(congregationId)) {
+    throw new Error('No hay congregacion activa.');
+  }
 
-  if (meetingIds.length === 0) return [];
+  if (isBlank(data.title)) {
+    throw new Error('El titulo de la asignacion es obligatorio.');
+  }
 
-  const snapshots = await Promise.all(
-    meetingIds.map((meetingId) =>
-      getDocs(buildAssignmentsQuery(congregationId, meetingId, constraintsFactory(meetingId)))
-    )
-  );
-
-  const merged = snapshots.flatMap((snapshot, index) => {
-    const meetingId = meetingIds[index];
-    return snapshot.docs.map((docSnap) =>
-      normalizeAssignment(meetingId, docSnap.id, docSnap.data())
-    );
-  });
-
-  return dedupeAssignments(merged).sort(assignmentSortByDueDate);
+  if (isBlank(data.cleaningGroupId) || isBlank(data.cleaningGroupName)) {
+    throw new Error('El grupo de limpieza es obligatorio.');
+  }
 };
 
 /** Obtiene una asignacion por ID dentro de la congregacion */
@@ -209,65 +77,20 @@ export const getAssignmentById = async (
   assignmentId: string,
   meetingIdHint?: string
 ): Promise<Assignment | null> => {
-  if (meetingIdHint && meetingIdHint.trim().length > 0) {
-    try {
-      const directSnapshot = await getDoc(
-        assignmentDocRef(congregationId, meetingIdHint, assignmentId)
-      );
-
-      if (directSnapshot.exists()) {
-        return normalizeAssignment(meetingIdHint, directSnapshot.id, directSnapshot.data());
-      }
-    } catch {
-      // Continue with broader fallback strategy.
-    }
+  if (isBlank(congregationId) || isBlank(assignmentId)) {
+    return null;
   }
 
-  try {
-    const grouped = await getDocs(
-      query(collectionGroup(db, 'assignments'), where(documentId(), '==', assignmentId), limit(6))
-    );
-
-    for (const docSnapshot of grouped.docs) {
-      const pathSegments = docSnapshot.ref.path.split('/');
-
-      if (
-        pathSegments.length >= 6 &&
-        pathSegments[0] === 'congregations' &&
-        pathSegments[1] === congregationId &&
-        pathSegments[2] === 'meetings' &&
-        pathSegments[4] === 'assignments'
-      ) {
-        const meetingId = pathSegments[3];
-        return normalizeAssignment(meetingId, docSnapshot.id, docSnapshot.data());
-      }
-    }
-  } catch {
-    // Fallback to deterministic scan below if collectionGroup is not available.
-  }
-
-  const meetingIds = await getMeetingIds(congregationId);
-
-  if (meetingIds.length === 0) return null;
-
-  const snapshots = await Promise.all(
-    meetingIds.map((meetingId) => getDoc(assignmentDocRef(congregationId, meetingId, assignmentId)))
-  );
-
-  for (let index = 0; index < snapshots.length; index += 1) {
-    const snapshot = snapshots[index];
-
-    if (snapshot.exists()) {
-      return normalizeAssignment(meetingIds[index], snapshot.id, snapshot.data());
-    }
-  }
-
-  return null;
+  return assignmentRepository.getById(congregationId, assignmentId, meetingIdHint);
 };
 
 /** Obtiene todas las asignaciones de la congregacion */
 export const getAllAssignments = async (congregationId: string): Promise<Assignment[]> => {
-  return getAssignmentsForMeetings(congregationId, () => [orderBy('dueDate', 'asc')]);
+  if (isBlank(congregationId)) {
+    return [];
+  }
+
+  return assignmentRepository.getAll(congregationId);
 };
 
 /** Obtiene asignaciones de un usuario especifico dentro de la congregacion */
@@ -275,10 +98,11 @@ export const getAssignmentsByUser = async (
   congregationId: string,
   uid: string
 ): Promise<Assignment[]> => {
-  return getAssignmentsForMeetings(congregationId, () => [
-    where('assignedToUid', '==', uid),
-    orderBy('dueDate', 'asc'),
-  ]);
+  if (isBlank(congregationId) || isBlank(uid)) {
+    return [];
+  }
+
+  return assignmentRepository.getByUser(congregationId, uid);
 };
 
 /** Obtiene asignaciones por estado dentro de la congregacion */
@@ -286,10 +110,11 @@ export const getAssignmentsByStatus = async (
   congregationId: string,
   status: AssignmentStatus
 ): Promise<Assignment[]> => {
-  return getAssignmentsForMeetings(congregationId, () => [
-    where('status', '==', status),
-    orderBy('dueDate', 'asc'),
-  ]);
+  if (isBlank(congregationId)) {
+    return [];
+  }
+
+  return assignmentRepository.getByStatus(congregationId, status);
 };
 
 /** Obtiene asignaciones del rango visible (semana/rango) */
@@ -305,7 +130,7 @@ export const getAssignmentsByWeek = async (
     perMeetingLimit?: number;
   }
 ): Promise<Assignment[]> => {
-  if (!congregationId || typeof congregationId !== 'string') {
+  if (isBlank(congregationId)) {
     return [];
   }
 
@@ -313,70 +138,7 @@ export const getAssignmentsByWeek = async (
     return [];
   }
 
-  const dueStart = Timestamp.fromDate(startDate);
-  const dueEnd = Timestamp.fromDate(endDate);
-  const maxPerMeeting = options?.perMeetingLimit ?? 40;
-  const meetingIds = await getMeetingIds(congregationId, {
-    startDate,
-    endDate,
-    maxItems: options?.maxMeetings ?? 60,
-    forceServer: options?.forceServer,
-  });
-
-  if (meetingIds.length === 0) return [];
-
-  const readAssignmentsForMeeting = async (meetingId: string) => {
-    const primaryConstraints: QueryConstraint[] = [
-      where('dueDate', '>=', dueStart),
-      where('dueDate', '<=', dueEnd),
-      orderBy('dueDate', 'asc'),
-      limit(maxPerMeeting),
-    ];
-
-    if (options?.userUid) {
-      primaryConstraints.unshift(where('assignedToUid', '==', options.userUid));
-    }
-
-    if (options?.status) {
-      primaryConstraints.unshift(where('status', '==', options.status));
-    }
-
-    try {
-      return await getDocs(
-        query(meetingAssignmentsCollectionRef(congregationId, meetingId), ...primaryConstraints)
-      );
-    } catch {
-      const fallbackConstraints: QueryConstraint[] = [limit(maxPerMeeting * 2)];
-
-      if (options?.userUid) {
-        fallbackConstraints.unshift(where('assignedToUid', '==', options.userUid));
-      }
-
-      if (options?.status) {
-        fallbackConstraints.unshift(where('status', '==', options.status));
-      }
-
-      return await getDocs(
-        query(meetingAssignmentsCollectionRef(congregationId, meetingId), ...fallbackConstraints)
-      );
-    }
-  };
-
-  const snapshots = await Promise.all(
-    meetingIds.map((meetingId) => readAssignmentsForMeeting(meetingId))
-  );
-
-  const merged = snapshots.flatMap((snapshot, index) =>
-    snapshot.docs
-      .map((docSnap) => normalizeAssignment(meetingIds[index], docSnap.id, docSnap.data()))
-      .filter((assignment) => {
-        const millis = assignment.dueDate?.toMillis?.();
-        if (typeof millis !== 'number') return false;
-        return millis >= dueStart.toMillis() && millis <= dueEnd.toMillis();
-      })
-  );
-
-  return dedupeAssignments(merged).sort(assignmentSortByDueDate);
+  return assignmentRepository.getByRange(congregationId, startDate, endDate, options);
 };
 
 /** Obtiene asignaciones de una reunion */
@@ -384,20 +146,11 @@ export const getAssignmentsByMeeting = async (
   congregationId: string,
   meetingId: string
 ): Promise<Assignment[]> => {
-  const q = query(
-    meetingAssignmentsCollectionRef(congregationId, meetingId),
-    orderBy('dueDate', 'asc')
-  );
+  if (isBlank(congregationId) || isBlank(meetingId)) {
+    return [];
+  }
 
-  return getQueryCacheFirst<Assignment[]>({
-    cacheKey: `assignments/${congregationId}/meeting/${meetingId}`,
-    query: q,
-    maxAgeMs: ASSIGNMENTS_CACHE_TTL_MS,
-    mapSnapshot: (snapshot) =>
-      snapshot.docs
-        .map((docSnapshot) => normalizeAssignment(meetingId, docSnapshot.id, docSnapshot.data()))
-        .sort(assignmentSortByDueDate),
-  });
+  return assignmentRepository.getByMeeting(congregationId, meetingId);
 };
 
 /** Crea una asignacion en la subcoleccion de la reunion */
@@ -408,32 +161,15 @@ export const createAssignment = async (
   assignedByUid: string,
   assignedByName: string
 ): Promise<string> => {
-  const callable = httpsCallable<
-    {
-      congregationId: string;
-      meetingId: string;
-      assignmentData: Record<string, unknown>;
-      assignedByName: string;
-    },
-    { assignmentId: string }
-  >(functions, 'createMeetingAssignmentByManager');
+  assertCreateAssignmentInput(congregationId, meetingId, data);
 
-  const result = await callable({
+  return assignmentRepository.create(
     congregationId,
     meetingId,
-    assignmentData: toCallableSafe({
-      ...data,
-      meetingId,
-      assignedByUid,
-      assignedByName,
-      status: 'pending' as AssignmentStatus,
-    }) as Record<string, unknown>,
-    assignedByName,
-  });
-
-  clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
-  clearSessionCacheByPrefix(`query:assignments-panel/${congregationId}/`);
-  return result.data.assignmentId;
+    data,
+    assignedByUid,
+    assignedByName
+  );
 };
 
 /** Crea una asignacion de limpieza para un grupo/familia completa. */
@@ -443,32 +179,14 @@ export const createCleaningGroupAssignment = async (
   assignedByUid: string,
   assignedByName: string
 ): Promise<string> => {
-  const ref = await addDoc(collection(db, 'congregations', congregationId, 'assignments'), {
-    congregationId,
-    category: 'cleaning',
-    type: 'cleaning',
-    title: data.title,
-    description: data.description ?? '',
-    notes: data.description ?? '',
-    priority: data.priority,
-    cleaningGroupId: data.cleaningGroupId,
-    cleaningGroupName: data.cleaningGroupName,
-    assignedToUid: data.cleaningGroupId,
-    assignedToName: data.cleaningGroupName,
-    assignedByUid,
-    assignedByName,
-    createdBy: assignedByUid,
-    updatedBy: assignedByUid,
-    dueDate: data.dueDate,
-    date: data.dueDate,
-    status: 'pending' as AssignmentStatus,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  assertCleaningAssignmentInput(congregationId, data);
 
-  clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
-  clearSessionCacheByPrefix(`query:assignments-panel/${congregationId}/`);
-  return ref.id;
+  return assignmentRepository.createCleaningGroup(
+    congregationId,
+    data,
+    assignedByUid,
+    assignedByName
+  );
 };
 
 /** Actualiza una asignacion */
@@ -478,24 +196,11 @@ export const updateAssignment = async (
   assignmentId: string,
   data: UpdateAssignmentDTO
 ): Promise<void> => {
-  const callable = httpsCallable<
-    {
-      congregationId: string;
-      meetingId: string;
-      assignmentId: string;
-      assignmentData: Record<string, unknown>;
-    },
-    { ok: true }
-  >(functions, 'updateMeetingAssignmentByManager');
+  if (isBlank(congregationId) || isBlank(meetingId) || isBlank(assignmentId)) {
+    return;
+  }
 
-  await callable({
-    congregationId,
-    meetingId,
-    assignmentId,
-    assignmentData: toCallableSafe(data) as Record<string, unknown>,
-  });
-  clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
-  clearSessionCacheByPrefix(`query:assignments-panel/${congregationId}/`);
+  await assignmentRepository.update(congregationId, meetingId, assignmentId, data);
 };
 
 /** Elimina una asignacion */
@@ -504,9 +209,11 @@ export const deleteAssignment = async (
   meetingId: string,
   assignmentId: string
 ): Promise<void> => {
-  await deleteDoc(assignmentDocRef(congregationId, meetingId, assignmentId));
-  clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
-  clearSessionCacheByPrefix(`query:assignments-panel/${congregationId}/`);
+  if (isBlank(congregationId) || isBlank(meetingId) || isBlank(assignmentId)) {
+    return;
+  }
+
+  await assignmentRepository.delete(congregationId, meetingId, assignmentId);
 };
 
 /** Cuenta asignaciones por estado */
@@ -514,11 +221,11 @@ export const getAssignmentsCount = async (
   congregationId: string,
   status?: AssignmentStatus
 ): Promise<number> => {
-  const all = status
-    ? await getAssignmentsByStatus(congregationId, status)
-    : await getAllAssignments(congregationId);
+  if (isBlank(congregationId)) {
+    return 0;
+  }
 
-  return all.length;
+  return assignmentRepository.count(congregationId, status);
 };
 
 /**
@@ -531,84 +238,15 @@ export const subscribeToAssignments = (
   filters?: AssignmentFilters,
   onError?: (error: unknown) => void
 ): Unsubscribe => {
-  const assignmentsByMeeting = new Map<string, Assignment[]>();
-  const assignmentsUnsubs = new Map<string, Unsubscribe>();
-  const listenerKey = `assignments:congregation:${congregationId}`;
-  logFirestoreListenerCreated(listenerKey);
+  if (isBlank(congregationId)) {
+    callback([]);
+    return () => undefined;
+  }
 
-  const emit = () => {
-    const merged = dedupeAssignments(Array.from(assignmentsByMeeting.values()).flat())
-      .sort(assignmentSortByDueDate);
-    callback(applyAssignmentFilters(merged, filters));
-  };
-
-  const releaseMeetingListener = (meetingId: string) => {
-    const unsubscribe = assignmentsUnsubs.get(meetingId);
-    if (unsubscribe) {
-      logFirestoreListenerDestroyed(`assignments:meeting:${congregationId}:${meetingId}`);
-      unsubscribe();
-      assignmentsUnsubs.delete(meetingId);
-    }
-
-    assignmentsByMeeting.delete(meetingId);
-  };
-
-  const meetingsUnsub = onSnapshot(
-    query(congregationMeetingsCollectionRef(congregationId), orderBy('startDate', 'desc')),
-    (meetingsSnap: QuerySnapshot) => {
-      const nextMeetingIds = new Set(meetingsSnap.docs.map((meetingDoc) => meetingDoc.id));
-
-      // Limpia listeners de reuniones que ya no existen.
-      Array.from(assignmentsUnsubs.keys()).forEach((meetingId) => {
-        if (!nextMeetingIds.has(meetingId)) {
-          releaseMeetingListener(meetingId);
-        }
-      });
-
-      meetingsSnap.docs.forEach((meetingDoc) => {
-        const meetingId = meetingDoc.id;
-
-        if (assignmentsUnsubs.has(meetingId)) {
-          return;
-        }
-
-        const assignmentsQuery = query(
-          meetingAssignmentsCollectionRef(congregationId, meetingId),
-          orderBy('dueDate', 'asc')
-        );
-
-        const assignmentUnsub = onSnapshot(
-          assignmentsQuery,
-          (assignmentsSnap) => {
-            assignmentsByMeeting.set(
-              meetingId,
-              assignmentsSnap.docs.map((docSnap) =>
-                normalizeAssignment(meetingId, docSnap.id, docSnap.data())
-              )
-            );
-            emit();
-          },
-          (error) => {
-            onError?.(error);
-          }
-        );
-
-        logFirestoreListenerCreated(`assignments:meeting:${congregationId}:${meetingId}`);
-        assignmentsUnsubs.set(meetingId, assignmentUnsub);
-      });
-
-      emit();
-    },
-    (error) => {
-      onError?.(error);
-    }
+  return assignmentRepository.subscribeToAssignments(
+    congregationId,
+    callback,
+    filters,
+    onError
   );
-
-  return () => {
-    logFirestoreListenerDestroyed(listenerKey);
-    meetingsUnsub();
-    assignmentsUnsubs.forEach((unsubscribe) => unsubscribe());
-    assignmentsUnsubs.clear();
-    assignmentsByMeeting.clear();
-  };
 };
