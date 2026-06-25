@@ -1,7 +1,18 @@
-import { arrayUnion, serverTimestamp, setDoc } from 'firebase/firestore';
-
 import { getNativePushToken } from '@/src/firebase/messaging';
-import { userDocRef } from '@/src/lib/firebase/refs';
+import { firestorePushTokenRepository } from '@/src/services/repositories/firestore/firestore-push-token-repository';
+import type { PushTokenRepository } from '@/src/services/repositories/ports/push-token-repository.port';
+
+let pushTokenRepository: PushTokenRepository = firestorePushTokenRepository;
+
+export const __setPushTokenRepositoryForTests = (
+  repo: PushTokenRepository
+): void => {
+  pushTokenRepository = repo;
+};
+
+export const __resetPushTokenRepositoryForTests = (): void => {
+  pushTokenRepository = firestorePushTokenRepository;
+};
 
 export const registerPushTokenForCurrentUser = async (
   userId: string
@@ -16,13 +27,9 @@ export const registerPushTokenForCurrentUser = async (
     return;
   }
 
-  await setDoc(
-    userDocRef(userId),
-    {
-      uid: userId,
-      notificationTokens: arrayUnion(token),
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
+  await pushTokenRepository.savePushToken(userId, {
+    kind: 'userProfile',
+    token,
+    includePushTokenUpdatedAt: false,
+  });
 };

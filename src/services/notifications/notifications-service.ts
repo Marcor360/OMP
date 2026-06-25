@@ -5,14 +5,9 @@
  */
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import {
-  arrayRemove,
-  arrayUnion,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
 
-import { userDocRef } from '@/src/lib/firebase/refs';
+import { firestorePushTokenRepository } from '@/src/services/repositories/firestore/firestore-push-token-repository';
+import type { PushTokenRepository } from '@/src/services/repositories/ports/push-token-repository.port';
 import { PermissionStatus } from '@/src/types/permissions.types';
 import {
   canUseRemotePushNotifications,
@@ -61,11 +56,40 @@ const PHYSICAL_DEVICE_REQUIRED_MESSAGE =
 
 let notificationsModulePromise: Promise<NotificationsModule | null> | null =
   null;
+let notificationsModuleOverride: NotificationsModule | null | undefined;
 let notificationHandlerConfigured = false;
+let pushTokenRepository: PushTokenRepository = firestorePushTokenRepository;
+
+export const __setPushTokenRepositoryForTests = (
+  repo: PushTokenRepository
+): void => {
+  pushTokenRepository = repo;
+};
+
+export const __resetPushTokenRepositoryForTests = (): void => {
+  pushTokenRepository = firestorePushTokenRepository;
+};
+
+export const __setNotificationsModuleForTests = (
+  module: NotificationsModule | null
+): void => {
+  notificationsModuleOverride = module;
+  notificationsModulePromise = null;
+};
+
+export const __resetNotificationsModuleForTests = (): void => {
+  notificationsModuleOverride = undefined;
+  notificationsModulePromise = null;
+  notificationHandlerConfigured = false;
+};
 
 const loadNotificationsModule = async (): Promise<NotificationsModule | null> => {
   if (!canUseRemotePushNotifications) {
     return null;
+  }
+
+  if (notificationsModuleOverride !== undefined) {
+    return notificationsModuleOverride;
   }
 
   if (!notificationsModulePromise) {
@@ -375,16 +399,11 @@ export async function registerPushTokenForUser(
       return null;
     }
 
-    await setDoc(
-      userDocRef(uid),
-      {
-        uid,
-        notificationTokens: arrayUnion(token),
-        pushTokenUpdatedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    await pushTokenRepository.savePushToken(uid, {
+      kind: 'userProfile',
+      token,
+      includePushTokenUpdatedAt: true,
+    });
 
     return token;
   } catch {
@@ -401,16 +420,7 @@ export async function unregisterPushToken(uid: string): Promise<void> {
 
   try {
     const token = await getNativeDevicePushToken(Notifications);
-    const payload: Record<string, unknown> = {
-      pushTokenUpdatedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-
-    if (token) {
-      payload.notificationTokens = arrayRemove(token);
-    }
-
-    await setDoc(userDocRef(uid), payload, { merge: true });
+    await pushTokenRepository.removePushToken(uid, { token });
   } catch {
     // Silent fallback: user could be deleted or permissions unavailable.
   }

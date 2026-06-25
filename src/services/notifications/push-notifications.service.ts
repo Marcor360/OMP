@@ -1,9 +1,9 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import { arrayUnion, serverTimestamp, setDoc } from 'firebase/firestore';
 
-import { userDocRef, userPushTokenDocRef } from '@/src/lib/firebase/refs';
+import { firestorePushTokenRepository } from '@/src/services/repositories/firestore/firestore-push-token-repository';
+import type { PushTokenRepository } from '@/src/services/repositories/ports/push-token-repository.port';
 import { PermissionStatus } from '@/src/types/permissions.types';
 import {
   canUseRemotePushNotifications,
@@ -34,6 +34,17 @@ const DEFAULT_CHANNEL_ID = 'default';
 type NotificationsModule = typeof import('expo-notifications');
 
 let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
+let pushTokenRepository: PushTokenRepository = firestorePushTokenRepository;
+
+export const __setPushTokenRepositoryForTests = (
+  repo: PushTokenRepository
+): void => {
+  pushTokenRepository = repo;
+};
+
+export const __resetPushTokenRepositoryForTests = (): void => {
+  pushTokenRepository = firestorePushTokenRepository;
+};
 
 const loadExpoNotifications = async (): Promise<NotificationsModule | null> => {
   if (!canUseRemotePushNotifications) {
@@ -233,30 +244,22 @@ export const registerExpoPushTokenForUser = async (params: {
       };
     }
 
-    await setDoc(
-      userPushTokenDocRef(userId, tokenToDocId(token)),
-      {
-        token,
-        userId,
-        congregationId,
-        platform: Platform.OS,
-        deviceName: Device.deviceName ?? Device.modelName ?? null,
-        isActive: true,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    await pushTokenRepository.savePushToken(userId, {
+      kind: 'tokenDocument',
+      tokenDocId: tokenToDocId(token),
+      token,
+      userId,
+      congregationId,
+      platform: Platform.OS,
+      deviceName: Device.deviceName ?? Device.modelName ?? null,
+      isActive: true,
+    });
 
-    await setDoc(
-      userDocRef(userId),
-      {
-        uid: userId,
-        notificationTokens: arrayUnion(token),
-        pushTokenUpdatedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    await pushTokenRepository.savePushToken(userId, {
+      kind: 'userProfile',
+      token,
+      includePushTokenUpdatedAt: true,
+    });
 
     return {
       ok: true,

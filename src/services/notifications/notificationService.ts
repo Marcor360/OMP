@@ -1,22 +1,22 @@
-import {
-  Unsubscribe,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  updateDoc,
-  where,
-  writeBatch,
-} from 'firebase/firestore';
-
-import {
-  congregationNotificationDocRef,
-  congregationNotificationsCollectionRef,
-} from '@/src/lib/firebase/refs';
 import { AppNotification } from '@/src/features/notifications/types/notification.types';
+import { firestoreNotificationRepository } from '@/src/services/repositories/firestore/firestore-notification-repository';
+import type {
+  NotificationRecord,
+  NotificationRepository,
+  Unsubscribe,
+} from '@/src/services/repositories/ports/notification-repository.port';
 
-const PAGE_LIMIT = 100;
+let notificationRepository: NotificationRepository = firestoreNotificationRepository;
+
+export const __setNotificationRepositoryForTests = (
+  repo: NotificationRepository
+): void => {
+  notificationRepository = repo;
+};
+
+export const __resetNotificationRepositoryForTests = (): void => {
+  notificationRepository = firestoreNotificationRepository;
+};
 
 const startOfTodayMillis = (): number => {
   const today = new Date();
@@ -163,6 +163,10 @@ const normalizeNotification = (
   };
 };
 
+const normalizeNotificationRecord = (
+  record: NotificationRecord
+): AppNotification | null => normalizeNotification(record.id, record.data);
+
 export const getUserNotifications = async (
   uid: string,
   congregationId?: string | null
@@ -175,17 +179,10 @@ export const getUserNotifications = async (
     return [];
   }
 
-  const q = query(
-    congregationNotificationsCollectionRef(congregationId),
-    where('userId', '==', uid),
-    orderBy('createdAt', 'desc'),
-    limit(PAGE_LIMIT)
-  );
+  const records = await notificationRepository.list(congregationId, uid);
 
-  const snap = await getDocs(q);
-
-  return snap.docs
-    .map((docSnap) => normalizeNotification(docSnap.id, docSnap.data()))
+  return records
+    .map(normalizeNotificationRecord)
     .filter((item): item is AppNotification => item !== null)
     .filter(isNotificationCurrent);
 };
@@ -206,18 +203,12 @@ export const subscribeToUserNotifications = (
     return () => {};
   }
 
-  const q = query(
-    congregationNotificationsCollectionRef(congregationId),
-    where('userId', '==', uid),
-    orderBy('createdAt', 'desc'),
-    limit(PAGE_LIMIT)
-  );
-
-  return onSnapshot(
-    q,
-    (snap) => {
-      const list = snap.docs
-        .map((docSnap) => normalizeNotification(docSnap.id, docSnap.data()))
+  return notificationRepository.subscribeUserNotifications(
+    congregationId,
+    uid,
+    (records) => {
+      const list = records
+        .map(normalizeNotificationRecord)
         .filter((item): item is AppNotification => item !== null)
         .filter(isNotificationCurrent);
 
@@ -243,18 +234,12 @@ export const subscribeToUnreadNotificationsCount = (
     return () => {};
   }
 
-  const q = query(
-    congregationNotificationsCollectionRef(congregationId),
-    where('userId', '==', uid),
-    where('isRead', '==', false),
-    limit(PAGE_LIMIT)
-  );
-
-  return onSnapshot(
-    q,
-    (snap) => {
-      const count = snap.docs
-        .map((docSnap) => normalizeNotification(docSnap.id, docSnap.data()))
+  return notificationRepository.subscribeUnreadCount(
+    congregationId,
+    uid,
+    (records) => {
+      const count = records
+        .map(normalizeNotificationRecord)
         .filter((item): item is AppNotification => item !== null)
         .filter(isNotificationCurrent).length;
 
@@ -276,9 +261,7 @@ export const markNotificationAsRead = async (
     return;
   }
 
-  await updateDoc(congregationNotificationDocRef(congregationId, notificationId), {
-    isRead: true,
-  });
+  await notificationRepository.markAsRead(congregationId, notificationId);
 };
 
 export const markAllNotificationsAsRead = async (
@@ -293,26 +276,5 @@ export const markAllNotificationsAsRead = async (
     return;
   }
 
-  const unreadQuery = query(
-    congregationNotificationsCollectionRef(congregationId),
-    where('userId', '==', uid),
-    where('isRead', '==', false),
-    limit(PAGE_LIMIT)
-  );
-
-  const snap = await getDocs(unreadQuery);
-
-  if (snap.empty) {
-    return;
-  }
-
-  const batch = writeBatch(snap.docs[0].ref.firestore);
-
-  snap.docs.forEach((docSnap) => {
-    batch.update(docSnap.ref, {
-      isRead: true,
-    });
-  });
-
-  await batch.commit();
+  await notificationRepository.markAllAsRead(congregationId, uid);
 };
