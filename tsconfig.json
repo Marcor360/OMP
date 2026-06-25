@@ -16,6 +16,6 @@
     "nativewind-env.d.ts"
   ],
   "exclude": [
-    "functions/src/__tests__"
+    "functions"
   ]
 }
