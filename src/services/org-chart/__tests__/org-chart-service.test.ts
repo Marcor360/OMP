@@ -21,8 +21,73 @@ jest.mock('@/src/services/users/users-service', () => ({
   normalizeUser: jest.fn(),
 }));
 
-import { buildOrgChart } from '@/src/services/org-chart/org-chart-service';
+import {
+  __resetOrgChartRepositoryForTests,
+  __setOrgChartRepositoryForTests,
+  buildOrgChart,
+  createDepartment,
+} from '@/src/services/org-chart/org-chart-service';
+import type {
+  OrgChartRecord,
+  OrgChartRepository,
+  OrgChartUserRecord,
+} from '@/src/services/repositories/ports/org-chart-repository.port';
+import type { DepartmentPayload } from '@/src/types/org-chart';
 import type { AppUser, UserServiceAssignment } from '@/src/types/user';
+
+class FakeOrgChartRepository implements OrgChartRepository {
+  readonly createDepartmentMock = jest.fn<Promise<void>, [string, DepartmentPayload, string]>(
+    () => Promise.resolve()
+  );
+
+  listOrgChartUsersForCurrentCongregation(): Promise<OrgChartUserRecord[]> {
+    return Promise.resolve([]);
+  }
+
+  listDepartments(): Promise<OrgChartRecord[]> {
+    return Promise.resolve([]);
+  }
+
+  listAssignments(): Promise<OrgChartRecord[]> {
+    return Promise.resolve([]);
+  }
+
+  initializeDepartmentsIfMissing(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  createDepartment(
+    congregationId: string,
+    payload: DepartmentPayload,
+    actorUid: string
+  ): Promise<void> {
+    return this.createDepartmentMock(congregationId, payload, actorUid);
+  }
+
+  updateDepartment(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  deactivateDepartment(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  assignDepartmentRole(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  removeDepartmentAssignment(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  updateDepartmentAssignmentRole(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  reorderDepartments(): Promise<void> {
+    return Promise.resolve();
+  }
+}
 
 const makeUser = (
   uid: string,
@@ -42,6 +107,31 @@ const makeUser = (
 });
 
 describe('buildOrgChart', () => {
+  afterEach(() => {
+    __resetOrgChartRepositoryForTests();
+    jest.clearAllMocks();
+  });
+
+  it('createDepartment delegates to the repository with the validated payload', async () => {
+    const repo = new FakeOrgChartRepository();
+    __setOrgChartRepositoryForTests(repo);
+
+    const currentUser = makeUser('coordinator', 'Coordinador', [
+      { position: 'coordinador', label: 'Coordinador' },
+    ]);
+    const payload: DepartmentPayload = {
+      name: '  Hospitalidad  ',
+      category: 'operations',
+      parentId: null,
+      order: 40,
+    };
+
+    await createDepartment('c1', payload, currentUser);
+
+    expect(repo.createDepartmentMock).toHaveBeenCalledTimes(1);
+    expect(repo.createDepartmentMock).toHaveBeenCalledWith('c1', payload, 'coordinator');
+  });
+
   it('builds the auto hierarchy from service assignments without manage permissions', () => {
     const coordinator = makeUser('u1', 'Coordinador', [
       { position: 'coordinador', label: 'Coordinador' },

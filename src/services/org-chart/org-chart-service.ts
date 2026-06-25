@@ -1,14 +1,5 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  query,
-  serverTimestamp,
-  writeBatch,
-} from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-
-import { db, functions } from '@/src/lib/firebase/app';
+import { firestoreOrgChartRepository } from '@/src/services/repositories/firestore/firestore-org-chart-repository';
+import type { OrgChartRepository } from '@/src/services/repositories/ports/org-chart-repository.port';
 import type {
   Department,
   DepartmentAssignment,
@@ -33,17 +24,15 @@ import {
 } from '@/src/utils/permissions/permissions';
 import { normalizeUser } from '@/src/services/users/users-service';
 
-const departmentsRef = (congregationId: string) =>
-  collection(db, 'congregations', congregationId, 'departments');
+let orgChartRepository: OrgChartRepository = firestoreOrgChartRepository;
 
-const departmentDocRef = (congregationId: string, departmentId: string) =>
-  doc(db, 'congregations', congregationId, 'departments', departmentId);
+export const __setOrgChartRepositoryForTests = (repo: OrgChartRepository): void => {
+  orgChartRepository = repo;
+};
 
-const assignmentsRef = (congregationId: string) =>
-  collection(db, 'congregations', congregationId, 'departmentAssignments');
-
-const assignmentDocRef = (congregationId: string, assignmentId: string) =>
-  doc(db, 'congregations', congregationId, 'departmentAssignments', assignmentId);
+export const __resetOrgChartRepositoryForTests = (): void => {
+  orgChartRepository = firestoreOrgChartRepository;
+};
 
 const normalizeDepartment = (id: string, data: Record<string, unknown>): Department => ({
   id,
@@ -168,30 +157,21 @@ const assertDepartmentPayload = (payload: DepartmentPayload) => {
 };
 
 const getAllDepartments = async (congregationId: string): Promise<Department[]> => {
-  const snap = await getDocs(query(departmentsRef(congregationId)));
-  return snap.docs
-    .map((docSnap) => normalizeDepartment(docSnap.id, docSnap.data()))
+  const records = await orgChartRepository.listDepartments(congregationId);
+  return records
+    .map((record) => normalizeDepartment(record.id, record.data))
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'es'));
 };
 
 const getAllAssignments = async (congregationId: string): Promise<DepartmentAssignment[]> => {
-  const snap = await getDocs(query(assignmentsRef(congregationId)));
-  return snap.docs.map((docSnap) => normalizeAssignment(docSnap.id, docSnap.data()));
-};
-
-type OrgChartUsersResult = {
-  users?: (Record<string, unknown> & { uid?: string })[];
+  const records = await orgChartRepository.listAssignments(congregationId);
+  return records.map((record) => normalizeAssignment(record.id, record.data));
 };
 
 export const getOrgChartUsersForCurrentCongregation = async (
   congregationId: string
 ): Promise<AppUser[]> => {
-  const callable = httpsCallable<Record<string, never>, OrgChartUsersResult>(
-    functions,
-    'listOrgChartUsersForCurrentCongregation'
-  );
-  const result = await callable({});
-  const users = Array.isArray(result.data?.users) ? result.data.users : [];
+  const users = await orgChartRepository.listOrgChartUsersForCurrentCongregation();
 
   return users
     .map((user) => normalizeUser(typeof user.uid === 'string' ? user.uid : '', user))
@@ -222,27 +202,11 @@ export const initializeDepartmentsIfMissing = async (
 ): Promise<boolean> => {
   assertCanManage(congregationId, currentUser);
 
-  const existing = await getDocs(query(departmentsRef(congregationId)));
-  if (!existing.empty) return false;
-
-  const batch = writeBatch(db);
-  INITIAL_DEPARTMENT_TEMPLATE.forEach((department) => {
-    const ref = doc(departmentsRef(congregationId));
-    batch.set(ref, {
-      name: department.name.trim(),
-      category: department.category,
-      parentId: department.parentId ?? null,
-      order: department.order ?? 0,
-      isActive: true,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      createdBy: currentUser.uid,
-      updatedBy: currentUser.uid,
-    });
-  });
-
-  await batch.commit();
-  return true;
+  return orgChartRepository.initializeDepartmentsIfMissing(
+    congregationId,
+    INITIAL_DEPARTMENT_TEMPLATE,
+    currentUser.uid
+  );
 };
 
 export const createDepartment = async (
@@ -253,20 +217,7 @@ export const createDepartment = async (
   assertCanManage(congregationId, currentUser);
   assertDepartmentPayload(payload);
 
-  const batch = writeBatch(db);
-  const ref = doc(departmentsRef(congregationId));
-  batch.set(ref, {
-    name: payload.name.trim(),
-    category: payload.category,
-    parentId: payload.parentId ?? null,
-    order: payload.order ?? 0,
-    isActive: true,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    createdBy: currentUser.uid,
-    updatedBy: currentUser.uid,
-  });
-  await batch.commit();
+  await orgChartRepository.createDepartment(congregationId, payload, currentUser.uid);
 };
 
 export const updateDepartment = async (
@@ -278,16 +229,12 @@ export const updateDepartment = async (
   assertCanManage(congregationId, currentUser);
   assertDepartmentPayload(payload);
 
-  const batch = writeBatch(db);
-  batch.update(departmentDocRef(congregationId, departmentId), {
-    name: payload.name.trim(),
-    category: payload.category,
-    parentId: payload.parentId ?? null,
-    order: payload.order ?? 0,
-    updatedAt: serverTimestamp(),
-    updatedBy: currentUser.uid,
-  });
-  await batch.commit();
+  await orgChartRepository.updateDepartment(
+    congregationId,
+    departmentId,
+    payload,
+    currentUser.uid
+  );
 };
 
 export const deactivateDepartment = async (
@@ -298,22 +245,16 @@ export const deactivateDepartment = async (
   assertCanManage(congregationId, currentUser);
 
   const assignments = await getActiveDepartmentAssignments(congregationId);
-  const batch = writeBatch(db);
-  batch.update(departmentDocRef(congregationId, departmentId), {
-    isActive: false,
-    updatedAt: serverTimestamp(),
-    updatedBy: currentUser.uid,
-  });
-  assignments
+  const assignmentIdsToDeactivate = assignments
     .filter((assignment) => assignment.departmentId === departmentId)
-    .forEach((assignment) => {
-      batch.update(assignmentDocRef(congregationId, assignment.id), {
-        isActive: false,
-        updatedAt: serverTimestamp(),
-        updatedBy: currentUser.uid,
-      });
-    });
-  await batch.commit();
+    .map((assignment) => assignment.id);
+
+  await orgChartRepository.deactivateDepartment(
+    congregationId,
+    departmentId,
+    assignmentIdsToDeactivate,
+    currentUser.uid
+  );
 };
 
 const assertAssignmentTarget = async (
@@ -353,35 +294,24 @@ const assignDepartmentRole = async (
   }
   if (duplicateInDepartment?.assignmentRole === role) return;
 
-  const batch = writeBatch(db);
-  if (role === 'responsible') {
-    assignments
-      .filter(
-        (assignment) =>
-          assignment.departmentId === departmentId &&
-          assignment.assignmentRole === 'responsible'
-      )
-      .forEach((assignment) => {
-        batch.update(assignmentDocRef(congregationId, assignment.id), {
-          isActive: false,
-          updatedAt: serverTimestamp(),
-          updatedBy: currentUser.uid,
-        });
-      });
-  }
+  const responsibleAssignmentIdsToDeactivate =
+    role === 'responsible'
+      ? assignments
+          .filter(
+            (assignment) =>
+              assignment.departmentId === departmentId &&
+              assignment.assignmentRole === 'responsible'
+          )
+          .map((assignment) => assignment.id)
+      : [];
 
-  const ref = doc(assignmentsRef(congregationId));
-  batch.set(ref, {
+  await orgChartRepository.assignDepartmentRole(congregationId, {
     departmentId,
     userId,
-    assignmentRole: role,
-    isActive: true,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    createdBy: currentUser.uid,
-    updatedBy: currentUser.uid,
+    role,
+    responsibleAssignmentIdsToDeactivate,
+    actorUid: currentUser.uid,
   });
-  await batch.commit();
 };
 
 export const assignDepartmentResponsible = (
@@ -404,13 +334,11 @@ export const removeDepartmentAssignment = async (
   currentUser: AppUser
 ): Promise<void> => {
   assertCanManage(congregationId, currentUser);
-  const batch = writeBatch(db);
-  batch.update(assignmentDocRef(congregationId, assignmentId), {
-    isActive: false,
-    updatedAt: serverTimestamp(),
-    updatedBy: currentUser.uid,
-  });
-  await batch.commit();
+  await orgChartRepository.removeDepartmentAssignment(
+    congregationId,
+    assignmentId,
+    currentUser.uid
+  );
 };
 
 export const updateDepartmentAssignmentRole = async (
@@ -424,30 +352,24 @@ export const updateDepartmentAssignmentRole = async (
   const target = assignments.find((assignment) => assignment.id === assignmentId);
   if (!target) throw new Error('Asignacion no encontrada.');
 
-  const batch = writeBatch(db);
-  if (role === 'responsible') {
-    assignments
-      .filter(
-        (assignment) =>
-          assignment.departmentId === target.departmentId &&
-          assignment.assignmentRole === 'responsible' &&
-          assignment.id !== assignmentId
-      )
-      .forEach((assignment) => {
-        batch.update(assignmentDocRef(congregationId, assignment.id), {
-          isActive: false,
-          updatedAt: serverTimestamp(),
-          updatedBy: currentUser.uid,
-        });
-      });
-  }
+  const responsibleAssignmentIdsToDeactivate =
+    role === 'responsible'
+      ? assignments
+          .filter(
+            (assignment) =>
+              assignment.departmentId === target.departmentId &&
+              assignment.assignmentRole === 'responsible' &&
+              assignment.id !== assignmentId
+          )
+          .map((assignment) => assignment.id)
+      : [];
 
-  batch.update(assignmentDocRef(congregationId, assignmentId), {
-    assignmentRole: role,
-    updatedAt: serverTimestamp(),
-    updatedBy: currentUser.uid,
+  await orgChartRepository.updateDepartmentAssignmentRole(congregationId, {
+    assignmentId,
+    role,
+    responsibleAssignmentIdsToDeactivate,
+    actorUid: currentUser.uid,
   });
-  await batch.commit();
 };
 
 export const reorderDepartments = async (
@@ -456,15 +378,11 @@ export const reorderDepartments = async (
   currentUser: AppUser
 ): Promise<void> => {
   assertCanManage(congregationId, currentUser);
-  const batch = writeBatch(db);
-  orderedDepartments.forEach((department, index) => {
-    batch.update(departmentDocRef(congregationId, department.id), {
-      order: (index + 1) * 10,
-      updatedAt: serverTimestamp(),
-      updatedBy: currentUser.uid,
-    });
-  });
-  await batch.commit();
+  await orgChartRepository.reorderDepartments(
+    congregationId,
+    orderedDepartments,
+    currentUser.uid
+  );
 };
 
 export const buildOrgChart = (
