@@ -2,22 +2,21 @@ import {
   Timestamp,
   addDoc,
   collection,
-  collectionGroup,
   deleteDoc,
-  documentId,
-  getDoc,
-  getDocs,
+  type DocumentData,
   limit,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  updateDoc,
   where,
   type Query,
   type QueryConstraint,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
+import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import { db, functions } from '@/src/lib/firebase/app';
 import {
   assignmentDocRef,
@@ -34,12 +33,17 @@ import {
   normalizeAssignment,
   sortAssignmentsByDueDate,
 } from '@/src/services/assignments/assignment.mapper';
-import { getQueryCacheFirst } from '@/src/services/repositories/firestore-cache-first';
+import {
+  getDocumentCacheFirst,
+  getQueryCacheFirst,
+  invalidateCacheEntry,
+} from '@/src/services/repositories/firestore-cache-first';
 import type {
   AssignmentRangeOptions,
   AssignmentRepository,
 } from '@/src/services/repositories/ports/assignment-repository.port';
 import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
+import { sanitizeForFirestore } from '@/src/services/meetings/firestore-payload';
 import type {
   Assignment,
   AssignmentStatus,
@@ -61,6 +65,7 @@ type MeetingIdsOptions = {
 };
 
 const ASSIGNMENTS_CACHE_TTL_MS = 60 * 1000;
+const ASSIGNMENT_DOC_CACHE_TTL_MS = 60 * 1000;
 
 const isInvalidRange = (startDate: Date, endDate: Date): boolean =>
   Number.isNaN(startDate.getTime()) ||
@@ -96,7 +101,21 @@ const toCallableSafe = (value: unknown): unknown => {
   return value;
 };
 
-const invalidateAssignmentCache = (congregationId: string): void => {
+const assignmentDocCacheKey = (
+  congregationId: string,
+  meetingId: string,
+  assignmentId: string
+): string => `assignments/${congregationId}/meeting/${meetingId}/doc/${assignmentId}`;
+
+const invalidateAssignmentCache = (
+  congregationId: string,
+  meetingId?: string,
+  assignmentId?: string
+): void => {
+  if (meetingId && assignmentId) {
+    invalidateCacheEntry(assignmentDocCacheKey(congregationId, meetingId, assignmentId));
+  }
+
   clearSessionCacheByPrefix(`query:assignments/${congregationId}/`);
   clearSessionCacheByPrefix(`query:assignments-panel/${congregationId}/`);
 };
@@ -125,6 +144,7 @@ const getMeetingIds = async (
     query: query(congregationMeetingsCollectionRef(congregationId), ...constraints),
     maxAgeMs: ASSIGNMENTS_CACHE_TTL_MS,
     forceServer: options?.forceServer,
+    persist: false,
     mapSnapshot: (snapshot) => snapshot.docs.map((docSnap) => docSnap.id),
   });
 };
@@ -133,36 +153,113 @@ const buildAssignmentsQuery = (
   congregationId: string,
   meetingId: string,
   extraConstraints: QueryConstraint[]
-): Query => {
+): Query<DocumentData> => {
   return query(
     meetingAssignmentsCollectionRef(congregationId, meetingId),
     ...extraConstraints
   );
 };
 
+const getCachedAssignmentsForMeeting = async (
+  congregationId: string,
+  meetingId: string,
+  constraints: QueryConstraint[],
+  cacheKeySuffix: string,
+  forceServer?: boolean
+): Promise<Assignment[]> => {
+  return getQueryCacheFirst<Assignment[]>({
+    cacheKey: `assignments/${congregationId}/meeting/${meetingId}/${cacheKeySuffix}`,
+    query: buildAssignmentsQuery(congregationId, meetingId, constraints),
+    maxAgeMs: ASSIGNMENTS_CACHE_TTL_MS,
+    forceServer,
+    persist: false,
+    mapSnapshot: (snapshot) =>
+      snapshot.docs.map((docSnap) =>
+        normalizeAssignment(meetingId, docSnap.id, docSnap.data())
+      ),
+  });
+};
+
 const getAssignmentsForMeetings = async (
   congregationId: string,
   constraintsFactory: (meetingId: string) => QueryConstraint[],
-  options?: MeetingIdsOptions
+  options?: MeetingIdsOptions & { cacheKeyPrefix?: string }
 ): Promise<Assignment[]> => {
   const meetingIds = await getMeetingIds(congregationId, options);
 
   if (meetingIds.length === 0) return [];
 
-  const snapshots = await Promise.all(
+  const assignmentGroups = await Promise.all(
     meetingIds.map((meetingId) =>
-      getDocs(buildAssignmentsQuery(congregationId, meetingId, constraintsFactory(meetingId)))
+      getCachedAssignmentsForMeeting(
+        congregationId,
+        meetingId,
+        constraintsFactory(meetingId),
+        options?.cacheKeyPrefix ?? 'all',
+        options?.forceServer
+      )
     )
   );
 
-  const merged = snapshots.flatMap((snapshot, index) => {
-    const meetingId = meetingIds[index];
-    return snapshot.docs.map((docSnap) =>
-      normalizeAssignment(meetingId, docSnap.id, docSnap.data())
-    );
+  return sortAssignmentsByDueDate(dedupeAssignments(assignmentGroups.flat()));
+};
+
+const createAssignmentViaFunction = async (
+  congregationId: string,
+  meetingId: string,
+  data: CreateAssignmentDTO,
+  assignedByUid: string,
+  assignedByName: string
+): Promise<string> => {
+  const callable = httpsCallable<
+    {
+      congregationId: string;
+      meetingId: string;
+      assignmentData: Record<string, unknown>;
+      assignedByName: string;
+    },
+    { assignmentId: string }
+  >(functions, 'createMeetingAssignmentByManager');
+
+  const result = await callable({
+    congregationId,
+    meetingId,
+    assignmentData: toCallableSafe({
+      ...data,
+      meetingId,
+      assignedByUid,
+      assignedByName,
+      status: 'pending' as AssignmentStatus,
+    }) as Record<string, unknown>,
+    assignedByName,
   });
 
-  return sortAssignmentsByDueDate(dedupeAssignments(merged));
+  invalidateAssignmentCache(congregationId, meetingId, result.data.assignmentId);
+  return result.data.assignmentId;
+};
+
+const updateAssignmentViaFunction = async (
+  congregationId: string,
+  meetingId: string,
+  assignmentId: string,
+  data: UpdateAssignmentDTO
+): Promise<void> => {
+  const callable = httpsCallable<
+    {
+      congregationId: string;
+      meetingId: string;
+      assignmentId: string;
+      assignmentData: Record<string, unknown>;
+    },
+    { ok: true }
+  >(functions, 'updateMeetingAssignmentByManager');
+
+  await callable({
+    congregationId,
+    meetingId,
+    assignmentId,
+    assignmentData: toCallableSafe(data) as Record<string, unknown>,
+  });
 };
 
 export const firestoreAssignmentRepository: AssignmentRepository = {
@@ -171,73 +268,50 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     assignmentId: string,
     meetingIdHint?: string
   ): Promise<Assignment | null> => {
+    const readAssignment = (meetingId: string): Promise<Assignment | null> =>
+      getDocumentCacheFirst<Assignment>({
+        cacheKey: assignmentDocCacheKey(congregationId, meetingId, assignmentId),
+        ref: assignmentDocRef(congregationId, meetingId, assignmentId),
+        mapSnapshot: (snapshot) =>
+          normalizeAssignment(meetingId, snapshot.id, snapshot.data() ?? {}),
+        maxAgeMs: ASSIGNMENT_DOC_CACHE_TTL_MS,
+        persist: false,
+      });
+
     if (meetingIdHint && meetingIdHint.trim().length > 0) {
       try {
-        const directSnapshot = await getDoc(
-          assignmentDocRef(congregationId, meetingIdHint, assignmentId)
-        );
+        const directAssignment = await readAssignment(meetingIdHint);
 
-        if (directSnapshot.exists()) {
-          return normalizeAssignment(meetingIdHint, directSnapshot.id, directSnapshot.data());
+        if (directAssignment) {
+          return directAssignment;
         }
       } catch {
         // Continue with broader fallback strategy.
       }
     }
 
-    try {
-      const grouped = await getDocs(
-        query(collectionGroup(db, 'assignments'), where(documentId(), '==', assignmentId), limit(6))
-      );
-
-      for (const docSnapshot of grouped.docs) {
-        const pathSegments = docSnapshot.ref.path.split('/');
-
-        if (
-          pathSegments.length >= 6 &&
-          pathSegments[0] === 'congregations' &&
-          pathSegments[1] === congregationId &&
-          pathSegments[2] === 'meetings' &&
-          pathSegments[4] === 'assignments'
-        ) {
-          const meetingId = pathSegments[3];
-          return normalizeAssignment(meetingId, docSnapshot.id, docSnapshot.data());
-        }
-      }
-    } catch {
-      // Fallback to deterministic scan below if collectionGroup is not available.
-    }
-
     const meetingIds = await getMeetingIds(congregationId);
 
     if (meetingIds.length === 0) return null;
 
-    const snapshots = await Promise.all(
-      meetingIds.map((meetingId) =>
-        getDoc(assignmentDocRef(congregationId, meetingId, assignmentId))
-      )
-    );
+    const assignments = await Promise.all(meetingIds.map((meetingId) => readAssignment(meetingId)));
 
-    for (let index = 0; index < snapshots.length; index += 1) {
-      const snapshot = snapshots[index];
-
-      if (snapshot.exists()) {
-        return normalizeAssignment(meetingIds[index], snapshot.id, snapshot.data());
-      }
-    }
-
-    return null;
+    return assignments.find((assignment): assignment is Assignment => assignment !== null) ?? null;
   },
 
   getAll: async (congregationId: string): Promise<Assignment[]> => {
-    return getAssignmentsForMeetings(congregationId, () => [orderBy('dueDate', 'asc')]);
+    return getAssignmentsForMeetings(congregationId, () => [orderBy('dueDate', 'asc')], {
+      cacheKeyPrefix: 'all',
+    });
   },
 
   getByUser: async (congregationId: string, uid: string): Promise<Assignment[]> => {
     return getAssignmentsForMeetings(congregationId, () => [
       where('assignedToUid', '==', uid),
       orderBy('dueDate', 'asc'),
-    ]);
+    ], {
+      cacheKeyPrefix: `user/${uid}`,
+    });
   },
 
   getByStatus: async (
@@ -247,7 +321,9 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     return getAssignmentsForMeetings(congregationId, () => [
       where('status', '==', status),
       orderBy('dueDate', 'asc'),
-    ]);
+    ], {
+      cacheKeyPrefix: `status/${status}`,
+    });
   },
 
   getByRange: async (
@@ -268,7 +344,11 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
 
     if (meetingIds.length === 0) return [];
 
-    const readAssignmentsForMeeting = async (meetingId: string) => {
+    const rangeKey = `${startDate.toISOString()}::${endDate.toISOString()}`;
+    const userKey = options?.userUid ? `/user/${options.userUid}` : '';
+    const statusKey = options?.status ? `/status/${options.status}` : '';
+
+    const readAssignmentsForMeeting = async (meetingId: string): Promise<Assignment[]> => {
       const primaryConstraints: QueryConstraint[] = [
         where('dueDate', '>=', dueStart),
         where('dueDate', '<=', dueEnd),
@@ -285,8 +365,12 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
       }
 
       try {
-        return await getDocs(
-          query(meetingAssignmentsCollectionRef(congregationId, meetingId), ...primaryConstraints)
+        return await getCachedAssignmentsForMeeting(
+          congregationId,
+          meetingId,
+          primaryConstraints,
+          `range/${rangeKey}/limit/${maxPerMeeting}${userKey}${statusKey}`,
+          options?.forceServer
         );
       } catch {
         const fallbackConstraints: QueryConstraint[] = [limit(maxPerMeeting * 2)];
@@ -299,24 +383,26 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
           fallbackConstraints.unshift(where('status', '==', options.status));
         }
 
-        return getDocs(
-          query(meetingAssignmentsCollectionRef(congregationId, meetingId), ...fallbackConstraints)
+        return getCachedAssignmentsForMeeting(
+          congregationId,
+          meetingId,
+          fallbackConstraints,
+          `range-fallback/${rangeKey}/limit/${maxPerMeeting * 2}${userKey}${statusKey}`,
+          options?.forceServer
         );
       }
     };
 
-    const snapshots = await Promise.all(
+    const assignmentGroups = await Promise.all(
       meetingIds.map((meetingId) => readAssignmentsForMeeting(meetingId))
     );
 
-    const merged = snapshots.flatMap((snapshot, index) =>
-      snapshot.docs
-        .map((docSnap) => normalizeAssignment(meetingIds[index], docSnap.id, docSnap.data()))
-        .filter((assignment) => {
-          const millis = assignment.dueDate?.toMillis?.();
-          if (typeof millis !== 'number') return false;
-          return millis >= dueStart.toMillis() && millis <= dueEnd.toMillis();
-        })
+    const merged = assignmentGroups.flatMap((assignments) =>
+      assignments.filter((assignment) => {
+        const millis = assignment.dueDate?.toMillis?.();
+        if (typeof millis !== 'number') return false;
+        return millis >= dueStart.toMillis() && millis <= dueEnd.toMillis();
+      })
     );
 
     return sortAssignmentsByDueDate(dedupeAssignments(merged));
@@ -335,6 +421,7 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
       cacheKey: `assignments/${congregationId}/meeting/${meetingId}`,
       query: q,
       maxAgeMs: ASSIGNMENTS_CACHE_TTL_MS,
+      persist: false,
       mapSnapshot: (snapshot) =>
         sortAssignmentsByDueDate(
           snapshot.docs.map((docSnapshot) =>
@@ -351,31 +438,36 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     assignedByUid: string,
     assignedByName: string
   ): Promise<string> => {
-    const callable = httpsCallable<
-      {
-        congregationId: string;
-        meetingId: string;
-        assignmentData: Record<string, unknown>;
-        assignedByName: string;
-      },
-      { assignmentId: string }
-    >(functions, 'createMeetingAssignmentByManager');
+    try {
+      const ref = await addDoc(
+        meetingAssignmentsCollectionRef(congregationId, meetingId),
+        sanitizeForFirestore({
+          ...data,
+          congregationId,
+          meetingId,
+          assignedByUid,
+          assignedByName,
+          status: 'pending' as AssignmentStatus,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+      );
 
-    const result = await callable({
-      congregationId,
-      meetingId,
-      assignmentData: toCallableSafe({
-        ...data,
+      invalidateAssignmentCache(congregationId, meetingId, ref.id);
+      return ref.id;
+    } catch (error) {
+      if (!isFirebaseErrorCode(error, 'permission-denied')) {
+        throw error;
+      }
+
+      return createAssignmentViaFunction(
+        congregationId,
         meetingId,
+        data,
         assignedByUid,
-        assignedByName,
-        status: 'pending' as AssignmentStatus,
-      }) as Record<string, unknown>,
-      assignedByName,
-    });
-
-    invalidateAssignmentCache(congregationId);
-    return result.data.assignmentId;
+        assignedByName
+      );
+    }
   },
 
   createCleaningGroup: async (
@@ -384,28 +476,31 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     assignedByUid: string,
     assignedByName: string
   ): Promise<string> => {
-    const ref = await addDoc(collection(db, 'congregations', congregationId, 'assignments'), {
-      congregationId,
-      category: 'cleaning',
-      type: 'cleaning',
-      title: data.title,
-      description: data.description ?? '',
-      notes: data.description ?? '',
-      priority: data.priority,
-      cleaningGroupId: data.cleaningGroupId,
-      cleaningGroupName: data.cleaningGroupName,
-      assignedToUid: data.cleaningGroupId,
-      assignedToName: data.cleaningGroupName,
-      assignedByUid,
-      assignedByName,
-      createdBy: assignedByUid,
-      updatedBy: assignedByUid,
-      dueDate: data.dueDate,
-      date: data.dueDate,
-      status: 'pending' as AssignmentStatus,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    const ref = await addDoc(
+      collection(db, 'congregations', congregationId, 'assignments'),
+      sanitizeForFirestore({
+        congregationId,
+        category: 'cleaning',
+        type: 'cleaning',
+        title: data.title,
+        description: data.description ?? '',
+        notes: data.description ?? '',
+        priority: data.priority,
+        cleaningGroupId: data.cleaningGroupId,
+        cleaningGroupName: data.cleaningGroupName,
+        assignedToUid: data.cleaningGroupId,
+        assignedToName: data.cleaningGroupName,
+        assignedByUid,
+        assignedByName,
+        createdBy: assignedByUid,
+        updatedBy: assignedByUid,
+        dueDate: data.dueDate,
+        date: data.dueDate,
+        status: 'pending' as AssignmentStatus,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    );
 
     invalidateAssignmentCache(congregationId);
     return ref.id;
@@ -417,23 +512,24 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     assignmentId: string,
     data: UpdateAssignmentDTO
   ): Promise<void> => {
-    const callable = httpsCallable<
-      {
-        congregationId: string;
-        meetingId: string;
-        assignmentId: string;
-        assignmentData: Record<string, unknown>;
-      },
-      { ok: true }
-    >(functions, 'updateMeetingAssignmentByManager');
+    try {
+      await updateDoc(
+        assignmentDocRef(congregationId, meetingId, assignmentId),
+        sanitizeForFirestore({
+          ...data,
+          updatedAt: serverTimestamp(),
+          ...(data.status === 'completed' ? { completedAt: serverTimestamp() } : {}),
+        })
+      );
+    } catch (error) {
+      if (!isFirebaseErrorCode(error, 'permission-denied')) {
+        throw error;
+      }
 
-    await callable({
-      congregationId,
-      meetingId,
-      assignmentId,
-      assignmentData: toCallableSafe(data) as Record<string, unknown>,
-    });
-    invalidateAssignmentCache(congregationId);
+      await updateAssignmentViaFunction(congregationId, meetingId, assignmentId, data);
+    }
+
+    invalidateAssignmentCache(congregationId, meetingId, assignmentId);
   },
 
   delete: async (
@@ -442,7 +538,7 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     assignmentId: string
   ): Promise<void> => {
     await deleteDoc(assignmentDocRef(congregationId, meetingId, assignmentId));
-    invalidateAssignmentCache(congregationId);
+    invalidateAssignmentCache(congregationId, meetingId, assignmentId);
   },
 
   count: async (
