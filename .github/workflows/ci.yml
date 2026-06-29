@@ -49,6 +49,8 @@ jobs:
   rules:
     name: Firestore Rules · emulator
     runs-on: ubuntu-latest
+    env:
+      FIREBASE_EMULATORS_PATH: ${{ github.workspace }}/.cache/firebase/emulators
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -61,5 +63,20 @@ jobs:
           java-version: '17'
       - name: Install
         run: npm ci
+      - name: Resolve firebase-tools version
+        id: ft
+        run: echo "version=$(node -p "require('firebase-tools/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Firestore emulator jar
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FIREBASE_EMULATORS_PATH }}
+          key: firestore-emulator-${{ runner.os }}-ft${{ steps.ft.outputs.version }}
+      - name: Pre-download Firestore emulator
+        run: npx firebase setup:emulators:firestore
+      - name: Verify emulator jar present
+        run: |
+          ls -la "$FIREBASE_EMULATORS_PATH"
+          test -f "$FIREBASE_EMULATORS_PATH"/cloud-firestore-emulator-*.jar \
+            || (echo "::error::No se encontro el jar del emulador Firestore" && exit 1)
       - name: Rules tests (Firestore emulator)
         run: npm run test:rules

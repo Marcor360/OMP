@@ -55,3 +55,6 @@ app-example
 .apk
 *.aab
 *.zip
+
+# emulator jar cache (do not commit 138 MB binary)
+.cache/
