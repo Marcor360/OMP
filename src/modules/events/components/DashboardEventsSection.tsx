@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { EventCard } from '@/src/components/cards/EventCard';
@@ -31,6 +31,11 @@ const confirmDelete = (title: string): Promise<boolean> => {
     ]);
   });
 };
+
+const eventEditHref = (eventId: string): Href => ({
+  pathname: '/(protected)/events/edit/[id]',
+  params: { id: eventId },
+});
 
 export function DashboardEventsSection({
   events,
@@ -72,7 +77,7 @@ export function DashboardEventsSection({
         {canManage ? (
           <TouchableOpacity
             style={styles.addButton}
-            onPress={() => router.push('/(protected)/events/create' as any)}
+            onPress={() => router.push('/(protected)/events/create')}
             activeOpacity={0.8}
           >
             <Ionicons name="add" size={16} color={colors.onPrimary} />
@@ -108,7 +113,7 @@ export function DashboardEventsSection({
               key={event.id}
               event={event}
               canManage={canManage}
-              onEdit={() => router.push(`/(protected)/events/edit/${event.id}` as any)}
+              onEdit={() => router.push(eventEditHref(event.id))}
               onDelete={handleDelete}
             />
           ))}

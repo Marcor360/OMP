@@ -13,7 +13,7 @@ import { OmpWelcomeNotice } from '@/src/components/common/OmpWelcomeNotice';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { NotificationsBadge } from '@/src/features/notifications/components/NotificationsBadge';
-import { DashboardEventsSection } from '@/src/features/events/components/DashboardEventsSection';
+import { DashboardEventsSection } from '@/src/modules/events/components/DashboardEventsSection';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
 import { getCongregationDisplayName } from '@/src/services/congregations/congregations-service';
