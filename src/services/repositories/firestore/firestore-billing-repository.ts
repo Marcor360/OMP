@@ -60,4 +60,12 @@ export const firestoreBillingRepository: BillingRepository = {
       ? result.data.activeUsersCount
       : null;
   },
+
+  setBillingExemption: async (payload: { exempt: boolean }): Promise<void> => {
+    const callable = httpsCallable<typeof payload, { ok: boolean }>(
+      functions,
+      'setBillingExemptionByRootAdmin'
+    );
+    await callable(payload);
+  },
 };

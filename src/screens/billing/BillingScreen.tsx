@@ -15,6 +15,7 @@ import {
   createStripePortalSession,
   getCongregationBillingSummary,
   getStripeBillingUsage,
+  setBillingExemption,
   type CongregationBillingSummary,
 } from '@/src/services/billing/billing-service';
 import { type AppColors, useAppColors } from '@/src/styles';
@@ -97,6 +98,7 @@ export function BillingScreen() {
   const canPay = canPaySubscription(appUser);
   const canManage = canManageSubscription(appUser);
   const isExempt = summary?.billingExemption?.exempt === true;
+  const isRootAdmin = appUser?.isPrimaryAdmin === true || appUser?.isRootAdmin === true;
   const billingStatus = summary?.billing.status;
   const graceDaysRemaining = getDaysUntil(summary?.billing.graceUntil);
   const showPaymentAlert = !isExempt && isPaymentAttentionStatus(billingStatus);
@@ -172,6 +174,32 @@ export function BillingScreen() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const handleToggleExemption = () => {
+    const next = !isExempt;
+    Alert.alert(
+      next ? t('billing.exemption.activateTitle') : t('billing.exemption.revokeTitle'),
+      next ? t('billing.exemption.activateMessage') : t('billing.exemption.revokeMessage'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: next ? t('billing.exemption.activateConfirm') : t('billing.exemption.revokeConfirm'),
+          style: next ? 'default' : 'destructive',
+          onPress: async () => {
+            try {
+              setActionLoading('exemption');
+              await setBillingExemption(next);
+              await refresh();
+            } catch (requestError) {
+              Alert.alert(t('billing.error.exemptionTitle'), formatFirestoreError(requestError));
+            } finally {
+              setActionLoading(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loadingProfile || loading) {
@@ -326,6 +354,30 @@ export function BillingScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        {isRootAdmin ? (
+          <TouchableOpacity
+            style={[styles.exemptionButton, isExempt && styles.exemptionRevokeButton]}
+            disabled={Boolean(actionLoading)}
+            onPress={handleToggleExemption}
+            activeOpacity={0.82}
+          >
+            {actionLoading === 'exemption' ? (
+              <ActivityIndicator color={isExempt ? colors.error : colors.primary} />
+            ) : (
+              <>
+                <Ionicons
+                  name={isExempt ? 'lock-open-outline' : 'shield-checkmark-outline'}
+                  size={18}
+                  color={isExempt ? colors.error : colors.primary}
+                />
+                <ThemedText style={[styles.exemptionButtonText, isExempt && styles.exemptionRevokeText]}>
+                  {isExempt ? t('billing.exemption.revoke') : t('billing.exemption.activate')}
+                </ThemedText>
+              </>
+            )}
+          </TouchableOpacity>
+        ) : null}
       </View>
     </ScreenContainer>
   );
@@ -518,5 +570,29 @@ const createStyles = (colors: AppColors) =>
       color: colors.onPrimary,
       fontSize: 14,
       fontWeight: '800',
+    },
+    exemptionButton: {
+      minHeight: 46,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.primary + '55',
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: 14,
+      marginTop: 10,
+    },
+    exemptionRevokeButton: {
+      borderColor: colors.error + '55',
+    },
+    exemptionButtonText: {
+      color: colors.primary,
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    exemptionRevokeText: {
+      color: colors.error,
     },
   });

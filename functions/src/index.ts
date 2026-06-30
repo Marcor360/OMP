@@ -94,3 +94,5 @@ export {
   sendBillingPaymentReminders,
   stripeWebhook,
 } from './billing/stripe.js';
+
+export { setBillingExemptionByRootAdmin } from './billing/admin-exemption.js';

@@ -8,4 +8,5 @@ export interface BillingRepository {
   }): Promise<string>;
   createPortalSession(payload: { congregationId: string }): Promise<string>;
   getBillingUsage(payload: { congregationId: string }): Promise<number | null>;
+  setBillingExemption(payload: { exempt: boolean }): Promise<void>;
 }

@@ -122,3 +122,7 @@ export const createStripePortalSession = async (payload: PortalPayload): Promise
 export const getStripeBillingUsage = async (payload: PortalPayload): Promise<number | null> => {
   return billingRepository.getBillingUsage(payload);
 };
+
+export const setBillingExemption = async (exempt: boolean): Promise<void> => {
+  await billingRepository.setBillingExemption({ exempt });
+};

@@ -13,6 +13,7 @@ jest.mock('@/src/services/repositories/firestore/firestore-billing-repository', 
     createCheckoutSession: async () => '',
     createPortalSession: async () => '',
     getBillingUsage: async () => null,
+    setBillingExemption: async () => undefined,
   },
 }));
 
@@ -40,6 +41,10 @@ class FakeBillingRepository implements BillingRepository {
 
   async getBillingUsage(): Promise<number | null> {
     return null;
+  }
+
+  async setBillingExemption(): Promise<void> {
+    // no-op in tests
   }
 }
 
