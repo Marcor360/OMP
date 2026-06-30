@@ -40,7 +40,7 @@ export function AssignmentTabs({ activeTab, onChange }: AssignmentTabsProps) {
             activeOpacity={0.85}
           >
             <ThemedText style={[styles.tabText, isActive && styles.tabTextActive]}>
-              {t(`assignments.categories.${tab}` as any)}
+              {t(`assignments.categories.${tab}`)}
             </ThemedText>
           </TouchableOpacity>
         );

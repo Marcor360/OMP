@@ -7,7 +7,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { useAppColors, type AppColors as AppColorSet } from '@/src/styles';
 import { MyCleaningDashboardSummary } from '@/src/modules/cleaning/services/my-cleaning-dashboard-service';
 import { ASSIGNMENT_STATUS_LABELS } from '@/src/modules/assignments/types/assignment.types';
-import { useI18n } from '@/src/i18n';
+import { type I18nContextType, useI18n } from '@/src/i18n';
 
 interface MyCleaningDashboardCardProps {
   summary: MyCleaningDashboardSummary | null;
@@ -16,7 +16,7 @@ interface MyCleaningDashboardCardProps {
   canOpenDetails?: boolean;
 }
 
-const formatCleaningDate = (value: string, t: any): string => {
+const formatCleaningDate = (value: string, t: I18nContextType['t']): string => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return t('cleaning.dashboardCard.noDate');
 
@@ -41,7 +41,7 @@ export function MyCleaningDashboardCard({
 
   const handlePress = () => {
     if (canOpenDetails && summary?.groupId) {
-      router.push(`/(protected)/cleaning/${summary.groupId}` as any);
+      router.push({ pathname: '/(protected)/cleaning/[id]', params: { id: summary.groupId } });
     }
   };
 

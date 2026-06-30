@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { useOptionalI18n } from '@/src/i18n/index';
+import { type I18nContextType, useOptionalI18n } from '@/src/i18n/index';
 
 interface DatePickerModalProps {
   visible: boolean;
@@ -77,7 +77,7 @@ const formatMonth = (year: number, monthIndex: number): string =>
     year: 'numeric',
   }).format(new Date(year, monthIndex, 1));
 
-const formatSelectedDate = (date: string | null, i18n: any): string => {
+const formatSelectedDate = (date: string | null, i18n: I18nContextType | undefined): string => {
   if (!date) return i18n?.t('common.datePickerNoSelection') ?? 'Selecciona una fecha';
 
   return new Intl.DateTimeFormat('es-MX', {

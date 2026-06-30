@@ -9,13 +9,13 @@ import {
   ASSIGNMENT_SUBTYPE_LABELS,
 } from '@/src/modules/assignments/types/assignment.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { useI18n } from '@/src/i18n';
+import { type I18nContextType, useI18n } from '@/src/i18n';
 
 interface AssignmentDetailSectionProps {
   assignment: Assignment;
 }
 
-const formatDate = (value: string, t: any): string => {
+const formatDate = (value: string, t: I18nContextType['t']): string => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return t('assignments.detailSection.noDate');
 

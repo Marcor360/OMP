@@ -71,15 +71,15 @@ export function SettingsScreen() {
   }, [canViewCongregationPlan, congregationId]);
 
   const handleNavigateToTheme = () => {
-    router.push('/(protected)/settings/theme' as any);
+    router.push('/(protected)/settings/theme');
   };
 
   const handleNavigateToLanguage = () => {
-    router.push('/(protected)/settings/language' as any);
+    router.push('/(protected)/settings/language');
   };
 
   const handleNavigateToAbout = () => {
-    router.push('/(protected)/settings/about' as any);
+    router.push('/(protected)/settings/about');
   };
 
   function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -179,7 +179,7 @@ export function SettingsScreen() {
                 label={t('billing.title')}
                 value="Stripe"
                 showArrow
-                onPress={() => router.push('/(protected)/billing' as any)}
+                onPress={() => router.push('/(protected)/billing')}
               />
             ) : null}
           </Section>
@@ -192,7 +192,7 @@ export function SettingsScreen() {
               icon="people-outline"
               label={t('settings.admin.userManagement')}
               showArrow
-              onPress={() => router.push('/(protected)/(tabs)/users' as any)}
+              onPress={() => router.push('/(protected)/(tabs)/users')}
             />
             ) : null}
             {canManageMeetings(appUser) ? (
@@ -200,7 +200,7 @@ export function SettingsScreen() {
               icon="calendar-outline"
               label={t('settings.admin.meetingManagement')}
               showArrow
-              onPress={() => router.push('/(protected)/(tabs)/meetings' as any)}
+              onPress={() => router.push('/(protected)/(tabs)/meetings')}
             />
             ) : null}
             {canManageAssignments(appUser) ? (
@@ -208,7 +208,7 @@ export function SettingsScreen() {
               icon="checkmark-done-outline"
               label={t('settings.admin.assignmentManagement')}
               showArrow
-              onPress={() => router.push('/(protected)/(tabs)/assignments' as any)}
+              onPress={() => router.push('/(protected)/(tabs)/assignments')}
             />
             ) : null}
             {canManageCleaning(appUser) || canViewCongregationModule(appUser) ? (
@@ -216,7 +216,7 @@ export function SettingsScreen() {
               icon="sparkles-outline"
               label={t('settings.admin.cleaningGroups')}
               showArrow
-              onPress={() => router.push('/(protected)/(tabs)/cleaning' as any)}
+              onPress={() => router.push('/(protected)/(tabs)/cleaning')}
             />
             ) : null}
             <SettingRow
@@ -236,28 +236,28 @@ export function SettingsScreen() {
             label={t('settings.organization.meetingCalendar')}
             value={t('common.view')}
             showArrow
-            onPress={() => router.push('/(protected)/(tabs)/meetings' as any)}
+            onPress={() => router.push('/(protected)/(tabs)/meetings')}
           />
           <SettingRow
             icon="person-outline"
             label={t('settings.organization.myAssignments')}
             value={t('common.view')}
             showArrow
-            onPress={() => router.push('/(protected)/(tabs)/assignments' as any)}
+            onPress={() => router.push('/(protected)/(tabs)/assignments')}
           />
           <SettingRow
             icon="time-outline"
             label={t('settings.organization.upcomingResponsibilities')}
             value={t('common.view')}
             showArrow
-            onPress={() => router.push('/(protected)/(tabs)/' as any)}
+            onPress={() => router.push('/(protected)/(tabs)')}
           />
           <SettingRow
             icon="archive-outline"
             label={t('settings.organization.assignmentHistory')}
             value={t('common.view')}
             showArrow
-            onPress={() => router.push('/(protected)/(tabs)/assignments' as any)}
+            onPress={() => router.push('/(protected)/(tabs)/assignments')}
           />
         </Section>
 

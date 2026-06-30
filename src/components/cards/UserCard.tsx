@@ -34,7 +34,7 @@ export function UserCard({ user, onPress }: UserCardProps) {
     if (onPress) {
       onPress();
     } else {
-      router.push(`/(protected)/users/${user.uid}` as any);
+      router.push({ pathname: '/(protected)/users/[id]', params: { id: user.uid } });
     }
   };
 

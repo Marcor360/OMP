@@ -33,7 +33,7 @@ export function MeetingCard({ meeting, onPress, muted = false }: MeetingCardProp
 
   const handlePress = () => {
     if (onPress) onPress();
-    else router.push(`/(protected)/meetings/${meeting.id}` as any);
+    else router.push({ pathname: '/(protected)/meetings/[id]', params: { id: meeting.id } });
   };
 
   const meetingTypeLabelByType: Record<Meeting['type'], string> = {

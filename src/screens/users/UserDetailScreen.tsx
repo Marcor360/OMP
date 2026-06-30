@@ -296,7 +296,7 @@ export function UserDetailScreen() {
           canEditThisUser ? (
             <TouchableOpacity
               style={styles.editBtn}
-              onPress={() => router.push(`/(protected)/users/edit/${user.uid}` as any)}
+              onPress={() => router.push({ pathname: '/(protected)/users/edit/[id]', params: { id: user.uid } })}
               activeOpacity={0.8}
             >
               <Ionicons name="pencil-outline" size={18} color={colors.primary} />

@@ -51,10 +51,13 @@ export function AssignmentCard({ assignment, onPress }: AssignmentCardProps) {
   const handlePress = () => {
     if (onPress) onPress();
     else {
-      const query = assignment.meetingId
-        ? `?meetingId=${encodeURIComponent(assignment.meetingId)}`
-        : '';
-      router.push(`/(protected)/assignments/${assignment.id}${query}` as any);
+      router.push({
+        pathname: '/(protected)/assignments/[id]',
+        params: {
+          id: assignment.id,
+          ...(assignment.meetingId ? { meetingId: assignment.meetingId } : {}),
+        },
+      });
     }
   };
 

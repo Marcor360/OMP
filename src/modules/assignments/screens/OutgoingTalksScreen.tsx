@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useI18n } from '@/src/i18n/index';
+import { type I18nContextType, useI18n } from '@/src/i18n/index';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
@@ -47,7 +47,7 @@ type FormErrors = {
   duplicate?: string;
 };
 
-const getStatusLabel = (status: OutgoingTalkStatus, t: any): string => {
+const getStatusLabel = (status: OutgoingTalkStatus, t: I18nContextType['t']): string => {
   if (status === 'scheduled') return t('assignments.statusScheduled');
   if (status === 'cancelled') return t('assignments.statusCancelled');
   return t('assignments.statusCompleted');

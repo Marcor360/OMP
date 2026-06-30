@@ -16,7 +16,7 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { useI18n } from '@/src/i18n/index';
+import { type I18nContextType, useI18n } from '@/src/i18n/index';
 import { useUser } from '@/src/context/user-context';
 import {
   createHospitalitySchedule,
@@ -129,7 +129,7 @@ const buildItemsFromRows = (params: {
   rows: PlanningRow[];
   usersById: Map<string, ActiveCongregationUser>;
   actorUid: string;
-  t: (key: any) => string;
+  t: I18nContextType['t'];
 }): Omit<HospitalityScheduleItem, 'id' | 'createdAt' | 'updatedAt'>[] =>
   params.rows.flatMap((row) =>
     rolesForMeetingType(row.meetingType).flatMap((roleKey) => {
@@ -568,7 +568,7 @@ export function HospitalityMicrophonesScheduleScreen() {
                     onPress={() => setExpandedKey(expanded ? null : optionKey)}
                   >
                     <View style={styles.roleTextWrap}>
-                      <ThemedText style={styles.roleTitle}>{t(`hospitality.roles.${roleKey}` as any)}</ThemedText>
+                      <ThemedText style={styles.roleTitle}>{t(`hospitality.roles.${roleKey}`)}</ThemedText>
                       <ThemedText style={styles.roleUser}>
                         {selectedUser?.displayName ?? t('hospitality.scheduleUnassigned')}
                       </ThemedText>

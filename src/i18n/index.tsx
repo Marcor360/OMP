@@ -46,7 +46,7 @@ function getNestedValue<T extends object>(obj: T, path: string): unknown {
   }, obj as unknown);
 }
 
-interface I18nContextType {
+export interface I18nContextType {
   language: SupportedLanguage;
   setLanguage: (lang: SupportedLanguage) => Promise<void>;
   hasCompletedLanguageOnboarding: boolean;
@@ -125,7 +125,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     (key: AppTranslationKey, vars?: Record<string, string | number>): string => {
       // Pluralization: if vars.count is provided, try key + '_plural' first when count != 1
       const resolveKey = (k: string): string | undefined => {
-        let value = (translations[language] as any)[k];
+        let value = (translations[language] as Record<string, unknown>)[k];
         if (value === undefined) {
           value = getNestedValue(translations[language], k);
         }
@@ -133,7 +133,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
         // Fallback to English
         if (language !== 'en') {
-          let fallback = (translations.en as any)[k];
+          let fallback = (translations.en as Record<string, unknown>)[k];
           if (fallback === undefined) {
             fallback = getNestedValue(translations.en, k);
           }

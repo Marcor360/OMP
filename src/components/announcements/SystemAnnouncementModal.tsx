@@ -108,7 +108,7 @@ export function SystemAnnouncementModal({
             </View>
             <View style={styles.headerText}>
               <ThemedText style={[styles.kicker, { color: accentColor }]}>
-                {t(`system.announcements.${config.label}` as any)}
+                {t(`system.announcements.${config.label}`)}
               </ThemedText>
               <ThemedText style={styles.title}>{announcement.title}</ThemedText>
             </View>

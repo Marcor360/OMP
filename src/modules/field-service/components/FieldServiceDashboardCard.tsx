@@ -81,7 +81,7 @@ function FieldServiceDashboardCardNative() {
   const monthLabel = formatMonthHeader(monthSummary.year, monthSummary.month);
 
   const handlePress = () => {
-    router.push('/(protected)/field-service' as any);
+    router.push('/(protected)/field-service');
   };
 
   return (

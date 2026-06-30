@@ -8,7 +8,7 @@ import {
   EVENT_TYPE_LABELS,
 } from '@/src/types/event';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { useOptionalI18n } from '@/src/i18n/index';
+import { type I18nContextType, useOptionalI18n } from '@/src/i18n/index';
 
 interface EventCardProps {
   event: CongregationEvent;
@@ -24,7 +24,7 @@ const formatDate = (date: Date): string =>
     timeZone: 'America/Mexico_City',
   }).format(date);
 
-const resolveDateLabel = (event: CongregationEvent, i18n: any): string => {
+const resolveDateLabel = (event: CongregationEvent, i18n: I18nContextType | undefined): string => {
   const start = event.startDate.toDate();
   const end = event.endDate.toDate();
   const sameDay =
@@ -49,7 +49,7 @@ const resolveDateLabel = (event: CongregationEvent, i18n: any): string => {
   return template.replace('{start}', formatDate(start)).replace('{end}', formatDate(end)).replace('{{start}}', formatDate(start)).replace('{{end}}', formatDate(end));
 };
 
-const resolveMainText = (event: CongregationEvent, i18n: any): string => {
+const resolveMainText = (event: CongregationEvent, i18n: I18nContextType | undefined): string => {
   if (event.type === 'visita_superintendente') {
     return event.superintendentName ?? (i18n?.t('components.cards.eventSuperintendentDefault') ?? 'Superintendente de Circuito');
   }

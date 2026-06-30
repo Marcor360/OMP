@@ -215,7 +215,7 @@ export function DashboardScreen() {
 
         <TouchableOpacity
           style={styles.notificationsButton}
-          onPress={() => router.push('/(protected)/notifications' as any)}
+          onPress={() => router.push('/(protected)/notifications')}
           activeOpacity={0.8}
         >
           <Ionicons name="notifications-outline" size={18} color={colors.textPrimary} />
@@ -251,7 +251,7 @@ export function DashboardScreen() {
 
       <TouchableOpacity
         style={styles.preachingCard}
-        onPress={() => router.push('/(protected)/(tabs)/preaching' as any)}
+        onPress={() => router.push('/(protected)/(tabs)/preaching')}
         activeOpacity={0.85}
       >
         <View style={styles.preachingIcon}>
@@ -268,7 +268,7 @@ export function DashboardScreen() {
 
       <TouchableOpacity
         style={styles.preachingCard}
-        onPress={() => router.push('/(protected)/organization-chart' as any)}
+        onPress={() => router.push('/(protected)/organization-chart')}
         activeOpacity={0.85}
       >
         <View style={styles.preachingIcon}>
@@ -302,7 +302,7 @@ export function DashboardScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <ThemedText style={styles.sectionTitle}>{t('dashboard.upcomingMeetings')}</ThemedText>
-          <TouchableOpacity onPress={() => router.push('/(protected)/(tabs)/meetings' as any)}>
+          <TouchableOpacity onPress={() => router.push('/(protected)/(tabs)/meetings')}>
             <ThemedText style={styles.seeAll}>{t('dashboard.seeAll')}</ThemedText>
           </TouchableOpacity>
         </View>
@@ -320,7 +320,7 @@ export function DashboardScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <ThemedText style={styles.sectionTitle}>{t('dashboard.pendingAssignments')}</ThemedText>
-          <TouchableOpacity onPress={() => router.push('/(protected)/(tabs)/assignments' as any)}>
+          <TouchableOpacity onPress={() => router.push('/(protected)/(tabs)/assignments')}>
             <ThemedText style={styles.seeAll}>{t('dashboard.seeAll')}</ThemedText>
           </TouchableOpacity>
         </View>

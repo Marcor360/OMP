@@ -176,7 +176,7 @@ export function CleaningGroupForm({
           returnKeyType="next"
           accessibilityLabel={t('cleaning.nameLabelGroup')}
         />
-        {errors.name && <Text style={styles.errorText}>{t(errors.name as any)}</Text>}
+        {errors.name && <Text style={styles.errorText}>{t(errors.name)}</Text>}
       </View>
 
       {/* Descripción */}
@@ -196,7 +196,7 @@ export function CleaningGroupForm({
           accessibilityLabel={t('cleaning.descLabel')}
         />
         {errors.description && (
-          <Text style={styles.errorText}>{t(errors.description as any)}</Text>
+          <Text style={styles.errorText}>{t(errors.description)}</Text>
         )}
       </View>
 

@@ -24,7 +24,7 @@ export function UnauthorizedScreen() {
       </ThemedText>
       <TouchableOpacity
         style={styles.button}
-        onPress={() => router.replace('/(protected)/(tabs)/' as any)}
+        onPress={() => router.replace('/(protected)/(tabs)')}
         activeOpacity={0.8}
       >
         <Ionicons name="home-outline" size={18} color={colors.onPrimary} />

@@ -168,7 +168,7 @@ const mapMeetingToFormState = (meeting: MidweekMeeting): MidweekMeetingFormState
   openingSong: meeting.openingSong ?? '',
   openingPrayer: meeting.openingPrayer ?? '',
   openingPrayerUserId: '',
-  middleSong: (meeting as any).middleSong ?? '',
+  middleSong: meeting.middleSong ?? '',
   closingSong: meeting.closingSong ?? '',
   closingPrayer: meeting.closingPrayer ?? '',
   closingPrayerUserId: '',
