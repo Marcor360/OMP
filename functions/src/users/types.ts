@@ -2,6 +2,8 @@ export type Role = 'admin' | 'supervisor' | 'user';
 export type Gender = 'masculino' | 'femenino';
 export type ServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar';
 export type ServiceDepartment =
+  | 'coordinacion'
+  | 'secretaria'
   | 'limpieza'
   | 'literatura'
   | 'tesoreria'
@@ -9,6 +11,11 @@ export type ServiceDepartment =
   | 'discursos'
   | 'reuniones'
   | 'predicacion'
+  | 'territorios'
+  | 'asignaciones'
+  | 'hospitalidad'
+  | 'usuarios'
+  | 'configuracion'
   | 'audio_video'
   | 'acomodadores_microfonos';
 

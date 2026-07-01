@@ -96,6 +96,8 @@ export const parseServiceDepartment = (value: unknown): ServiceDepartment | unde
   if (!text) return undefined;
 
   if (
+    text === 'coordinacion' ||
+    text === 'secretaria' ||
     text === 'limpieza' ||
     text === 'literatura' ||
     text === 'tesoreria' ||
@@ -103,6 +105,11 @@ export const parseServiceDepartment = (value: unknown): ServiceDepartment | unde
     text === 'discursos' ||
     text === 'reuniones' ||
     text === 'predicacion' ||
+    text === 'territorios' ||
+    text === 'asignaciones' ||
+    text === 'hospitalidad' ||
+    text === 'usuarios' ||
+    text === 'configuracion' ||
     text === 'audio_video' ||
     text === 'acomodadores_microfonos'
   ) {

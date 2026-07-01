@@ -7,6 +7,8 @@ import type {
 } from './types.js';
 
 export const SERVICE_DEPARTMENT_LABELS: Record<ServiceDepartment, string> = {
+  coordinacion: 'Coordinacion',
+  secretaria: 'Secretaria',
   limpieza: 'Limpieza',
   literatura: 'Literatura',
   tesoreria: 'Tesoreria',
@@ -14,6 +16,11 @@ export const SERVICE_DEPARTMENT_LABELS: Record<ServiceDepartment, string> = {
   discursos: 'Discursos',
   reuniones: 'Reuniones',
   predicacion: 'Predicacion',
+  territorios: 'Territorios',
+  asignaciones: 'Asignaciones',
+  hospitalidad: 'Hospitalidad',
+  usuarios: 'Usuarios',
+  configuracion: 'Configuracion',
   audio_video: 'Audio y Video',
   acomodadores_microfonos: 'Acomodadores y Microfonos',
 };
