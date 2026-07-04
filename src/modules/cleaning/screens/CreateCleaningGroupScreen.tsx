@@ -36,7 +36,7 @@ export function CreateCleaningGroupScreen() {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { congregationId, uid, loading: permLoading } = useCleaningPermission();
+  const { congregationId, loading: permLoading } = useCleaningPermission();
   const { refreshAll } = useCleaningCache();
   const { t } = useI18n();
 
@@ -72,7 +72,6 @@ export function CreateCleaningGroupScreen() {
           groupType: formValues.groupType,
           isActive: formValues.isActive,
         },
-        uid,
         selectedMemberIds
       );
 

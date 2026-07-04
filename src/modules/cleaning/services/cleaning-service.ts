@@ -3,9 +3,7 @@
  * Toda operación de membresía usa transacciones Firestore para garantizar integridad.
  */
 import {
-  addDoc,
   collection,
-  deleteDoc,
   doc,
   getDocs,
   query,
@@ -223,14 +221,37 @@ const resolveUserMemberStatus = (
 
 // ─── createCleaningGroup ──────────────────────────────────────────────────────
 
+const mapCallableErrorToCleaningError = (error: unknown): CleaningServiceError => {
+  if (error instanceof CleaningServiceError) return error;
+
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : '';
+  const message =
+    typeof error === 'object' && error !== null && 'message' in error
+      ? String((error as { message?: unknown }).message)
+      : 'No se pudo crear el grupo de limpieza.';
+
+  if (code.includes('permission-denied') || code.includes('unauthenticated')) {
+    return new CleaningServiceError('PERMISSION_DENIED', message);
+  }
+  if (code.includes('invalid-argument')) {
+    return new CleaningServiceError('INVALID_DATA', message);
+  }
+  if (code.includes('failed-precondition')) {
+    return new CleaningServiceError('INVALID_DATA', message);
+  }
+  return new CleaningServiceError('TRANSACTION_FAILED', message);
+};
+
 /**
- * Crea un grupo nuevo y agrega integrantes iniciales en una sola transacción.
- * Si initialMemberIds está vacío, solo crea el grupo.
+ * Crea un grupo (y sus integrantes iniciales, atomicamente) via Cloud Function.
+ * La autorizacion y la validacion ocurren server-side.
  */
 export const createCleaningGroup = async (
   congregationId: string,
   dto: CreateCleaningGroupDTO,
-  createdBy: string,
   initialMemberIds: string[] = []
 ): Promise<string> => {
   if (!congregationId) {
@@ -239,70 +260,36 @@ export const createCleaningGroup = async (
   if (!dto.name.trim()) {
     throw new CleaningServiceError('INVALID_DATA', 'El nombre del grupo es requerido.');
   }
-  const payload = {
-    name: dto.name.trim(),
-    description: dto.description?.trim() ?? '',
-    congregationId,
-    groupType: dto.groupType ?? 'standard',
-    memberIds: [],
-    memberCount: 0,
-    isActive: dto.isActive ?? true,
-    createdBy,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  };
 
-  const storageModes = resolveGroupStorageModes(congregationId);
-  let selectedStorageMode: CleaningGroupStorageMode = storageModes[0];
-  let groupRef: Awaited<ReturnType<typeof addDoc>> | null = null;
-  let permissionError: unknown = null;
+  const callable = httpsCallable<
+    {
+      congregationId: string;
+      name: string;
+      description: string;
+      groupType: CleaningGroupType;
+      isActive: boolean;
+      initialMemberIds: string[];
+    },
+    { groupId?: string }
+  >(functions, 'createCleaningGroupByManager');
 
-  for (const mode of storageModes) {
-    try {
-      groupRef = await addDoc(cleaningGroupsCollectionRefByMode(mode, congregationId), payload);
-      selectedStorageMode = mode;
-      break;
-    } catch (error) {
-      if (isPermissionDeniedError(error)) {
-        permissionError = permissionError ?? error;
-        continue;
-      }
-      throw error;
+  try {
+    const result = await callable({
+      congregationId,
+      name: dto.name.trim(),
+      description: dto.description?.trim() ?? '',
+      groupType: dto.groupType ?? 'standard',
+      isActive: dto.isActive ?? true,
+      initialMemberIds: Array.from(new Set(initialMemberIds)),
+    });
+    const groupId = typeof result.data.groupId === 'string' ? result.data.groupId : '';
+    if (!groupId) {
+      throw new CleaningServiceError('TRANSACTION_FAILED', 'No se pudo crear el grupo de limpieza.');
     }
+    return groupId;
+  } catch (error) {
+    throw mapCallableErrorToCleaningError(error);
   }
-
-  if (!groupRef) {
-    if (permissionError) throw permissionError;
-    throw new CleaningServiceError(
-      'TRANSACTION_FAILED',
-      'No se pudo crear el grupo de limpieza.'
-    );
-  }
-
-  const groupId = groupRef.id;
-
-  if (initialMemberIds.length > 0) {
-    try {
-      // Agregar integrantes iniciales asegurando transaccionalidad
-      await addUsersToCleaningGroup(
-        groupId,
-        initialMemberIds,
-        dto.name.trim(),
-        {
-          congregationId,
-          storageMode: selectedStorageMode,
-        }
-      );
-    } catch (error) {
-      // Rollback defensivo si falla la asignacion inicial.
-      await deleteDoc(
-        cleaningGroupDocRefByMode(selectedStorageMode, groupId, congregationId)
-      );
-      throw error;
-    }
-  }
-
-  return groupId;
 };
 
 // ─── getCleaningGroups ────────────────────────────────────────────────────────
