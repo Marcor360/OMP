@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
@@ -9,7 +9,6 @@ import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useToast } from '@/src/context/toast-context';
 import { useUser } from '@/src/context/user-context';
-import { AssignmentPickerModal } from '@/src/modules/organization/components/AssignmentPickerModal';
 import { DepartmentEditorModal } from '@/src/modules/organization/components/DepartmentEditorModal';
 import { OrganizationTreeDesktop } from '@/src/modules/organization/components/OrganizationTreeDesktop';
 import { OrganizationTreeMobile } from '@/src/modules/organization/components/OrganizationTreeMobile';
@@ -17,25 +16,19 @@ import { useOrganizationChart } from '@/src/modules/organization/hooks/useOrgani
 import { useResponsiveOrganizationLayout } from '@/src/modules/organization/hooks/useResponsiveOrganizationLayout';
 import {
   createDepartment,
-  createDepartmentAssignment,
-  deactivateDepartmentAssignment,
-  getActiveOrganizationUsers,
+  regenerateOrgChart,
   seedDefaultDepartments,
   updateDepartment,
-  updateDepartmentAssignment,
 } from '@/src/modules/organization/services/organizationService';
-import {
-  type Department,
-  type DepartmentAssignment,
-  type OrganizationTreeNode,
-} from '@/src/modules/organization/types/organization.types';
+import { type Department } from '@/src/modules/organization/types/organization.types';
 import {
   canManageOrganizationChart,
   canViewOrganizationChart,
 } from '@/src/modules/organization/utils/organizationPermissions';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import type { AppUser } from '@/src/types/user';
 import { formatFirestoreError, isPermissionDeniedError } from '@/src/utils/errors/errors';
+
+const noop = (): void => undefined;
 
 export function OrganizationChart() {
   const colors = useAppColors();
@@ -46,101 +39,32 @@ export function OrganizationChart() {
   const canView = canViewOrganizationChart(appUser);
   const canManage = canManageOrganizationChart(appUser);
   const orgChart = useOrganizationChart(canView ? congregationId : null);
-  const [users, setUsers] = useState<AppUser[]>([]);
-  const [usersLoading, setUsersLoading] = useState(true);
-  const [usersError, setUsersError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
   const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
-  const [editingAssignment, setEditingAssignment] = useState<DepartmentAssignment | null>(null);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
 
-  const loadUsers = useCallback(async () => {
-    if (!congregationId || !canManage) {
-      setUsers([]);
-      setUsersLoading(false);
+  const handleRegenerate = useCallback(async () => {
+    if (!canManage) {
+      Alert.alert('Error', 'Solo el coordinador o el secretario pueden generar el organigrama.');
       return;
     }
 
     try {
-      setUsersLoading(true);
-      setUsersError(null);
-      setUsers(await getActiveOrganizationUsers(congregationId));
-    } catch (requestError) {
-      setUsers([]);
-      setUsersError(
-        isPermissionDeniedError(requestError)
-          ? 'No se pudo leer la lista de usuarios para editar el organigrama. Verifica permisos de usuarios y organigrama.'
-          : formatFirestoreError(requestError)
-      );
-    } finally {
-      setUsersLoading(false);
-    }
-  }, [canManage, congregationId]);
-
-  useEffect(() => {
-    void loadUsers();
-  }, [loadUsers]);
-
-  const refreshAll = useCallback(async () => {
-    await Promise.all([orgChart.refresh(), loadUsers()]);
-  }, [loadUsers, orgChart]);
-
-  const openAssignmentModal = (node?: OrganizationTreeNode) => {
-    if (node?.assignmentId) {
-      setEditingAssignment(orgChart.assignments.find((item) => item.id === node.assignmentId) ?? null);
-    } else {
-      setEditingAssignment(null);
-    }
-    setAssignmentModalOpen(true);
-  };
-
-  const saveAssignment = async (
-    assignment: Omit<DepartmentAssignment, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
-  ) => {
-    try {
       setSaving(true);
-      if (assignment.id) {
-        await updateDepartmentAssignment(assignment.congregationId, assignment.id, assignment);
-        showToast('Asignacion actualizada con exito');
-      } else {
-        await createDepartmentAssignment(assignment);
-        showToast('Asignacion creada con exito');
-      }
-      setAssignmentModalOpen(false);
-      setEditingAssignment(null);
-      await refreshAll();
+      const result = await regenerateOrgChart();
+      await orgChart.refresh();
+      showToast(result.warnings.length > 0 ? result.warnings[0] : 'Organigrama generado con exito');
     } catch (requestError) {
       Alert.alert(
         'Error',
         isPermissionDeniedError(requestError)
-          ? 'No tienes permisos para modificar el organigrama.'
+          ? 'Solo el coordinador o el secretario pueden generar el organigrama.'
           : formatFirestoreError(requestError)
       );
     } finally {
       setSaving(false);
     }
-  };
-
-  const deactivateAssignment = async (assignment: DepartmentAssignment) => {
-    try {
-      setSaving(true);
-      await deactivateDepartmentAssignment(assignment.congregationId, assignment.id);
-      showToast('Asignacion desactivada con exito');
-      setAssignmentModalOpen(false);
-      setEditingAssignment(null);
-      await refreshAll();
-    } catch (requestError) {
-      Alert.alert(
-        'Error',
-        isPermissionDeniedError(requestError)
-          ? 'No tienes permisos para modificar el organigrama.'
-          : formatFirestoreError(requestError)
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
+  }, [canManage, orgChart, showToast]);
 
   const saveDepartment = async (
     department: Omit<Department, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
@@ -174,7 +98,6 @@ export function OrganizationChart() {
       Alert.alert('Error', 'No se pudo identificar la congregacion del usuario.');
       return;
     }
-
     if (!canManage) {
       Alert.alert('Error', 'No tienes permisos para crear departamentos del organigrama.');
       return;
@@ -197,7 +120,7 @@ export function OrganizationChart() {
     }
   };
 
-  if (loadingProfile || orgChart.loading || usersLoading) {
+  if (loadingProfile || orgChart.loading) {
     return <LoadingState message="Cargando organigrama..." />;
   }
 
@@ -206,16 +129,11 @@ export function OrganizationChart() {
   }
 
   if (orgChart.error) {
-    return <ErrorState message={orgChart.error} onRetry={refreshAll} />;
-  }
-
-  if (canManage && usersError) {
-    return <ErrorState message={usersError} onRetry={refreshAll} />;
+    return <ErrorState message={orgChart.error} onRetry={orgChart.refresh} />;
   }
 
   const hasDepartments = orgChart.departments.some((department) => department.isActive);
   const hasAssignments = orgChart.assignments.some((assignment) => assignment.isActive);
-  const isEmpty = !hasDepartments && !hasAssignments;
 
   return (
     <ScreenContainer scrollable={layout.isMobile} padded={false}>
@@ -235,18 +153,17 @@ export function OrganizationChart() {
               >
                 <Ionicons name="business-outline" size={18} color={colors.primary} />
               </TouchableOpacity>
-              {hasDepartments ? (
-                <TouchableOpacity
-                  style={styles.primaryHeaderButton}
-                  onPress={() => openAssignmentModal()}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="add-outline" size={18} color={colors.onPrimary} />
-                  <ThemedText style={styles.primaryHeaderButtonText}>
-                    {hasAssignments ? 'Editar organigrama' : 'Crear organigrama'}
-                  </ThemedText>
-                </TouchableOpacity>
-              ) : null}
+              <TouchableOpacity
+                style={[styles.primaryHeaderButton, saving && styles.disabledButton]}
+                onPress={handleRegenerate}
+                disabled={saving}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="sync-outline" size={18} color={colors.onPrimary} />
+                <ThemedText style={styles.primaryHeaderButtonText}>
+                  {saving ? 'Generando...' : 'Generar organigrama'}
+                </ThemedText>
+              </TouchableOpacity>
             </View>
           ) : null
         }
@@ -260,57 +177,58 @@ export function OrganizationChart() {
           </View>
         ))}
 
-        {isEmpty ? (
+        {!hasDepartments ? (
           <View style={styles.emptyState}>
             <Ionicons name="git-network-outline" size={34} color={colors.textMuted} />
-            <ThemedText style={styles.emptyTitle}>Aun no hay organigrama configurado para esta congregacion.</ThemedText>
+            <ThemedText style={styles.emptyTitle}>
+              Aun no hay organigrama configurado para esta congregacion.
+            </ThemedText>
             {canManage ? (
-              <TouchableOpacity
-                style={[styles.emptyButton, saving && styles.disabledButton]}
-                onPress={handleSeedDefaultDepartments}
-                disabled={saving}
-              >
-                <ThemedText style={styles.emptyButtonText}>Crear departamentos base</ThemedText>
-              </TouchableOpacity>
+              <View style={styles.emptyActions}>
+                <TouchableOpacity
+                  style={[styles.emptyButton, saving && styles.disabledButton]}
+                  onPress={handleRegenerate}
+                  disabled={saving}
+                >
+                  <ThemedText style={styles.emptyButtonText}>Generar organigrama</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.secondaryButton, saving && styles.disabledButton]}
+                  onPress={handleSeedDefaultDepartments}
+                  disabled={saving}
+                >
+                  <ThemedText style={styles.secondaryButtonText}>Crear departamentos base</ThemedText>
+                </TouchableOpacity>
+              </View>
             ) : null}
           </View>
         ) : !hasAssignments ? (
           <View style={styles.emptyState}>
             <Ionicons name="git-network-outline" size={34} color={colors.textMuted} />
-            <ThemedText style={styles.emptyTitle}>Aun no hay asignaciones en el organigrama congregacional.</ThemedText>
+            <ThemedText style={styles.emptyTitle}>
+              Aun no hay asignaciones. Asigna puestos de servicio a los usuarios y genera el organigrama.
+            </ThemedText>
             {canManage ? (
-              <TouchableOpacity style={styles.emptyButton} onPress={() => openAssignmentModal()}>
-                <ThemedText style={styles.emptyButtonText}>Crear organigrama</ThemedText>
+              <TouchableOpacity
+                style={[styles.emptyButton, saving && styles.disabledButton]}
+                onPress={handleRegenerate}
+                disabled={saving}
+              >
+                <ThemedText style={styles.emptyButtonText}>Generar organigrama</ThemedText>
               </TouchableOpacity>
             ) : null}
           </View>
         ) : layout.isMobile ? (
-          <OrganizationTreeMobile
-            roots={orgChart.tree.roots}
-            canEdit={canManage}
-            onEdit={openAssignmentModal}
-          />
+          <OrganizationTreeMobile roots={orgChart.tree.roots} canEdit={false} onEdit={noop} />
         ) : (
           <OrganizationTreeDesktop
             roots={orgChart.tree.roots}
-            canEdit={canManage}
+            canEdit={false}
             compact={layout.mode === 'tablet'}
-            onEdit={openAssignmentModal}
+            onEdit={noop}
           />
         )}
       </View>
-
-      <AssignmentPickerModal
-        visible={assignmentModalOpen}
-        departments={orgChart.departments}
-        assignments={orgChart.assignments}
-        users={users}
-        editingAssignment={editingAssignment}
-        saving={saving}
-        onClose={() => setAssignmentModalOpen(false)}
-        onSave={saveAssignment}
-        onDeactivate={deactivateAssignment}
-      />
 
       <DepartmentEditorModal
         visible={departmentModalOpen}
@@ -326,16 +244,8 @@ export function OrganizationChart() {
 
 const createStyles = (colors: AppColorSet) =>
   StyleSheet.create({
-    content: {
-      flex: 1,
-      padding: 16,
-      gap: 12,
-    },
-    headerActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
+    content: { flex: 1, padding: 16, gap: 12 },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     headerButton: {
       width: 40,
       height: 40,
@@ -355,11 +265,7 @@ const createStyles = (colors: AppColorSet) =>
       gap: 6,
       paddingHorizontal: 12,
     },
-    primaryHeaderButtonText: {
-      color: colors.onPrimary,
-      fontSize: 13,
-      fontWeight: '900',
-    },
+    primaryHeaderButtonText: { color: colors.onPrimary, fontSize: 13, fontWeight: '900' },
     warningBanner: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -370,12 +276,7 @@ const createStyles = (colors: AppColorSet) =>
       borderRadius: 10,
       padding: 12,
     },
-    warningText: {
-      flex: 1,
-      color: colors.warning,
-      fontSize: 13,
-      fontWeight: '700',
-    },
+    warningText: { flex: 1, color: colors.warning, fontSize: 13, fontWeight: '700' },
     emptyState: {
       alignItems: 'center',
       justifyContent: 'center',
@@ -387,23 +288,18 @@ const createStyles = (colors: AppColorSet) =>
       backgroundColor: colors.surface,
       padding: 24,
     },
-    emptyTitle: {
-      color: colors.textSecondary,
-      textAlign: 'center',
-      fontSize: 14,
-      fontWeight: '700',
-    },
-    emptyButton: {
+    emptyTitle: { color: colors.textSecondary, textAlign: 'center', fontSize: 14, fontWeight: '700' },
+    emptyActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center' },
+    emptyButton: { borderRadius: 10, backgroundColor: colors.primary, paddingHorizontal: 14, paddingVertical: 10 },
+    emptyButtonText: { color: colors.onPrimary, fontWeight: '900' },
+    secondaryButton: {
       borderRadius: 10,
-      backgroundColor: colors.primary,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
-    emptyButtonText: {
-      color: colors.onPrimary,
-      fontWeight: '900',
-    },
-    disabledButton: {
-      opacity: 0.65,
-    },
+    secondaryButtonText: { color: colors.textPrimary, fontWeight: '800' },
+    disabledButton: { opacity: 0.65 },
   });
