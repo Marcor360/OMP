@@ -69,6 +69,7 @@ export const en = {
   'settings.section.legal': 'Legal',
   'settings.section.devicePermissions': 'Device permissions',
   'settings.section.congregationPlan': 'Congregation plan',
+  'settings.section.activity': 'Your activity',
 
   // Settings - Account
   'settings.account.fullName': 'Full name',
@@ -82,12 +83,22 @@ export const en = {
   'settings.admin.cleaningGroups': 'Cleaning groups',
   'settings.admin.hospitalityGroups': 'Hospitality groups',
   'settings.admin.notifications': 'Notifications',
+  'settings.admin.permissionHint': 'Only the areas you have permission for are shown.',
+  'settings.admin.userManagement.desc': 'People, roles and permissions',
+  'settings.admin.meetingManagement.desc': 'Schedule meetings and their parts',
+  'settings.admin.assignmentManagement.desc': 'Assign and publish responsibilities',
+  'settings.admin.cleaningGroups.desc': 'Shifts and cleaning groups',
+  'settings.admin.notifications.desc': 'Announcements for the congregation',
 
   // Settings - Organization
   'settings.organization.meetingCalendar': 'Meeting calendar',
   'settings.organization.myAssignments': 'My assignments',
   'settings.organization.upcomingResponsibilities': 'Upcoming responsibilities',
   'settings.organization.assignmentHistory': 'Assignment history',
+  'settings.organization.meetingCalendar.desc': 'Upcoming meetings',
+  'settings.organization.myAssignments.desc': "What's assigned to you",
+  'settings.organization.upcomingResponsibilities.desc': 'Your upcoming parts',
+  'settings.organization.assignmentHistory.desc': 'Your full history',
 
   // Settings - Application
   'settings.app.theme': 'Theme',
@@ -97,6 +108,8 @@ export const en = {
   'settings.plan.activeUsers': 'Active users',
   'settings.plan.availableUsers': 'Available users',
   'settings.plan.loading': 'Loading...',
+  'settings.plan.remaining': '{{count}} available',
+  'settings.plan.limit': 'Limit {{limit}}',
   'settings.permissions.expoGoUnavailable': 'Remote push notifications are not available in Expo Go. Use a development build to test them.',
 
   // Billing
@@ -107,6 +120,10 @@ export const en = {
   'billing.noActivePlan': 'No active plan',
   'billing.noStatus': 'No status',
   'billing.exempt': 'Exempt',
+  'billing.status.active': 'Active',
+  'billing.status.pending': 'Payment pending',
+  'billing.status.canceled': 'Canceled',
+  'billing.manage': 'Manage',
   'billing.exemptNotice': 'This congregation is billing-exempt. Checkout will not be started.',
   'billing.nextPayment': 'Next payment',
   'billing.currentPeriod': 'Current period',

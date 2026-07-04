@@ -69,6 +69,7 @@ export const es = {
   'settings.section.legal': 'Legal',
   'settings.section.devicePermissions': 'Permisos del dispositivo',
   'settings.section.congregationPlan': 'Plan de congregacion',
+  'settings.section.activity': 'Tu actividad',
 
   // Settings - Cuenta
   'settings.account.fullName': 'Nombre completo',
@@ -82,12 +83,22 @@ export const es = {
   'settings.admin.cleaningGroups': 'Grupos de limpieza',
   'settings.admin.hospitalityGroups': 'Grupos de hospitalidad',
   'settings.admin.notifications': 'Notificaciones',
+  'settings.admin.permissionHint': 'Solo se muestran las areas para las que tienes permiso.',
+  'settings.admin.userManagement.desc': 'Personas, roles y permisos',
+  'settings.admin.meetingManagement.desc': 'Programa reuniones y sus partes',
+  'settings.admin.assignmentManagement.desc': 'Asigna y publica responsabilidades',
+  'settings.admin.cleaningGroups.desc': 'Turnos y grupos de aseo',
+  'settings.admin.notifications.desc': 'Avisos para la congregacion',
 
   // Settings - Organizacion
   'settings.organization.meetingCalendar': 'Calendario de reuniones',
   'settings.organization.myAssignments': 'Mis asignaciones',
   'settings.organization.upcomingResponsibilities': 'Proximas responsabilidades',
   'settings.organization.assignmentHistory': 'Historial de asignaciones',
+  'settings.organization.meetingCalendar.desc': 'Proximas reuniones',
+  'settings.organization.myAssignments.desc': 'Lo que tienes asignado',
+  'settings.organization.upcomingResponsibilities.desc': 'Tus proximas partes',
+  'settings.organization.assignmentHistory.desc': 'Todo tu historial',
 
   // Settings - Aplicacion
   'settings.app.theme': 'Tema',
@@ -97,6 +108,8 @@ export const es = {
   'settings.plan.activeUsers': 'Usuarios activos',
   'settings.plan.availableUsers': 'Usuarios disponibles',
   'settings.plan.loading': 'Cargando...',
+  'settings.plan.remaining': '{{count}} disponibles',
+  'settings.plan.limit': 'Limite {{limit}}',
   'settings.permissions.expoGoUnavailable': 'Las notificaciones push remotas no estan disponibles en Expo Go. Para probarlas usa una development build.',
 
   // Billing
@@ -107,6 +120,10 @@ export const es = {
   'billing.noActivePlan': 'Sin plan activo',
   'billing.noStatus': 'Sin estado',
   'billing.exempt': 'Exenta',
+  'billing.status.active': 'Activa',
+  'billing.status.pending': 'Pago pendiente',
+  'billing.status.canceled': 'Cancelada',
+  'billing.manage': 'Gestionar',
   'billing.exemptNotice': 'Esta congregacion esta exenta de cobro. No se iniciara Checkout.',
   'billing.nextPayment': 'Proximo pago',
   'billing.currentPeriod': 'Periodo actual',
