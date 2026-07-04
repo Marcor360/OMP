@@ -229,14 +229,38 @@ export function DashboardScreen() {
       <OmpWelcomeNotice />
 
       <View style={styles.statsRow}>
-        <StatCard title={t('dashboard.assignments')} value={metrics.totalAssignments ?? 0} icon="checkmark-done-outline" color={colors.primary} onPress={() => router.push('/(protected)/(tabs)/assignments')} />
-        <StatCard title={t('dashboard.pending')} value={metrics.pendingAssignments ?? 0} icon="time-outline" color={colors.warning} onPress={() => router.push('/(protected)/(tabs)/assignments')} />
+        <StatCard
+          title={t('dashboard.assignments')}
+          value={metrics.totalAssignments ?? 0}
+          icon="checkmark-done-outline"
+          color={colors.primary}
+          onPress={() => router.push('/(protected)/(tabs)/assignments')}
+        />
+        <StatCard
+          title={t('dashboard.pending')}
+          value={metrics.pendingAssignments ?? 0}
+          icon="time-outline"
+          color={colors.warning}
+          onPress={() => router.push('/(protected)/(tabs)/assignments')}
+        />
       </View>
 
       {isAdmin && (
         <View style={styles.statsRow}>
-          <StatCard title={t('dashboard.meetings')} value={metrics.totalMeetings ?? 0} icon="calendar-outline" color={colors.accent} onPress={() => router.push('/(protected)/(tabs)/meetings')} />
-          <StatCard title={t('dashboard.users')} value={metrics.totalUsers ?? 0} icon="people-outline" color={colors.secondary} onPress={canOpenUsers ? () => router.push('/(protected)/(tabs)/users') : undefined} />
+          <StatCard
+            title={t('dashboard.meetings')}
+            value={metrics.totalMeetings ?? 0}
+            icon="calendar-outline"
+            color={colors.accent}
+            onPress={() => router.push('/(protected)/(tabs)/meetings')}
+          />
+          <StatCard
+            title={t('dashboard.users')}
+            value={metrics.totalUsers ?? 0}
+            icon="people-outline"
+            color={colors.secondary}
+            onPress={canOpenUsers ? () => router.push('/(protected)/(tabs)/users') : undefined}
+          />
         </View>
       )}
 

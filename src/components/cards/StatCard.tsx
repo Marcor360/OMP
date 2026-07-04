@@ -12,7 +12,9 @@ interface StatCardProps {
   color?: string;
   subtitle?: string;
   style?: ViewStyle;
+  /** Si se provee, la tarjeta se vuelve tocable y navega a la seccion. */
   onPress?: () => void;
+  /** Etiqueta de accesibilidad; por defecto usa titulo y valor. */
   accessibilityLabel?: string;
 }
 
@@ -23,7 +25,7 @@ export function StatCard({
   color,
   subtitle,
   style,
-  onPress,
+  onPress: handlePress,
   accessibilityLabel,
 }: StatCardProps) {
   const colors = useAppColors();
@@ -41,26 +43,27 @@ export function StatCard({
     </>
   );
 
-  if (onPress) {
+  if (handlePress) {
     return (
       <TouchableOpacity
         style={[styles.card, style]}
-        onPress={onPress}
+        onPress={handlePress}
         activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? `${title}: ${value}`}
       >
         {content}
-        <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} style={styles.chevron} />
+        <Ionicons
+          name="chevron-forward"
+          size={16}
+          color={colors.textDisabled}
+          style={styles.chevron}
+        />
       </TouchableOpacity>
     );
   }
 
-  return (
-    <View style={[styles.card, style]}>
-      {content}
-    </View>
-  );
+  return <View style={[styles.card, style]}>{content}</View>;
 }
 
 const createStyles = (colors: AppColorSet) =>
