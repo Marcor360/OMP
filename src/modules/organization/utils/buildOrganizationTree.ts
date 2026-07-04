@@ -1,9 +1,7 @@
 import {
   type BuildOrganizationTreeInput,
   type BuildOrganizationTreeResult,
-  type Department,
   type DepartmentAssignment,
-  OPERATIONAL_DEPARTMENT_IDS,
   type OrganizationPosition,
   type OrganizationTreeNode,
 } from '@/src/modules/organization/types/organization.types';
@@ -74,7 +72,6 @@ export const buildOrganizationTree = ({
   const activeDepartments = departments
     .filter((department) => department.isActive)
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'es'));
-  const departmentsById = new Map(activeDepartments.map((department) => [department.id, department]));
   const activeAssignments = assignments.filter((assignment) => assignment.isActive);
   const warnings: string[] = [];
 
@@ -94,9 +91,9 @@ export const buildOrganizationTree = ({
     )
     .sort(sortAssignments)[0];
 
-  const operationalDepartments = OPERATIONAL_DEPARTMENT_IDS
-    .map((departmentId) => departmentsById.get(departmentId))
-    .filter((department): department is Department => Boolean(department));
+  const operationalDepartments = activeDepartments.filter(
+    (department) => department.id !== 'coordinacion' && department.id !== 'secretaria'
+  );
 
   if (!coordinatorAssignment) {
     warnings.push('Falta asignar un coordinador para construir el organigrama.');
