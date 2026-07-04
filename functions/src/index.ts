@@ -78,6 +78,7 @@ export {
 } from "./territories-notifications.js";
 
 export {
+  createCleaningGroupByManager,
   listCleaningGroupsForCurrentUser,
 } from './cleaning.js';
 
