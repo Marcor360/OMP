@@ -96,3 +96,8 @@ export {
 } from './billing/stripe.js';
 
 export { setBillingExemptionByRootAdmin } from './billing/admin-exemption.js';
+
+export {
+  reconcileOrgChartOnUserWrite,
+  regenerateOrgChart,
+} from './organization/triggers.js';
