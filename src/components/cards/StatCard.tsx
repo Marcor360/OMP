@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, type ViewStyle } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
@@ -12,6 +12,8 @@ interface StatCardProps {
   color?: string;
   subtitle?: string;
   style?: ViewStyle;
+  onPress?: () => void;
+  accessibilityLabel?: string;
 }
 
 export function StatCard({
@@ -21,19 +23,42 @@ export function StatCard({
   color,
   subtitle,
   style,
+  onPress,
+  accessibilityLabel,
 }: StatCardProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
   const iconColor = color ?? colors.primary;
 
-  return (
-    <View style={[styles.card, style]}>
+  const content = (
+    <>
       <View style={[styles.iconWrap, { backgroundColor: iconColor + '22' }]}>
         <Ionicons name={icon} size={22} color={iconColor} />
       </View>
       <ThemedText style={styles.value}>{value}</ThemedText>
       <ThemedText style={styles.title}>{title}</ThemedText>
       {subtitle ? <ThemedText style={styles.subtitle}>{subtitle}</ThemedText> : null}
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity
+        style={[styles.card, style]}
+        onPress={onPress}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? `${title}: ${value}`}
+      >
+        {content}
+        <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} style={styles.chevron} />
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <View style={[styles.card, style]}>
+      {content}
     </View>
   );
 }
@@ -73,5 +98,10 @@ const createStyles = (colors: AppColorSet) =>
       fontSize: 11,
       color: colors.textMuted,
       marginTop: 2,
+    },
+    chevron: {
+      position: 'absolute',
+      top: 14,
+      right: 14,
     },
   });

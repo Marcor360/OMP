@@ -23,7 +23,7 @@ import { Assignment } from '@/src/types/assignment';
 import { DashboardMetrics } from '@/src/types/dashboard';
 import { Meeting } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { canManageAssignments, canManageCleaning, canManageUsers } from '@/src/utils/permissions/permissions';
+import { canManageAssignments, canManageCleaning, canManageUsers, canViewUsers } from '@/src/utils/permissions/permissions';
 // MÃ³dulo local: Contador de Horas de PredicaciÃ³n (sin Firebase)
 import { FieldServiceDashboardCard } from '@/src/modules/field-service/components/FieldServiceDashboardCard';
 import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
@@ -76,6 +76,7 @@ export function DashboardScreen() {
   const isAdmin = canManageUsers(appUser);
   const canManage = canManageAssignments(appUser);
   const canManageCleaningGroups = canManageCleaning(appUser);
+  const canOpenUsers = canViewUsers(appUser);
   const {
     events,
     loading: eventsLoading,
@@ -215,7 +216,9 @@ export function DashboardScreen() {
 
         <TouchableOpacity
           style={styles.notificationsButton}
-          onPress={() => router.push('/(protected)/notifications')}
+          onPress={() => {
+            router.push('/(protected)/notifications');
+          }}
           activeOpacity={0.8}
         >
           <Ionicons name="notifications-outline" size={18} color={colors.textPrimary} />
@@ -226,14 +229,14 @@ export function DashboardScreen() {
       <OmpWelcomeNotice />
 
       <View style={styles.statsRow}>
-        <StatCard title={t('dashboard.assignments')} value={metrics.totalAssignments ?? 0} icon="checkmark-done-outline" color={colors.primary} />
-        <StatCard title={t('dashboard.pending')} value={metrics.pendingAssignments ?? 0} icon="time-outline" color={colors.warning} />
+        <StatCard title={t('dashboard.assignments')} value={metrics.totalAssignments ?? 0} icon="checkmark-done-outline" color={colors.primary} onPress={() => router.push('/(protected)/(tabs)/assignments')} />
+        <StatCard title={t('dashboard.pending')} value={metrics.pendingAssignments ?? 0} icon="time-outline" color={colors.warning} onPress={() => router.push('/(protected)/(tabs)/assignments')} />
       </View>
 
       {isAdmin && (
         <View style={styles.statsRow}>
-          <StatCard title={t('dashboard.meetings')} value={metrics.totalMeetings ?? 0} icon="calendar-outline" color={colors.accent} />
-          <StatCard title={t('dashboard.users')} value={metrics.totalUsers ?? 0} icon="people-outline" color={colors.secondary} />
+          <StatCard title={t('dashboard.meetings')} value={metrics.totalMeetings ?? 0} icon="calendar-outline" color={colors.accent} onPress={() => router.push('/(protected)/(tabs)/meetings')} />
+          <StatCard title={t('dashboard.users')} value={metrics.totalUsers ?? 0} icon="people-outline" color={colors.secondary} onPress={canOpenUsers ? () => router.push('/(protected)/(tabs)/users') : undefined} />
         </View>
       )}
 
@@ -251,7 +254,9 @@ export function DashboardScreen() {
 
       <TouchableOpacity
         style={styles.preachingCard}
-        onPress={() => router.push('/(protected)/(tabs)/preaching')}
+        onPress={() => {
+          router.push('/(protected)/(tabs)/preaching');
+        }}
         activeOpacity={0.85}
       >
         <View style={styles.preachingIcon}>
@@ -268,7 +273,9 @@ export function DashboardScreen() {
 
       <TouchableOpacity
         style={styles.preachingCard}
-        onPress={() => router.push('/(protected)/organization-chart')}
+        onPress={() => {
+          router.push('/(protected)/organization-chart');
+        }}
         activeOpacity={0.85}
       >
         <View style={styles.preachingIcon}>
@@ -302,7 +309,11 @@ export function DashboardScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <ThemedText style={styles.sectionTitle}>{t('dashboard.upcomingMeetings')}</ThemedText>
-          <TouchableOpacity onPress={() => router.push('/(protected)/(tabs)/meetings')}>
+          <TouchableOpacity
+            onPress={() => {
+              router.push('/(protected)/(tabs)/meetings');
+            }}
+          >
             <ThemedText style={styles.seeAll}>{t('dashboard.seeAll')}</ThemedText>
           </TouchableOpacity>
         </View>
@@ -320,7 +331,11 @@ export function DashboardScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <ThemedText style={styles.sectionTitle}>{t('dashboard.pendingAssignments')}</ThemedText>
-          <TouchableOpacity onPress={() => router.push('/(protected)/(tabs)/assignments')}>
+          <TouchableOpacity
+            onPress={() => {
+              router.push('/(protected)/(tabs)/assignments');
+            }}
+          >
             <ThemedText style={styles.seeAll}>{t('dashboard.seeAll')}</ThemedText>
           </TouchableOpacity>
         </View>
