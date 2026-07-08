@@ -242,7 +242,7 @@ export function SettingsScreen() {
 
   function AccountCard() {
     return (
-      <View style={[styles.heroCard, styles.accountCard]}>
+      <View style={[styles.heroCard, styles.accountCard, isWide && styles.accountCardWide]}>
         <View style={styles.accountTop}>
           <View style={styles.avatar}>
             <ThemedText style={styles.avatarText}>{getInitials(appUser?.displayName)}</ThemedText>
@@ -281,7 +281,7 @@ export function SettingsScreen() {
     const nextPayment = formatBillingDate(billing?.nextPaymentDate ?? billing?.currentPeriodEnd);
 
     return (
-      <View style={[styles.heroCard, styles.planCard]}>
+      <View style={[styles.heroCard, styles.planCard, isWide && styles.planCardWide]}>
         <View style={styles.planHeader}>
           <View>
             <ThemedText style={styles.cardEyebrow}>{t('settings.plan.current')}</ThemedText>
@@ -628,12 +628,16 @@ const createStyles = (colors: AppColors) =>
       padding: 18,
     },
     accountCard: {
-      flex: 1,
       gap: 16,
     },
+    accountCardWide: {
+      flex: 1,
+    },
     planCard: {
-      flex: 1.2,
       gap: 16,
+    },
+    planCardWide: {
+      flex: 1.2,
     },
     accountTop: {
       flexDirection: 'row',
@@ -752,6 +756,7 @@ const createStyles = (colors: AppColors) =>
       borderTopWidth: 1,
       borderTopColor: colors.border,
       paddingTop: 16,
+      paddingBottom: 2,
       flexDirection: 'row',
       gap: 12,
       alignItems: 'flex-start',
