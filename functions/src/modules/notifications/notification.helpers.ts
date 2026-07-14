@@ -4,6 +4,7 @@ import {
   NotificationCategory,
   ResolvedAssignmentUsers,
 } from './notification.types.js';
+import { Timestamp } from 'firebase-admin/firestore';
 
 const isString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
@@ -56,6 +57,40 @@ const normalizeDateValue = (value: unknown): string | null => {
   }
 
   return null;
+};
+
+export const resolveAssignmentMeetingDate = (
+  data: Record<string, unknown>
+): { meetingDate: Timestamp | null; meetingDateLabel: string | null } => {
+  const raw = data.date ?? data.dueDate ?? data.startDate;
+  const meetingDateLabel = normalizeDateValue(raw);
+
+  if (raw instanceof Timestamp) {
+    return { meetingDate: raw, meetingDateLabel };
+  }
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) {
+    return { meetingDate: Timestamp.fromDate(raw), meetingDateLabel };
+  }
+  if (isString(raw)) {
+    const parsed = new Date(raw.trim());
+    return {
+      meetingDate: Number.isNaN(parsed.getTime()) ? null : Timestamp.fromDate(parsed),
+      meetingDateLabel,
+    };
+  }
+  if (
+    typeof raw === 'object' &&
+    raw !== null &&
+    'toDate' in raw &&
+    typeof (raw as { toDate?: unknown }).toDate === 'function'
+  ) {
+    const parsed = (raw as { toDate: () => Date }).toDate();
+    return {
+      meetingDate: Number.isNaN(parsed.getTime()) ? null : Timestamp.fromDate(parsed),
+      meetingDateLabel,
+    };
+  }
+  return { meetingDate: null, meetingDateLabel };
 };
 
 const parseAssignmentsArray = (rawAssignments: unknown): ResolvedAssignmentUsers => {
@@ -193,6 +228,8 @@ export const resolveAssignmentContext = (params: {
     return null;
   }
 
+  const { meetingDate, meetingDateLabel } = resolveAssignmentMeetingDate(params.data);
+
   return {
     assignmentId: params.assignmentId,
     meetingId: isString(params.pathParams.meetingId) ?
@@ -200,7 +237,8 @@ export const resolveAssignmentContext = (params: {
       null,
     category,
     congregationId: resolveCongregationId(params.data, params.pathParams),
-    date: resolveAssignmentDate(params.data),
+    meetingDate,
+    meetingDateLabel,
     meetingType: resolveMeetingType(params.data),
     sentBy: resolveSentBy(params.data),
   };

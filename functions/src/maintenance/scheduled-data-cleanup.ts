@@ -18,25 +18,20 @@ const RETENTION_MONTHS = 6;
 const QUERY_PAGE_SIZE = 200;
 const CACHE_CONTROL_DOC_PATH = "system/cacheControl";
 
-const TARGET_COLLECTION_IDS = [
-  "reuniones",
-  "assignments",
-  "asignaciones",
-  "meetings",
-  "tareas",
-  "tasks",
-  "archivos",
-  "files",
-] as const;
+export const CLEANUP_SCHEMA = {
+  reuniones: ["endDate"],
+  assignments: ["dueDate"],
+  asignaciones: ["dueDate"],
+  meetings: ["meetingDate", "endDate", "startDate"],
+  tareas: ["dueDate"],
+  tasks: ["dueDate"],
+  archivos: ["endDate"],
+  files: ["endDate"],
+} as const;
 
-const DATE_FIELD_CANDIDATES = [
-  "endDate",
-  "meetingDate",
-  "startDate",
-  "dueDate",
-  "date",
-  "scheduledAt",
-] as const;
+type TargetCollectionId = keyof typeof CLEANUP_SCHEMA;
+
+const TARGET_COLLECTION_IDS = Object.keys(CLEANUP_SCHEMA) as TargetCollectionId[];
 
 const EXCLUDED_PATH_PARTS = [
   "informes",
@@ -46,7 +41,16 @@ const EXCLUDED_PATH_PARTS = [
   "monthlyReports",
 ] as const;
 
-type TargetCollectionId = (typeof TARGET_COLLECTION_IDS)[number];
+type FieldCleanupStats = {
+  field: string;
+  scanned: number;
+  deletedDocs: number;
+  deletedFiles: number;
+  deletedNotifications: number;
+  errors: number;
+  missingIndexes: number;
+  durationMs: number;
+};
 
 type CollectionCleanupStats = {
   collectionId: TargetCollectionId;
@@ -57,6 +61,9 @@ type CollectionCleanupStats = {
   skippedFileDelete: number;
   fileDeleteErrors: number;
   docDeleteErrors: number;
+  missingIndexes: number;
+  durationMs: number;
+  byField: FieldCleanupStats[];
 };
 
 type InactiveUsersCleanupStats = {
@@ -81,6 +88,8 @@ type CleanupRunSummary = {
     skippedFileDelete: number;
     fileDeleteErrors: number;
     docDeleteErrors: number;
+    missingIndexes: number;
+    durationMs: number;
     deletedInactiveUsers: number;
     inactiveUserDeleteErrors: number;
   };
@@ -200,26 +209,6 @@ const toMillis = (value: unknown): number | null => {
   return null;
 };
 
-const getEffectiveExpirationMillis = (data: Record<string, unknown>): number | null => {
-  const orderedFields = [
-    "endDate",
-    "meetingDate",
-    "startDate",
-    "dueDate",
-    "date",
-    "scheduledAt",
-  ] as const;
-
-  for (const field of orderedFields) {
-    const millis = toMillis(data[field]);
-    if (millis !== null) {
-      return millis;
-    }
-  }
-
-  return null;
-};
-
 const getInactiveUserExpirationMillis = (data: Record<string, unknown>): number | null => {
   const orderedFields = [
     "disabledAt",
@@ -305,7 +294,9 @@ const deleteNotificationsByAssignmentIds = async (params: {
 
       while (true) {
         const snapshot = await adminDb
-          .collectionGroup("notifications")
+          .collection("congregations")
+          .doc(params.congregationId)
+          .collection("notifications")
           .where("assignmentId", "==", assignmentId)
           .limit(QUERY_PAGE_SIZE)
           .get();
@@ -357,13 +348,17 @@ const deleteRelatedNotificationsForMeeting = async (params: {
   try {
     const deletedByMetadata = await deleteQueryInBatches(
       adminDb
-        .collectionGroup("notifications")
+        .collection("congregations")
+        .doc(params.congregationId)
+        .collection("notifications")
         .where("metadata.meetingId", "==", params.meetingId)
     );
     const assignmentPrefix = `${params.meetingId}:`;
     const deletedByAssignmentId = await deleteQueryInBatches(
       adminDb
-        .collectionGroup("notifications")
+        .collection("congregations")
+        .doc(params.congregationId)
+        .collection("notifications")
         .where("assignmentId", ">=", assignmentPrefix)
         .where("assignmentId", "<", `${assignmentPrefix}\uf8ff`)
         .orderBy("assignmentId", "asc")
@@ -390,6 +385,7 @@ const cleanupCollectionGroup = async (params: {
   cutoffTimestamp: Timestamp;
   defaultBucketName: string;
 }): Promise<CollectionCleanupStats> => {
+  const collectionStartedAt = Date.now();
   const stats: CollectionCleanupStats = {
     collectionId: params.collectionId,
     scanned: 0,
@@ -399,6 +395,9 @@ const cleanupCollectionGroup = async (params: {
     skippedFileDelete: 0,
     fileDeleteErrors: 0,
     docDeleteErrors: 0,
+    missingIndexes: 0,
+    durationMs: 0,
+    byField: [],
   };
 
   logger.info("[scheduledDataCleanup] Iniciando limpieza de coleccion", {
@@ -408,29 +407,40 @@ const cleanupCollectionGroup = async (params: {
 
   const processedPaths = new Set<string>();
 
-  for (const dateField of DATE_FIELD_CANDIDATES) {
-    let cursor: QueryDocumentSnapshot | null = null;
+  for (const dateField of CLEANUP_SCHEMA[params.collectionId]) {
+    const fieldStartedAt = Date.now();
+    const filesBefore = stats.deletedFiles;
+    const notificationsBefore = stats.deletedNotifications;
+    const fieldStats: FieldCleanupStats = {
+      field: dateField,
+      scanned: 0,
+      deletedDocs: 0,
+      deletedFiles: 0,
+      deletedNotifications: 0,
+      errors: 0,
+      missingIndexes: 0,
+      durationMs: 0,
+    };
 
-    while (true) {
-      let queryRef = adminDb
-        .collectionGroup(params.collectionId)
-        .where(dateField, "<", params.cutoffTimestamp)
-        .orderBy(dateField, "asc")
-        .limit(QUERY_PAGE_SIZE);
+    try {
+      let cursor: QueryDocumentSnapshot | null = null;
+      while (true) {
+        let queryRef = adminDb
+          .collectionGroup(params.collectionId)
+          .where(dateField, "<", params.cutoffTimestamp)
+          .orderBy(dateField, "asc")
+          .limit(QUERY_PAGE_SIZE);
 
-      if (cursor) {
-        queryRef = queryRef.startAfter(cursor);
-      }
+        if (cursor) queryRef = queryRef.startAfter(cursor);
 
-      const snapshot = await queryRef.get();
+        const snapshot = await queryRef.get();
 
-      if (snapshot.empty) {
-        break;
-      }
+        if (snapshot.empty) break;
 
-      stats.scanned += snapshot.size;
+        stats.scanned += snapshot.size;
+        fieldStats.scanned += snapshot.size;
 
-      for (const docSnap of snapshot.docs) {
+        for (const docSnap of snapshot.docs) {
         if (processedPaths.has(docSnap.ref.path)) {
           continue;
         }
@@ -446,7 +456,7 @@ const cleanupCollectionGroup = async (params: {
         }
 
         const data = docSnap.data() as Record<string, unknown>;
-        const effectiveExpirationMillis = getEffectiveExpirationMillis(data);
+        const effectiveExpirationMillis = toMillis(data[dateField]);
 
         if (
           effectiveExpirationMillis === null ||
@@ -485,8 +495,10 @@ const cleanupCollectionGroup = async (params: {
           }
 
           stats.deletedDocs += 1;
+          fieldStats.deletedDocs += 1;
         } catch (error) {
           stats.docDeleteErrors += 1;
+          fieldStats.errors += 1;
           logger.error("[scheduledDataCleanup] Error eliminando documento", {
             docPath: docSnap.ref.path,
             collectionId: params.collectionId,
@@ -496,10 +508,30 @@ const cleanupCollectionGroup = async (params: {
         }
       }
 
-      cursor = snapshot.docs[snapshot.docs.length - 1];
+        cursor = snapshot.docs[snapshot.docs.length - 1];
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      fieldStats.errors += 1;
+      stats.docDeleteErrors += 1;
+      if (message.includes("FAILED_PRECONDITION") || message.includes("index")) {
+        fieldStats.missingIndexes += 1;
+        stats.missingIndexes += 1;
+      }
+      logger.error("[scheduledDataCleanup] Error en campo", {
+        collectionId: params.collectionId,
+        dateField,
+        error: message,
+      });
     }
+    fieldStats.deletedFiles = stats.deletedFiles - filesBefore;
+    fieldStats.deletedNotifications =
+      stats.deletedNotifications - notificationsBefore;
+    fieldStats.durationMs = Date.now() - fieldStartedAt;
+    stats.byField.push(fieldStats);
   }
 
+  stats.durationMs = Date.now() - collectionStartedAt;
   logger.info("[scheduledDataCleanup] Coleccion procesada", stats);
 
   return stats;
@@ -589,6 +621,8 @@ const buildRunSummary = (params: {
       acc.skippedFileDelete += current.skippedFileDelete;
       acc.fileDeleteErrors += current.fileDeleteErrors;
       acc.docDeleteErrors += current.docDeleteErrors;
+      acc.missingIndexes += current.missingIndexes;
+      acc.durationMs += current.durationMs;
       return acc;
     },
     {
@@ -599,6 +633,8 @@ const buildRunSummary = (params: {
       skippedFileDelete: 0,
       fileDeleteErrors: 0,
       docDeleteErrors: 0,
+      missingIndexes: 0,
+      durationMs: 0,
       deletedInactiveUsers: params.inactiveUsersStats.deletedUsers,
       inactiveUserDeleteErrors: params.inactiveUsersStats.deleteErrors,
     }
@@ -628,7 +664,7 @@ const updateCacheControlDocument = async (summary: CleanupRunSummary): Promise<v
       cleanupPolicy: {
         retention: "six-months",
         retentionMonths: RETENTION_MONTHS,
-        dateFields: DATE_FIELD_CANDIDATES,
+        dateFieldsByCollection: CLEANUP_SCHEMA,
         excludedPathParts: EXCLUDED_PATH_PARTS,
         preservedCollections: ["users activos", "roles", "configuraciones"],
         inactiveUsersDeletedAfterMonths: RETENTION_MONTHS,
@@ -659,7 +695,7 @@ export const scheduledDataCleanup = onSchedule(
       startedAt: startedAt.toISOString(),
       cutoffAt: cutoffAt.toISOString(),
       defaultBucketName,
-      targetCollections: TARGET_COLLECTION_IDS,
+      cleanupSchema: CLEANUP_SCHEMA,
     });
 
     const statsByCollection: CollectionCleanupStats[] = [];
@@ -687,6 +723,9 @@ export const scheduledDataCleanup = onSchedule(
           skippedFileDelete: 0,
           fileDeleteErrors: 0,
           docDeleteErrors: 1,
+          missingIndexes: 0,
+          durationMs: 0,
+          byField: [],
         });
       }
     }

@@ -1,9 +1,12 @@
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 export type NotificationCategory = 'platform' | 'cleaning' | 'hospitality';
 export type MeetingType = 'midweek' | 'weekend' | null;
 
 export interface NotificationMetadata {
+  meetingDate?: Timestamp | null;
+  meetingDateLabel?: string | null;
+  /** Legacy temporal: leer para UI, no usar como valor cronológico. */
   date?: string | null;
   meetingId?: string | null;
   meetingType?: MeetingType;
@@ -47,6 +50,7 @@ export interface AssignmentNotificationContext {
   congregationId: string | null;
   category: NotificationCategory;
   meetingType: MeetingType;
-  date: string | null;
+  meetingDate: Timestamp | null;
+  meetingDateLabel: string | null;
   sentBy: string | null;
 }

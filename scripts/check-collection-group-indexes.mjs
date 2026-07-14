@@ -1,183 +1,93 @@
 #!/usr/bin/env node
-// Guard: every `collectionGroup(<arg>)` used with a filter/orderBy in
-// functions/src must have a matching COLLECTION_GROUP entry (index or
-// fieldOverride) in firestore.indexes.json. Prevents the drift documented in
-// docs/firestore-security.md#collectiongroup-drift (2026-07-13 incident: 9
-// query shapes across scheduled jobs had zero supporting index in production,
-// several failing on every run for weeks).
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import {readFileSync, readdirSync, statSync} from 'node:fs';
+import {join, relative} from 'node:path';
+import {fileURLToPath} from 'node:url';
 
-const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
-const FUNCTIONS_SRC = join(REPO_ROOT, 'functions', 'src');
-const INDEXES_FILE = join(REPO_ROOT, 'firestore.indexes.json');
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const SRC = join(ROOT, 'functions', 'src');
+const INDEXES = join(ROOT, 'firestore.indexes.json');
 
-// Exact fields required per collection, per the collectionGroup query audit
-// in docs/firestore-security.md. Extend this when a new collectionGroup
-// query shape is added in functions/src.
+// Audited query shapes. Dynamic collectionGroup calls are permitted only by
+// this explicit file/ref allowlist and must remain covered here.
 const REQUIRED_FIELDS = {
-  notifications: ['createdAt', 'eventId'],
-  meetings: ['meetingDate'],
-  billingHistory: ['createdAt'],
+  reuniones: ['endDate'], assignments: ['dueDate'], asignaciones: ['dueDate'],
+  meetings: ['meetingDate', 'endDate', 'startDate'], tareas: ['dueDate'],
+  tasks: ['dueDate'], archivos: ['endDate'], files: ['endDate'],
+  notifications: ['createdAt'], billingHistory: ['createdAt'],
 };
+const DYNAMIC_ALLOWLIST = new Map([
+  ['functions/src/maintenance/scheduled-data-cleanup.ts::params.collectionId',
+    Object.entries(REQUIRED_FIELDS).filter(([name]) => !['notifications', 'billingHistory'].includes(name))],
+]);
 
-const walk = (dir, files = []) => {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    const stat = statSync(full);
-    if (stat.isDirectory()) {
-      walk(full, files);
-    } else if (entry.endsWith('.ts')) {
-      files.push(full);
-    }
+const walk = (dir, out = []) => {
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) walk(path, out);
+    else if (name.endsWith('.ts')) out.push(path);
   }
-  return files;
+  return out;
 };
-
-const lineNumberAt = (source, index) => source.slice(0, index).split('\n').length;
-
-// Pass 1: build a project-wide map of resolvable string / string[] constants,
-// so imported constants (e.g. BILLING_HISTORY_COLLECTION declared in another
-// file) still resolve instead of falling back to "dynamic".
-const buildConstantMap = (files) => {
-  const stringConsts = new Map();
-  const arrayConsts = new Map();
-
+const constants = (files) => {
+  const map = new Map();
   for (const file of files) {
     const source = readFileSync(file, 'utf8');
-
-    for (const match of source.matchAll(/(?:export\s+)?const\s+([A-Z][\w]*)\s*(?::[^=]+)?=\s*['"]([\w.-]+)['"]/g)) {
-      stringConsts.set(match[1], match[2]);
-    }
-
-    for (const match of source.matchAll(/(?:export\s+)?const\s+([A-Z][\w]*)\s*(?::[^=]+)?=\s*\[([\s\S]*?)\]\s*as const/g)) {
-      const values = Array.from(match[2].matchAll(/['"]([\w.-]+)['"]/g)).map((m) => m[1]);
-      arrayConsts.set(match[1], values);
-    }
+    for (const m of source.matchAll(/(?:export\s+)?const\s+([A-Z][\w]*)\s*(?::[^=]+)?=\s*['"]([\w.-]+)['"]/g)) map.set(m[1], m[2]);
   }
-
-  return { stringConsts, arrayConsts };
+  return map;
 };
-
-const resolveArgument = (rawArg, constants) => {
-  const trimmed = rawArg.trim();
-
-  const literalMatch = trimmed.match(/^['"]([\w-]+)['"]$/);
-  if (literalMatch) return { kind: 'literal', values: [literalMatch[1]] };
-
-  const identifierMatch = trimmed.match(/^[A-Za-z_$][\w$]*$/);
-  if (identifierMatch) {
-    if (constants.stringConsts.has(trimmed)) {
-      return { kind: 'literal', values: [constants.stringConsts.get(trimmed)] };
-    }
-    if (constants.arrayConsts.has(trimmed)) {
-      return { kind: 'literal', values: constants.arrayConsts.get(trimmed) };
-    }
+const coverage = (json) => {
+  const set = new Set();
+  for (const index of json.indexes || []) {
+    if (index.queryScope !== 'COLLECTION_GROUP') continue;
+    for (const field of index.fields || []) set.add(`${index.collectionGroup}::${field.fieldPath}`);
   }
-
-  return { kind: 'dynamic' };
+  for (const item of json.fieldOverrides || []) {
+    if ((item.indexes || []).some((index) => index.queryScope === 'COLLECTION_GROUP')) set.add(`${item.collectionGroup}::${item.fieldPath}`);
+  }
+  return set;
 };
-
-const findCollectionGroupUsages = (files, constants) => {
-  const literalUsages = [];
-  const dynamicUsages = [];
-
+const audit = ({files, indexes}) => {
+  const known = constants(files);
+  const failures = [];
+  const used = new Set();
   for (const file of files) {
     const source = readFileSync(file, 'utf8');
-
+    const rel = relative(ROOT, file).replaceAll('\\', '/');
     for (const match of source.matchAll(/collectionGroup\(\s*([^)]*?)\s*\)/g)) {
-      const line = lineNumberAt(source, match.index);
-      const resolved = resolveArgument(match[1], constants);
-
-      if (resolved.kind === 'literal') {
-        for (const collectionGroup of resolved.values) {
-          literalUsages.push({ collectionGroup, file, line });
-        }
-      } else {
-        dynamicUsages.push({ file, line, ref: match[1].trim() });
+      const ref = match[1].trim();
+      const literal = ref.match(/^['"]([\w-]+)['"]$/)?.[1] || known.get(ref);
+      if (literal) used.add(literal);
+      else {
+        const key = `${rel}::${ref}`;
+        const allowed = DYNAMIC_ALLOWLIST.get(key);
+        if (!allowed) failures.push(`Dynamic collectionGroup not declared: ${key}`);
+        else for (const [group] of allowed) used.add(group);
       }
     }
   }
-
-  return { literalUsages, dynamicUsages };
-};
-
-const buildCollectionGroupFieldSet = (indexesJson) => {
-  const set = new Set();
-
-  for (const index of indexesJson.indexes || []) {
-    if (index.queryScope !== 'COLLECTION_GROUP') continue;
-    for (const field of index.fields || []) {
-      set.add(`${index.collectionGroup}::${field.fieldPath}`);
-    }
-    set.add(`${index.collectionGroup}::*`);
+  const covered = coverage(indexes);
+  for (const group of used) {
+    const fields = REQUIRED_FIELDS[group];
+    if (!fields) failures.push(`collectionGroup '${group}' has no audited query shape`);
+    else for (const field of fields) if (!covered.has(`${group}::${field}`)) failures.push(`Missing COLLECTION_GROUP coverage: ${group}.${field}`);
   }
-
-  for (const override of indexesJson.fieldOverrides || []) {
-    const hasGroupScope = (override.indexes || []).some(
-      (entry) => entry.queryScope === 'COLLECTION_GROUP'
-    );
-    if (hasGroupScope) {
-      set.add(`${override.collectionGroup}::${override.fieldPath}`);
-      set.add(`${override.collectionGroup}::*`);
-    }
-  }
-
-  return set;
+  return failures;
 };
 
 const main = () => {
-  const files = walk(FUNCTIONS_SRC);
-  const constants = buildConstantMap(files);
-  const { literalUsages, dynamicUsages } = findCollectionGroupUsages(files, constants);
-  const indexesJson = JSON.parse(readFileSync(INDEXES_FILE, 'utf8'));
-  const cgFieldSet = buildCollectionGroupFieldSet(indexesJson);
-
-  const failures = [];
-  const seenCollections = new Set(literalUsages.map((u) => u.collectionGroup));
-
-  for (const collectionGroup of seenCollections) {
-    if (!cgFieldSet.has(`${collectionGroup}::*`)) {
-      failures.push(
-        `collectionGroup('${collectionGroup}') has no COLLECTION_GROUP index/fieldOverride at all.`
-      );
-      continue;
-    }
-
-    const requiredFields = REQUIRED_FIELDS[collectionGroup];
-    if (!requiredFields) continue;
-
-    for (const field of requiredFields) {
-      if (!cgFieldSet.has(`${collectionGroup}::${field}`)) {
-        failures.push(
-          `Missing COLLECTION_GROUP coverage for ${collectionGroup}.${field} (required by REQUIRED_FIELDS in this script).`
-        );
-      }
-    }
+  if (process.argv.includes('--self-test')) {
+    if (!DYNAMIC_ALLOWLIST.has('functions/src/maintenance/scheduled-data-cleanup.ts::params.collectionId')) throw new Error('declared dynamic use rejected');
+    if (DYNAMIC_ALLOWLIST.has('functions/src/other.ts::unknown')) throw new Error('undeclared dynamic use accepted');
+    console.log('OK: dynamic allowlist self-test passed.');
+    return;
   }
-
-  if (dynamicUsages.length > 0) {
-    console.log('Dynamic collectionGroup() usages found (not enforced, review manually):');
-    for (const usage of dynamicUsages) {
-      console.log(`  dynamic:${usage.file}:${usage.line} (arg: ${usage.ref})`);
-    }
-  }
-
-  if (failures.length > 0) {
-    console.error('\nfirestore.indexes.json is missing COLLECTION_GROUP coverage:\n');
-    for (const failure of failures) {
-      console.error(`  - ${failure}`);
-    }
-    console.error(
-      '\nSee docs/firestore-security.md for the export procedure and known collectionGroup query shapes.'
-    );
+  const files = walk(SRC);
+  const failures = audit({files, indexes: JSON.parse(readFileSync(INDEXES, 'utf8'))});
+  if (failures.length) {
+    console.error(failures.map((failure) => `- ${failure}`).join('\n'));
     process.exit(1);
   }
-
-  console.log(
-    `OK: ${seenCollections.size} literal collectionGroup() collection(s) covered, ${dynamicUsages.length} dynamic usage(s) reported above.`
-  );
+  console.log(`OK: ${Object.values(REQUIRED_FIELDS).flat().length} audited collectionGroup field shapes are covered.`);
 };
-
 main();

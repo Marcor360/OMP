@@ -28,8 +28,6 @@ const getNotificationCutoff = (now: Date): Date => {
   return cutoff;
 };
 
-const toDateKey = (date: Date): string => date.toISOString().slice(0, 10);
-
 const deleteSnapshot = async (
   snapshot: FirebaseFirestore.QuerySnapshot
 ): Promise<number> => {
@@ -91,34 +89,8 @@ export const scheduledNotificationsCleanup = onSchedule(
       }
     }
 
-    while (true) {
-      const snapshot = await adminDb
-        .collectionGroup(NOTIFICATIONS_COLLECTION_ID)
-        .where("metadata.date", "<", toDateKey(cutoffAt))
-        .orderBy("metadata.date", "asc")
-        .limit(QUERY_PAGE_SIZE)
-        .get();
-
-      if (snapshot.empty) {
-        break;
-      }
-
-      scanned += snapshot.size;
-
-      try {
-        deleted += await deleteSnapshot(snapshot);
-      } catch (error) {
-        errors += snapshot.size;
-        logger.error(
-          "[scheduledNotificationsCleanup] Error eliminando lote por fecha de asignacion",
-          {
-            batchSize: snapshot.size,
-            error: error instanceof Error ? error.message : String(error),
-          }
-        );
-        break;
-      }
-    }
+    // Datos legacy con metadata.date localizada se eliminan progresivamente por
+    // createdAt. Las nuevas notificaciones guardan metadata.meetingDate Timestamp.
 
     const finishedAt = new Date();
     const summary: NotificationCleanupSummary = {

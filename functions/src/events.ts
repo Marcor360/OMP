@@ -475,8 +475,13 @@ export const notifyEventChanges = onDocumentWritten(
   async (event) => {
     if (event.data?.before.exists && !event.data.after.exists) {
       const eventId = event.params.eventId;
-      if (eventId) {
-        const deletedNotifications = await deleteRelatedNotifications(eventId);
+      const before = event.data.before.data() as Record<string, unknown>;
+      const congregationId = asNonEmptyString(before.congregationId);
+      if (eventId && congregationId) {
+        const deletedNotifications = await deleteRelatedNotifications(
+          congregationId,
+          eventId
+        );
         logger.info('Event related notifications deleted after manual removal', {
           eventId,
           deletedNotifications,
@@ -536,12 +541,17 @@ const deleteQueryPage = async (
   return snapshot.size;
 };
 
-const deleteRelatedNotifications = async (eventId: string): Promise<number> => {
+const deleteRelatedNotifications = async (
+  congregationId: string,
+  eventId: string
+): Promise<number> => {
   let deleted = 0;
 
   while (true) {
     const snap = await adminDb
-      .collectionGroup(NOTIFICATIONS_COLLECTION)
+      .collection('congregations')
+      .doc(congregationId)
+      .collection(NOTIFICATIONS_COLLECTION)
       .where('eventId', '==', eventId)
       .limit(PAGE_SIZE)
       .get();
@@ -578,7 +588,18 @@ export const scheduledEventsCleanup = onSchedule(
       if (snap.empty) break;
 
       for (const docSnap of snap.docs) {
-        deletedNotifications += await deleteRelatedNotifications(docSnap.id);
+        const data = docSnap.data() as Record<string, unknown>;
+        const congregationId = asNonEmptyString(data.congregationId);
+        if (!congregationId) {
+          logger.warn('Skipping event cleanup without congregationId', {
+            eventId: docSnap.id,
+          });
+          continue;
+        }
+        deletedNotifications += await deleteRelatedNotifications(
+          congregationId,
+          docSnap.id
+        );
         await docSnap.ref.delete();
         deletedEvents += 1;
       }

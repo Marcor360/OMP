@@ -151,7 +151,8 @@ const notifySingleUser = async (params: {
     assignmentId: params.context.assignmentId,
     sentBy: params.context.sentBy,
     metadata: {
-      date: params.context.date,
+      meetingDate: params.context.meetingDate,
+      meetingDateLabel: params.context.meetingDateLabel,
       meetingId: params.context.meetingId,
       meetingType: params.context.meetingType,
       role: params.role,
@@ -166,7 +167,7 @@ const notifySingleUser = async (params: {
     assignmentId: params.context.assignmentId,
     category: params.context.category,
     meetingType: params.context.meetingType,
-    date: params.context.date,
+    date: params.context.meetingDateLabel,
   });
 };
 
@@ -198,7 +199,7 @@ const processAssignmentWrite = async (
 
   const message = buildNotificationMessage({
     category: context.category,
-    date: context.date,
+    date: context.meetingDateLabel,
     meetingType: context.meetingType,
   });
 
