@@ -15,6 +15,7 @@ import {
   createAssignment,
   getAssignmentsByWeek,
   subscribeToAssignments,
+  type SubscribeToAssignmentsOptions,
 } from '@/src/services/assignments/assignments-service';
 
 jest.mock('@/src/services/repositories/firestore/firestore-assignment-repository', () => ({
@@ -63,6 +64,7 @@ class FakeAssignmentRepository implements AssignmentRepository {
       (assignments: Assignment[]) => void,
       AssignmentFilters | undefined,
       ((error: unknown) => void) | undefined,
+      SubscribeToAssignmentsOptions | undefined,
     ]
   >(() => () => undefined);
 
@@ -125,9 +127,10 @@ class FakeAssignmentRepository implements AssignmentRepository {
     congregationId: string,
     callback: (assignments: Assignment[]) => void,
     filters?: AssignmentFilters,
-    onError?: (error: unknown) => void
+    onError?: (error: unknown) => void,
+    options?: SubscribeToAssignmentsOptions
   ): Unsubscribe {
-    return this.subscribeMock(congregationId, callback, filters, onError);
+    return this.subscribeMock(congregationId, callback, filters, onError, options);
   }
 }
 
@@ -198,6 +201,30 @@ describe('assignments-service repository seam', () => {
     subscribeToAssignments('c1', callback, filters, onError);
 
     expect(repo.subscribeMock).toHaveBeenCalledTimes(1);
-    expect(repo.subscribeMock).toHaveBeenCalledWith('c1', callback, filters, onError);
+    expect(repo.subscribeMock).toHaveBeenCalledWith(
+      'c1',
+      callback,
+      filters,
+      onError,
+      undefined
+    );
+  });
+
+  it('subscribeToAssignments delegates custom subscription options', () => {
+    const callback = jest.fn<void, [Assignment[]]>();
+    const options: SubscribeToAssignmentsOptions = {
+      windowMonthsBack: 6,
+      maxMeetings: 25,
+    };
+
+    subscribeToAssignments('c1', callback, undefined, undefined, options);
+
+    expect(repo.subscribeMock).toHaveBeenCalledWith(
+      'c1',
+      callback,
+      undefined,
+      undefined,
+      options
+    );
   });
 });

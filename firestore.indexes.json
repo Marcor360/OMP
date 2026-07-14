@@ -287,5 +287,114 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "billingHistory",
+      "fieldPath": "createdAt",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "meetings",
+      "fieldPath": "meetingDate",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "meetings",
+      "fieldPath": "endDate",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "fieldPath": "createdAt",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "fieldPath": "eventId",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reuniones",
+      "fieldPath": "endDate",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "assignments",
+      "fieldPath": "endDate",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "asignaciones",
+      "fieldPath": "endDate",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tareas",
+      "fieldPath": "endDate",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tasks",
+      "fieldPath": "endDate",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "archivos",
+      "fieldPath": "endDate",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "files",
+      "fieldPath": "endDate",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    }
+  ]
 }

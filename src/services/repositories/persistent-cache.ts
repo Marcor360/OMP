@@ -1,5 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import {
+  getPersistentBlobStore,
+  type PersistentBlobStore,
+} from '@/src/services/repositories/ports/persistent-blob-store';
 import { createLogger } from '@/src/utils/logger';
 
 type PersistentCacheEntry<T> = {
@@ -19,15 +21,21 @@ type PersistentCacheStoredEntry = {
   cycleKey?: unknown;
 };
 
-const PERSISTENT_CACHE_PREFIX = 'omp:persistent-cache:';
-const PERSISTENT_CACHE_META_KEY = `${PERSISTENT_CACHE_PREFIX}meta`;
-const CACHE_SCHEMA_VERSION = 1;
-const MAX_PERSISTENT_CACHE_ENTRIES = 300;
-const MAX_PERSISTENT_CACHE_ENTRY_BYTES = 250 * 1024;
+const PERSISTENT_CACHE_META_KEY = 'meta';
+// v2: backend por plataforma (filesystem en nativo); el bump fuerza reset limpio del ciclo.
+const CACHE_SCHEMA_VERSION = 2;
 
 const log = createLogger('persistent-cache');
+let store = getPersistentBlobStore();
 
 let initializationPromise: Promise<void> | null = null;
+
+export const __setPersistentBlobStoreForTests = (
+  nextStore: PersistentBlobStore
+): void => {
+  store = nextStore;
+  initializationPromise = null;
+};
 
 export const getAnnualCacheCycleKey = (date = new Date()): string => {
   const year = date.getFullYear();
@@ -58,11 +66,6 @@ const debugPersistentCache = (message: string, key?: string): void => {
     log.debug(`[persistent-cache] ${message}${key ? ` ${key}` : ''}`);
   }
 };
-
-const toStorageKey = (key: string): string => `${PERSISTENT_CACHE_PREFIX}${key}`;
-
-const isPersistentCacheStorageKey = (key: string): boolean =>
-  key.startsWith(PERSISTENT_CACHE_PREFIX);
 
 const isMetaStorageKey = (key: string): boolean => key === PERSISTENT_CACHE_META_KEY;
 
@@ -167,8 +170,7 @@ const estimateSerializedBytes = (value: string): number => {
 
 const getPersistentStorageKeys = async (): Promise<string[]> => {
   try {
-    const keys = await AsyncStorage.getAllKeys();
-    return keys.filter(isPersistentCacheStorageKey);
+    return await store.getAllKeys();
   } catch (error) {
     warnPersistentCacheError('getAllKeys', error);
     return [];
@@ -178,9 +180,9 @@ const getPersistentStorageKeys = async (): Promise<string[]> => {
 const enforcePersistentCacheLimit = async (): Promise<void> => {
   try {
     const keys = (await getPersistentStorageKeys()).filter((key) => !isMetaStorageKey(key));
-    if (keys.length <= MAX_PERSISTENT_CACHE_ENTRIES) return;
+    if (keys.length <= store.maxEntries) return;
 
-    const pairs = await AsyncStorage.multiGet(keys);
+    const pairs = await store.multiGet(keys);
     const entries = pairs.map(([storageKey, raw]) => {
       const entry = parseJson<PersistentCacheStoredEntry>(raw);
       const updatedAt = typeof entry?.updatedAt === 'number' ? entry.updatedAt : 0;
@@ -188,11 +190,11 @@ const enforcePersistentCacheLimit = async (): Promise<void> => {
     });
     const keysToRemove = entries
       .sort((a, b) => a.updatedAt - b.updatedAt)
-      .slice(0, Math.max(0, entries.length - MAX_PERSISTENT_CACHE_ENTRIES))
+      .slice(0, Math.max(0, entries.length - store.maxEntries))
       .map((entry) => entry.storageKey);
 
     if (keysToRemove.length > 0) {
-      await AsyncStorage.multiRemove(keysToRemove);
+      await store.removeItems(keysToRemove);
       debugPersistentCache('limit-pruned', String(keysToRemove.length));
     }
   } catch (error) {
@@ -205,7 +207,7 @@ export const clearAllPersistentCache = async (): Promise<void> => {
     const keys = await getPersistentStorageKeys();
 
     if (keys.length > 0) {
-      await AsyncStorage.multiRemove(keys);
+      await store.removeItems(keys);
     }
   } catch (error) {
     warnPersistentCacheError('clear all', error);
@@ -221,7 +223,7 @@ export const initializePersistentCacheCycle = async (): Promise<void> => {
     try {
       const currentCycleKey = getAnnualCacheCycleKey();
       const meta = parseJson<PersistentCacheMeta>(
-        await AsyncStorage.getItem(PERSISTENT_CACHE_META_KEY)
+        await store.getItem(PERSISTENT_CACHE_META_KEY)
       );
       const shouldReset =
         meta?.cycleKey !== currentCycleKey ||
@@ -232,7 +234,7 @@ export const initializePersistentCacheCycle = async (): Promise<void> => {
         debugPersistentCache('annual reset', currentCycleKey);
       }
 
-      await AsyncStorage.setItem(
+      await store.setItem(
         PERSISTENT_CACHE_META_KEY,
         JSON.stringify({
           cycleKey: currentCycleKey,
@@ -258,13 +260,12 @@ export const getPersistentCachedValue = async <T>(
     await initializePersistentCacheCycle();
 
     const normalizedKey = normalizeLayerCacheKey(key);
-    const storageKey = toStorageKey(normalizedKey);
-    const entry = parseJson<PersistentCacheEntry<T>>(await AsyncStorage.getItem(storageKey));
+    const entry = parseJson<PersistentCacheEntry<T>>(await store.getItem(normalizedKey));
     const currentCycleKey = getAnnualCacheCycleKey();
 
     if (!entry || entry.cycleKey !== currentCycleKey) {
       if (entry) {
-        await AsyncStorage.removeItem(storageKey);
+        await store.removeItems([normalizedKey]);
       }
       debugPersistentCache('miss', normalizedKey);
       return undefined;
@@ -276,7 +277,7 @@ export const getPersistentCachedValue = async <T>(
       maxAgeMs > 0 &&
       Date.now() - entry.updatedAt > maxAgeMs
     ) {
-      await AsyncStorage.removeItem(storageKey);
+      await store.removeItems([normalizedKey]);
       debugPersistentCache('expired', normalizedKey);
       return undefined;
     }
@@ -304,15 +305,15 @@ export const setPersistentCachedValue = async <T>(
     };
     const serialized = JSON.stringify(entry);
 
-    if (estimateSerializedBytes(serialized) > MAX_PERSISTENT_CACHE_ENTRY_BYTES) {
+    if (estimateSerializedBytes(serialized) > store.maxEntryBytes) {
       warnPersistentCacheError(
         'skip too large',
-        `${normalizedKey} exceeds ${MAX_PERSISTENT_CACHE_ENTRY_BYTES} bytes`
+        `${normalizedKey} exceeds ${store.maxEntryBytes} bytes`
       );
       return;
     }
 
-    await AsyncStorage.setItem(toStorageKey(normalizedKey), serialized);
+    await store.setItem(normalizedKey, serialized);
     await enforcePersistentCacheLimit();
   } catch (error) {
     warnPersistentCacheError('set', error);
@@ -322,9 +323,9 @@ export const setPersistentCachedValue = async <T>(
 export const clearPersistentCachedValue = async (key: string): Promise<void> => {
   try {
     const normalizedKey = normalizeLayerCacheKey(key);
-    const keys = Array.from(new Set([toStorageKey(key), toStorageKey(normalizedKey)]));
+    const keys = Array.from(new Set([key, normalizedKey]));
 
-    await AsyncStorage.multiRemove(keys);
+    await store.removeItems(keys);
   } catch (error) {
     warnPersistentCacheError('clear value', error);
   }
@@ -335,9 +336,7 @@ export const clearPersistentCacheByPrefix = async (prefix: string): Promise<void
 
   try {
     const normalizedPrefix = normalizeLayerCachePrefix(prefix);
-    const storagePrefixes = Array.from(
-      new Set([toStorageKey(prefix), toStorageKey(normalizedPrefix)])
-    );
+    const storagePrefixes = Array.from(new Set([prefix, normalizedPrefix]));
     const shouldRemoveNormalizedUsersQuery =
       prefix === 'query:users/' || prefix === 'query:users';
 
@@ -350,7 +349,7 @@ export const clearPersistentCacheByPrefix = async (prefix: string): Promise<void
       );
 
     if (keysToRemove.length > 0) {
-      await AsyncStorage.multiRemove(keysToRemove);
+      await store.removeItems(keysToRemove);
     }
   } catch (error) {
     warnPersistentCacheError('clear prefix', error);

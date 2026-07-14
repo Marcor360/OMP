@@ -63,6 +63,8 @@ jobs:
           java-version: '17'
       - name: Install
         run: npm ci
+      - name: Guard índices collectionGroup
+        run: npm run check:indexes
       - name: Resolve firebase-tools version
         id: ft
         run: echo "version=$(node -p "require('firebase-tools/package.json').version")" >> "$GITHUB_OUTPUT"

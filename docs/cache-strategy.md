@@ -12,7 +12,7 @@ Firestore Rules y Cloud Functions siguen siendo la autoridad real. El cache solo
 `firestore-cache-first.ts` lee en este orden:
 
 1. Memoria de sesion.
-2. AsyncStorage persistente.
+2. Cache persistente por plataforma.
 3. Cache local de Firestore.
 4. Servidor Firestore.
 
@@ -20,7 +20,16 @@ Si `forceServer` es `true`, no se devuelve memoria persistente como resultado pr
 
 ## Cache Persistente
 
-El cache persistente usa AsyncStorage con el prefijo:
+## Backend Por Plataforma
+
+El backend persistente se resuelve por plataforma mediante `PersistentBlobStore`:
+
+- Web conserva AsyncStorage con el prefijo `omp:persistent-cache:` y los mismos límites históricos.
+- Android e iOS guardan JSON asíncrono en `documentDirectory/omp-persistent-cache/`, dentro del sandbox privado de la app. Un `manifest.json` mantiene el índice de claves lógicas y fechas de actualización.
+
+El almacenamiento nativo usa `expo-file-system/legacy` y no requiere permisos de almacenamiento compartido o externo. Los fallos y manifests corruptos degradan a un cache miss; nunca bloquean el uso de Firestore.
+
+En web, el cache persistente usa AsyncStorage con el prefijo:
 
 ```text
 omp:persistent-cache:
@@ -46,14 +55,14 @@ La metadata incluye `schemaVersion`. Si cambia la version de esquema, la app lim
 
 ## Limites
 
-El cache persistente esta acotado:
+El cache persistente esta acotado por plataforma:
 
-- Maximo 300 entradas persistentes.
-- Maximo 250 KB aproximados por entrada.
+- Web: máximo 300 entradas y 250 KB aproximados por entrada.
+- Android/iOS: máximo 500 entradas y 2 MB aproximados por entrada.
 - Si se supera el limite de entradas, se borran primero las mas antiguas por `updatedAt`.
 - Si una entrada supera el limite de tamano, no se guarda.
 
-AsyncStorage es una optimizacion. Si falla una lectura, escritura o limpieza de cache, la app debe continuar usando memoria, Firestore local o servidor.
+La persistencia es una optimización. Si falla una lectura, escritura o limpieza, la app debe continuar usando memoria, Firestore local o servidor.
 
 ## Ciclo Anual
 

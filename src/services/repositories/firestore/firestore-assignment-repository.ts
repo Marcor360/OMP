@@ -52,6 +52,16 @@ import type {
   UpdateAssignmentDTO,
 } from '@/src/types/assignment';
 
+const SUBSCRIBE_WINDOW_MONTHS_BACK = 3;
+const SUBSCRIBE_MAX_MEETINGS = 60;
+
+export interface SubscribeToAssignmentsOptions {
+  /** Meses hacia atrás incluidos en la ventana (default 3). El futuro entra completo. */
+  windowMonthsBack?: number;
+  /** Tope de reuniones escuchadas simultáneamente (default 60). */
+  maxMeetings?: number;
+}
+
 type SerializableTimestamp = {
   seconds: number;
   nanoseconds: number;
@@ -556,7 +566,8 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     congregationId: string,
     callback: (assignments: Assignment[]) => void,
     filters,
-    onError?: (error: unknown) => void
+    onError?: (error: unknown) => void,
+    options?: SubscribeToAssignmentsOptions
   ) => {
     const assignmentsByMeeting = new Map<string, Assignment[]>();
     const assignmentsUnsubs = new Map<string, () => void>();
@@ -581,8 +592,19 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
       assignmentsByMeeting.delete(meetingId);
     };
 
+    const windowStart = new Date();
+    windowStart.setMonth(
+      windowStart.getMonth() -
+        (options?.windowMonthsBack ?? SUBSCRIBE_WINDOW_MONTHS_BACK)
+    );
+
     const meetingsUnsub = onSnapshot(
-      query(congregationMeetingsCollectionRef(congregationId), orderBy('startDate', 'desc')),
+      query(
+        congregationMeetingsCollectionRef(congregationId),
+        where('startDate', '>=', Timestamp.fromDate(windowStart)),
+        orderBy('startDate', 'desc'),
+        limit(options?.maxMeetings ?? SUBSCRIBE_MAX_MEETINGS)
+      ),
       (meetingsSnap) => {
         const nextMeetingIds = new Set(meetingsSnap.docs.map((meetingDoc) => meetingDoc.id));
 

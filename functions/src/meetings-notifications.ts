@@ -26,6 +26,17 @@ type PublicationStatus = 'draft' | 'published';
 
 const NOTIFICATION_REGION = 'us-central1';
 const NOTIFICATION_TIME_ZONE = 'America/Mexico_City';
+const REMINDER_CONCURRENCY = 5;
+
+const mapWithConcurrency = async <T>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> => {
+  for (let i = 0; i < items.length; i += limit) {
+    await Promise.all(items.slice(i, i + limit).map(worker));
+  }
+};
 
 const normalizeText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -409,17 +420,29 @@ export const sendMeetingReminderThreeDaysBefore = onSchedule(
       targetDay: targetDate.toISOString().slice(0, 10),
     });
 
-    for (const meetingDoc of meetingsSnap.docs) {
+    await mapWithConcurrency(
+      meetingsSnap.docs,
+      REMINDER_CONCURRENCY,
+      async (meetingDoc) => {
       const context = resolveMeetingContextFromPath(meetingDoc.ref.path);
       if (!context) {
-        continue;
+        return;
       }
 
-      await processReminderForMeeting({
-        congregationId: context.congregationId,
-        meetingId: context.meetingId,
-        meetingData: meetingDoc.data() as Record<string, unknown>,
-      });
-    }
+        try {
+          await processReminderForMeeting({
+            congregationId: context.congregationId,
+            meetingId: context.meetingId,
+            meetingData: meetingDoc.data() as Record<string, unknown>,
+          });
+        } catch (error) {
+          logger.error('Error procesando recordatorio de reunion', {
+            congregationId: context.congregationId,
+            meetingId: context.meetingId,
+            error,
+          });
+        }
+      }
+    );
   }
 );

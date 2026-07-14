@@ -1,32 +1,29 @@
 /* eslint-disable import/first */
+import type { PersistentBlobStore } from '@/src/services/repositories/ports/persistent-blob-store';
+
 const mockStorage = new Map<string, string>();
-
-jest.mock('@react-native-async-storage/async-storage', () => ({
-  __esModule: true,
-  default: {
-    getItem: jest.fn((key: string) => Promise.resolve(mockStorage.get(key) ?? null)),
-    setItem: jest.fn((key: string, value: string) => {
-      mockStorage.set(key, value);
-      return Promise.resolve();
-    }),
-    removeItem: jest.fn((key: string) => {
-      mockStorage.delete(key);
-      return Promise.resolve();
-    }),
-    getAllKeys: jest.fn(() => Promise.resolve(Array.from(mockStorage.keys()))),
-    multiRemove: jest.fn((keys: string[]) => {
-      keys.forEach((key) => mockStorage.delete(key));
-      return Promise.resolve();
-    }),
-    multiGet: jest.fn((keys: string[]) =>
-      Promise.resolve(keys.map((key) => [key, mockStorage.get(key) ?? null]))
-    ),
-  },
-}));
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
+const mockStore: PersistentBlobStore = {
+  maxEntryBytes: 250 * 1024,
+  maxEntries: 300,
+  getItem: jest.fn((key: string) => Promise.resolve(mockStorage.get(key) ?? null)),
+  setItem: jest.fn((key: string, value: string) => {
+    mockStorage.set(key, value);
+    return Promise.resolve();
+  }),
+  removeItems: jest.fn((keys: string[]) => {
+    keys.forEach((key) => mockStorage.delete(key));
+    return Promise.resolve();
+  }),
+  getAllKeys: jest.fn(() =>
+    Promise.resolve(Array.from(mockStorage.keys()).filter((key) => key !== 'external:key'))
+  ),
+  multiGet: jest.fn((keys: string[]) =>
+    Promise.resolve(keys.map((key) => [key, mockStorage.get(key) ?? null]))
+  ),
+};
 
 import {
+  __setPersistentBlobStoreForTests,
   buildCongregationCacheKey,
   buildUserCacheKey,
   clearAllPersistentCache,
@@ -41,11 +38,16 @@ describe('persistent cache', () => {
   beforeEach(async () => {
     mockStorage.clear();
     jest.clearAllMocks();
+    Object.defineProperty(mockStore, 'maxEntryBytes', {
+      configurable: true,
+      value: 250 * 1024,
+    });
+    Object.defineProperty(mockStore, 'maxEntries', {
+      configurable: true,
+      value: 300,
+    });
+    __setPersistentBlobStoreForTests(mockStore);
     await clearAllPersistentCache();
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
   });
 
   it('calculates annual cycles from September to August', () => {
@@ -62,7 +64,7 @@ describe('persistent cache', () => {
   });
 
   it('stores, reads and clears a value without touching external keys', async () => {
-    await AsyncStorage.setItem('external:key', 'keep');
+    mockStorage.set('external:key', 'keep');
     await setPersistentCachedValue('doc:users/u1', { name: 'Marco' });
 
     await expect(getPersistentCachedValue<{ name: string }>('doc:users/u1')).resolves.toEqual({
@@ -71,17 +73,21 @@ describe('persistent cache', () => {
 
     await clearPersistentCachedValue('doc:users/u1');
     await expect(getPersistentCachedValue('doc:users/u1')).resolves.toBeUndefined();
-    await expect(AsyncStorage.getItem('external:key')).resolves.toBe('keep');
+    expect(mockStorage.get('external:key')).toBe('keep');
   });
 
   it('expires values by max age', async () => {
-    jest.spyOn(Date, 'now').mockReturnValueOnce(1_000).mockReturnValueOnce(5_000);
+    const dateNowSpy = jest
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(5_000);
 
     await setPersistentCachedValue('query:dashboard-summary/c1', { count: 1 });
 
     await expect(
       getPersistentCachedValue('query:dashboard-summary/c1', 1_000)
     ).resolves.toBeUndefined();
+    dateNowSpy.mockRestore();
   });
 
   it('clears normalized congregation prefixes only', async () => {
@@ -92,5 +98,26 @@ describe('persistent cache', () => {
 
     await expect(getPersistentCachedValue('query:meetings/c1/week/current')).resolves.toBeUndefined();
     await expect(getPersistentCachedValue('query:meetings/c2/week/current')).resolves.toEqual(['m2']);
+  });
+
+  it('persists and recovers a 500 KB entry with native limits', async () => {
+    Object.defineProperty(mockStore, 'maxEntryBytes', { value: 2 * 1024 * 1024 });
+    const payload = 'n'.repeat(500 * 1024);
+
+    await setPersistentCachedValue('query:meetings/c1/large', payload);
+
+    await expect(getPersistentCachedValue('query:meetings/c1/large')).resolves.toBe(payload);
+  });
+
+  it('discards a 500 KB entry with web limits', async () => {
+    const payload = 'w'.repeat(500 * 1024);
+
+    await setPersistentCachedValue('query:meetings/c1/large', payload);
+
+    await expect(getPersistentCachedValue('query:meetings/c1/large')).resolves.toBeUndefined();
+    expect(mockStore.setItem).not.toHaveBeenCalledWith(
+      'congregation:c1:query:meetings/large',
+      expect.stringContaining(payload)
+    );
   });
 });

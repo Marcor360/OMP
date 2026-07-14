@@ -1,6 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
-import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/src/config/firebase/firebase';
 import { loginWithEmail, logout } from '@/src/services/auth-service';
 import { clearLocalSessionData } from '@/src/services/session/session-cleanup';
@@ -10,10 +11,16 @@ import { createLogger } from '@/src/utils/logger';
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const authLogger = createLogger('AuthProvider');
 
-// Tiempo de inactividad antes de cerrar sesión automáticamente (15 minutos en ms)
-const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
+// Tiempo real de inactividad antes de cerrar sesión (única fuente de verdad).
+const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
+// Clave de persistencia del último momento de actividad (wall clock, ms epoch).
+const LAST_ACTIVITY_STORAGE_KEY = 'omp:session:last-activity-at';
+// Throttle de escritura a AsyncStorage (no escribir en cada mousemove).
+const ACTIVITY_PERSIST_THROTTLE_MS = 30 * 1000;
+// Tick de verificación mientras la app está viva en primer plano.
+const EXPIRY_CHECK_INTERVAL_MS = 60 * 1000;
 
-// Eventos de actividad del usuario que reinician el timer (solo web)
+// Eventos de actividad del usuario que actualizan la marca (solo web)
 const WEB_ACTIVITY_EVENTS = [
   'mousemove',
   'mousedown',
@@ -27,92 +34,145 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
-  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   // Referencia a usuario para poder accederla desde event listeners sin closures stale
   const userRef = useRef<User | null>(null);
-
+  const lastActivityRef = useRef<number>(0);
+  const lastPersistedRef = useRef<number>(0);
+  const expiryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Mantener userRef sincronizado con el state
   useEffect(() => {
     userRef.current = user;
   }, [user]);
 
-  // Reiniciar el timer de inactividad
-  const resetInactivityTimer = () => {
-    if (!userRef.current) return;
-
-    if (inactivityTimer.current) {
-      clearTimeout(inactivityTimer.current);
+  const clearExpiryInterval = () => {
+    if (expiryIntervalRef.current) {
+      clearInterval(expiryIntervalRef.current);
+      expiryIntervalRef.current = null;
     }
-
-    inactivityTimer.current = setTimeout(async () => {
-      // Cerrar sesión por inactividad
-      await clearLocalSessionData();
-      await logout();
-    }, INACTIVITY_TIMEOUT);
   };
 
-  // Limpiar el timer
-  const clearInactivityTimer = () => {
-    if (inactivityTimer.current) {
-      clearTimeout(inactivityTimer.current);
-      inactivityTimer.current = null;
+  const persistLastActivity = async (at: number, force = false) => {
+    if (!force && at - lastPersistedRef.current < ACTIVITY_PERSIST_THROTTLE_MS) return;
+    lastPersistedRef.current = at;
+    try {
+      await AsyncStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, String(at));
+    } catch (error) {
+      authLogger.warn('No se pudo persistir last-activity', error);
     }
+  };
+
+  const touchActivity = (force = false) => {
+    if (!userRef.current) return;
+    const now = Date.now();
+    lastActivityRef.current = now;
+    void persistLastActivity(now, force);
+  };
+
+  const readPersistedLastActivity = async (): Promise<number | null> => {
+    try {
+      const raw = await AsyncStorage.getItem(LAST_ACTIVITY_STORAGE_KEY);
+      const parsed = raw ? Number(raw) : NaN;
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const clearPersistedLastActivity = async () => {
+    try {
+      await AsyncStorage.removeItem(LAST_ACTIVITY_STORAGE_KEY);
+    } catch {
+      // noop
+    }
+  };
+
+  const forceLogoutByInactivity = async () => {
+    authLogger.info('Sesión cerrada por inactividad (wall-clock)');
+    clearExpiryInterval();
+    await clearPersistedLastActivity();
+    await clearLocalSessionData();
+    await logout();
+  };
+
+  // Verifica expiración leyendo la mayor marca conocida (memoria vs storage).
+  // Leer storage cubre multi-pestaña en web: actividad en la pestaña A cuenta para la B.
+  const checkExpiry = async (source: string): Promise<boolean> => {
+    if (!userRef.current) return false;
+    const persisted = await readPersistedLastActivity();
+    const last = Math.max(lastActivityRef.current, persisted ?? 0);
+    if (last === 0) {
+      touchActivity(true);
+      return false;
+    }
+    const elapsed = Date.now() - last;
+    if (elapsed > INACTIVITY_TIMEOUT_MS) {
+      authLogger.info(`Inactividad detectada (${source}): ${Math.round(elapsed / 1000)}s`);
+      await forceLogoutByInactivity();
+      return true;
+    }
+    return false;
   };
 
   // Escuchar cambios en el estado de autenticación
   useEffect(() => {
     authLogger.debug('Iniciando onAuthStateChanged listener');
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       authLogger.debug('onAuthStateChanged fired', firebaseUser?.uid ?? 'null');
 
-      setUser(firebaseUser);
       userRef.current = firebaseUser;
-      setLoading(false);
       setAuthError(null);
-
 
       if (firebaseUser) {
         authLogger.info('Usuario autenticado', firebaseUser.uid);
-        resetInactivityTimer();
+        const expired = await checkExpiry('auth-restore');
+        if (expired) return;
+        touchActivity(true);
+        clearExpiryInterval();
+        expiryIntervalRef.current = setInterval(() => {
+          void checkExpiry('tick');
+        }, EXPIRY_CHECK_INTERVAL_MS);
       } else {
         authLogger.info('Sin sesion activa');
-        clearInactivityTimer();
+        clearExpiryInterval();
+        lastActivityRef.current = 0;
+        lastPersistedRef.current = 0;
+        void clearPersistedLastActivity();
         void clearLocalSessionData();
       }
+
+      setUser(firebaseUser);
+      setLoading(false);
     });
 
     return () => {
       authLogger.debug('Limpiando onAuthStateChanged listener');
+      clearExpiryInterval();
       unsubscribe();
     };
   }, []);
 
-  // Web: registrar eventos de actividad del usuario automáticamente
-  // El timer corre incluso si la pestaña está oculta (dejar pestaña abierta cuenta como inactividad)
+  // Web: persistir actividad y comprobar el tiempo real transcurrido al volver a la pestaña.
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
     const handleActivity = () => {
-      if (userRef.current) resetInactivityTimer();
+      touchActivity();
     };
 
-    // Agregar listeners de actividad
     WEB_ACTIVITY_EVENTS.forEach((event) => {
       window.addEventListener(event, handleActivity, { passive: true });
     });
 
-    // Page Visibility API: si el usuario regresa a la pestaña, reiniciar timer
-    // Si la pestaña lleva oculta más de INACTIVITY_TIMEOUT → logout automático ya ocurrió
+    // Al volver, comprobar expiración antes de registrar actividad.
     const handleVisibilityChange = () => {
       if (!document.hidden && userRef.current) {
-        // El usuario regresó a la pestaña → se considera actividad
-        resetInactivityTimer();
+        void checkExpiry('web-visible').then((expired) => {
+          if (!expired) touchActivity();
+        });
       }
-      // Si la pestaña se oculta, el timer SIGUE corriendo (no lo limpiamos)
-      // Esto asegura que si dejan la pestaña abierta y no regresan, se cierra sesión
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -125,20 +185,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []); // Solo se monta una vez; usa userRef para evitar closures stale
 
-  // Móvil: manejar cambios de estado de la app (background/foreground)
+  // Móvil: manejar cambios de estado con el tiempo wall-clock persistido.
   useEffect(() => {
     if (Platform.OS === 'web') return;
 
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       if (
         appStateRef.current.match(/inactive|background/) &&
         nextAppState === 'active'
       ) {
-        // App volvió al frente → reiniciar timer
-        if (userRef.current) resetInactivityTimer();
+        // Comprobar expiración antes de considerar el regreso como actividad.
+        const expired = await checkExpiry('app-resume');
+        if (!expired) touchActivity();
       } else if (nextAppState.match(/inactive|background/)) {
-        // App fue al background → el timer sigue corriendo
-        // (si llevan más de 15 min en background, se cierra sesión al volver)
+        // Forzar la marca en disco antes de que el runtime quede suspendido.
+        void persistLastActivity(Date.now(), true);
       }
       appStateRef.current = nextAppState;
     };
@@ -147,18 +208,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.remove();
   }, []);
 
-  // Reiniciar timer manualmente desde pantallas (útil para móvil)
+  // Registrar actividad manualmente desde pantallas (útil para móvil).
   const onUserActivity = () => {
-    if (userRef.current) resetInactivityTimer();
+    touchActivity();
   };
 
   const login = async (email: string, password: string) => {
     await clearLocalSessionData();
     await loginWithEmail({ email, password });
+    touchActivity(true);
   };
 
   const handleLogout = async () => {
-    clearInactivityTimer();
+    clearExpiryInterval();
+    void clearPersistedLastActivity();
     await clearLocalSessionData();
     await logout();
   };

@@ -8,15 +8,36 @@ import type {
 import type {
   AssignmentFilters,
 } from '@/src/services/assignments/assignment.mapper';
-import { firestoreAssignmentRepository } from '@/src/services/repositories/firestore/firestore-assignment-repository';
+import {
+  firestoreAssignmentRepository,
+  type SubscribeToAssignmentsOptions,
+} from '@/src/services/repositories/firestore/firestore-assignment-repository';
 import type {
   AssignmentRepository,
   Unsubscribe,
 } from '@/src/services/repositories/ports/assignment-repository.port';
 
-let assignmentRepository: AssignmentRepository = firestoreAssignmentRepository;
+export type { SubscribeToAssignmentsOptions };
 
-export const __setAssignmentRepositoryForTests = (repo: AssignmentRepository): void => {
+type AssignmentRepositoryWithSubscribeOptions = Omit<
+  AssignmentRepository,
+  'subscribeToAssignments'
+> & {
+  subscribeToAssignments(
+    congregationId: string,
+    callback: (assignments: Assignment[]) => void,
+    filters?: AssignmentFilters,
+    onError?: (error: unknown) => void,
+    options?: SubscribeToAssignmentsOptions
+  ): Unsubscribe;
+};
+
+let assignmentRepository: AssignmentRepositoryWithSubscribeOptions =
+  firestoreAssignmentRepository;
+
+export const __setAssignmentRepositoryForTests = (
+  repo: AssignmentRepositoryWithSubscribeOptions
+): void => {
   assignmentRepository = repo;
 };
 
@@ -236,7 +257,8 @@ export const subscribeToAssignments = (
   congregationId: string,
   callback: (assignments: Assignment[]) => void,
   filters?: AssignmentFilters,
-  onError?: (error: unknown) => void
+  onError?: (error: unknown) => void,
+  options?: SubscribeToAssignmentsOptions
 ): Unsubscribe => {
   if (isBlank(congregationId)) {
     callback([]);
@@ -247,6 +269,7 @@ export const subscribeToAssignments = (
     congregationId,
     callback,
     filters,
-    onError
+    onError,
+    options
   );
 };
