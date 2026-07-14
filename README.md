@@ -1,1143 +1,963 @@
 # OMP Suite
 
-OMP Suite —Organization, Ministry & Programs— es una aplicación multiplataforma para la organización interna de congregaciones. Su objetivo es centralizar en una sola plataforma la administración de usuarios, reuniones, asignaciones, limpieza, predicación, territorios, notificaciones, organigrama, permisos, planes, pagos y configuración por congregación.
+**Organization, Ministry & Programs**
 
-OMP Suite está pensada para funcionar en:
+OMP Suite es una aplicación multiplataforma para la organización interna de congregaciones. Su objetivo es centralizar en una sola plataforma la administración de usuarios, reuniones, asignaciones, limpieza, predicación, territorios, eventos, notificaciones, organigrama, permisos, planes, pagos y configuración por congregación.
+
+OMP Suite está diseñado para funcionar en:
 
 * Web.
 * Android.
 * iOS mediante Expo.
-* Dispositivos móviles.
+* Teléfonos.
+* Tabletas.
 * Escritorio mediante React Native Web.
 
-OMP Suite no es una aplicación oficial de JW.ORG, no está afiliada, respaldada ni aprobada por ninguna entidad oficial de los Testigos de Jehová. Es una herramienta independiente de uso privado.
+> **Aviso importante:** OMP Suite no es una aplicación oficial de JW.ORG, no está afiliada, respaldada ni aprobada por ninguna entidad oficial de los Testigos de Jehová. Es una herramienta tecnológica independiente de uso privado.
 
 ---
 
-## Estado Actual Del Proyecto
+## Índice
 
-* Versión actual: `1.13.3`.
-* Tiempo aproximado de desarrollo acumulado: 4 meses de trabajo activo.
-* Estado del producto: fase avanzada de estabilización técnica y comercial.
-* Plataforma principal: Expo / React Native.
-* Navegación: Expo Router.
-* Backend: Firebase.
-* Cobros: Stripe Billing.
-* Notificaciones: Expo Notifications y Firebase Admin Messaging.
-* Seguridad: Firestore Rules, roles, permisos y Cloud Functions.
-* Modelo comercial: suscripción mensual por congregación.
-* Unidad de cobro: congregación, no usuario individual.
-
-OMP Suite ya no debe tratarse como prototipo. Actualmente tiene una base técnica de producto real, con módulos operativos, reglas de seguridad, integración de pagos, backend serverless, documentación técnica y validaciones de despliegue.
+1. Estado actual.
+2. Evaluación funcional.
+3. Objetivo del producto.
+4. Problemas que resuelve.
+5. Plataformas soportadas.
+6. Stack tecnológico.
+7. Arquitectura.
+8. Estructura del repositorio.
+9. Navegación y autenticación.
+10. Seguridad, roles y permisos.
+11. Módulos funcionales.
+12. Organigrama congregacional.
+13. Billing y suscripciones.
+14. Precios vigentes.
+15. Valor comercial del proyecto.
+16. Costos tecnológicos.
+17. Costos y comisiones Stripe.
+18. Costos acumulados durante cuatro meses.
+19. Firebase y Google Cloud.
+20. Cache y rendimiento.
+21. Notificaciones.
+22. Modelo de datos.
+23. Variables de entorno y secrets.
+24. Instalación y comandos.
+25. Builds y despliegues.
+26. Testing y CI.
+27. Estado funcional por módulo.
+28. Riesgos técnicos conocidos.
+29. Requisitos para producción.
+30. Roadmap.
+31. Convenciones de desarrollo.
+32. Nota final.
 
 ---
 
-## Objetivo De OMP Suite
+# Estado Actual Del Proyecto
 
-OMP Suite busca resolver un problema común: muchas congregaciones manejan información operativa en hojas de cálculo, chats, notas sueltas, mensajes privados o archivos separados. Esto puede provocar duplicidad de información, errores en asignaciones, poca visibilidad, dificultad para dar seguimiento y dependencia de una sola persona.
+| Dato                                | Estado                                             |
+| ----------------------------------- | -------------------------------------------------- |
+| Nombre                              | OMP Suite                                          |
+| Repositorio                         | `Marcor360/OMP`                                    |
+| Versión declarada                   | `1.13.3`                                           |
+| Último mensaje de versión observado | `1.15.2`                                           |
+| Tiempo de desarrollo acumulado      | Aproximadamente cuatro meses                       |
+| Estado                              | Beta avanzada funcional                            |
+| Plataforma principal                | Expo / React Native                                |
+| Backend                             | Firebase                                           |
+| Pagos                               | Stripe Billing                                     |
+| Notificaciones                      | Expo Notifications y Firebase Admin Messaging      |
+| Seguridad                           | Firestore Rules, Cloud Functions, roles y permisos |
+| Modelo comercial                    | Suscripción mensual por congregación               |
+| Unidad de cobro                     | Congregación, no usuario individual                |
 
-OMP centraliza esa operación en una plataforma estructurada.
+## Estado De Versión
 
-Objetivos principales:
+Actualmente existe una diferencia que debe resolverse antes del siguiente release:
+
+```text
+package.json:       1.13.3
+app.json:           1.13.3
+iOS buildNumber:    1.13.3
+Android versionCode: 11303
+README:             1.13.3
+Último commit:      mensaje 1.15.2
+```
+
+El mensaje del commit no debe considerarse automáticamente la versión oficial. Antes del siguiente build se debe decidir si la versión real es `1.13.3`, `1.15.2` u otra, y sincronizar todos los archivos.
+
+---
+
+# Evaluación Funcional
+
+OMP Suite ya no debe tratarse como una demostración o prototipo visual. Tiene una base técnica real, módulos operativos, backend serverless, reglas de seguridad, billing, notificaciones, cache, tests y procesos automatizados.
+
+## Clasificación Actual
+
+| Área                                 | Evaluación |
+| ------------------------------------ | ---------- |
+| Arquitectura                         | 8.5/10     |
+| Funcionalidad implementada           | 8/10       |
+| Backend                              | 8.5/10     |
+| Seguridad y permisos                 | 7/10       |
+| Calidad y testing                    | 7.5/10     |
+| Experiencia multiplataforma          | 7.5/10     |
+| Preparación comercial                | 7/10       |
+| Preparación completa para producción | 6.5/10     |
+
+## Veredicto
+
+> OMP Suite es un producto funcional para pruebas controladas y primeras congregaciones, pero sigue en fase de estabilización antes de una distribución comercial amplia.
+
+Esto significa:
+
+* Los flujos principales existen.
+* El frontend está conectado al backend.
+* Las operaciones sensibles pasan por Cloud Functions.
+* Firestore Rules protegen los datos.
+* Stripe está implementado.
+* Existen pruebas automatizadas.
+* Existe CI.
+* Hay documentación técnica.
+* Todavía deben cerrarse inconsistencias de permisos, pruebas reales externas y detalles de escalabilidad.
+
+---
+
+# Objetivo De OMP Suite
+
+OMP Suite busca reemplazar procesos fragmentados que normalmente se manejan mediante:
+
+* hojas de cálculo;
+* grupos de mensajería;
+* documentos separados;
+* notas manuales;
+* listas impresas;
+* archivos privados;
+* mensajes individuales;
+* procesos dependientes de una sola persona.
+
+El producto centraliza la información en una plataforma estructurada, segura y accesible desde distintos dispositivos.
+
+## Objetivos Principales
 
 * Reducir errores administrativos.
 * Ahorrar tiempo en la organización semanal.
-* Centralizar datos por congregación.
-* Proteger la información mediante permisos.
-* Dar visibilidad clara a los responsables.
-* Evitar duplicidad entre módulos.
-* Mejorar la experiencia móvil.
+* Centralizar información por congregación.
+* Evitar datos duplicados.
+* Separar responsabilidades.
+* Controlar quién puede consultar o modificar cada módulo.
 * Mantener historial operativo.
-* Facilitar futuras mejoras sin rehacer la arquitectura.
-* Mantener un costo accesible para congregaciones.
-* Permitir crecimiento técnico sin romper la base actual.
+* Facilitar la comunicación.
+* Mejorar la experiencia móvil.
+* Proteger información sensible.
+* Automatizar tareas repetitivas.
+* Reducir lecturas innecesarias en Firestore.
+* Facilitar el mantenimiento técnico.
+* Preparar el sistema para crecer.
+* Mantener un precio accesible.
 
 ---
 
-## Qué Problemas Resuelve
+# Problemas Que Resuelve
 
-OMP Suite ayuda a resolver:
+OMP ayuda a resolver:
 
-* Usuarios dispersos en listas manuales.
-* Asignaciones repetidas o mal coordinadas.
-* Falta de control sobre quién puede editar cada módulo.
-* Reuniones creadas sin revisión suficiente.
-* Limpieza y acomodadores manejados fuera del sistema.
-* Falta de historial de cambios.
-* Notificaciones poco centralizadas.
-* Organización de predicación y territorios desconectada.
-* Dificultad para visualizar responsabilidades internas.
-* Cobros o suscripciones sin integración directa.
-* Lecturas innecesarias en Firestore por falta de cache.
-* Mala experiencia móvil en pantallas profundas.
-* Falta de separación entre usuarios comunes, supervisores y administradores.
-* Riesgo de mezclar información entre congregaciones.
-* Dificultad para mantener datos actualizados en diferentes dispositivos.
-
----
-
-## Características Principales
-
-OMP Suite incluye actualmente:
-
-* Autenticación de usuarios.
-* Gestión de usuarios por congregación.
-* Roles técnicos internos.
-* Permisos por módulo.
-* Responsabilidades de servicio.
-* Reuniones entre semana.
-* Reuniones de fin de semana.
-* Asignaciones.
-* Discursos externos.
-* Limpieza.
-* Grupos de limpieza.
-* Planeación de limpieza.
-* Acomodadores y micrófonos.
-* Lectores.
-* Predicación.
-* Territorios.
-* Reportes de predicación.
-* Organigrama congregacional.
-* Notificaciones internas.
-* Push notifications.
-* Dashboard por congregación.
-* Configuración de usuario.
-* Configuración por congregación.
-* Billing con Stripe.
-* Checkout de suscripción.
-* Customer Portal.
-* Stripe Webhook.
-* Historial de pagos.
-* Recordatorios de pago.
-* Exenciones administrativas de cobro.
-* Cache persistente.
-* Estrategia cache-first.
-* Validaciones de seguridad en frontend.
-* Validaciones de seguridad en Firestore Rules.
-* Validaciones de seguridad en Cloud Functions.
-* Documentación técnica.
-* Estructura preparada para builds web, Android e iOS.
+* usuarios dispersos en diferentes archivos;
+* falta de una fuente única de verdad;
+* asignaciones duplicadas;
+* asignaciones incompatibles;
+* reuniones creadas sin revisión;
+* conflictos con discursos externos;
+* poca claridad sobre responsabilidades;
+* falta de control por congregación;
+* limpieza gestionada manualmente;
+* acomodadores y micrófonos manejados fuera del sistema;
+* dificultad para visualizar el organigrama;
+* cobros sin integración automatizada;
+* notificaciones no centralizadas;
+* poca trazabilidad;
+* dependencia de una sola computadora;
+* falta de permisos granulares;
+* falta de historial de pagos;
+* exceso de lecturas Firestore;
+* errores técnicos mostrados directamente al usuario;
+* navegación móvil inconsistente.
 
 ---
 
-## Stack Técnico
+# Plataformas Soportadas
 
-### Frontend
+## Web
+
+La versión web utiliza Expo Web y React Native Web.
+
+Está pensada para:
+
+* administradores;
+* coordinadores;
+* secretarios;
+* encargados de módulos;
+* usuarios que prefieren trabajar desde computadora;
+* tareas administrativas de mayor tamaño.
+
+El build web se genera mediante:
+
+```bash
+npm run build:web
+```
+
+Firebase Hosting está deshabilitado en la configuración actual. El resultado debe publicarse en el host externo configurado para OMP.
+
+## Android
+
+Android es una plataforma principal.
+
+El proyecto incluye:
+
+* identificador `com.marcor360.omp`;
+* iconos adaptativos;
+* permisos de notificaciones;
+* vibración;
+* bloqueo de permisos innecesarios;
+* soporte para development build;
+* soporte para release;
+* compatibilidad con EAS Build.
+
+## iOS
+
+El proyecto está preparado para iOS mediante Expo.
+
+Incluye:
+
+* soporte para tabletas;
+* background mode para notificaciones;
+* descripción de permisos;
+* build number;
+* integración con Expo Notifications.
+
+La preparación técnica no sustituye una prueba real. Antes de declarar soporte de producción se debe validar:
+
+* instalación física;
+* recepción de notificaciones;
+* navegación;
+* login;
+* deep links;
+* Stripe Checkout;
+* Customer Portal;
+* rendimiento;
+* App Store submission.
+
+---
+
+# Stack Tecnológico
+
+## Frontend
 
 * Expo SDK 54.
 * React 19.
 * React Native 0.81.
+* React Native Web.
 * TypeScript.
 * Expo Router.
-* React Native Web.
-* NativeWind / Tailwind CSS.
+* React Navigation.
+* NativeWind.
+* Tailwind CSS.
 * AsyncStorage.
 * Expo Notifications.
 * Expo Image.
 * Expo Haptics.
 * Expo Linking.
 * Expo Web Browser.
-* React Navigation.
+* Expo Splash Screen.
 * React Native Reanimated.
 * React Native Gesture Handler.
+* React Native Safe Area Context.
+* React Native Screens.
 * React Native SVG.
+* Ionicons.
 
-### Backend
+## Backend
 
 * Firebase Authentication.
 * Cloud Firestore.
-* Firebase Cloud Functions.
+* Cloud Functions for Firebase.
 * Firebase Admin SDK.
 * Firebase Admin Messaging.
 * Firestore Rules.
 * Firestore Indexes.
+* Firebase Functions Secrets.
 * Stripe Billing.
 * Stripe Checkout.
 * Stripe Customer Portal.
 * Stripe Webhooks.
-* Firebase Functions Secrets.
+* Expo Server SDK.
 * Funciones programadas.
-* Procesos de sincronización backend.
+* Triggers Firestore.
 
-### Testing Y Validación
+## Calidad
 
+* ESLint.
+* TypeScript.
 * Jest.
 * Jest Expo.
-* TypeScript.
-* ESLint.
 * Firebase Rules Unit Testing.
-* Tests frontend.
+* Firebase Emulator Suite.
+* GitHub Actions.
 * Tests de Cloud Functions.
-* Pruebas de Firestore Rules mediante emuladores.
-* Validación predeploy.
-* Build de Cloud Functions.
-* Validación de tipos con `tsc --noEmit`.
+* Tests frontend.
+* Tests de Firestore Rules.
 
 ---
 
-## Plataformas Soportadas
+# Arquitectura General
 
-OMP Suite está diseñado como producto multiplataforma.
-
-### Web
-
-La versión web se construye con Expo Web y React Native Web. Está pensada para administradores o usuarios que prefieren trabajar desde escritorio.
-
-### Android
-
-Android es una plataforma principal. La app puede correr localmente con Expo y generar builds mediante EAS o build local.
-
-### iOS
-
-iOS está preparado mediante Expo. El proyecto contempla configuración de permisos, notificaciones y compatibilidad con dispositivos iOS.
-
----
-
-## Estructura General Del Repositorio
+OMP utiliza una arquitectura por capas.
 
 ```text
-app/                         Rutas Expo Router
-app/(auth)/                  Pantallas públicas de autenticación
-app/(protected)/             Pantallas autenticadas
-app/(protected)/(tabs)/      Tabs principales de la app
-src/components/              Componentes UI reutilizables
-src/screens/                 Pantallas principales
-src/modules/                 Módulos de dominio
-src/services/                Servicios, repositorios y acceso a Firebase
-src/types/                   Tipos, DTOs y constantes de dominio
-src/i18n/                    Traducciones
-src/lib/firebase/            Inicialización y referencias Firebase
-src/utils/                   Utilidades puras
-functions/                   Cloud Functions
+Interfaz
+   ↓
+Pantallas y componentes
+   ↓
+Hooks y casos de uso
+   ↓
+Servicios y repositorios
+   ↓
+Firebase SDK / Callable Functions
+   ↓
+Firestore Rules / Cloud Functions
+   ↓
+Firestore, Authentication, Stripe y notificaciones
+```
+
+## Principios Arquitectónicos
+
+* Las pantallas no deben contener toda la lógica.
+* Los servicios deben concentrar acceso a datos.
+* Las operaciones sensibles deben pasar por backend.
+* Firestore Rules deben proteger incluso si la UI falla.
+* `congregationId` debe aislar todos los datos.
+* Stripe Webhook debe ser la fuente de verdad de pago.
+* Los permisos deben calcularse de manera consistente.
+* Los módulos deben compartir utilidades cuando resuelven el mismo problema.
+* Los datos sensibles no deben depender del cache.
+* La lógica debe poder probarse de forma aislada.
+
+---
+
+# Estructura Del Repositorio
+
+```text
+app/
+├── (auth)/                  Rutas públicas
+├── (protected)/             Rutas autenticadas
+│   ├── (tabs)/              Navegación principal
+│   ├── users/
+│   ├── meetings/
+│   ├── assignments/
+│   ├── cleaning/
+│   ├── preaching/
+│   ├── territories/
+│   ├── billing/
+│   ├── notifications/
+│   └── settings/
+├── _layout.tsx
+└── language-setup.tsx
+
+src/
+├── components/              UI reutilizable
+├── context/                 Auth, usuario, tema y toast
+├── hooks/                   Hooks compartidos
+├── i18n/                    Traducciones
+├── lib/firebase/            Inicialización Firebase
+├── modules/                 Módulos de dominio
+├── screens/                 Pantallas principales
+├── services/                Servicios y repositorios
+├── styles/                  Tema y diseño
+├── types/                   Tipos y DTOs
+└── utils/                   Utilidades y permisos
+
+functions/
+├── src/
+│   ├── billing/
+│   ├── config/
+│   ├── maintenance/
+│   ├── modules/
+│   ├── organization/
+│   ├── users/
+│   └── index.ts
+├── scripts/
+└── package.json
+
 docs/                        Documentación técnica
-firestore.rules              Reglas reales de seguridad
-firestore.indexes.json       Índices Firestore
+firestore.rules              Seguridad Firestore
+firestore.indexes.json       Índices
+firebase.json                Configuración Firebase
+.github/workflows/ci.yml     Integración continua
 ```
 
 ---
 
-## Arquitectura De Navegación
+# Navegación Y Autenticación
 
-OMP usa Expo Router como sistema principal de navegación.
+OMP usa Expo Router.
 
-La aplicación separa rutas públicas y protegidas:
+## Grupos De Rutas
 
 ```text
-app/(auth)/                  Login, registro y recuperación
-app/(protected)/             Rutas que requieren sesión activa
-app/(protected)/(tabs)/      Rutas principales visibles en navegación
+app/(auth)/                  Login y recuperación
+app/(protected)/             Contenido con sesión
+app/(protected)/(tabs)/      Módulos principales
 ```
 
-La navegación protegida valida:
+## Flujo De Entrada
 
-* usuario autenticado;
-* perfil cargado;
+1. Inicialización de tema.
+2. Inicialización de traducciones.
+3. Inicialización de cache persistente.
+4. Onboarding de idioma.
+5. Carga de Authentication.
+6. Recuperación del perfil Firestore.
+7. Validación de usuario activo.
+8. Validación de congregación.
+9. Validación de bloqueo.
+10. Redirección segura.
+
+## Navegación Protegida
+
+La aplicación comprueba:
+
+* sesión activa;
+* usuario de Firebase Authentication;
+* perfil en `/users/{uid}`;
 * congregación asignada;
-* usuario activo;
-* estado de bloqueo;
+* estado activo;
+* acceso de congregación;
+* mantenimiento;
 * permisos;
-* estado de billing cuando aplique;
-* redirecciones seguras.
+* rutas permitidas;
+* estado de billing para escrituras administrativas.
 
-En móvil, la aplicación utiliza un menú lateral adaptado para pantallas pequeñas. Las pantallas secundarias deben incluir una flecha de regreso mediante `PageHeader showBack`.
+## Navegación Móvil
+
+En pantallas menores a 768 px:
+
+* se utiliza menú lateral móvil;
+* se oculta la barra de tabs inferior;
+* las rutas secundarias deben usar `PageHeader`;
+* las rutas profundas deben incluir `showBack`;
+* se debe definir `fallbackRoute` cuando sea necesario.
 
 ---
 
-## Modelo De Seguridad
+# Seguridad
 
-La seguridad de OMP no depende únicamente de la interfaz.
+La seguridad real no depende únicamente de ocultar botones.
 
-La UI puede ocultar botones, pero la seguridad real se aplica en:
+OMP aplica seguridad en:
 
-* Firestore Rules.
-* Cloud Functions.
-* Validaciones de permisos.
-* Validaciones por congregación.
-* Validaciones por usuario activo.
-* Validaciones por estado de billing.
-* Validaciones de roles.
-* Validaciones de responsabilidades.
+1. Interfaz.
+2. Funciones de permisos.
+3. Firestore Rules.
+4. Cloud Functions.
+5. Validaciones de Stripe.
+6. Validaciones por congregación.
 
-Principios obligatorios:
+## Principios Obligatorios
 
 * Todo dato protegido requiere autenticación.
-* Todo dato de congregación debe estar aislado por `congregationId`.
-* Un usuario no debe leer datos de otra congregación.
-* Un usuario común no puede cambiar su rol.
-* Un usuario común no puede cambiar su congregación.
-* Los cambios sensibles deben pasar por Cloud Functions.
-* Las reglas de Firestore son la fuente final de seguridad para lecturas y escrituras directas.
-* Las operaciones administrativas deben validar permisos en backend.
-* Los datos de billing no deben depender solo del cliente.
-* Stripe Webhook es la fuente confiable para pagos.
-* Las llaves privadas nunca deben estar en el frontend.
-* Los secrets deben administrarse desde Firebase Functions Secrets.
+* Cada usuario pertenece a una congregación.
+* No se deben mezclar datos de congregaciones.
+* Los usuarios comunes no pueden cambiar su rol.
+* Los usuarios comunes no pueden cambiar su congregación.
+* Los usuarios comunes no pueden elevar sus propios permisos.
+* Las operaciones sensibles deben pasar por Functions.
+* Los secrets nunca deben exponerse al cliente.
+* Firestore Rules deben validar lecturas y escrituras.
+* Billing debe validarse en backend.
+* Las reglas no deben confiar en etiquetas visuales.
+* Los datos de `/system` no deben ser escribibles desde cliente.
 
 ---
 
-## Roles Técnicos
+# Roles, Permisos Y Responsabilidades
 
-Los roles técnicos internos recomendados son:
+## Roles Técnicos
 
 ```ts
 type UserRole = 'admin' | 'supervisor' | 'user';
 ```
 
-Etiquetas visibles:
+| Rol          | Descripción                       |
+| ------------ | --------------------------------- |
+| `admin`      | Administrador técnico             |
+| `supervisor` | Supervisor con permisos delegados |
+| `user`       | Usuario normal                    |
 
-| Valor técnico | Etiqueta UI   |
-| ------------- | ------------- |
-| `admin`       | Administrador |
-| `supervisor`  | Supervisor    |
-| `user`        | Usuario       |
+Los valores `administrador` y `usuario` continúan aceptándose temporalmente como datos legacy. No deben generarse en documentos nuevos.
 
-Valores antiguos como `administrador` o `usuario` deben tratarse como legacy y no usarse para datos nuevos.
-
----
-
-## Separación Entre Role, Permissions Y Service Assignments
-
-OMP separa conceptos que no deben mezclarse.
+## Separación Conceptual
 
 ### `role`
 
-Define el nivel general del usuario dentro del sistema.
-
-Ejemplos:
-
-* `admin`
-* `supervisor`
-* `user`
+Nivel técnico general.
 
 ### `permissions`
 
-Define acciones técnicas por módulo.
-
-Ejemplos:
-
-* ver usuarios;
-* crear usuarios;
-* editar reuniones;
-* administrar limpieza;
-* ver pagos;
-* administrar pagos;
-* ver organigrama;
-* administrar módulos específicos.
+Acciones permitidas por módulo.
 
 ### `serviceAssignments`
 
-Define responsabilidades dentro de la congregación.
-
-Ejemplos:
-
-* coordinador;
-* secretario;
-* encargado de limpieza;
-* auxiliar de tesorería;
-* encargado de territorios;
-* encargado de predicación;
-* encargado de reuniones.
+Responsabilidades de servicio.
 
 ### `privileges`
 
-Define condiciones internas o atributos funcionales especiales.
+Condiciones funcionales, por ejemplo:
+
+* anciano;
+* siervo ministerial;
+* precursor regular;
+* precursor auxiliar.
 
 ### `responsibilities`
 
-Define marcadores funcionales que pueden activar accesos o comportamientos específicos.
+Responsabilidades adicionales.
+
+## Acciones De Permiso
+
+```ts
+type PermissionAction =
+  | 'view'
+  | 'create'
+  | 'edit'
+  | 'delete'
+  | 'manage'
+  | 'approve'
+  | 'export';
+```
+
+## Departamentos De Permiso
+
+```text
+usuarios
+reuniones
+limpieza
+departments
+predicacion
+tesoreria
+pagos
+configuracion
+avisos
+asignaciones
+acomodadores_microfonos
+organigrama
+```
+
+## Asignaciones De Servicio
+
+```text
+coordinador
+secretario
+encargado
+auxiliar
+apoyo
+```
+
+Departamentos posibles:
+
+```text
+coordinacion
+secretaria
+limpieza
+literatura
+tesoreria
+mantenimiento
+discursos
+reuniones
+predicacion
+territorios
+asignaciones
+hospitalidad
+usuarios
+configuracion
+audio_video
+acomodadores_microfonos
+```
 
 ---
 
-## Módulos Principales
+# Módulos Funcionales
 
-### Usuarios
-
-El módulo de usuarios permite administrar personas dentro de una congregación.
+## Usuarios
 
 Incluye:
 
-* creación de usuarios;
-* edición de perfil;
-* activación y desactivación;
-* control de roles;
-* permisos por módulo;
+* creación;
+* listado;
+* edición;
+* actualización de contraseña;
+* activación;
+* desactivación;
+* eliminación;
+* roles;
+* permisos;
+* privilegios;
 * responsabilidades;
-* límite por plan;
+* cargos de servicio;
+* límite de usuarios por plan;
 * paginación;
-* fallback seguro si falla una Cloud Function;
-* mensajes de error humanos;
-* aislamiento por congregación.
+* fallback de lectura;
+* errores humanos;
+* protección de usuarios del sistema.
 
-La creación de usuarios activos respeta el límite del plan contratado.
+Operaciones principales:
 
----
+```text
+createUserByAdmin
+listUsersForCurrentCongregation
+updateUserByAdmin
+updateUserPasswordByAdmin
+disableUserByAdmin
+deleteUserByAdmin
+```
 
-### Reuniones
-
-El módulo de reuniones permite crear y administrar reuniones de congregación.
+## Reuniones
 
 Incluye:
 
 * reuniones entre semana;
 * reuniones de fin de semana;
-* flujo guiado de creación;
-* revisión antes de publicar;
-* datos básicos;
+* creación;
+* edición;
+* eliminación;
+* borradores;
+* publicación;
+* revisión final;
 * lugar;
-* enlace;
-* fecha;
-* semana;
+* enlaces;
 * programa;
 * asignaciones;
 * limpieza;
 * lectores;
 * acomodadores;
 * micrófonos;
-* integración con módulos publicados;
-* validación de duplicados;
-* validación de conflictos;
-* guardado de borrador;
-* publicación controlada.
-
-El formulario de reuniones está diseñado para evitar errores antes de publicar.
-
----
-
-### Asignaciones
-
-El módulo de asignaciones permite administrar responsabilidades dentro de reuniones.
-
-Incluye:
-
-* asignaciones por reunión;
-* validaciones de usuario;
-* compatibilidad con reuniones;
+* detección de reuniones duplicadas;
 * integración con discursos externos;
-* control de conflictos;
-* usuarios bloqueados por salida a discursar;
-* separación entre borradores y datos publicados.
+* notificaciones;
+* recordatorios.
 
----
-
-### Discursos Externos
-
-El módulo de discursos externos permite registrar salidas a discursar.
+## Asignaciones
 
 Incluye:
 
-* programación de salida;
-* usuario asignado;
-* fecha;
+* creación;
+* edición;
+* consulta;
+* integración con reuniones;
+* validación de conflictos;
+* asignaciones de participantes;
+* control de responsables;
+* integración con acomodadores y micrófonos.
+
+## Discursos Externos
+
+Incluye:
+
+* creación;
+* actualización;
+* cancelación;
+* marcado como completado;
 * congregación destino;
-* validación contra reuniones de fin de semana;
-* prevención de conflictos;
-* integración con planeación operativa.
+* fecha;
+* participante;
+* conflicto con reunión de fin de semana.
 
----
-
-### Limpieza
-
-El módulo de limpieza permite organizar grupos y turnos.
+## Eventos Y Avisos
 
 Incluye:
 
-* grupos de limpieza;
+* eventos especiales;
+* visita del superintendente;
+* asambleas;
+* conmemoración;
+* reuniones especiales;
+* capacitación;
+* notificación de cambios;
+* limpieza programada de eventos antiguos.
+
+## Limpieza
+
+Incluye:
+
+* grupos;
 * integrantes;
-* planeación por fechas;
-* publicación de schedule;
-* sincronización con reuniones;
-* integración con el formulario de reuniones;
-* Cloud Function de publicación;
-* control de campos sincronizados;
-* IDs deterministas para evitar duplicados.
+* usuarios elegibles;
+* calendario;
+* borradores;
+* publicación;
+* integración con reuniones;
+* sincronización backend;
+* permisos de encargado;
+* IDs deterministas.
 
----
+Funciones:
 
-### Acomodadores Y Micrófonos
+```text
+createCleaningGroupByManager
+listCleaningGroupsForCurrentUser
+publishCleaningScheduleByManager
+```
 
-Este módulo permite planear funciones relacionadas con hospitalidad y micrófonos.
+## Acomodadores, Micrófonos Y Lectores
 
 Incluye:
 
-* acomodadores;
-* micrófonos;
-* lectores;
-* planeación por fecha;
-* publicación controlada;
+* responsables;
+* auxiliares;
+* planificación;
+* fechas;
+* publicación;
 * sincronización con reuniones;
-* Cloud Function propia;
-* campos bloqueados cuando ya están controlados por este módulo;
-* explicación visual de por qué ciertos campos están bloqueados.
+* protección de campos administrados por el módulo;
+* permisos específicos.
 
----
+Función:
 
-### Predicación
+```text
+publishHospitalityScheduleByManager
+```
 
-El módulo de predicación centraliza información relacionada con actividad de predicación.
+## Predicación
 
 Incluye:
 
 * reportes;
-* asignaciones relacionadas;
-* datos por congregación;
-* integración con usuarios;
-* estructura preparada para crecimiento.
+* grupos;
+* responsables;
+* permisos;
+* información por congregación;
+* estructura para aprobación y exportación.
 
----
-
-### Territorios
-
-El módulo de territorios permite organizar zonas o registros relacionados con predicación.
+## Territorios
 
 Incluye:
 
-* administración de territorios;
-* asignaciones;
-* estado del territorio;
-* datos por congregación;
-* control de permisos.
+* catálogo;
+* creación;
+* edición;
+* desactivación;
+* asignaciones mensuales;
+* responsables;
+* auxiliares;
+* limpieza programada;
+* recordatorios;
+* permisos por acción.
+
+## Notificaciones
+
+Incluye:
+
+* notificaciones internas;
+* tokens push;
+* Expo Push;
+* Firebase Admin Messaging;
+* segmentación por congregación;
+* notificaciones de asignaciones;
+* notificaciones de reuniones;
+* recordatorios;
+* limpieza de notificaciones antiguas;
+* migración de notificaciones legacy.
+
+## Dashboard
+
+Incluye:
+
+* resumen por congregación;
+* actualización manual;
+* actualización programada;
+* tarjetas navegables;
+* guardas de permisos;
+* próximos eventos;
+* reuniones;
+* accesos rápidos.
+
+## Configuración
+
+Incluye:
+
+* cuenta;
+* perfil;
+* tema;
+* idioma;
+* estado del plan;
+* facturación;
+* navegación a módulos administrativos;
+* información de la aplicación.
+
+## Contador De Horas
+
+Existe un módulo de servicio del campo local que funciona sin Firebase para operaciones personales del usuario.
 
 ---
 
-### Organigrama Congregacional
+# Organigrama Congregacional
 
-El organigrama permite visualizar responsabilidades dentro de la congregación.
+El organigrama usa como fuente principal:
 
-Incluye:
+```text
+/users/{uid}.serviceAssignments
+```
+
+A partir de los usuarios activos se genera una proyección en:
+
+```text
+/congregations/{congregationId}/departments
+/congregations/{congregationId}/departmentAssignments
+```
+
+## Flujo Automático
+
+Cuando cambia un usuario, el trigger revisa:
+
+* `serviceAssignments`;
+* `servicePosition`;
+* `serviceDepartment`;
+* `isActive`;
+* `displayName`;
+* `email`;
+* `congregationId`;
+* `role`.
+
+Si cambia un campo relevante, se regenera la proyección.
+
+## Generación Manual
+
+La función:
+
+```text
+regenerateOrgChart
+```
+
+puede ejecutarse por:
 
 * coordinador;
 * secretario;
-* departamentos operativos;
-* responsables;
-* auxiliares;
-* apoyos;
-* vista móvil;
-* vista escritorio;
-* permisos de visualización;
-* permisos de administración;
-* carga de usuarios activos para edición;
-* manejo de errores;
-* estructura jerárquica.
+* root admin;
+* primary admin;
+* usuarios protegidos del sistema.
 
-Regla funcional:
+## Capacidades
 
-* Todo usuario activo con `congregationId` debe poder ver el organigrama.
-* La administración debe permanecer limitada a usuarios autorizados, como coordinador, secretario o usuarios con acceso global según reglas definidas.
+* crea departamentos faltantes;
+* crea asignaciones nuevas;
+* actualiza asignaciones existentes;
+* desactiva asignaciones eliminadas;
+* usa IDs deterministas;
+* detecta más de un coordinador;
+* detecta más de un secretario;
+* conserva compatibilidad legacy;
+* soporta vista móvil;
+* soporta vista escritorio;
+* muestra advertencias.
 
----
+## Regla De Acceso
 
-### Notificaciones
+Todos los usuarios activos con congregación pueden visualizar el organigrama.
 
-OMP tiene dos tipos de notificaciones:
+La administración está limitada a:
 
-* notificaciones internas en Firestore;
-* push notifications mediante Expo Notifications y Firebase Admin Messaging.
-
-Incluye:
-
-* tokens por usuario;
-* segmentación por congregación;
-* mensajes internos;
-* canales Android;
-* limpieza de tokens inválidos;
-* envío desde backend;
-* soporte para notificaciones de reuniones, asignaciones y limpieza.
-
-Las pruebas finales de push no deben hacerse únicamente en Expo Go. Deben validarse en development build o release.
-
----
-
-### Dashboard
-
-El dashboard resume información relevante para la congregación.
-
-Puede mostrar:
-
-* reuniones próximas;
-* asignaciones;
-* avisos;
-* estado de módulos;
-* datos de la congregación;
-* indicadores operativos.
-
-Debe evolucionar hacia dashboard por perfil:
-
-* administrador;
-* supervisor;
-* usuario común;
-* encargado de módulo;
-* tesorería;
+* coordinador;
 * secretario;
-* coordinador.
+* usuarios protegidos del sistema.
 
 ---
 
-## Billing Y Suscripciones
+# Billing Y Suscripciones
 
-El cobro de OMP Suite es por congregación, no por usuario individual.
+OMP cobra por congregación.
 
-OMP usa Stripe Billing como proveedor principal. No se manejan pagos manuales como flujo principal.
+No se cobra por cada usuario individual. El plan define el máximo de usuarios activos de una congregación.
 
-### Planes Vigentes
-
-| Plan      | Usuarios activos incluidos | Precio mensual |
-| --------- | -------------------------: | -------------: |
-| `omp_80`  |                80 usuarios |         70 MXN |
-| `omp_150` |               150 usuarios |        120 MXN |
-| `omp_250` |               250 usuarios |        200 MXN |
-
-Los precios no se incrementan en esta actualización.
-
-Estos precios incluyen:
-
-* uso de la plataforma;
-* mantenimiento técnico básico;
-* actualizaciones continuas;
-* infraestructura Firebase;
-* Cloud Functions;
-* Firestore;
-* integración con Stripe;
-* procesamiento de pagos;
-* notificaciones;
-* mejoras de seguridad;
-* corrección de errores;
-* soporte de evolución del producto.
-
----
-
-## Valor Comercial Del Proyecto
-
-OMP Suite no debe valorarse como una página web sencilla ni como una plantilla visual. Es una plataforma completa con frontend multiplataforma, backend serverless, base de datos, reglas de seguridad, notificaciones, suscripciones, pagos, permisos, módulos operativos y documentación técnica.
-
-El valor de mercado estimado del proyecto completo, si una empresa, congregación o cliente mandara construirlo desde cero con un desarrollador fullstack senior, agencia o equipo técnico especializado, se estima en:
-
-| Escenario                                              |             Valor estimado |
-| ------------------------------------------------------ | -------------------------: |
-| Valor conservador del desarrollo                       |      350,000 – 650,000 MXN |
-| Valor realista por alcance actual                      |    650,000 – 1,200,000 MXN |
-| Valor con agencia, QA, diseño, DevOps y soporte formal | 1,200,000 – 2,000,000+ MXN |
-
-Este valor no representa el precio mensual de uso de OMP. Representa el costo aproximado de producir una plataforma similar desde cero, considerando análisis, diseño, arquitectura, desarrollo, integración, seguridad, pruebas, documentación y despliegue.
-
----
-
-## Por Qué El Proyecto Tiene Ese Valor
-
-OMP Suite tiene un valor técnico alto porque concentra varias capas de desarrollo que normalmente se cotizan por separado.
-
-### 1. Aplicación Multiplataforma
-
-OMP no es solamente una web. Está construido para funcionar en:
-
-* Web.
-* Android.
-* iOS.
-* Escritorio.
-* Dispositivos móviles.
-
-Esto implica arquitectura adaptable, navegación protegida, diseño responsive, compatibilidad móvil y estructura preparada para builds reales.
-
-### 2. Frontend Completo
-
-Incluye:
-
-* Expo SDK 54.
-* React 19.
-* React Native 0.81.
-* TypeScript.
-* Expo Router.
-* NativeWind.
-* React Native Web.
-* Componentes reutilizables.
-* Pantallas protegidas.
-* Estados de carga.
-* Estados vacíos.
-* Manejo de errores humanos.
-* Navegación móvil.
-* Menú lateral móvil.
-* Formularios complejos.
-* Validaciones por módulo.
-
-### 3. Backend Serverless
-
-Incluye:
-
-* Firebase Authentication.
-* Cloud Firestore.
-* Cloud Functions.
-* Firebase Admin SDK.
-* Funciones programadas.
-* Webhooks.
-* Validaciones del lado servidor.
-* Procesos de sincronización.
-* Acciones administrativas protegidas.
-
-### 4. Seguridad
-
-Incluye:
-
-* aislamiento por `congregationId`;
-* usuarios activos/inactivos;
-* roles técnicos;
-* permisos por módulo;
-* responsabilidades de servicio;
-* Firestore Rules;
-* validaciones en Cloud Functions;
-* protección de campos sensibles;
-* protección de billing;
-* protección de operaciones administrativas.
-
-### 5. Billing Con Stripe
-
-Incluye:
-
-* Stripe Billing.
-* Stripe Checkout.
-* Stripe Customer Portal.
-* Stripe Webhook.
-* Historial de pagos.
-* Recordatorios de pago.
-* Exenciones de cobro.
-* Estados de gracia.
-* Validación de permisos para pagar.
-* Separación entre cliente y llaves privadas.
-* Secrets en Firebase Functions.
-
-### 6. Módulos Operativos
-
-OMP incluye módulos que normalmente serían sistemas independientes:
-
-* Usuarios.
-* Reuniones.
-* Asignaciones.
-* Limpieza.
-* Grupos de limpieza.
-* Acomodadores y micrófonos.
-* Lectores.
-* Discursos externos.
-* Predicación.
-* Territorios.
-* Reportes.
-* Notificaciones.
-* Organigrama.
-* Billing.
-* Dashboard.
-* Configuración.
-
-### 7. Cache Y Optimización
-
-Incluye:
-
-* cache en memoria;
-* cache persistente con AsyncStorage;
-* estrategia cache-first;
-* invalidación por ciclo;
-* limpieza al cerrar sesión;
-* limpieza al cambiar de congregación;
-* reducción de lecturas Firestore;
-* control de datos sensibles sin cache persistente.
-
-### 8. Documentación Técnica
-
-Incluye documentación para:
-
-* arquitectura;
-* permisos;
-* matriz de permisos;
-* seguridad Firestore;
-* billing;
-* deployment;
-* notificaciones;
-* QA móvil;
-* App Check;
-* cache;
-* testing;
-* planes por congregación;
-* validación predeploy.
-
----
-
-## Estimación De Horas De Desarrollo
-
-El desarrollo acumulado de OMP representa aproximadamente 4 meses de trabajo activo. Para un proyecto con este alcance, una estimación razonable de horas de mercado sería:
-
-| Área                                   | Horas estimadas |
-| -------------------------------------- | --------------: |
-| Análisis, arquitectura y planificación |      60 – 120 h |
-| Diseño UX/UI y experiencia móvil       |      80 – 160 h |
-| Frontend React Native / Expo / Web     |     220 – 420 h |
-| Firebase Auth, Firestore y servicios   |     120 – 240 h |
-| Cloud Functions y backend seguro       |     140 – 280 h |
-| Firestore Rules y permisos             |      80 – 180 h |
-| Billing con Stripe                     |      70 – 140 h |
-| Notificaciones                         |       40 – 90 h |
-| Cache, rendimiento y optimización      |      50 – 120 h |
-| Testing, QA y correcciones             |     100 – 220 h |
-| Documentación técnica                  |      40 – 100 h |
-
-Total estimado:
-
-```text
-Mínimo conservador: 700 – 900 horas
-Rango realista: 900 – 1,400 horas
-Rango agencia/equipo formal: 1,400 – 2,000+ horas
-```
-
----
-
-## Estimación De Valor Por Hora
-
-Una tarifa de mercado para perfiles relacionados con React Native, Firebase, backend serverless, Stripe y arquitectura fullstack puede variar según experiencia, país, urgencia, agencia, soporte y responsabilidad técnica.
-
-Para valorar OMP se puede usar una referencia conservadora:
-
-```text
-Tarifa baja conservadora: 20 – 25 USD/h
-Tarifa freelance especializada: 25 – 45 USD/h
-Tarifa senior/agencia: 45 – 80+ USD/h
-```
-
-Ejemplo de cálculo:
-
-```text
-900 h x 25 USD/h = 22,500 USD
-1,200 h x 35 USD/h = 42,000 USD
-1,500 h x 45 USD/h = 67,500 USD
-```
-
-Convertido a MXN de forma aproximada:
-
-```text
-22,500 USD ≈ 390,000 MXN
-42,000 USD ≈ 735,000 MXN
-67,500 USD ≈ 1,180,000 MXN
-```
-
-Por eso el valor de mercado recomendado para documentar OMP es:
-
-```text
-Valor de mercado estimado: 650,000 – 1,200,000 MXN
-```
-
-Este rango es razonable para una plataforma funcional con frontend multiplataforma, backend Firebase, Cloud Functions, reglas de seguridad, Stripe Billing, notificaciones, módulos operativos y documentación técnica.
-
----
-
-## Diferencia Entre Valor Del Proyecto Y Precio De Suscripción
-
-El valor de mercado del proyecto no significa que cada congregación pague ese monto.
-
-OMP usa un modelo de suscripción mensual accesible:
+## Planes Vigentes
 
 | Plan      | Usuarios activos | Precio mensual |
-| --------- | ---------------: | -------------: |
-| `omp_80`  |      80 usuarios |         70 MXN |
-| `omp_150` |     150 usuarios |        120 MXN |
-| `omp_250` |     250 usuarios |        200 MXN |
+| --------- | ---------------- | -------------- |
+| `omp_80`  | 80               | **70 MXN**     |
+| `omp_150` | 150              | **120 MXN**    |
+| `omp_250` | 250              | **200 MXN**    |
 
-Estos precios se mantienen sin incremento.
+## Regla De Precios
 
-La suscripción mensual no busca cobrar a una sola congregación el costo completo del desarrollo. Busca distribuir el costo de operación, mantenimiento y evolución entre varias congregaciones con un precio accesible.
+En esta actualización:
 
----
+* no se incrementan precios;
+* no se crean nuevos Price IDs;
+* no se modifican suscripciones;
+* no se cambian los secrets;
+* no se cambian constantes de billing;
+* nuevas congregaciones usan los precios actuales.
 
-## Por Qué Se Cobra
-
-OMP requiere cobro porque no es solo una pantalla o una página web estática. Es una plataforma con backend, base de datos, reglas de seguridad, funciones en servidor, integración de pagos, notificaciones, mantenimiento y evolución continua.
-
-El cobro ayuda a cubrir:
-
-### Infraestructura
-
-* dominio;
-* hosting;
-* Firebase;
-* Google Cloud;
-* Firestore;
-* Cloud Functions;
-* Secrets;
-* notificaciones;
-* almacenamiento;
-* tráfico;
-* ambientes de prueba.
-
-### Procesamiento De Pagos
-
-* Stripe Billing.
-* Stripe Checkout.
-* Stripe Customer Portal.
-* Webhooks.
-* Manejo de facturación.
-* Comisiones por transacción.
-* Validaciones de pago.
-* Historial de eventos.
-
-### Desarrollo
-
-* 4 meses aproximados de desarrollo acumulado.
-* Arquitectura multiplataforma.
-* Módulos internos.
-* Validaciones.
-* Refactors.
-* Correcciones.
-* Diseño móvil.
-* Mejoras de rendimiento.
-* Testing.
-* Seguridad.
-* Documentación.
-
-### Mantenimiento
-
-* Actualización de dependencias.
-* Corrección de errores.
-* Ajustes por cambios en Expo, Firebase o Stripe.
-* Revisión de reglas.
-* Revisión de permisos.
-* Soporte técnico.
-* Mejoras de documentación.
-* Optimización de costos.
-
-### Seguridad
-
-* Firestore Rules.
-* Cloud Functions.
-* Aislamiento por congregación.
-* Validación de usuarios activos.
-* Validación de roles.
-* Protección de operaciones sensibles.
-* Manejo de secrets.
-* Evitar exposición de llaves privadas.
-
----
-
-## Costos Tecnológicos Del Proyecto
-
-OMP tiene costos tecnológicos directos e indirectos. Algunos son fijos, otros dependen del uso.
-
-### Costos Fijos
-
-| Concepto                   | Tipo                                      |                         Estimación |
-| -------------------------- | ----------------------------------------- | ---------------------------------: |
-| Dominio `ompsuite.com`     | Anual                                     |                  200 – 700 MXN/año |
-| Hosting externo web        | Mensual                                   |                    0 – 400 MXN/mes |
-| Cuenta Google Play         | Pago único, si se publica en Play Store   |                      aprox. 25 USD |
-| Apple Developer Program    | Anual, si se publica en App Store         |                  aprox. 99 USD/año |
-| Expo EAS                   | Opcional                                  | 0 USD, 19 USD/mes o más según plan |
-| Herramientas de desarrollo | Variable                                  |                          según uso |
-| Certificados SSL           | Normalmente incluido por host o proveedor |                       0 – variable |
-
-### Costos Variables
-
-| Concepto           | Cómo se cobra                                                                  |
-| ------------------ | ------------------------------------------------------------------------------ |
-| Firebase Firestore | lecturas, escrituras, almacenamiento y egreso después del límite gratuito      |
-| Cloud Functions    | invocaciones, CPU, memoria, egreso y build minutes después del límite gratuito |
-| Firebase Storage   | almacenamiento, descargas y operaciones si se usa                              |
-| Stripe             | comisión por transacción exitosa                                               |
-| Hosting externo    | tráfico, almacenamiento o plan contratado                                      |
-| Dominio            | renovación anual                                                               |
-| EAS Build          | builds incluidos o uso adicional según plan                                    |
-| Soporte técnico    | tiempo humano de mantenimiento                                                 |
-| Google Cloud       | uso de recursos asociados a Firebase y Functions                               |
-
----
-
-## Firebase Y Google Cloud
-
-OMP usa Firebase como backend principal. Firebase puede tener uso gratuito en varios servicios, pero en producción debe asumirse que el costo puede crecer con el uso.
-
-Servicios usados o preparados:
-
-* Firebase Authentication.
-* Cloud Firestore.
-* Cloud Functions.
-* Firebase Admin SDK.
-* Firebase Admin Messaging.
-* Cloud Messaging.
-* Firestore Rules.
-* Firestore Indexes.
-* Secrets de Functions.
-* Emuladores para pruebas.
-
-El costo de Firebase depende principalmente de:
-
-* cantidad de usuarios activos;
-* cantidad de lecturas Firestore;
-* cantidad de escrituras;
-* cantidad de funciones ejecutadas;
-* tráfico de red;
-* almacenamiento;
-* notificaciones;
-* frecuencia de consultas;
-* listeners en tiempo real;
-* eficiencia del cache.
-
-OMP incluye una estrategia de cache para reducir lecturas innecesarias y controlar costos.
-
----
-
-## Stripe
-
-OMP usa Stripe Billing para procesar suscripciones.
-
-Los precios vigentes son:
+## Componentes De Billing
 
 ```text
-omp_80  = 70 MXN/mes
-omp_150 = 120 MXN/mes
-omp_250 = 200 MXN/mes
+createStripeCheckoutSession
+createStripePortalSession
+getStripeBillingUsage
+stripeWebhook
+sendBillingPaymentReminders
+scheduledBillingHistoryCleanup
+setBillingExemptionByRootAdmin
 ```
 
-Stripe cobra comisión por pago exitoso. Como referencia de cálculo para tarjetas nacionales en México:
+## Flujo De Pago
+
+1. El usuario autorizado entra a billing.
+2. La aplicación obtiene el uso activo.
+3. El usuario selecciona un plan.
+4. Se llama a `createStripeCheckoutSession`.
+5. La Function valida usuario, congregación y permisos.
+6. Se crea o reutiliza el cliente Stripe.
+7. Stripe Checkout procesa el pago.
+8. Stripe redirige a la aplicación.
+9. Stripe Webhook recibe el evento.
+10. Firestore se actualiza.
+11. La aplicación muestra el estado real.
+
+La pantalla `/billing/success` no es la fuente definitiva de pago. La fuente de verdad es Firestore después de procesar el webhook.
+
+## Estados
 
 ```text
-3.6% + 3 MXN por transacción exitosa
+disabled
+checkout_pending
+active
+trialing
+past_due
+payment_action_required
+unpaid
+canceled
+incomplete
+incomplete_expired
+exempt
 ```
 
-Estimación de comisión por plan:
+## Periodo De Gracia
 
-| Plan      | Cobro mensual | Comisión Stripe aprox. | Neto aprox. |
-| --------- | ------------: | ---------------------: | ----------: |
-| `omp_80`  |        70 MXN |               5.52 MXN |   64.48 MXN |
-| `omp_150` |       120 MXN |               7.32 MXN |  112.68 MXN |
-| `omp_250` |       200 MXN |              10.20 MXN |  189.80 MXN |
-
-Estimación por 4 meses de una congregación:
-
-| Plan      | Total cobrado 4 meses | Comisión Stripe aprox. 4 meses | Neto aprox. 4 meses |
-| --------- | --------------------: | -----------------------------: | ------------------: |
-| `omp_80`  |               280 MXN |                      22.08 MXN |          257.92 MXN |
-| `omp_150` |               480 MXN |                      29.28 MXN |          450.72 MXN |
-| `omp_250` |               800 MXN |                      40.80 MXN |          759.20 MXN |
-
-Estos cálculos son aproximados y pueden variar si se usan tarjetas internacionales, conversión de moneda, impuestos, disputas, reembolsos o condiciones especiales de Stripe.
-
----
-
-## Costo Acumulado De Tecnología Durante 4 Meses
-
-Como el desarrollo lleva aproximadamente 4 meses, se puede documentar el costo tecnológico acumulado de forma estimada.
-
-| Concepto                                             |       Estimación 4 meses |
-| ---------------------------------------------------- | -----------------------: |
-| Dominio anual prorrateado                            |             70 – 235 MXN |
-| Dominio pagado completo anual                        |            200 – 700 MXN |
-| Hosting externo web                                  |            0 – 1,600 MXN |
-| Firebase / Google Cloud en etapa baja                |            0 – 1,200 MXN |
-| Stripe por una suscripción `omp_80` durante 4 meses  |         22.08 MXN aprox. |
-| Stripe por una suscripción `omp_150` durante 4 meses |         29.28 MXN aprox. |
-| Stripe por una suscripción `omp_250` durante 4 meses |         40.80 MXN aprox. |
-| Expo EAS Free                                        |                    0 MXN |
-| Expo EAS Starter por 4 meses, si se usa              |            aprox. 76 USD |
-| Apple Developer, si se publica en iOS                |               99 USD/año |
-| Google Play Console, si se publica en Play Store     | aprox. 25 USD pago único |
-
-Costo acumulado mínimo probable en etapa de desarrollo:
+Los estados:
 
 ```text
-500 – 3,500 MXN aprox. + comisiones Stripe
+past_due
+payment_action_required
+incomplete
 ```
 
-Costo acumulado posible si se usan planes pagados, builds, cuentas de tienda y más tráfico:
+pueden disponer de cinco días de gracia.
 
-```text
-3,500 – 20,000+ MXN aprox.
-```
+Después del periodo de gracia, las escrituras administrativas pueden restringirse.
 
-Estos rangos deben reemplazarse por facturas reales si ya existen comprobantes de dominio, hosting, Firebase, Google Cloud, Expo, Apple, Google Play o Stripe.
+## Exenciones
 
----
-
-## Costos Que Deben Registrarse Internamente
-
-Para tener control financiero real, registrar cada gasto en una tabla interna:
-
-| Fecha     | Proveedor               | Concepto                           |     Monto | Moneda  | Periodo         | Notas                               |
-| --------- | ----------------------- | ---------------------------------- | --------: | ------- | --------------- | ----------------------------------- |
-| Pendiente | Dominio                 | `ompsuite.com`                     | pendiente | MXN/USD | anual           | registrar factura real              |
-| Pendiente | Hosting                 | host externo web                   | pendiente | MXN/USD | mensual/anual   | Firebase Hosting está deshabilitado |
-| Pendiente | Firebase / Google Cloud | Firestore, Functions, Secrets      | pendiente | MXN/USD | mensual         | según uso                           |
-| Pendiente | Stripe                  | comisiones de pago                 |  variable | MXN     | por transacción | comisión por pago exitoso           |
-| Pendiente | Expo                    | EAS Build / Update                 | pendiente | USD     | mensual         | si se usa plan pagado               |
-| Pendiente | Apple                   | Developer Program                  |        99 | USD     | anual           | solo si se publica iOS              |
-| Pendiente | Google                  | Play Console                       |        25 | USD     | pago único      | solo si se publica Android          |
-| Pendiente | Herramientas            | desarrollo, diseño, monitoreo o QA | pendiente | MXN/USD | variable        | según uso real                      |
-
----
-
-## Conclusión Económica
-
-OMP tiene dos valores distintos:
-
-```text
-1. Valor de mercado del desarrollo completo:
-   650,000 – 1,200,000 MXN aprox.
-
-2. Precio mensual de uso por congregación:
-   70, 120 o 200 MXN al mes.
-```
-
-El precio mensual se mantiene bajo para que sea accesible. No refleja el costo completo de construcción del sistema, sino una contribución mensual para operación, mantenimiento, infraestructura y evolución continua.
-
-Por eso, aunque el proyecto completo tiene un valor de mercado alto, las suscripciones actuales se mantienen sin incremento:
-
-```text
-omp_80  = 70 MXN/mes
-omp_150 = 120 MXN/mes
-omp_250 = 200 MXN/mes
-```
-
----
-
-## Flujo De Billing
-
-El flujo actual de pago es:
-
-1. Usuario autorizado entra a la sección de billing.
-2. Selecciona plan.
-3. La app llama a `createStripeCheckoutSession`.
-4. Cloud Functions valida:
-
-   * autenticación;
-   * congregación;
-   * permisos;
-   * plan;
-   * exención de cobro.
-5. Cloud Functions crea o reutiliza el cliente Stripe.
-6. Stripe Checkout procesa el pago.
-7. Stripe redirige al usuario.
-8. Stripe Webhook recibe el evento real de pago.
-9. Firestore se actualiza con el estado real.
-10. La app muestra el estado desde Firestore.
-
-La pantalla de éxito no debe considerarse fuente de verdad. La fuente de verdad es el webhook de Stripe reflejado en Firestore.
-
----
-
-## Estados De Billing
-
-Estados comunes:
-
-| Estado                    | Significado                               |
-| ------------------------- | ----------------------------------------- |
-| `active`                  | Suscripción activa                        |
-| `trialing`                | Periodo de prueba                         |
-| `checkout_pending`        | Checkout iniciado, pago aún no confirmado |
-| `past_due`                | Pago vencido                              |
-| `payment_action_required` | Requiere acción del usuario               |
-| `unpaid`                  | Pago no cubierto                          |
-| `canceled`                | Suscripción cancelada                     |
-| `incomplete`              | Suscripción incompleta                    |
-| `incomplete_expired`      | Suscripción incompleta expirada           |
-| `exempt`                  | Congregación exenta                       |
-
----
-
-## Exenciones De Cobro
-
-Algunas congregaciones pueden estar exentas.
-
-Modelo:
+Una congregación puede tener:
 
 ```ts
 billingExemption: {
@@ -1149,95 +969,432 @@ billingExemption: {
 }
 ```
 
-Cuando una congregación está exenta:
+Una congregación exenta:
 
-* no se inicia Checkout;
-* no se bloquea el acceso por pago;
-* no se envían recordatorios de pago;
-* la UI debe mostrar estado exento;
-* el backend puede reflejar `billing.provider = "exempt"`;
-* el backend puede reflejar `billing.status = "exempt"`.
-
----
-
-## Modelo Firestore De Billing
-
-La fuente vigente del plan vive en:
-
-```text
-/congregations/{congregationId}.billing
-```
-
-Campos principales:
-
-```ts
-billing: {
-  enabled: boolean;
-  provider: 'stripe' | 'exempt';
-  status: string;
-  planKey: 'omp_80' | 'omp_150' | 'omp_250';
-  activeUsersLimit: number;
-  userLimit: number;
-  billingDay: 1;
-  billingCycle: 'monthly';
-  graceDays: 5;
-  graceStartedAt?: Timestamp | null;
-  graceUntil?: Timestamp | null;
-  adminRestricted?: boolean;
-  stripeCustomerId?: string;
-  stripeSubscriptionId?: string;
-  stripePriceId?: string;
-  currentPeriodStart?: Timestamp;
-  currentPeriodEnd?: Timestamp;
-  nextPaymentDate?: Timestamp;
-  cancelAtPeriodEnd?: boolean;
-  lastPaymentStatus?: string;
-  lastInvoiceId?: string;
-  lastInvoiceUrl?: string;
-  lastStripeEventId?: string;
-  updatedAt?: Timestamp;
-}
-```
+* no inicia Checkout;
+* no se restringe por falta de pago;
+* no recibe recordatorios;
+* conserva un límite de usuarios;
+* muestra estado `exempt`.
 
 ---
 
-## Historial De Billing
+# Por Qué Se Cobra
 
-Los eventos importantes de Stripe se guardan en:
+OMP no es una página estática. Es una plataforma con costos técnicos y humanos continuos.
+
+La suscripción ayuda a cubrir:
+
+## Desarrollo
+
+* análisis;
+* arquitectura;
+* frontend;
+* backend;
+* diseño;
+* refactors;
+* nuevas funciones;
+* corrección de errores;
+* documentación;
+* testing;
+* despliegues.
+
+## Infraestructura
+
+* dominio;
+* host;
+* Firebase;
+* Google Cloud;
+* Firestore;
+* Cloud Functions;
+* tráfico;
+* almacenamiento;
+* secrets;
+* notificaciones.
+
+## Pagos
+
+* Stripe Billing;
+* Checkout;
+* Portal;
+* Webhook;
+* historial;
+* recordatorios;
+* comisión por transacción.
+
+## Seguridad
+
+* reglas;
+* validaciones;
+* mantenimiento de permisos;
+* protección por congregación;
+* revisión de accesos;
+* actualización de dependencias.
+
+## Soporte
+
+* solución de errores;
+* ayuda a administradores;
+* revisión de datos;
+* mantenimiento;
+* validación de builds;
+* compatibilidad con nuevas versiones.
+
+---
+
+# Valor Comercial Del Proyecto
+
+OMP no debe valorarse como una plantilla ni como un sitio web básico.
+
+Incluye:
+
+* una aplicación multiplataforma;
+* backend serverless;
+* autenticación;
+* permisos;
+* Firestore Rules;
+* Cloud Functions;
+* pagos;
+* notificaciones;
+* módulos operativos;
+* sincronizaciones;
+* pruebas;
+* CI;
+* documentación.
+
+## Valor Estimado
+
+| Escenario                                | Valor estimado            |
+| ---------------------------------------- | ------------------------- |
+| Desarrollo conservador                   | 350,000–650,000 MXN       |
+| Valor realista por alcance actual        | **650,000–1,200,000 MXN** |
+| Agencia con diseño, QA, DevOps y soporte | 1,200,000–2,000,000+ MXN  |
+
+Este rango es una estimación interna, no un avalúo contable ni una cotización vinculante.
+
+Como referencia externa, Upwork publica un rango histórico típico de **24–45 USD por hora** para desarrolladores React Native y aclara que la tarifa real depende de la negociación.
+
+## Horas Estimadas
+
+| Área                               | Horas   |
+| ---------------------------------- | ------- |
+| Análisis y arquitectura            | 60–120  |
+| UX/UI                              | 80–160  |
+| Frontend Expo / React Native / Web | 220–420 |
+| Firebase y servicios               | 120–240 |
+| Cloud Functions                    | 140–280 |
+| Firestore Rules                    | 80–180  |
+| Stripe                             | 70–140  |
+| Notificaciones                     | 40–90   |
+| Cache y rendimiento                | 50–120  |
+| QA y correcciones                  | 100–220 |
+| Documentación                      | 40–100  |
+
+Rango total:
 
 ```text
+Estimación conservadora: 700–900 horas
+Estimación realista:     900–1,400 horas
+Equipo formal/agencia:   1,400–2,000+ horas
+```
+
+## Diferencia Entre Valor Y Suscripción
+
+```text
+Valor estimado del sistema:
+650,000–1,200,000 MXN
+
+Precio pagado por congregación:
+70, 120 o 200 MXN al mes
+```
+
+Una congregación no paga el costo completo de desarrollo. El modelo distribuye mantenimiento y operación entre varias congregaciones.
+
+---
+
+# Costos Tecnológicos
+
+Los costos se dividen en:
+
+* costos confirmados mediante factura;
+* costos variables;
+* costos potenciales;
+* estimaciones operativas.
+
+El repositorio no contiene facturas. Por lo tanto, el README no debe declarar como pagado un monto que no esté respaldado.
+
+## Costos Fijos O Periódicos
+
+| Concepto                | Frecuencia             | Estado                        |
+| ----------------------- | ---------------------- | ----------------------------- |
+| Dominio `ompsuite.com`  | Anual                  | Registrar factura real        |
+| Hosting web externo     | Mensual/anual          | Registrar proveedor y factura |
+| Firebase / Google Cloud | Mensual por consumo    | Variable                      |
+| Expo EAS                | Mensual o uso gratuito | Según plan                    |
+| Apple Developer Program | Anual                  | Solo si se publica en iOS     |
+| Google Play Console     | Registro/publicación   | Solo si se publica            |
+| Herramientas de diseño  | Variable               | Registrar si existen          |
+| Monitoreo               | Variable               | Registrar si existe           |
+| Soporte técnico         | Continuo               | Tiempo humano                 |
+
+## Referencias Externas
+
+Expo publica actualmente:
+
+* plan Free: 0 USD/mes;
+* plan Starter: 19 USD/mes más uso;
+* plan Production: 199 USD/mes más uso.
+
+El plan gratuito incluye hasta 15 builds Android y 15 builds iOS según la página vigente.
+
+Apple publica una membresía de Apple Developer Program de 99 USD por año, o su equivalente local.
+
+Estos precios pueden cambiar. Antes de registrar un gasto se debe usar la factura real.
+
+---
+
+# Firebase Y Google Cloud
+
+Firebase puede operar inicialmente dentro de cuotas sin costo, pero requiere monitoreo.
+
+La página oficial de Firebase muestra para Cloud Firestore Standard una cuota sin costo que incluye, entre otros:
+
+* 1 GiB almacenado;
+* 10 GiB/mes de egreso;
+* 20,000 escrituras por día;
+* 50,000 lecturas por día;
+* 20,000 eliminaciones por día.
+
+Estas cuotas pueden cambiar y se aplican a nivel de proyecto.
+
+## Factores Que Generan Costo
+
+* lecturas;
+* escrituras;
+* eliminaciones;
+* almacenamiento;
+* tráfico;
+* ejecuciones de Functions;
+* CPU;
+* memoria;
+* logs;
+* builds;
+* consultas repetidas;
+* listeners;
+* crecimiento de usuarios.
+
+## Controles Implementados
+
+* cache en memoria;
+* cache persistente;
+* cache-first;
+* invalidación;
+* consultas count;
+* paginación;
+* limpieza programada;
+* evitar listeners duplicados;
+* aislamiento por congregación.
+
+---
+
+# Stripe Y Comisiones
+
+Stripe publica para México una tarifa estándar de:
+
+```text
+3.6% + 3 MXN
+```
+
+por transacción exitosa con tarjeta nacional. Las tarifas publicadas excluyen IVA y pueden aplicar cargos adicionales para tarjetas internacionales o conversión de moneda.
+
+## Cálculo Mensual Aproximado
+
+| Plan      | Cobro      | Comisión aproximada | Neto aproximado |
+| --------- | ---------- | ------------------- | --------------- |
+| `omp_80`  | 70.00 MXN  | 5.52 MXN            | 64.48 MXN       |
+| `omp_150` | 120.00 MXN | 7.32 MXN            | 112.68 MXN      |
+| `omp_250` | 200.00 MXN | 10.20 MXN           | 189.80 MXN      |
+
+Cálculo:
+
+```text
+70 × 3.6% + 3   = 5.52
+120 × 3.6% + 3  = 7.32
+200 × 3.6% + 3  = 10.20
+```
+
+## Acumulado Por Cuatro Meses
+
+| Plan      | Cobrado    | Comisión aproximada | Neto aproximado |
+| --------- | ---------- | ------------------- | --------------- |
+| `omp_80`  | 280.00 MXN | 22.08 MXN           | 257.92 MXN      |
+| `omp_150` | 480.00 MXN | 29.28 MXN           | 450.72 MXN      |
+| `omp_250` | 800.00 MXN | 40.80 MXN           | 759.20 MXN      |
+
+Estos montos representan una suscripción individual mantenida durante cuatro meses.
+
+No incluyen:
+
+* IVA sobre comisiones;
+* tarjetas internacionales;
+* conversión;
+* disputas;
+* reembolsos;
+* promociones;
+* periodos parciales.
+
+---
+
+# Costos Acumulados Durante Cuatro Meses
+
+Sin facturas no se puede declarar el costo exacto pagado.
+
+Se puede mantener una estimación provisional:
+
+| Concepto                            | Estimación de cuatro meses   |
+| ----------------------------------- | ---------------------------- |
+| Dominio anual prorrateado           | 70–235 MXN                   |
+| Dominio anual completo              | 200–700 MXN                  |
+| Hosting externo                     | 0–1,600 MXN                  |
+| Firebase / Google Cloud en uso bajo | 0–1,200 MXN                  |
+| Expo Free                           | 0 MXN                        |
+| Expo Starter durante cuatro meses   | 76 USD más uso               |
+| Stripe `omp_80`                     | 22.08 MXN de comisión aprox. |
+| Stripe `omp_150`                    | 29.28 MXN de comisión aprox. |
+| Stripe `omp_250`                    | 40.80 MXN de comisión aprox. |
+
+## Estimación Global Provisional
+
+```text
+Escenario mínimo:
+500–3,500 MXN + comisiones
+
+Escenario con servicios pagados:
+3,500–20,000+ MXN
+```
+
+Estos rangos no sustituyen las facturas.
+
+## Registro De Gastos Reales
+
+| Fecha     | Proveedor    | Concepto          | Monto     | Moneda  | Periodo       | Comprobante |
+| --------- | ------------ | ----------------- | --------- | ------- | ------------- | ----------- |
+| Pendiente | Registrador  | Dominio           | Pendiente | MXN/USD | Anual         | Pendiente   |
+| Pendiente | Hosting      | Web               | Pendiente | MXN/USD | Mensual/anual | Pendiente   |
+| Pendiente | Google Cloud | Firebase          | Pendiente | MXN/USD | Mensual       | Pendiente   |
+| Pendiente | Stripe       | Comisiones        | Variable  | MXN     | Transacción   | Dashboard   |
+| Pendiente | Expo         | EAS               | Pendiente | USD     | Mensual       | Pendiente   |
+| Pendiente | Apple        | Developer Program | Pendiente | USD     | Anual         | Pendiente   |
+| Pendiente | Google       | Play Console      | Pendiente | USD     | Registro      | Pendiente   |
+| Pendiente | Otro         | Herramientas      | Pendiente | MXN/USD | Variable      | Pendiente   |
+
+---
+
+# Cache Y Rendimiento
+
+OMP utiliza una estrategia cache-first.
+
+## Capas
+
+1. Memoria de sesión.
+2. AsyncStorage.
+3. Cache local de Firestore.
+4. Servidor Firestore.
+
+## Reglas
+
+* Billing no debe usar cache persistente como fuente de verdad.
+* Los permisos no deben depender del cache.
+* Se debe invalidar después de escribir.
+* Logout debe limpiar cache.
+* Cambiar de congregación debe limpiar datos anteriores.
+* El cache debe incluir `schemaVersion`.
+* Se debe limitar el tamaño.
+* No se deben mantener listeners innecesarios.
+
+## Ciclo
+
+El cache persistente utiliza un ciclo anual del 1 de septiembre al 31 de agosto.
+
+---
+
+# Notificaciones
+
+OMP utiliza:
+
+* notificaciones internas;
+* Expo Push Tokens;
+* Firebase Admin Messaging;
+* Expo Server SDK;
+* canales Android;
+* triggers Firestore.
+
+## Flujo
+
+1. El usuario inicia sesión.
+2. La app solicita permiso.
+3. Obtiene el token.
+4. Guarda el token asociado al usuario.
+5. Backend crea una notificación.
+6. Trigger procesa la notificación.
+7. Se envía push.
+8. La app abre la ruta asociada.
+
+## Reglas
+
+* No probar únicamente con Expo Go.
+* Probar en development build o release.
+* Eliminar tokens inválidos.
+* Segmentar por congregación.
+* Respetar preferencias.
+* No incluir información sensible innecesaria.
+
+---
+
+# Modelo De Datos Principal
+
+```text
+/users/{uid}
+/users/{uid}/pushTokens/{tokenDocId}
+
+/congregations/{congregationId}
+/congregations/{congregationId}/persons/{personId}
+/congregations/{congregationId}/meetings/{meetingId}
+/congregations/{congregationId}/meetings/{meetingId}/assignments/{assignmentId}
+/congregations/{congregationId}/assignments/{assignmentId}
+/congregations/{congregationId}/cleaningGroups/{groupId}
+/congregations/{congregationId}/cleaningSchedules/{scheduleId}
+/congregations/{congregationId}/cleaningSchedules/{scheduleId}/items/{itemId}
+/congregations/{congregationId}/hospitalitySchedules/{scheduleId}
+/congregations/{congregationId}/hospitalitySchedules/{scheduleId}/items/{itemId}
+/congregations/{congregationId}/outgoingTalks/{outgoingTalkId}
+/congregations/{congregationId}/departments/{departmentId}
+/congregations/{congregationId}/departmentAssignments/{assignmentId}
+/congregations/{congregationId}/notifications/{notificationId}
+/congregations/{congregationId}/changeLogs/{changeLogId}
+/congregations/{congregationId}/preachingReports/{monthId}/submissions/{userId}
 /congregations/{congregationId}/billingHistory/{stripeEventId}
+
+/dashboardSummary/{congregationId}
+/system/{docId}
+/superAdmins/{uid}
 ```
 
-Ejemplo de estructura:
+## Regla Central
 
-```ts
-{
-  provider: 'stripe';
-  type: string;
-  status: string;
-  amount?: number | null;
-  currency: 'MXN' | string;
-  planKey?: 'omp_80' | 'omp_150' | 'omp_250' | null;
-  stripeEventId: string;
-  stripeInvoiceId?: string | null;
-  stripeSubscriptionId?: string | null;
-  stripeCustomerId?: string | null;
-  hostedInvoiceUrl?: string | null;
-  createdAt: Timestamp;
-  processedAt: Timestamp;
-}
-```
-
-El historial puede limpiarse automáticamente después del periodo de retención definido por el backend.
+> Todo documento de una congregación debe estar asociado y protegido mediante `congregationId`.
 
 ---
 
-## Variables De Entorno
+# Variables De Entorno
 
-Crear `.env` local a partir de `.env.example`.
+Crear:
 
-Variables públicas del cliente:
+```bash
+cp .env.example .env
+```
+
+Variables públicas:
 
 ```env
 EXPO_PUBLIC_FIREBASE_API_KEY=
@@ -1249,13 +1406,13 @@ EXPO_PUBLIC_FIREBASE_APP_ID=
 EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=
 ```
 
-Las variables `EXPO_PUBLIC_*` se exponen al cliente. No guardar secretos en ellas.
+Las variables `EXPO_PUBLIC_*` son visibles en el cliente.
+
+No colocar secretos privados en ellas.
 
 ---
 
-## Secrets De Firebase Functions
-
-Las llaves privadas y Price IDs deben configurarse como secrets de Firebase Functions.
+# Secrets De Functions
 
 ```bash
 npx -y firebase-tools@latest functions:secrets:set STRIPE_SECRET_KEY
@@ -1266,29 +1423,23 @@ npx -y firebase-tools@latest functions:secrets:set STRIPE_PRICE_OMP_250
 npx -y firebase-tools@latest functions:secrets:set APP_BILLING_RETURN_URL
 ```
 
-No colocar `STRIPE_SECRET_KEY` en frontend.
-No guardar `sk_test_...` ni `sk_live_...` en `.env` público.
-No subir secrets al repositorio.
+## Price IDs De Sandbox Documentados
 
----
-
-## Price IDs De Prueba
-
-Los Price IDs de prueba documentados son:
-
-```text
+```env
 STRIPE_PRICE_OMP_80=price_1Tfr4rBNusNy7pYKEQ7ACpWM
 STRIPE_PRICE_OMP_150=price_1Tf4rBNusNy7pYKXPJFlhLwo
 STRIPE_PRICE_OMP_250=price_1Tfr4rBNusNy7pYKS7XQFqWA
 ```
 
-Estos IDs corresponden al entorno de prueba correcto. Si aparecen IDs con otro prefijo o de otro sandbox, debe verificarse el entorno de Stripe antes de hacer pruebas.
+No cambiar estos IDs mientras:
 
-Mientras los precios sigan siendo 70, 120 y 200 MXN, no deben reemplazarse los Price IDs correctos.
+* pertenezcan al sandbox correcto;
+* correspondan a los montos actuales;
+* no se cambien los precios.
 
 ---
 
-## Archivos Sensibles
+# Archivos Sensibles
 
 No subir:
 
@@ -1303,275 +1454,159 @@ serviceAccountKey.json
 *.p12
 *.key
 *.mobileprovision
-dist/
-web-build/
 *.aab
 *.apk
 *.zip
-logs de Firebase
-logs de Expo
-logs de npm
+dist/
+web-build/
+.cache/
+logs
 ```
 
 ---
 
-## Modelo De Datos Principal
+# Instalación
 
-Rutas principales:
+## Requisitos
 
-```text
-/users/{uid}
-/users/{uid}/pushTokens/{tokenDocId}
-/congregations/{congregationId}
-/congregations/{congregationId}/persons/{personId}
-/congregations/{congregationId}/meetings/{meetingId}
-/congregations/{congregationId}/meetings/{meetingId}/assignments/{assignmentId}
-/congregations/{congregationId}/assignments/{assignmentId}
-/congregations/{congregationId}/cleaningGroups/{groupId}
-/congregations/{congregationId}/cleaningSchedules/{scheduleId}
-/congregations/{congregationId}/cleaningSchedules/{scheduleId}/items/{itemId}
-/congregations/{congregationId}/hospitalitySchedules/{scheduleId}
-/congregations/{congregationId}/hospitalitySchedules/{scheduleId}/items/{itemId}
-/congregations/{congregationId}/outgoingTalks/{outgoingTalkId}
-/congregations/{congregationId}/departments/{departmentId}
-/congregations/{congregationId}/departmentAssignments/{assignmentId}
-/congregations/{congregationId}/changeLogs/{changeLogId}
-/congregations/{congregationId}/notifications/{notificationId}
-/congregations/{congregationId}/preachingReports/{monthId}/submissions/{userId}
-/congregations/{congregationId}/billingHistory/{stripeEventId}
-/dashboardSummary/{congregationId}
-/system/{docId}
-```
+* Node.js 22.
+* npm.
+* Firebase CLI.
+* Java 17 para el emulador.
+* Android Studio para Android local.
+* Xcode para iOS local.
+* EAS CLI para builds remotos.
 
-Regla central:
-
-> Todo dato de congregación debe estar aislado por `congregationId`. No hacer consultas globales desde cliente salvo flujos superadmin protegidos y explícitamente autorizados.
-
----
-
-## Cache Y Rendimiento
-
-OMP usa una estrategia cache-first para reducir lecturas innecesarias.
-
-Capas de cache:
-
-1. memoria de sesión;
-2. cache persistente con AsyncStorage;
-3. cache local de Firestore;
-4. servidor Firestore.
-
-Reglas de cache:
-
-* no usar cache persistente para billing sensible;
-* no usar cache como fuente de autoridad de permisos;
-* invalidar cache al crear, editar, publicar o eliminar;
-* limpiar cache al cerrar sesión;
-* limpiar cache al cambiar de congregación;
-* limitar tamaño por entrada;
-* usar `schemaVersion` para invalidación segura;
-* evitar listeners duplicados;
-* evitar `onSnapshot` si no se necesita tiempo real.
-
----
-
-## Costos Firestore
-
-Buenas prácticas:
-
-* preferir cache-first cuando sea posible;
-* evitar listeners en pantallas que solo necesitan lectura puntual;
-* no leer colecciones completas si basta un resumen;
-* usar filtros por `congregationId`;
-* paginar listados grandes;
-* usar consultas count cuando solo se necesita conteo;
-* limpiar listeners al desmontar;
-* evitar duplicar lecturas entre módulos;
-* usar IDs deterministas cuando sea útil;
-* separar datos publicados de borradores;
-* no consultar usuarios completos si solo se necesita cantidad.
-
----
-
-## Cloud Functions
-
-Cloud Functions se usa para operaciones sensibles y procesos de backend.
-
-Áreas principales:
-
-* usuarios;
-* reuniones;
-* eventos;
-* notificaciones;
-* dashboard;
-* territorios;
-* limpieza;
-* planeación operativa;
-* billing;
-* Stripe;
-* recordatorios;
-* limpieza programada;
-* exenciones administrativas.
-
-Funciones destacadas:
-
-* creación de usuarios por administrador;
-* listado seguro de usuarios;
-* publicación de schedules;
-* sincronización de limpieza;
-* sincronización de acomodadores/micrófonos;
-* envío de notificaciones;
-* generación de dashboard;
-* creación de Checkout de Stripe;
-* creación de Customer Portal;
-* webhook de Stripe;
-* recordatorios de pago;
-* limpieza de historial.
-
----
-
-## Firestore Rules
-
-Las reglas deben garantizar:
-
-* autenticación obligatoria;
-* aislamiento por congregación;
-* validación de usuario activo;
-* validación de roles;
-* validación de permisos;
-* validación de planes;
-* protección de billing;
-* protección de `/system`;
-* protección de roles y campos sensibles;
-* bloqueo de escrituras directas indebidas;
-* compatibilidad temporal con datos legacy cuando aplique.
-
-Regla general:
-
-> Si una acción puede afectar a otros usuarios, roles, permisos, billing, congregación o datos sensibles, debe estar protegida por Firestore Rules o Cloud Functions.
-
----
-
-## Comandos Principales
-
-Instalar dependencias:
+## Dependencias
 
 ```bash
 npm install
 npm --prefix functions install
 ```
 
-Iniciar Expo:
+## Inicio
 
 ```bash
 npm run start
 ```
 
-Android local:
-
-```bash
-npm run android
-```
-
-Android release local:
-
-```bash
-npm run android:release
-```
-
-iOS local:
-
-```bash
-npm run ios
-```
-
-Web:
+## Web
 
 ```bash
 npm run web
 ```
 
-Build web:
-
-```bash
-npm run build:web
-npm run preview:web
-```
-
-Validación completa:
-
-```bash
-npm run validate
-```
-
-Pruebas de reglas:
-
-```bash
-npm run test:rules
-```
-
-Deploy de reglas:
-
-```bash
-npm run deploy:rules
-```
-
-Deploy de Functions:
-
-```bash
-npm run deploy:functions
-```
-
-Deploy completo:
-
-```bash
-npm run deploy:all
-```
-
----
-
-## Validación Antes De Producción
-
-Antes de publicar:
-
-* `npm run validate` debe pasar completo.
-* TypeScript debe compilar sin errores.
-* Lint debe pasar.
-* Tests frontend deben pasar.
-* Tests de Functions deben pasar.
-* Firestore Rules deben probarse.
-* Functions deben compilar.
-* No debe haber secrets en Git.
-* No debe haber builds generados en Git.
-* Los índices necesarios deben estar desplegados.
-* Las reglas deben estar desplegadas.
-* Las Functions deben estar desplegadas.
-* Stripe webhook debe estar activo.
-* Customer Portal debe estar configurado.
-* Variables de entorno deben estar completas.
-* Android debe probarse en development build o release.
-* Web debe probarse con build real.
-* Notificaciones deben probarse fuera de Expo Go.
-* i18n debe actualizarse si hubo textos nuevos.
-* Estados vacíos y errores humanos deben revisarse.
-* Los precios deben permanecer sincronizados entre documentación, frontend, Functions y Stripe.
-
----
-
-## Build Android
-
-Desarrollo local:
+## Android
 
 ```bash
 npm run android
 ```
 
-Release local:
+## iOS
+
+```bash
+npm run ios
+```
+
+---
+
+# Comandos
+
+| Comando                    | Acción                     |
+| -------------------------- | -------------------------- |
+| `npm run start`            | Inicia Expo                |
+| `npm run android`          | Ejecuta Android            |
+| `npm run android:release`  | Ejecuta release Android    |
+| `npm run ios`              | Ejecuta iOS                |
+| `npm run web`              | Ejecuta Web                |
+| `npm run build:web`        | Exporta Web                |
+| `npm run preview:web`      | Previsualiza Web           |
+| `npm run lint`             | Ejecuta ESLint             |
+| `npm test`                 | Ejecuta Jest               |
+| `npm run test:coverage`    | Cobertura                  |
+| `npm run test:rules`       | Prueba Firestore Rules     |
+| `npm run validate`         | Validación integral        |
+| `npm run deploy:rules`     | Despliega reglas e índices |
+| `npm run deploy:functions` | Despliega Functions        |
+| `npm run deploy:all`       | Despliegue completo        |
+
+---
+
+# Validación
+
+```bash
+npm run validate
+```
+
+Incluye:
+
+```text
+Expo lint
+TypeScript
+Tests frontend
+Functions lint
+Functions build
+Functions tests
+```
+
+Las reglas se ejecutan por separado:
+
+```bash
+npm run test:rules
+```
+
+---
+
+# Integración Continua
+
+GitHub Actions ejecuta tres trabajos:
+
+## Aplicación
+
+```text
+npm ci
+npm run lint
+npx tsc --noEmit
+npm test -- --runInBand
+```
+
+## Functions
+
+```text
+npm ci --prefix functions
+npm --prefix functions run lint
+npm --prefix functions run build
+npm --prefix functions test -- --runInBand
+```
+
+## Firestore Rules
+
+```text
+npm ci
+instalación Java 17
+descarga del emulador
+npm run test:rules
+```
+
+No se debe declarar un release listo si alguno falla.
+
+---
+
+# Build Android
+
+## Desarrollo
+
+```bash
+npm run android
+```
+
+## Release Local
 
 ```bash
 npm run android:release
 ```
 
-Build recomendado con EAS:
+## EAS
 
 ```bash
 npm install -g eas-cli
@@ -1579,32 +1614,336 @@ eas login
 eas build --platform android
 ```
 
-Después de cambios de versión o permisos, actualizar:
+Antes de generar AAB:
 
-* `package.json`;
-* `app.json`;
-* `android.versionName`, si existe carpeta nativa;
-* `android.versionCode`, si existe carpeta nativa;
-* build AAB.
+* sincronizar versión;
+* actualizar versionCode;
+* ejecutar `npm run validate`;
+* ejecutar `npm run test:rules`;
+* probar notificaciones;
+* probar Stripe;
+* revisar permisos.
 
 ---
 
-## Build Web
+# Build Web
 
 ```bash
 npm run build:web
 npm run preview:web
 ```
 
-Firebase Hosting está deshabilitado para este proyecto. El resultado de `npm run build:web` debe publicarse usando el host externo configurado para OMP.
+El resultado se genera en:
+
+```text
+dist/
+```
+
+Debe publicarse en el host externo configurado.
 
 ---
 
-## Documentación Técnica
+# Estado Funcional Por Módulo
 
-La documentación larga vive en `docs/`.
+| Módulo                    | Estado                                |
+| ------------------------- | ------------------------------------- |
+| Login                     | Funcional                             |
+| Rutas protegidas          | Funcional                             |
+| Onboarding de idioma      | Funcional                             |
+| Tema                      | Funcional                             |
+| Usuarios                  | Funcional con corrección pendiente    |
+| Reuniones                 | Funcional                             |
+| Asignaciones              | Funcional                             |
+| Discursos externos        | Funcional                             |
+| Eventos                   | Funcional                             |
+| Limpieza                  | Funcional                             |
+| Acomodadores y micrófonos | Funcional con inconsistencia de Rules |
+| Predicación               | Funcional, requiere QA completo       |
+| Territorios               | Funcional, requiere QA completo       |
+| Organigrama móvil         | Funcional                             |
+| Organigrama escritorio    | Funcional con límite de profundidad   |
+| Dashboard                 | Funcional                             |
+| Configuración             | Funcional                             |
+| Notificaciones internas   | Funcional                             |
+| Push notifications        | Implementadas; validar dispositivos   |
+| Stripe Checkout           | Implementado; validar ambiente        |
+| Customer Portal           | Implementado; validar ambiente        |
+| Stripe Webhook            | Implementado; validar ambiente        |
+| Web                       | Funcional                             |
+| Android                   | Funcional en desarrollo/build         |
+| iOS                       | Preparado; falta QA real              |
+| CI                        | Configurado                           |
+| Firestore Rules tests     | Configurados                          |
 
-Documentos recomendados:
+---
+
+# Riesgos Técnicos Conocidos
+
+## Prioridad Crítica
+
+### Permiso `acomodadores_microfonos`
+
+El frontend acepta:
+
+```text
+acomodadores_microfonos
+```
+
+pero `validUserPermissions()` en Firestore Rules todavía no incluye esa clave en su lista `hasOnly()`.
+
+Posible consecuencia:
+
+* crear o editar un usuario con ese permiso puede ser rechazado.
+
+Corrección requerida:
+
+```text
+Agregar 'acomodadores_microfonos' en validUserPermissions().
+Agregar su validación con validPermissionActions().
+Agregar tests de Firestore Rules.
+```
+
+---
+
+## Prioridad Alta
+
+### Sincronización De Versión
+
+Definir una versión única y actualizar:
+
+```text
+package.json
+app.json
+ios.buildNumber
+android.versionCode
+README.md
+release notes
+```
+
+### Batch Del Organigrama
+
+La reconciliación usa un único `WriteBatch`.
+
+Una congregación grande puede generar demasiadas operaciones.
+
+Solución:
+
+* dividir en lotes;
+* usar tamaño seguro;
+* confirmar cada lote;
+* registrar progreso;
+* manejar fallos parciales.
+
+### QA De Stripe
+
+Validar:
+
+* secret key;
+* webhook secret;
+* Price IDs;
+* Checkout;
+* Portal;
+* webhook;
+* renovación;
+* pago fallido;
+* gracia;
+* exención;
+* historial.
+
+---
+
+## Prioridad Media
+
+### Organigrama Desktop
+
+La vista escritorio no es recursiva en profundidad ilimitada.
+
+Debe crearse un render recursivo para cualquier nivel.
+
+### Estado De Proyección
+
+El trigger automático solo registra fallos en logs.
+
+Agregar:
+
+```text
+organizationProjectionStatus
+lastProjectionAt
+lastProjectionError
+lastSuccessfulProjectionAt
+```
+
+### Coordinador Y Secretario Duplicados
+
+La generación toma el primero por nombre.
+
+Debe bloquearse la creación de:
+
+* dos coordinadores activos;
+* dos secretarios activos.
+
+### Roles Legacy
+
+Las Rules todavía aceptan:
+
+```text
+administrador
+usuario
+```
+
+Después de migrar Firestore deben eliminarse.
+
+### Placeholder Del Sistema
+
+Eliminar referencias como:
+
+```text
+tu_correo@gmail.com
+```
+
+de las reglas o sustituirlas por mecanismos de identidad seguros.
+
+---
+
+# Requisitos Para Producción
+
+OMP podrá declararse estable cuando cumpla:
+
+## Código
+
+* [ ] `npm run validate` pasa.
+* [ ] `npm run test:rules` pasa.
+* [ ] CI está verde.
+* [ ] No hay errores TypeScript.
+* [ ] No hay errores ESLint.
+* [ ] Functions compilan.
+* [ ] Tests críticos pasan.
+
+## Seguridad
+
+* [ ] `acomodadores_microfonos` corregido.
+* [ ] Roles legacy migrados.
+* [ ] Placeholder eliminado.
+* [ ] Rules auditadas.
+* [ ] Secrets rotados.
+* [ ] No hay credenciales en Git.
+* [ ] App Check planificado.
+
+## Billing
+
+* [ ] Sandbox probado.
+* [ ] Live mode probado.
+* [ ] Webhook desplegado.
+* [ ] Portal configurado.
+* [ ] Price IDs confirmados.
+* [ ] Pago exitoso probado.
+* [ ] Pago fallido probado.
+* [ ] Gracia probada.
+* [ ] Exención probada.
+* [ ] Renovación probada.
+
+## Plataformas
+
+* [ ] Web probado.
+* [ ] Android development build probado.
+* [ ] Android release probado.
+* [ ] iOS físico probado.
+* [ ] Navegación móvil auditada.
+* [ ] Deep links probados.
+* [ ] Push notifications probadas.
+
+## Datos
+
+* [ ] Migración legacy ejecutada.
+* [ ] Backups definidos.
+* [ ] Índices desplegados.
+* [ ] Organigrama validado.
+* [ ] Datos duplicados revisados.
+* [ ] Costos monitoreados.
+
+---
+
+# Roadmap
+
+## Fase 1 — Base Técnica
+
+**Estado:** completada.
+
+* Expo Router.
+* Authentication.
+* Firestore.
+* Functions.
+* rutas protegidas;
+* roles;
+* permisos;
+* documentación inicial.
+
+## Fase 2 — Módulos
+
+**Estado:** avanzada.
+
+* usuarios;
+* reuniones;
+* asignaciones;
+* limpieza;
+* hospitalidad;
+* discursos;
+* predicación;
+* territorios;
+* notificaciones;
+* organigrama;
+* dashboard.
+
+## Fase 3 — Billing
+
+**Estado:** implementado, pendiente de QA integral.
+
+* planes;
+* límites;
+* Checkout;
+* Portal;
+* Webhook;
+* historial;
+* recordatorios;
+* exenciones.
+
+## Fase 4 — Estabilización
+
+**Estado:** actual.
+
+* corregir permisos;
+* sincronizar versión;
+* mejorar organigrama;
+* dividir batches;
+* aumentar cobertura;
+* probar servicios externos;
+* revisar navegación.
+
+## Fase 5 — Producción
+
+* builds oficiales;
+* monitoreo;
+* Stripe live;
+* soporte;
+* backups;
+* App Check;
+* métricas;
+* publicación.
+
+## Fase 6 — Escalamiento
+
+* panel superadmin;
+* auditoría;
+* métricas por congregación;
+* costos;
+* reportes;
+* observabilidad;
+* administración avanzada;
+* soporte multi-congregación.
+
+---
+
+# Documentación Técnica
 
 ```text
 docs/architecture.md
@@ -1628,257 +1967,128 @@ docs/congregation-plans.md
 
 ---
 
-## Estado Comercial
+# Convención De Commits
 
-OMP Suite mantiene precios accesibles para congregaciones.
-
-Precios actuales:
-
-| Plan      |               Límite |      Precio |
-| --------- | -------------------: | ----------: |
-| `omp_80`  |  80 usuarios activos |  70 MXN/mes |
-| `omp_150` | 150 usuarios activos | 120 MXN/mes |
-| `omp_250` | 250 usuarios activos | 200 MXN/mes |
-
-Estos precios se mantienen sin incremento en esta actualización.
-
----
-
-## Política De Suscripciones Activas
-
-Reglas actuales:
-
-* No se suben precios.
-* No se cambian Price IDs por aumento.
-* No se modifican suscripciones activas.
-* No se recrean productos Stripe si los actuales funcionan.
-* Nuevas congregaciones usan los mismos precios vigentes.
-* El historial de pagos se conserva.
-* El webhook de Stripe sigue siendo fuente de verdad.
-* Las exenciones se respetan.
-
----
-
-## Riesgos Técnicos Actuales
-
-Riesgos a revisar:
-
-* diferencias entre permisos frontend y Firestore Rules;
-* valores legacy pendientes de migración;
-* reglas que todavía aceptan compatibilidad temporal;
-* pantallas secundarias sin flecha de regreso móvil;
-* organigrama desktop con jerarquías profundas;
-* cobertura incompleta de tests de Firestore Rules;
-* validación de billing en sandbox y producción;
-* consistencia entre documentación y código;
-* uso correcto de Price IDs por ambiente;
-* manejo de permisos delegables y no delegables;
-* control real de costos de Firebase/Google Cloud;
-* registro interno de facturas y suscripciones pagadas.
-
----
-
-## Pendientes Técnicos Recomendados
-
-Prioridad alta:
-
-* Actualizar README a versión `1.13.3`.
-* Confirmar que documentación y código mantienen precios actuales.
-* Registrar costos reales de dominio, host, Firebase, Google Cloud, Stripe y terceros.
-* Agregar pruebas de Firestore Rules para organigrama.
-* Revisar permisos `organigrama` / `departments`.
-* Revisar permiso `acomodadores_microfonos` si existe en frontend y rules.
-* Auditar navegación móvil secundaria.
-* Verificar que todas las pantallas profundas usen `PageHeader showBack`.
-* Probar Stripe Checkout en sandbox.
-* Probar Stripe Webhook en sandbox.
-* Probar Customer Portal en sandbox.
-* Confirmar que no hay secrets expuestos.
-
-Prioridad media:
-
-* Mejorar organigrama desktop recursivo.
-* Agregar dashboard por perfil.
-* Agregar métricas internas.
-* Mejorar estados vacíos.
-* Mejorar errores humanos.
-* Completar documentación de QA.
-* Preparar checklist de producción.
-
-Prioridad futura:
-
-* Panel superadmin.
-* Administración avanzada de congregaciones.
-* Gestión externa de planes.
-* App Check gradual.
-* Métricas de uso.
-* Auditoría de acciones administrativas.
-* Mejoras de rendimiento.
-* Mejoras visuales para escritorio.
-
----
-
-## Roadmap Actualizado
-
-### Fase 1 — Base Técnica
-
-Estado: completada.
-
-Incluye:
-
-* Expo Router.
-* Firebase Auth.
-* Firestore.
-* Cloud Functions.
-* estructura protegida;
-* roles;
-* permisos;
-* documentación base;
-* configuración de build;
-* estructura de módulos.
-
-### Fase 2 — Módulos Operativos
-
-Estado: avanzada.
-
-Incluye:
-
-* usuarios;
-* reuniones;
-* asignaciones;
-* limpieza;
-* acomodadores y micrófonos;
-* predicación;
-* territorios;
-* notificaciones;
-* organigrama;
-* dashboard.
-
-### Fase 3 — Billing
-
-Estado: implementado y en estabilización.
-
-Incluye:
-
-* planes;
-* límites de usuarios;
-* Stripe Checkout;
-* Customer Portal;
-* Webhook;
-* historial;
-* recordatorios;
-* exenciones;
-* validaciones backend.
-
-### Fase 4 — Seguridad Y QA
-
-Estado: en proceso.
-
-Incluye:
-
-* Firestore Rules;
-* tests de reglas;
-* validaciones por permisos;
-* validaciones por congregación;
-* revisión de valores legacy;
-* protección de campos sensibles;
-* auditoría de navegación.
-
-### Fase 5 — Producción
-
-Estado: pendiente / preparación.
-
-Incluye:
-
-* validación de ambientes;
-* build Android;
-* build web;
-* pruebas reales de notificaciones;
-* revisión de Stripe live;
-* revisión de secrets;
-* checklist de despliegue;
-* monitoreo inicial.
-
-### Fase 6 — Escalamiento
-
-Estado: futuro.
-
-Incluye:
-
-* panel superadmin;
-* métricas;
-* auditoría;
-* administración avanzada;
-* optimización de costos;
-* App Check;
-* mejoras de UX;
-* soporte multi-congregación avanzado si se decide.
-
----
-
-## Convención De Commits
+```text
+feat: nueva funcionalidad
+fix: corrección
+docs: documentación
+test: pruebas
+refactor: reestructuración
+chore: mantenimiento
+ci: integración continua
+```
 
 Ejemplos:
 
 ```text
-feat: agregar gestion de territorios
-fix: corregir permisos de limpieza
-docs: actualizar README principal
-test: cubrir reglas de organigrama
-refactor: separar servicios de billing
-chore: actualizar dependencias
+fix(rules): aceptar permiso acomodadores_microfonos
+refactor(org-chart): dividir reconciliacion en batches
+docs(readme): actualizar estado funcional
+test(rules): cubrir permisos de hospitalidad
+chore(version): sincronizar version 1.15.2
 ```
-
-Mantener commits pequeños y enfocados.
-
-No mezclar:
-
-* refactors grandes;
-* cambios visuales;
-* reglas de seguridad;
-* cambios de billing;
-* cambios de documentación;
-* cambios de navegación;
-
-salvo que sean parte del mismo objetivo técnico.
 
 ---
 
-## Checklist Antes De Abrir PR
-
-Antes de abrir un PR:
+# Flujo Git Recomendado
 
 ```bash
+git checkout -b fix/permissions-hospitality
 npm run validate
 npm run test:rules
 git status --short
+git add .
+git commit -m "fix(rules): align hospitality permissions"
+git push
 ```
 
-Verificar:
+Mantener cambios enfocados.
 
-* no hay archivos sensibles;
-* no hay builds generados;
-* no hay secrets;
-* no se tocaron precios accidentalmente;
-* no se rompieron tipos;
-* no se rompió lint;
-* no se rompieron tests;
-* README está actualizado;
-* docs están sincronizados;
-* cambios tienen alcance claro.
+No mezclar en un mismo commit:
+
+* reglas;
+* refactors masivos;
+* diseño;
+* billing;
+* navegación;
+* documentación;
+
+salvo que sean parte del mismo objetivo.
 
 ---
 
-## Nota Final
+# Checklist Antes De PR
 
-OMP Suite ya cuenta con una base técnica fuerte y debe documentarse como producto real en estabilización, no como prototipo. La documentación debe reflejar el trabajo acumulado durante aproximadamente 4 meses, la arquitectura multiplataforma, el backend Firebase, la integración Stripe, los módulos operativos, las reglas de seguridad existentes, los costos tecnológicos y el valor comercial real del proyecto.
+* [ ] Alcance definido.
+* [ ] No hay secrets.
+* [ ] No hay builds.
+* [ ] No se cambiaron precios.
+* [ ] No se cambiaron Price IDs.
+* [ ] Lint pasa.
+* [ ] TypeScript pasa.
+* [ ] Tests pasan.
+* [ ] Rules tests pasan.
+* [ ] Documentación actualizada.
+* [ ] Cambios de versión sincronizados.
+* [ ] Capturas o pasos QA incluidos.
 
-Los precios se mantienen sin aumento:
+---
+
+# Política De Precios
+
+Los precios vigentes se mantienen:
 
 ```text
-omp_80  = 70 MXN/mes
-omp_150 = 120 MXN/mes
-omp_250 = 200 MXN/mes
+OMP 80:  70 MXN/mes
+OMP 150: 120 MXN/mes
+OMP 250: 200 MXN/mes
 ```
 
-El valor técnico y comercial estimado del proyecto completo es mucho mayor que la suscripción mensual. La suscripción mensual existe para cubrir operación, infraestructura, mantenimiento, procesamiento de pagos, soporte y evolución continua sin trasladar a una sola congregación el costo completo de desarrollo del sistema.
+No modificar sin una decisión comercial explícita.
+
+Cualquier cambio futuro requiere:
+
+1. decisión comercial;
+2. nuevos Prices en Stripe;
+3. estrategia para clientes existentes;
+4. actualización frontend;
+5. actualización backend;
+6. actualización de documentación;
+7. pruebas;
+8. comunicación previa.
+
+---
+
+# Conclusión
+
+OMP Suite es una plataforma funcional con una arquitectura sólida y un alcance superior al de un prototipo.
+
+Actualmente cuenta con:
+
+* frontend multiplataforma;
+* backend Firebase;
+* Cloud Functions;
+* reglas de seguridad;
+* permisos;
+* billing;
+* notificaciones;
+* módulos operativos;
+* cache;
+* CI;
+* testing;
+* documentación.
+
+Su valor comercial estimado es considerablemente mayor que la suscripción mensual. Los precios bajos buscan distribuir el costo de infraestructura, mantenimiento y desarrollo continuo entre varias congregaciones.
+
+La prioridad inmediata no es agregar decenas de funciones nuevas. Es cerrar las diferencias actuales:
+
+1. permiso `acomodadores_microfonos`;
+2. sincronización de versión;
+3. batches del organigrama;
+4. QA real de Stripe;
+5. QA de notificaciones;
+6. pruebas físicas Android e iOS;
+7. eliminación de compatibilidad legacy cuando la migración termine.
+
+Después de cerrar esos puntos, OMP puede clasificarse como una versión comercial estable y preparada para una adopción más amplia.
