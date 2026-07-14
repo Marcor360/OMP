@@ -33,6 +33,7 @@ export {
   syncMeetingCleaningAssignmentsByManager,
   createMeetingAssignmentByManager,
   updateMeetingAssignmentByManager,
+  deleteMeetingAssignmentByManager,
 } from './meetings-management.js';
 
 export {

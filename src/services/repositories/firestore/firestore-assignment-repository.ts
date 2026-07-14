@@ -547,7 +547,11 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     meetingId: string,
     assignmentId: string
   ): Promise<void> => {
-    await deleteDoc(assignmentDocRef(congregationId, meetingId, assignmentId));
+    const callable = httpsCallable<
+      {congregationId: string; meetingId: string; assignmentId: string},
+      {ok: true; assignmentId: string; notificationsDeleted: number}
+    >(functions, 'deleteMeetingAssignmentByManager');
+    await callable({congregationId, meetingId, assignmentId});
     invalidateAssignmentCache(congregationId, meetingId, assignmentId);
   },
 

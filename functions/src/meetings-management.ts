@@ -73,6 +73,19 @@ type UpdateMeetingAssignmentPayload = {
   assignmentData?: unknown;
 };
 
+type DeleteMeetingAssignmentPayload = {
+  congregationId?: unknown;
+  meetingId?: unknown;
+  assignmentId?: unknown;
+};
+
+const ASSIGNMENT_PROTECTED_FIELDS = new Set([
+  'createdBy', 'createdAt', 'updatedBy', 'updatedAt', 'congregationId', 'meetingId',
+]);
+
+const sanitizeAssignmentInput = (data: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(data).filter(([key]) => !ASSIGNMENT_PROTECTED_FIELDS.has(key)));
+
 const normalizeText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -938,9 +951,15 @@ export const createMeetingAssignmentByManager = onCall(
     const payload = request.data as CreateMeetingAssignmentPayload;
     const congregationId = parseCongregationId(payload.congregationId);
     const meetingId = parseMeetingId(payload.meetingId);
-    const assignmentData = parseAssignmentData(payload.assignmentData);
+    const assignmentData = sanitizeAssignmentInput(parseAssignmentData(payload.assignmentData));
     const requester = await getRequesterProfile(request.auth.uid);
     assertMeetingManager({ requester, congregationId });
+
+    const meetingRef = adminDb.collection('congregations').doc(congregationId)
+      .collection('meetings').doc(meetingId);
+    if (!(await meetingRef.get()).exists) {
+      throw new HttpsError('not-found', 'Reunion no encontrada.');
+    }
 
     const dueDate = toTimestamp(assignmentData.dueDate) ?? toTimestamp(assignmentData.date);
     await assertNoOutgoingTalkConflictForUser({
@@ -949,12 +968,7 @@ export const createMeetingAssignmentByManager = onCall(
       assignmentDate: dueDate,
     });
 
-    const ref = await adminDb
-      .collection('congregations')
-      .doc(congregationId)
-      .collection('meetings')
-      .doc(meetingId)
-      .collection('assignments')
+    const ref = await meetingRef.collection('assignments')
       .add(
         sanitizeForFirestore({
           ...assignmentData,
@@ -967,6 +981,8 @@ export const createMeetingAssignmentByManager = onCall(
             requester.email ??
             'Usuario',
           status: normalizeText(assignmentData.status) ?? 'pending',
+          createdBy: request.auth.uid,
+          updatedBy: request.auth.uid,
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         }) as Record<string, unknown>
@@ -987,9 +1003,15 @@ export const updateMeetingAssignmentByManager = onCall(
     const congregationId = parseCongregationId(payload.congregationId);
     const meetingId = parseMeetingId(payload.meetingId);
     const assignmentId = parseMeetingId(payload.assignmentId);
-    const assignmentData = parseAssignmentData(payload.assignmentData);
+    const assignmentData = sanitizeAssignmentInput(parseAssignmentData(payload.assignmentData));
     const requester = await getRequesterProfile(request.auth.uid);
     assertMeetingManager({ requester, congregationId });
+
+    const meetingRef = adminDb.collection('congregations').doc(congregationId)
+      .collection('meetings').doc(meetingId);
+    if (!(await meetingRef.get()).exists) {
+      throw new HttpsError('not-found', 'Reunion no encontrada.');
+    }
 
     const ref = adminDb
       .collection('congregations')
@@ -1017,6 +1039,9 @@ export const updateMeetingAssignmentByManager = onCall(
     await ref.update(
       sanitizeForFirestore({
         ...assignmentData,
+        congregationId,
+        meetingId,
+        updatedBy: request.auth.uid,
         updatedAt: FieldValue.serverTimestamp(),
         ...(assignmentData.status === 'completed'
           ? { completedAt: FieldValue.serverTimestamp() }
@@ -1025,6 +1050,39 @@ export const updateMeetingAssignmentByManager = onCall(
     );
 
     return { ok: true };
+  }
+);
+
+export const deleteMeetingAssignmentByManager = onCall(
+  {region: 'us-central1'},
+  async (request): Promise<{ok: true; assignmentId: string; notificationsDeleted: number}> => {
+    if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    const payload = request.data as DeleteMeetingAssignmentPayload;
+    const congregationId = parseCongregationId(payload.congregationId);
+    const meetingId = parseMeetingId(payload.meetingId);
+    const assignmentId = parseMeetingId(payload.assignmentId);
+    const requester = await getRequesterProfile(request.auth.uid);
+    assertMeetingManager({requester, congregationId});
+
+    const congregationRef = adminDb.collection('congregations').doc(congregationId);
+    const meetingRef = congregationRef.collection('meetings').doc(meetingId);
+    const assignmentRef = meetingRef.collection('assignments').doc(assignmentId);
+    const [meetingSnap, assignmentSnap] = await Promise.all([meetingRef.get(), assignmentRef.get()]);
+    if (!meetingSnap.exists) throw new HttpsError('not-found', 'Reunion no encontrada.');
+    if (!assignmentSnap.exists) return {ok: true, assignmentId, notificationsDeleted: 0};
+
+    const notifications = await congregationRef.collection('notifications')
+      .where('assignmentId', '==', assignmentId).get();
+    const writer = adminDb.bulkWriter();
+    notifications.docs.forEach((doc) => writer.delete(doc.ref));
+    writer.delete(assignmentRef);
+    await writer.close();
+    await congregationRef.collection('changeLogs').add({
+      action: 'meeting_assignment_deleted', meetingId, assignmentId,
+      congregationId, performedBy: request.auth.uid,
+      performedAt: FieldValue.serverTimestamp(),
+    });
+    return {ok: true, assignmentId, notificationsDeleted: notifications.size};
   }
 );
 
@@ -1053,7 +1111,16 @@ export const deleteMeetingByManager = onCall(
       throw new HttpsError('not-found', 'Reunion no encontrada.');
     }
 
-    await meetingRef.delete();
+    const notifications = await adminDb.collection('congregations').doc(congregationId)
+      .collection('notifications').where('metadata.meetingId', '==', meetingId).get();
+    const writer = adminDb.bulkWriter();
+    notifications.docs.forEach((doc) => writer.delete(doc.ref));
+    await writer.close();
+    await adminDb.recursiveDelete(meetingRef);
+    await adminDb.collection('congregations').doc(congregationId).collection('changeLogs').add({
+      action: 'meeting_deleted', meetingId, congregationId,
+      performedBy: request.auth.uid, performedAt: FieldValue.serverTimestamp(),
+    });
 
     return { ok: true };
   }
