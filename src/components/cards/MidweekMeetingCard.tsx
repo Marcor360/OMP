@@ -3,7 +3,7 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { StatusBadge, meetingStatusColor } from '@/src/components/common/StatusBadge';
+import { StatusBadge, useStatusColors } from '@/src/components/common/StatusBadge';
 import { ThemedText } from '@/src/components/themed-text';
 import { MidweekMeeting } from '@/src/services/meetings/midweek-meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
@@ -19,6 +19,7 @@ interface MidweekMeetingCardProps {
 export function MidweekMeetingCard({ meeting, onPress }: MidweekMeetingCardProps) {
   const router = useRouter();
   const colors = useAppColors();
+  const { meetingStatusColor } = useStatusColors();
   const styles = createStyles(colors);
   const i18n = useOptionalI18n();
 

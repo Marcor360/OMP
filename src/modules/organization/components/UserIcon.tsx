@@ -2,10 +2,10 @@ import Svg, { Path } from 'react-native-svg';
 
 type UserIconProps = {
   size?: number;
-  color?: string;
+  color: string;
 };
 
-export function UserIcon({ size = 20, color = '#334155' }: UserIconProps) {
+export function UserIcon({ size = 20, color }: UserIconProps) {
   return (
     <Svg
       width={size}

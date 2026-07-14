@@ -1,5 +1,3 @@
-import { Appearance } from 'react-native';
-
 import { BrandPalette } from '@/src/styles/palette';
 
 const light = {
@@ -40,9 +38,9 @@ const light = {
 
   info: '#2563EB',
   infoLight: '#DBEAFE',
-  infoDark: '#1E40AF',
+  infoDark: BrandPalette.deepBlue,
 
-  roleAdmin: '#1E40AF',
+  roleAdmin: BrandPalette.deepBlue,
   roleSupervisor: '#0284C7',
   roleUser: '#16A34A',
 
@@ -63,7 +61,7 @@ const light = {
 
 const dark = {
   primary: '#60A5FA',
-  onPrimary: BrandPalette.white,
+  onPrimary: '#0B1220',
   primaryDark: BrandPalette.primaryBlue,
   primaryLight: '#93C5FD',
 
@@ -131,8 +129,5 @@ export type AppColors = (typeof AppColorSchemes)[AppColorSchemeName];
 export function getAppColors(scheme: AppColorSchemeName): AppColors {
   return AppColorSchemes[scheme];
 }
-
-const currentScheme = Appearance.getColorScheme() ?? 'light';
-export const CurrentAppColors = getAppColors(currentScheme);
 
 export type AppColor = keyof AppColors;

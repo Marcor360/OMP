@@ -9,7 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 import { useOptionalI18n } from '@/src/i18n/index';
-import { useAppColors } from '@/src/styles';
+import { type AppColors, useAppColors } from '@/src/styles';
 import { PermissionStatus } from '@/src/types/permissions.types';
 
 interface PermissionRowProps {
@@ -22,25 +22,28 @@ interface PermissionRowProps {
   loading?: boolean;
 }
 
-const STATUS_CONFIG = {
+const STATUS_CONFIG: Record<
+  PermissionStatus,
+  { labelKey: string; colorToken: keyof AppColors; icon: keyof typeof Ionicons.glyphMap }
+> = {
   granted: {
     labelKey: 'permission.status.granted',
-    color: '#16A34A',
+    colorToken: 'success',
     icon: 'checkmark-circle' as const,
   },
   denied: {
     labelKey: 'permission.status.denied',
-    color: '#DC2626',
+    colorToken: 'error',
     icon: 'close-circle' as const,
   },
   undetermined: {
     labelKey: 'permission.status.undetermined',
-    color: '#D97706',
+    colorToken: 'warning',
     icon: 'help-circle' as const,
   },
   unavailable: {
     labelKey: 'permission.status.unavailable',
-    color: '#9CA3AF',
+    colorToken: 'textDisabled',
     icon: 'remove-circle-outline' as const,
   },
 };
@@ -61,6 +64,8 @@ export function PermissionRow({
   const colors = useAppColors();
   const i18n = useOptionalI18n();
   const cfg = STATUS_CONFIG[status];
+  const { colorToken } = cfg;
+  const statusColor = colors[colorToken];
 
   const [requesting, setRequesting] = React.useState(false);
 
@@ -166,8 +171,8 @@ export function PermissionRow({
           {description}
         </Text>
         <View style={styles.statusRow}>
-          <Ionicons name={cfg.icon} size={12} color={cfg.color} />
-          <Text style={[styles.statusLabel, { color: cfg.color }]}>{statusLabel}</Text>
+          <Ionicons name={cfg.icon} size={12} color={statusColor} />
+          <Text style={[styles.statusLabel, { color: statusColor }]}>{statusLabel}</Text>
         </View>
       </View>
 

@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
-import { StatusBadge, assignmentStatusColor, priorityColor } from '@/src/components/common/StatusBadge';
+import { StatusBadge, useStatusColors } from '@/src/components/common/StatusBadge';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Assignment, ASSIGNMENT_PRIORITY_LABELS, ASSIGNMENT_STATUS_LABELS } from '@/src/types/assignment';
 import { formatDate, isOverdue } from '@/src/utils/dates/dates';
@@ -41,6 +41,7 @@ const getOverdueDate = (assignment: Assignment): Date => {
 export function AssignmentCard({ assignment, onPress }: AssignmentCardProps) {
   const router = useRouter();
   const colors = useAppColors();
+  const { assignmentStatusColor, priorityColor } = useStatusColors();
   const styles = createStyles(colors);
   const i18n = useOptionalI18n();
   const dateOverdue = isOverdue(getOverdueDate(assignment));

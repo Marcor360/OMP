@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
-import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common/StatusBadge';
+import { StatusBadge, useStatusColors } from '@/src/components/common/StatusBadge';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
 import { useAuth } from '@/src/context/auth-context';
@@ -35,6 +35,7 @@ export function ProfileScreen() {
   const { appUser } = useUser();
   const { logout } = useAuth();
   const colors = useAppColors();
+  const { roleColor, userStatusColor } = useStatusColors();
   const styles = createStyles(colors);
   const { t } = useI18n();
   const [congregationName, setCongregationName] = useState('--');

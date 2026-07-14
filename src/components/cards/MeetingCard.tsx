@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
-import { StatusBadge, meetingStatusColor } from '@/src/components/common/StatusBadge';
+import { StatusBadge, useStatusColors } from '@/src/components/common/StatusBadge';
 import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Meeting } from '@/src/types/meeting';
@@ -29,6 +29,7 @@ export function MeetingCard({ meeting, onPress, muted = false }: MeetingCardProp
   const router = useRouter();
   const { t } = useI18n();
   const colors = useAppColors();
+  const { meetingStatusColor } = useStatusColors();
   const styles = createStyles(colors);
 
   const handlePress = () => {

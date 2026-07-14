@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -43,40 +43,53 @@ export function StatusBadge({
   );
 }
 
-export const meetingStatusColor: Record<string, string> = {
-  pending: '#6B7280',
-  scheduled: '#2563EB',
-  in_progress: '#D97706',
-  completed: '#16A34A',
-  cancelled: '#DC2626',
-};
+export interface StatusColorMaps {
+  meetingStatusColor: Record<string, string>;
+  assignmentStatusColor: Record<string, string>;
+  priorityColor: Record<string, string>;
+  userStatusColor: Record<string, string>;
+  roleColor: Record<string, string>;
+}
 
-export const assignmentStatusColor: Record<string, string> = {
-  pending: '#D97706',
-  in_progress: '#2563EB',
-  completed: '#16A34A',
-  cancelled: '#6B7280',
-  overdue: '#DC2626',
-};
-
-export const priorityColor: Record<string, string> = {
-  low: '#6B7280',
-  medium: '#D97706',
-  high: '#DC2626',
-  critical: '#7C3AED',
-};
-
-export const userStatusColor: Record<string, string> = {
-  active: '#16A34A',
-  inactive: '#6B7280',
-  suspended: '#DC2626',
-};
-
-export const roleColor: Record<string, string> = {
-  admin: '#1E40AF',
-  supervisor: '#0284C7',
-  user: '#16A34A',
-};
+/** Colores de estado derivados del tema activo. */
+export function useStatusColors(): StatusColorMaps {
+  const colors = useAppColors();
+  return useMemo(
+    () => ({
+      meetingStatusColor: {
+        pending: colors.textMuted,
+        scheduled: colors.info,
+        in_progress: colors.warning,
+        completed: colors.success,
+        cancelled: colors.error,
+      },
+      assignmentStatusColor: {
+        pending: colors.warning,
+        in_progress: colors.info,
+        completed: colors.success,
+        cancelled: colors.textMuted,
+        overdue: colors.error,
+      },
+      priorityColor: {
+        low: colors.priorityLow,
+        medium: colors.priorityMedium,
+        high: colors.priorityHigh,
+        critical: colors.priorityCritical,
+      },
+      userStatusColor: {
+        active: colors.success,
+        inactive: colors.textMuted,
+        suspended: colors.error,
+      },
+      roleColor: {
+        admin: colors.roleAdmin,
+        supervisor: colors.roleSupervisor,
+        user: colors.roleUser,
+      },
+    }),
+    [colors]
+  );
+}
 
 const createStyles = (_colors: AppColorSet) =>
   StyleSheet.create({

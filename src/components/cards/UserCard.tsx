@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
-import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common/StatusBadge';
+import { StatusBadge, useStatusColors } from '@/src/components/common/StatusBadge';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   AppUser,
@@ -21,6 +21,7 @@ interface UserCardProps {
 export function UserCard({ user, onPress }: UserCardProps) {
   const router = useRouter();
   const colors = useAppColors();
+  const { roleColor, userStatusColor } = useStatusColors();
   const styles = createStyles(colors);
 
   const initials = user.displayName

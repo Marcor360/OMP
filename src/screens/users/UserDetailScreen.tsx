@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
-import { StatusBadge, roleColor, userStatusColor } from '@/src/components/common/StatusBadge';
+import { StatusBadge, useStatusColors } from '@/src/components/common/StatusBadge';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
@@ -44,6 +44,7 @@ export function UserDetailScreen() {
   const router = useRouter();
   const { appUser, congregationId, isAdmin, loadingProfile, profileError, uid: currentUid } = useUser();
   const colors = useAppColors();
+  const { roleColor, userStatusColor } = useStatusColors();
   const styles = createStyles(colors);
   const { t } = useI18n();
   const { showToast } = useToast();
