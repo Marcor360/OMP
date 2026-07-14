@@ -52,7 +52,15 @@ export type ReconcileResult = {
   deactivated: number;
   departmentsCreated: number;
   warnings: string[];
+  operationCount: number;
 };
+
+export class StructuralRoleConflictError extends Error {
+  constructor(public readonly role: 'coordinador' | 'secretario', public readonly userIds: string[]) {
+    super(`Hay mas de un ${role} activo: ${userIds.join(', ')}.`);
+    this.name = 'StructuralRoleConflictError';
+  }
+}
 
 const assignmentDocId = (departmentId: string, position: string, uid: string): string =>
   `auto_${departmentId}_${position}_${uid}`;
@@ -105,17 +113,17 @@ export const computeDesiredAssignments = (
     for (const assignment of resolveUserAssignments(user)) rows.push({ user, assignment });
   }
 
-  // Coordinador y Secretario son unicos: se toma el primero por nombre.
+  // Los roles estructurales son únicos. Nunca se elige uno silenciosamente.
   let coordinatorUid: string | null = null;
   let secretaryUid: string | null = null;
   for (const { user, assignment } of rows) {
     if (assignment.position === 'coordinador') {
       if (!coordinatorUid) coordinatorUid = user.uid;
-      else warnings.push('Hay mas de un Coordinador; se usa el primero por nombre.');
+      else throw new StructuralRoleConflictError('coordinador', rows.filter((row) => row.assignment.position === 'coordinador').map((row) => row.user.uid));
     }
     if (assignment.position === 'secretario') {
       if (!secretaryUid) secretaryUid = user.uid;
-      else warnings.push('Hay mas de un Secretario; se usa el primero por nombre.');
+      else throw new StructuralRoleConflictError('secretario', rows.filter((row) => row.assignment.position === 'secretario').map((row) => row.user.uid));
     }
   }
 
@@ -191,7 +199,14 @@ export const reconcileOrgChartProjection = async (
   db: Firestore = getFirestore()
 ): Promise<ReconcileResult> => {
   const cid = congregationId.trim();
-  if (!cid) return { created: 0, updated: 0, deactivated: 0, departmentsCreated: 0, warnings: ['congregationId vacio'] };
+  if (!cid) return { created: 0, updated: 0, deactivated: 0, departmentsCreated: 0, warnings: ['congregationId vacio'], operationCount: 0 };
+
+  const congregationRef = db.collection('congregations').doc(cid);
+  await congregationRef.set({
+    organizationProjectionStatus: 'processing',
+    lastProjectionStartedAt: FieldValue.serverTimestamp(),
+    lastProjectionError: null,
+  }, {merge: true});
 
   const usersSnap = await db
     .collection('users')
@@ -215,7 +230,18 @@ export const reconcileOrgChartProjection = async (
     })
     .filter((user) => user.displayName.trim().length > 0);
 
-  const { assignments, referencedDepartments, warnings } = computeDesiredAssignments(users);
+  let desired: ReturnType<typeof computeDesiredAssignments>;
+  try {
+    desired = computeDesiredAssignments(users);
+  } catch (error) {
+    await congregationRef.set({
+      organizationProjectionStatus: 'failed',
+      lastProjectionAt: FieldValue.serverTimestamp(),
+      lastProjectionError: error instanceof Error ? error.message : String(error),
+    }, {merge: true});
+    throw error;
+  }
+  const {assignments, referencedDepartments, warnings} = desired;
 
   const deptCol = db.collection('congregations').doc(cid).collection('departments');
   const asgCol = db.collection('congregations').doc(cid).collection('departmentAssignments');
@@ -223,14 +249,15 @@ export const reconcileOrgChartProjection = async (
 
   const existingDeptIds = new Set(deptSnap.docs.map((docSnap) => docSnap.id));
   const now = FieldValue.serverTimestamp();
-  const batch = db.batch();
+  type WriteOperation = (batch: FirebaseFirestore.WriteBatch) => void;
+  const operations: WriteOperation[] = [];
 
   // 1) Crear docs de departamento faltantes (NUNCA sobrescribe existentes).
   let departmentsCreated = 0;
   for (const deptId of referencedDepartments) {
     if (STRUCTURAL_DEPARTMENTS.includes(deptId)) continue;
     if (existingDeptIds.has(deptId)) continue;
-    batch.set(deptCol.doc(deptId), {
+    operations.push((batch) => batch.set(deptCol.doc(deptId), {
       id: deptId,
       congregationId: cid,
       name: SERVICE_DEPARTMENT_LABELS[deptId] ?? deptId,
@@ -243,7 +270,7 @@ export const reconcileOrgChartProjection = async (
       allowMultipleAssistants: true,
       createdAt: now,
       updatedAt: now,
-    });
+    }));
     departmentsCreated += 1;
   }
 
@@ -274,10 +301,10 @@ export const reconcileOrgChartProjection = async (
     if (assignment.email) base.email = assignment.email;
 
     if (existingById.has(assignment.id)) {
-      batch.set(asgCol.doc(assignment.id), base, { merge: true });
+      operations.push((batch) => batch.set(asgCol.doc(assignment.id), base, { merge: true }));
       updated += 1;
     } else {
-      batch.set(asgCol.doc(assignment.id), { ...base, createdAt: now, createdBy: 'system' });
+      operations.push((batch) => batch.set(asgCol.doc(assignment.id), { ...base, createdAt: now, createdBy: 'system' }));
       created += 1;
     }
   }
@@ -288,11 +315,44 @@ export const reconcileOrgChartProjection = async (
     const data = docSnap.data();
     if (data.isActive !== true) continue;
     if (desiredIds.has(docSnap.id)) continue;
-    batch.set(asgCol.doc(docSnap.id), { isActive: false, updatedAt: now, updatedBy: 'system' }, { merge: true });
+    operations.push((batch) => batch.set(asgCol.doc(docSnap.id), { isActive: false, updatedAt: now, updatedBy: 'system' }, { merge: true }));
     deactivated += 1;
   }
 
-  await batch.commit();
+  try {
+    for (let offset = 0; offset < operations.length; offset += 400) {
+      const chunk = operations.slice(offset, offset + 400);
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          const batch = db.batch();
+          chunk.forEach((operation) => operation(batch));
+          await batch.commit();
+          lastError = undefined;
+          break;
+        } catch (error) {
+          lastError = error;
+          logger.warn('reconcileOrgChartProjection chunk retry', {congregationId: cid, offset, attempt, error});
+        }
+      }
+      if (lastError) throw lastError;
+    }
+    await congregationRef.set({
+      organizationProjectionStatus: warnings.length ? 'completed_with_warnings' : 'completed',
+      lastProjectionAt: FieldValue.serverTimestamp(),
+      lastSuccessfulProjectionAt: FieldValue.serverTimestamp(),
+      lastProjectionError: null,
+      lastProjectionWarnings: warnings,
+      lastProjectionOperationCount: operations.length,
+    }, {merge: true});
+  } catch (error) {
+    await congregationRef.set({
+      organizationProjectionStatus: 'failed', lastProjectionAt: FieldValue.serverTimestamp(),
+      lastProjectionError: error instanceof Error ? error.message : String(error),
+      lastProjectionWarnings: warnings, lastProjectionOperationCount: operations.length,
+    }, {merge: true});
+    throw error;
+  }
   logger.info('reconcileOrgChartProjection done', {
     congregationId: cid,
     created,
@@ -302,5 +362,5 @@ export const reconcileOrgChartProjection = async (
     warnings,
   });
 
-  return { created, updated, deactivated, departmentsCreated, warnings };
+  return { created, updated, deactivated, departmentsCreated, warnings, operationCount: operations.length };
 };

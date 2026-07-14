@@ -160,6 +160,8 @@ beforeEach(async () => {
         role: 'user',
         congregationId: 'suspended',
       })),
+      setDoc(doc(db, 'users/root'), userDoc({uid: 'root', role: 'admin', congregationId: 'c1'})),
+      setDoc(doc(db, 'superAdmins/root'), {isActive: true}),
     ]);
   });
 });
@@ -265,8 +267,8 @@ describe('org chart department rules', () => {
     );
   });
 
-  it('allows coordinator to sync organization service assignments', async () => {
-    await assertSucceeds(
+  it('blocks direct organization service assignment writes even for coordinator', async () => {
+    await assertFails(
       updateDoc(doc(authedDb('coordinator'), 'users/member'), {
         serviceAssignments: [
           { position: 'encargado', department: 'limpieza', label: 'Encargado de Limpieza' },
@@ -291,5 +293,41 @@ describe('org chart department rules', () => {
         updatedAt: Timestamp.now(),
       })
     );
+  });
+});
+
+describe('sensitive user writes', () => {
+  it('blocks self role, permissions, congregation and protection escalation', async () => {
+    const ref = doc(authedDb('member'), 'users/member');
+    await assertFails(updateDoc(ref, {role: 'admin', updatedAt: Timestamp.now()}));
+    await assertFails(updateDoc(ref, {permissions: {usuarios: {manage: true}}, updatedAt: Timestamp.now()}));
+    await assertFails(updateDoc(ref, {congregationId: 'c2', updatedAt: Timestamp.now()}));
+    await assertFails(updateDoc(ref, {protectedFromDeletion: true, updatedAt: Timestamp.now()}));
+  });
+
+  it('accepts acomodadores_microfonos and rejects unknown permission keys', async () => {
+    const valid = userDoc({
+      uid: 'hospitality-manager', role: 'supervisor', congregationId: 'c1',
+      permissions: {acomodadores_microfonos: {view: true, manage: true}},
+    });
+    await assertSucceeds(setDoc(doc(authedDb('root'), 'users/hospitality-manager'), valid));
+    await assertSucceeds(updateDoc(doc(authedDb('root'), 'users/hospitality-manager'), {
+      permissions: {acomodadores_microfonos: {view: true, edit: true}},
+      updatedAt: Timestamp.now(),
+    }));
+    await assertFails(setDoc(doc(authedDb('root'), 'users/invalid-permission'), {
+      ...userDoc({uid: 'invalid-permission', role: 'user', congregationId: 'c1'}),
+      permissions: {desconocido: {view: true}},
+    }));
+  });
+
+  it('does not protect a user because of creator strings', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users/string-marker'), {
+        ...userDoc({uid: 'string-marker', role: 'user', congregationId: 'c1'}),
+        createdBy: 'system', createdByName: 'Sistema Sistema', createdByEmail: 'tu_correo@gmail.com',
+      });
+    });
+    await assertSucceeds(getDoc(doc(authedDb('admin'), 'users/string-marker')));
   });
 });

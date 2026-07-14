@@ -17,6 +17,7 @@ import { resolveCongregationEmailDomain, resolveGeneratedEmail, splitDisplayName
 import { logCreateUserFailure } from './logging.js';
 import {
   ensureAdminElderPrivileges,
+  buildServiceAssignmentKeys,
   normalizeAssignmentForRole,
   normalizeText,
   parseCreateUserPayload,
@@ -138,6 +139,7 @@ export const createUserByAdmin = onCall(
         if (payload.serviceDepartment) userDoc.serviceDepartment = payload.serviceDepartment;
         if (payload.departmentLabel) userDoc.department = payload.departmentLabel;
         userDoc.serviceAssignments = payload.serviceAssignments;
+        userDoc.serviceAssignmentKeys = buildServiceAssignmentKeys(payload.serviceAssignments);
         if (payload.privileges && Object.keys(payload.privileges).length > 0) {
           userDoc.privileges = payload.privileges;
         }
@@ -354,6 +356,9 @@ export const updateUserByAdmin = onCall(
     if (payload.serviceAssignmentsProvided || payload.serviceAssignmentProvided || payload.role) {
       docUpdates.serviceAssignments =
         nextServiceAssignments.length > 0 ? nextServiceAssignments : FieldValue.delete();
+      docUpdates.serviceAssignmentKeys = nextServiceAssignments.length > 0
+        ? buildServiceAssignmentKeys(nextServiceAssignments)
+        : FieldValue.delete();
     }
 
     if (payload.privilegesProvided || serviceAssignmentsRequireAdminElder(nextServiceAssignments)) {

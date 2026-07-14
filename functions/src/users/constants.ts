@@ -49,6 +49,7 @@ export const PERMISSION_DEPARTMENTS: PermissionDepartment[] = [
   'avisos',
   'asignaciones',
   'organigrama',
+  'acomodadores_microfonos',
 ];
 
 export const PERMISSION_ACTIONS: PermissionAction[] = [

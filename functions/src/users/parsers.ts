@@ -441,6 +441,9 @@ export const parseServiceAssignments = (
   const byKey = new Map<string, StoredServiceAssignment>();
 
   if (Array.isArray(value)) {
+    if (value.length > 20) {
+      throw new HttpsError('invalid-argument', 'No se permiten mas de 20 funciones congregacionales.');
+    }
     value.forEach((item) => {
       if (typeof item !== 'object' || item === null || Array.isArray(item)) {
         throw new HttpsError('invalid-argument', 'Funciones congregacionales invalidas.');
@@ -452,7 +455,11 @@ export const parseServiceAssignments = (
         parseServiceDepartment(record.department)
       );
       if (normalized) {
-        byKey.set(`${normalized.position}:${normalized.department ?? ''}`, normalized);
+        const key = `${normalized.position}:${normalized.department ?? ''}`;
+        if (byKey.has(key)) {
+          throw new HttpsError('invalid-argument', 'No se permiten funciones congregacionales duplicadas.');
+        }
+        byKey.set(key, normalized);
       }
     });
   }
@@ -466,7 +473,7 @@ export const parseServiceAssignments = (
     byKey.set(`${fallbackStored.position}:${fallbackStored.department ?? ''}`, fallbackStored);
   }
 
-  const assignments = Array.from(byKey.values()).slice(0, 20);
+  const assignments = Array.from(byKey.values());
   const hasCoordinator = assignments.some((assignment) => assignment.position === 'coordinador');
   const hasSecretary = assignments.some((assignment) => assignment.position === 'secretario');
 
@@ -479,6 +486,12 @@ export const parseServiceAssignments = (
 
   return assignments;
 };
+
+export const buildServiceAssignmentKeys = (
+  assignments: Pick<StoredServiceAssignment, 'position' | 'department'>[]
+): string[] => assignments.map(
+  (assignment) => `${assignment.position}:${assignment.department ?? ''}`
+);
 
 export const parseListUsersPayload = (value: unknown): ListUsersPayload => {
   if (value === undefined || value === null) return {};

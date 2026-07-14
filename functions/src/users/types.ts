@@ -41,7 +41,8 @@ export type PermissionDepartment =
   | 'configuracion'
   | 'avisos'
   | 'asignaciones'
-  | 'organigrama';
+  | 'organigrama'
+  | 'acomodadores_microfonos';
 
 export type PermissionAction =
   | 'view'

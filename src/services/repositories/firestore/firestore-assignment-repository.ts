@@ -2,21 +2,18 @@ import {
   Timestamp,
   addDoc,
   collection,
-  deleteDoc,
   type DocumentData,
   limit,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
-  updateDoc,
   where,
   type Query,
   type QueryConstraint,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
-import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import { db, functions } from '@/src/lib/firebase/app';
 import {
   assignmentDocRef,
@@ -448,36 +445,9 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     assignedByUid: string,
     assignedByName: string
   ): Promise<string> => {
-    try {
-      const ref = await addDoc(
-        meetingAssignmentsCollectionRef(congregationId, meetingId),
-        sanitizeForFirestore({
-          ...data,
-          congregationId,
-          meetingId,
-          assignedByUid,
-          assignedByName,
-          status: 'pending' as AssignmentStatus,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        })
-      );
-
-      invalidateAssignmentCache(congregationId, meetingId, ref.id);
-      return ref.id;
-    } catch (error) {
-      if (!isFirebaseErrorCode(error, 'permission-denied')) {
-        throw error;
-      }
-
-      return createAssignmentViaFunction(
-        congregationId,
-        meetingId,
-        data,
-        assignedByUid,
-        assignedByName
-      );
-    }
+    return createAssignmentViaFunction(
+      congregationId, meetingId, data, assignedByUid, assignedByName
+    );
   },
 
   createCleaningGroup: async (
@@ -522,22 +492,7 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     assignmentId: string,
     data: UpdateAssignmentDTO
   ): Promise<void> => {
-    try {
-      await updateDoc(
-        assignmentDocRef(congregationId, meetingId, assignmentId),
-        sanitizeForFirestore({
-          ...data,
-          updatedAt: serverTimestamp(),
-          ...(data.status === 'completed' ? { completedAt: serverTimestamp() } : {}),
-        })
-      );
-    } catch (error) {
-      if (!isFirebaseErrorCode(error, 'permission-denied')) {
-        throw error;
-      }
-
-      await updateAssignmentViaFunction(congregationId, meetingId, assignmentId, data);
-    }
+    await updateAssignmentViaFunction(congregationId, meetingId, assignmentId, data);
 
     invalidateAssignmentCache(congregationId, meetingId, assignmentId);
   },

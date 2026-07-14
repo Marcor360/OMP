@@ -10,6 +10,10 @@
 
 import { HttpsError } from 'firebase-functions/v2/https';
 import { stripOrgChartManageUnlessAuthorized } from '../users.js';
+import {
+  parsePermissions as parseStoredPermissions,
+  parseServiceAssignments as parseStoredServiceAssignments,
+} from '../users/parsers.js';
 
 // ─── Helpers replicados ───────────────────────────────────────────────────────
 
@@ -396,6 +400,38 @@ describe('parsePermissions', () => {
         { strict: false }
       )
     ).not.toThrow();
+  });
+});
+
+describe('parseServiceAssignments security', () => {
+  it('rejects duplicate assignments instead of silently deduplicating', () => {
+    expect(() => parseStoredServiceAssignments([
+      {position: 'encargado', department: 'limpieza', label: 'ignored'},
+      {position: 'encargado', department: 'limpieza', label: 'different'},
+    ], 'admin')).toThrow(HttpsError);
+  });
+
+  it('rejects more than 20 assignments instead of truncating', () => {
+    const assignments = Array.from({length: 21}, (_, index) => ({
+      position: 'auxiliar', department: index % 2 ? 'limpieza' : 'reuniones', label: `Label ${index}`,
+    }));
+    expect(() => parseStoredServiceAssignments(assignments, 'admin')).toThrow(HttpsError);
+  });
+
+  it('derives the label from position and department, not client input', () => {
+    expect(parseStoredServiceAssignments([
+      {position: 'encargado', department: 'limpieza', label: 'Coordinador'},
+    ], 'admin')).toEqual([
+      {position: 'encargado', department: 'limpieza', label: 'Encargado de Limpieza'},
+    ]);
+  });
+});
+
+describe('backend permission contract', () => {
+  it('accepts acomodadores_microfonos and rejects unknown modules', () => {
+    expect(parseStoredPermissions({acomodadores_microfonos: {view: true, manage: true}}))
+      .toEqual({acomodadores_microfonos: {view: true, manage: true}});
+    expect(() => parseStoredPermissions({desconocido: {view: true}})).toThrow(HttpsError);
   });
 });
 

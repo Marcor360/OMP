@@ -93,52 +93,22 @@ service cloud.firestore {
       return isActive()
         && (
           currentUserData().servicePosition == position
-          || (
-            currentUserData().serviceAssignments is list
-            && (
-              (
-                position == 'coordinador'
-                && currentUserData().serviceAssignments.hasAny([
-                  { 'position': 'coordinador', 'label': 'Coordinador' }
-                ])
-              )
-              || (
-                position == 'secretario'
-                && currentUserData().serviceAssignments.hasAny([
-                  { 'position': 'secretario', 'label': 'Secretario' }
-                ])
-              )
-              || (
-                (position == 'encargado' || position == 'auxiliar')
-                && currentUserData().serviceAssignments.hasAny([
-                  { 'position': position, 'department': 'limpieza', 'label': 'Encargado de Limpieza' },
-                  { 'position': position, 'department': 'limpieza', 'label': 'Auxiliar de Limpieza' },
-                  { 'position': position, 'department': 'tesoreria', 'label': 'Encargado de Tesoreria' },
-                  { 'position': position, 'department': 'tesoreria', 'label': 'Auxiliar de Tesoreria' },
-                  { 'position': position, 'department': 'predicacion', 'label': 'Encargado de Predicacion' },
-                  { 'position': position, 'department': 'predicacion', 'label': 'Auxiliar de Predicacion' },
-                  { 'position': position, 'department': 'reuniones', 'label': 'Encargado de Reuniones' },
-                  { 'position': position, 'department': 'reuniones', 'label': 'Auxiliar de Reuniones' },
-                  { 'position': position, 'department': 'discursos', 'label': 'Encargado de Discursos' },
-                  { 'position': position, 'department': 'discursos', 'label': 'Auxiliar de Discursos' }
-                ])
-              )
-            )
-          )
+          || hasServiceAssignmentKey(position, '')
         );
+    }
+
+    function hasServiceAssignmentKey(position, department) {
+      return isActive()
+        && currentUserData().serviceAssignmentKeys is list
+        && currentUserData().serviceAssignmentKeys.hasAny([position + ':' + department]);
     }
 
     function isCoordinatorOrSecretary() {
       return isActive()
         && (
           currentUserData().servicePosition in ['coordinador', 'secretario']
-          || (
-            currentUserData().serviceAssignments is list
-            && currentUserData().serviceAssignments.hasAny([
-              { 'position': 'coordinador', 'label': 'Coordinador' },
-              { 'position': 'secretario', 'label': 'Secretario' }
-            ])
-          )
+          || hasServiceAssignmentKey('coordinador', '')
+          || hasServiceAssignmentKey('secretario', '')
         );
     }
 
@@ -176,12 +146,7 @@ service cloud.firestore {
                   || currentUserData().serviceDepartment == 'limpieza'
                 )
               )
-              || (
-                currentUserData().serviceAssignments is list
-                && currentUserData().serviceAssignments.hasAny([
-                  { 'position': 'encargado', 'department': 'limpieza', 'label': 'Encargado de Limpieza' }
-                ])
-              )
+              || hasServiceAssignmentKey('encargado', 'limpieza')
             )
           )
         );
@@ -203,13 +168,7 @@ service cloud.firestore {
                 currentUserData().servicePosition == 'encargado'
                 && currentUserData().serviceDepartment == 'acomodadores_microfonos'
               )
-              || (
-                currentUserData().serviceAssignments is list
-                && currentUserData().serviceAssignments.hasAny([
-                  { 'position': 'encargado', 'department': 'acomodadores_microfonos', 'label': 'Encargado de Acomodadores y Microfonos' },
-                  { 'position': 'auxiliar', 'department': 'acomodadores_microfonos', 'label': 'Auxiliar de Acomodadores y Microfonos' }
-                ])
-              )
+              || hasServiceAssignmentKey('encargado', 'acomodadores_microfonos')
             )
           )
         );
@@ -232,21 +191,10 @@ service cloud.firestore {
               || currentUserData().servicePosition == 'auxiliar'
             )
           )
-          || (
-            currentUserData().serviceAssignments is list
-            && (
-              (
-                currentUserData().privileges is map
-                && currentUserData().privileges.isElder == true
-                && currentUserData().serviceAssignments.hasAny([
-                  { 'position': 'encargado', 'department': 'predicacion', 'label': 'Encargado de Predicacion' }
-                ])
-              )
-              || currentUserData().serviceAssignments.hasAny([
-                { 'position': 'auxiliar', 'department': 'predicacion', 'label': 'Auxiliar de Predicacion' }
-              ])
-            )
-          )
+          || (currentUserData().privileges is map
+            && currentUserData().privileges.isElder == true
+            && hasServiceAssignmentKey('encargado', 'predicacion'))
+          || hasServiceAssignmentKey('auxiliar', 'predicacion')
         );
     }
 
@@ -261,12 +209,7 @@ service cloud.firestore {
                 currentUserData().servicePosition == 'encargado'
                 && currentUserData().serviceDepartment == 'discursos'
               )
-              || (
-                currentUserData().serviceAssignments is list
-                && currentUserData().serviceAssignments.hasAny([
-                  { 'position': 'encargado', 'department': 'discursos', 'label': 'Encargado de Discursos' }
-                ])
-              )
+              || hasServiceAssignmentKey('encargado', 'discursos')
             )
           )
         );
@@ -289,12 +232,7 @@ service cloud.firestore {
                 currentUserData().servicePosition == 'encargado'
                 && currentUserData().serviceDepartment == 'reuniones'
               )
-              || (
-                currentUserData().serviceAssignments is list
-                && currentUserData().serviceAssignments.hasAny([
-                  { 'position': 'encargado', 'department': 'reuniones', 'label': 'Encargado de Reuniones' }
-                ])
-              )
+              || hasServiceAssignmentKey('encargado', 'reuniones')
             )
           )
         );
@@ -348,26 +286,8 @@ service cloud.firestore {
               || currentUserData().serviceDepartment == 'territorios'
             )
           )
-          || (
-            currentUserData().serviceAssignments is list
-            && (
-              currentUserData().serviceAssignments.hasAny([
-                { 'position': position, 'department': 'predicacion', 'label': 'Encargado de Predicacion' }
-              ])
-              || currentUserData().serviceAssignments.hasAny([
-                { 'position': position, 'department': 'predicacion', 'label': 'Auxiliar de Predicacion' }
-              ])
-              || currentUserData().serviceAssignments.hasAny([
-                { 'position': position, 'department': 'territorios', 'label': 'Territorios' }
-              ])
-              || currentUserData().serviceAssignments.hasAny([
-                { 'position': position, 'department': 'territorios', 'label': 'Encargado de Predicacion' }
-              ])
-              || currentUserData().serviceAssignments.hasAny([
-                { 'position': position, 'department': 'territorios', 'label': 'Auxiliar de Predicacion' }
-              ])
-            )
-          )
+          || hasServiceAssignmentKey(position, 'predicacion')
+          || hasServiceAssignmentKey(position, 'territorios')
         );
     }
 
@@ -756,6 +676,7 @@ service cloud.firestore {
         'servicePosition',
         'serviceDepartment',
         'serviceAssignments',
+        'serviceAssignmentKeys',
         'department',
         'privileges',
         'responsibilities',
@@ -864,6 +785,10 @@ service cloud.firestore {
           || validUserServiceAssignments(data.serviceAssignments)
         )
         && (
+          !('serviceAssignmentKeys' in data)
+          || (data.serviceAssignmentKeys is list && data.serviceAssignmentKeys.size() <= 20)
+        )
+        && (
           !('isElder' in data)
           || data.isElder is bool
         )
@@ -899,44 +824,16 @@ service cloud.firestore {
 
     function isSystemPrincipalUserData(data) {
       return (
+          ('uid' in data)
+          && data.uid is string
+          && exists(/databases/$(database)/documents/superAdmins/$(data.uid))
+        )
+        || (
           ('protectedFromDeletion' in data && data.protectedFromDeletion == true)
           || ('isSystemUser' in data && data.isSystemUser == true)
           || ('isPrimaryAdmin' in data && data.isPrimaryAdmin == true)
           || ('isRootAdmin' in data && data.isRootAdmin == true)
           || ('systemProtected' in data && data.systemProtected == true)
-        )
-        || (
-          ('createdBy' in data)
-          && data.createdBy in [
-            'system',
-            'sistema',
-            'System',
-            'Sistema',
-            'Sistema Sistema',
-            'tu_correo@gmail.com'
-          ]
-        )
-        || (
-          ('createdByName' in data)
-          && data.createdByName in [
-            'system',
-            'sistema',
-            'System',
-            'Sistema',
-            'Sistema Sistema',
-            'tu_correo@gmail.com'
-          ]
-        )
-        || (
-          ('createdByEmail' in data)
-          && data.createdByEmail in [
-            'system',
-            'sistema',
-            'System',
-            'Sistema',
-            'Sistema Sistema',
-            'tu_correo@gmail.com'
-          ]
         );
     }
 
@@ -1005,7 +902,8 @@ service cloud.firestore {
           'configuracion',
           'avisos',
           'asignaciones',
-          'organigrama'
+          'organigrama',
+          'acomodadores_microfonos'
         ])
         && (!('usuarios' in permissions) || validPermissionActions(permissions.usuarios))
         && (!('reuniones' in permissions) || validPermissionActions(permissions.reuniones))
@@ -1017,7 +915,8 @@ service cloud.firestore {
         && (!('configuracion' in permissions) || validPermissionActions(permissions.configuracion))
         && (!('avisos' in permissions) || validPermissionActions(permissions.avisos))
         && (!('asignaciones' in permissions) || validPermissionActions(permissions.asignaciones))
-        && (!('organigrama' in permissions) || validPermissionActions(permissions.organigrama));
+        && (!('organigrama' in permissions) || validPermissionActions(permissions.organigrama))
+        && (!('acomodadores_microfonos' in permissions) || validPermissionActions(permissions.acomodadores_microfonos));
     }
 
     function validUserCreate(userId) {
@@ -2356,20 +2255,15 @@ service cloud.firestore {
           && resource.data.congregationId == myCongregationId()
         );
 
-      allow create: if isSuperAdmin() || (canCreateUsers()
-        && validUserCreate(userId)
-        && targetDocInMyCongregation()
-        && safeDelegatedUserCreate());
+      // La creación administrativa pasa exclusivamente por Cloud Functions.
+      allow create: if isSuperAdmin()
+        && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
+        && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments));
 
-      allow update: if isSuperAdmin() || (
-          // Sincronizacion del organigrama congregacional: solo cargos de servicio.
-          validOrganizationServiceAssignmentSync()
-        ) || (
-          canEditUsers()
-          && storedDocInMyCongregation()
-          && targetDocInMyCongregation()
-          && validUserUpdateByAdmin(userId)
-          && safeDelegatedUserUpdate()
+      allow update: if (
+          isSuperAdmin()
+          && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
+          && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments))
         ) || (
           validSelfUserUpdate(userId)
         ) || (
@@ -2380,13 +2274,8 @@ service cloud.firestore {
           validCleaningMembershipUserUpdate()
         );
 
-      allow delete: if isSuperAdmin() || (
-          canDeleteUsers()
-          && storedDocInMyCongregation()
-          && resource.data.role != 'admin'
-          && resource.data.role != 'administrador'
-          && !isSystemPrincipalUserData(resource.data)
-        );
+      // La eliminación administrativa pasa exclusivamente por Cloud Functions.
+      allow delete: if isSuperAdmin();
 
       match /pushTokens/{tokenDocId} {
         allow get, list: if isSameUser(userId);

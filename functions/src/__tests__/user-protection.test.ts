@@ -7,9 +7,9 @@ describe('isSystemPrincipalUser', () => {
     expect(isSystemPrincipalUser({ isRootAdmin: true })).toBe(true);
   });
 
-  it('protege al usuario principal por identidad propia', () => {
-    expect(isSystemPrincipalUser({ email: 'tu_correo@gmail.com' })).toBe(true);
-    expect(isSystemPrincipalUser({ displayName: 'Sistema Sistema' })).toBe(true);
+  it('no protege por identidad textual', () => {
+    expect(isSystemPrincipalUser({ email: 'tu_correo@gmail.com' })).toBe(false);
+    expect(isSystemPrincipalUser({ displayName: 'Sistema Sistema' })).toBe(false);
   });
 
   it('no protege usuarios normales aunque los haya creado el sistema principal', () => {

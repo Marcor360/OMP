@@ -1074,7 +1074,12 @@ export const deleteMeetingAssignmentByManager = onCall(
     const notifications = await congregationRef.collection('notifications')
       .where('assignmentId', '==', assignmentId).get();
     const writer = adminDb.bulkWriter();
-    notifications.docs.forEach((doc) => writer.delete(doc.ref));
+    const relatedNotifications = notifications.docs.filter((doc) => {
+      const data = doc.data() as Record<string, unknown>;
+      const metadata = asRecord(data.metadata);
+      return normalizeText(data.meetingId) === meetingId || normalizeText(metadata?.meetingId) === meetingId;
+    });
+    relatedNotifications.forEach((doc) => writer.delete(doc.ref));
     writer.delete(assignmentRef);
     await writer.close();
     await congregationRef.collection('changeLogs').add({
@@ -1082,7 +1087,7 @@ export const deleteMeetingAssignmentByManager = onCall(
       congregationId, performedBy: request.auth.uid,
       performedAt: FieldValue.serverTimestamp(),
     });
-    return {ok: true, assignmentId, notificationsDeleted: notifications.size};
+    return {ok: true, assignmentId, notificationsDeleted: relatedNotifications.length};
   }
 );
 
@@ -1108,13 +1113,18 @@ export const deleteMeetingByManager = onCall(
 
     const meetingSnap = await meetingRef.get();
     if (!meetingSnap.exists) {
-      throw new HttpsError('not-found', 'Reunion no encontrada.');
+      return {ok: true};
     }
 
-    const notifications = await adminDb.collection('congregations').doc(congregationId)
-      .collection('notifications').where('metadata.meetingId', '==', meetingId).get();
+    const notificationsRef = adminDb.collection('congregations').doc(congregationId).collection('notifications');
+    const [metadataNotifications, directNotifications] = await Promise.all([
+      notificationsRef.where('metadata.meetingId', '==', meetingId).get(),
+      notificationsRef.where('meetingId', '==', meetingId).get(),
+    ]);
     const writer = adminDb.bulkWriter();
-    notifications.docs.forEach((doc) => writer.delete(doc.ref));
+    const notificationRefs = new Map([...metadataNotifications.docs, ...directNotifications.docs]
+      .map((doc) => [doc.ref.path, doc.ref]));
+    notificationRefs.forEach((ref) => writer.delete(ref));
     await writer.close();
     await adminDb.recursiveDelete(meetingRef);
     await adminDb.collection('congregations').doc(congregationId).collection('changeLogs').add({

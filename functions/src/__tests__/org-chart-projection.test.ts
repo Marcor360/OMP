@@ -58,16 +58,18 @@ describe('computeDesiredAssignments', () => {
     expect(warnings.some((warning) => warning.includes('sin departamento'))).toBe(true);
   });
 
-  it('toma el primer coordinador por nombre si hay dos y advierte', () => {
-    const { assignments, warnings } = computeDesiredAssignments([
+  it('rechaza dos coordinadores activos', () => {
+    expect(() => computeDesiredAssignments([
       user('u2', 'Zoe Coordinadora', [{ position: 'coordinador', label: 'Coordinador' }]),
       user('u1', 'Ana Coordinadora', [{ position: 'coordinador', label: 'Coordinador' }]),
-    ]);
+    ])).toThrow('Hay mas de un coordinador activo');
+  });
 
-    const coordinators = assignments.filter((item) => item.position === 'coordinador');
-    expect(coordinators).toHaveLength(1);
-    expect(coordinators[0].userId).toBe('u1');
-    expect(warnings).toContain('Hay mas de un Coordinador; se usa el primero por nombre.');
+  it('rechaza dos secretarios activos', () => {
+    expect(() => computeDesiredAssignments([
+      user('u1', 'Ana', [{position: 'secretario', label: 'Secretario'}]),
+      user('u2', 'Beto', [{position: 'secretario', label: 'Secretario'}]),
+    ])).toThrow('Hay mas de un secretario activo');
   });
 
   it('advierte cuando no hay coordinador', () => {

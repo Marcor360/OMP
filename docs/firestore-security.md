@@ -40,3 +40,11 @@ Las eliminaciones relacionadas con eventos, reuniones y asignaciones consultan a
 5. Verificar en Cloud Logging cada proceso programado: campos procesados, paginación, errores, índices faltantes y aislamiento por congregación.
 
 No se deben desplegar Functions que dependan de índices mientras alguno siga construyéndose.
+
+## Usuarios y roles legacy
+
+Las escrituras administrativas de `/users/{uid}` se realizan mediante Cloud Functions. El cliente solo conserva actualizaciones del perfil propio, tokens push y campos operativos expresamente limitados. Los indicadores `protectedFromDeletion`, `isSystemUser`, `isPrimaryAdmin`, `isRootAdmin` y `systemProtected` son autoridad backend; nombres, correos y campos `createdBy*` nunca identifican usuarios protegidos.
+
+`administrador` y `usuario` siguen aceptándose únicamente al leer documentos legacy en Rules y normalizadores. Las Functions de creación escriben exclusivamente `admin`, `supervisor` o `user`. Antes de retirar la compatibilidad se debe migrar cada documento existente, confirmar que no quedan roles legacy y ejecutar las pruebas de Rules para usuario propio, misma/otra congregación, usuarios inactivos y todos los roles.
+
+La estructura completa de `serviceAssignments`, sus combinaciones, duplicados y unicidad congregacional se valida en `createUserByAdmin` y `updateUserByAdmin`. Rules bloquea su modificación directa: esta validación es deliberadamente backend porque Firestore Rules no puede comprobar de forma segura unicidad entre documentos ni listas complejas arbitrarias.
