@@ -6,6 +6,7 @@ import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
+import { PreachingGroupUserPickerModal } from '@/src/components/preaching/PreachingGroupUserPickerModal';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
 import {
@@ -15,6 +16,7 @@ import {
   useTerritoriesCatalog,
   useTerritoryMutations,
 } from '@/src/hooks/use-territories';
+import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   buildTerritoryId,
@@ -25,6 +27,7 @@ import {
   type Territory,
   type TerritoryAssignmentTarget,
 } from '@/src/types/territory';
+import type { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import {
   canAssignMonthlyTerritories,
@@ -33,6 +36,7 @@ import {
 } from '@/src/utils/permissions/permissions';
 
 type TabKey = 'territories' | 'groups' | 'monthly';
+type GroupPicker = 'captain' | 'assistant' | 'members';
 
 type TerritoryDraft = {
   id?: string;
@@ -137,8 +141,10 @@ export function TerritoriesManageScreen() {
               if (draft.id) await mutations.updatePreachingGroup(draft.id, input);
               else await mutations.createPreachingGroup(input);
               Alert.alert('Grupos', 'Grupo guardado correctamente.');
+              return true;
             } catch (saveError) {
               Alert.alert('Error', formatFirestoreError(saveError));
+              return false;
             }
           }}
           onDeactivate={async (groupId) => {
@@ -274,27 +280,40 @@ function GroupsSection({
   onDeactivate,
 }: {
   groups: PreachingGroup[];
-  users: { uid: string; displayName: string }[];
+  users: AppUser[];
   canManage: boolean;
   saving: boolean;
-  onSave: (draft: GroupDraft) => Promise<void>;
+  onSave: (draft: GroupDraft) => Promise<boolean>;
   onDeactivate: (groupId: string) => Promise<void>;
 }) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
   const [draft, setDraft] = useState<GroupDraft>(emptyGroupDraft());
+  const [picker, setPicker] = useState<GroupPicker | null>(null);
   const activeGroups = groups.filter((group) => group.isActive);
+  const captain = users.find((user) => user.uid === draft.captainUserId);
+  const assistant = users.find((user) => user.uid === draft.assistantUserId);
 
   if (!canManage) return <ErrorState message="No tienes permisos para administrar grupos." />;
 
-  const toggleMember = (uid: string) => {
-    setDraft((current) => ({
-      ...current,
-      memberIds: current.memberIds.includes(uid)
-        ? current.memberIds.filter((item) => item !== uid)
-        : [...current.memberIds, uid],
-    }));
-  };
+  const selectedIds = picker === 'captain'
+    ? draft.captainUserId ? [draft.captainUserId] : []
+    : picker === 'assistant'
+      ? draft.assistantUserId ? [draft.assistantUserId] : []
+      : draft.memberIds;
+  const lockedReasons: Record<string, string> = {};
+  if (picker === 'assistant' && draft.captainUserId) {
+    lockedReasons[draft.captainUserId] = t('preachingGroups.isCaptain');
+  }
+  if (picker === 'members') {
+    if (draft.captainUserId) {
+      lockedReasons[draft.captainUserId] = t('preachingGroups.captainLocked');
+    }
+    if (draft.assistantUserId) {
+      lockedReasons[draft.assistantUserId] = t('preachingGroups.assistantLocked');
+    }
+  }
 
   return (
     <View style={styles.stack}>
@@ -308,18 +327,41 @@ function GroupsSection({
           placeholderTextColor={colors.textDisabled}
           keyboardType="number-pad"
         />
-        <ThemedText style={styles.label}>Capitan</ThemedText>
-        <UserChipList users={users} selectedIds={draft.captainUserId ? [draft.captainUserId] : []} onPress={(uid) => setDraft((current) => ({ ...current, captainUserId: uid, memberIds: Array.from(new Set([...current.memberIds, uid])) }))} />
-        <ThemedText style={styles.label}>Auxiliar</ThemedText>
-        <UserChipList users={users} selectedIds={draft.assistantUserId ? [draft.assistantUserId] : []} onPress={(uid) => setDraft((current) => ({ ...current, assistantUserId: current.assistantUserId === uid ? '' : uid, memberIds: Array.from(new Set([...current.memberIds, uid])) }))} />
-        <ThemedText style={styles.label}>Integrantes</ThemedText>
-        <UserChipList users={users} selectedIds={draft.memberIds} onPress={toggleMember} />
+        <SelectionField
+          label={t('preachingGroups.captain')}
+          value={captain?.displayName}
+          placeholder={t('preachingGroups.selectCaptain')}
+          icon="person-outline"
+          onPress={() => setPicker('captain')}
+        />
+        <SelectionField
+          label={t('preachingGroups.assistant')}
+          value={assistant?.displayName}
+          placeholder={t('preachingGroups.selectAssistant')}
+          icon="person-add-outline"
+          onPress={() => setPicker('assistant')}
+          onClear={draft.assistantUserId
+            ? () => setDraft((current) => ({ ...current, assistantUserId: '' }))
+            : undefined}
+        />
+        <SelectionField
+          label={t('preachingGroups.members')}
+          value={draft.memberIds.length > 0
+            ? t('preachingGroups.membersSelected', { count: draft.memberIds.length })
+            : undefined}
+          placeholder={t('preachingGroups.selectMembers')}
+          icon="people-outline"
+          onPress={() => setPicker('members')}
+        />
         <TouchableOpacity
-          style={[styles.primaryButton, saving && styles.disabledButton]}
-          disabled={saving}
+          style={[
+            styles.primaryButton,
+            (saving || !draft.number.trim() || !draft.captainUserId) && styles.disabledButton,
+          ]}
+          disabled={saving || !draft.number.trim() || !draft.captainUserId}
           onPress={async () => {
-            await onSave(draft);
-            setDraft(emptyGroupDraft());
+            const saved = await onSave(draft);
+            if (saved) setDraft(emptyGroupDraft());
           }}
         >
           <Ionicons name="save-outline" size={18} color={colors.onPrimary} />
@@ -356,31 +398,115 @@ function GroupsSection({
           </View>
         ))}
       </View>
+
+      <PreachingGroupUserPickerModal
+        visible={picker !== null}
+        title={
+          picker === 'captain'
+            ? t('preachingGroups.selectCaptain')
+            : picker === 'assistant'
+              ? t('preachingGroups.selectAssistant')
+              : t('preachingGroups.selectMembers')
+        }
+        users={users}
+        groups={activeGroups}
+        currentGroupId={draft.id}
+        selectedIds={selectedIds}
+        multiple={picker === 'members'}
+        lockedReasons={lockedReasons}
+        onClose={() => setPicker(null)}
+        onConfirm={(ids) => {
+          if (picker === 'captain') {
+            const captainUserId = ids[0] ?? '';
+            setDraft((current) => ({
+              ...current,
+              captainUserId,
+              assistantUserId:
+                current.assistantUserId === captainUserId ? '' : current.assistantUserId,
+              memberIds: captainUserId
+                ? Array.from(new Set([...current.memberIds, captainUserId]))
+                : current.memberIds,
+            }));
+          } else if (picker === 'assistant') {
+            const assistantUserId = ids[0] ?? '';
+            setDraft((current) => ({
+              ...current,
+              assistantUserId,
+              memberIds: assistantUserId
+                ? Array.from(new Set([...current.memberIds, assistantUserId]))
+                : current.memberIds,
+            }));
+          } else if (picker === 'members') {
+            setDraft((current) => ({
+              ...current,
+              memberIds: Array.from(
+                new Set([
+                  ...ids,
+                  ...(current.captainUserId ? [current.captainUserId] : []),
+                  ...(current.assistantUserId ? [current.assistantUserId] : []),
+                ])
+              ),
+            }));
+          }
+          setPicker(null);
+        }}
+      />
     </View>
   );
 }
 
-function UserChipList({
-  users,
-  selectedIds,
+function SelectionField({
+  label,
+  value,
+  placeholder,
+  icon,
   onPress,
+  onClear,
 }: {
-  users: { uid: string; displayName: string }[];
-  selectedIds: string[];
-  onPress: (uid: string) => void;
+  label: string;
+  value?: string;
+  placeholder: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  onClear?: () => void;
 }) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { t } = useI18n();
+
   return (
-    <View style={styles.chipWrap}>
-      {users.map((user) => {
-        const selected = selectedIds.includes(user.uid);
-        return (
-          <TouchableOpacity key={user.uid} style={[styles.chip, selected && styles.chipActive]} onPress={() => onPress(user.uid)}>
-            <ThemedText style={[styles.chipText, selected && styles.chipTextActive]}>{user.displayName}</ThemedText>
+    <View style={styles.selectionGroup}>
+      <ThemedText style={styles.label}>{label}</ThemedText>
+      <View style={styles.selectionField}>
+        <TouchableOpacity
+          style={styles.selectionMain}
+          onPress={onPress}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`${label}: ${value ?? placeholder}`}
+        >
+          <View style={styles.selectionIcon}>
+            <Ionicons name={icon} size={18} color={colors.primary} />
+          </View>
+          <ThemedText
+            style={[styles.selectionValue, !value && styles.selectionPlaceholder]}
+            numberOfLines={1}
+          >
+            {value ?? placeholder}
+          </ThemedText>
+          <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        {onClear ? (
+          <TouchableOpacity
+            style={styles.clearSelection}
+            onPress={onClear}
+            accessibilityRole="button"
+            accessibilityLabel={t('preachingGroups.clearSelection', { role: label.toLowerCase() })}
+          >
+            <Ionicons name="close-circle" size={19} color={colors.textMuted} />
           </TouchableOpacity>
-        );
-      })}
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -583,6 +709,48 @@ const createStyles = (colors: AppColorSet) =>
       color: colors.textMuted,
       fontSize: 12,
       fontWeight: '800',
+    },
+    selectionGroup: {
+      gap: 6,
+    },
+    selectionField: {
+      minHeight: 52,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.backgroundLight,
+      paddingHorizontal: 12,
+    },
+    selectionMain: {
+      flex: 1,
+      minHeight: 50,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    selectionIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.primary + '16',
+    },
+    selectionValue: {
+      flex: 1,
+      minWidth: 0,
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    selectionPlaceholder: {
+      color: colors.textMuted,
+      fontWeight: '600',
+    },
+    clearSelection: {
+      padding: 4,
     },
     input: {
       minHeight: 46,

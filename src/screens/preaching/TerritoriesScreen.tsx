@@ -10,6 +10,7 @@ import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
 import { useVisibleMonthlyTerritories } from '@/src/hooks/use-territories';
+import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   getCurrentMonthId,
@@ -21,6 +22,7 @@ import { canManageTerritories } from '@/src/utils/permissions/permissions';
 
 export function TerritoriesScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { appUser, uid, congregationId, loadingProfile, profileError } = useUser();
@@ -47,13 +49,16 @@ export function TerritoriesScreen() {
         actions={
           canManage ? (
             <TouchableOpacity
-              style={styles.headerButton}
+              style={styles.manageButton}
               onPress={() => router.push('/(protected)/preaching/territories/manage' as never)}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel="Administrar predicacion"
+              accessibilityLabel={t('preachingHub.manageTitle')}
             >
-              <Ionicons name="settings-outline" size={18} color={colors.onPrimary} />
+              <Ionicons name="settings-outline" size={16} color={colors.onPrimary} />
+              <ThemedText style={styles.manageButtonText}>
+                {t('preachingHub.manageShort')}
+              </ThemedText>
             </TouchableOpacity>
           ) : null
         }
@@ -137,13 +142,20 @@ function TerritorySection({
 
 const createStyles = (colors: AppColorSet) =>
   StyleSheet.create({
-    headerButton: {
-      width: 38,
-      height: 38,
-      borderRadius: 12,
+    manageButton: {
+      minHeight: 36,
+      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
+      gap: 6,
+      borderRadius: 999,
       backgroundColor: colors.primary,
+      paddingHorizontal: 12,
+    },
+    manageButtonText: {
+      color: colors.onPrimary,
+      fontSize: 13,
+      fontWeight: '800',
     },
     sectionList: {
       gap: 14,

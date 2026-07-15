@@ -222,8 +222,9 @@ const createStyles = (colors: ReturnType<typeof useAppColors>) =>
     },
     dayCell: {
       flex: 1,
-      height: 52,
+      minHeight: 44,
       margin: 2,
+      paddingVertical: 6,
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',

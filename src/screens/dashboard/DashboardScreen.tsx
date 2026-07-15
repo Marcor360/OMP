@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, useWindowDimensions, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useI18n } from '@/src/i18n/index';
@@ -273,8 +273,8 @@ export function DashboardScreen() {
         </View>
       ) : null}
 
-      {/* â”€â”€ Contador de Horas de PredicaciÃ³n (solo dispositivo mÃ³vil) â”€â”€ */}
-      {Platform.OS !== 'web' && <FieldServiceDashboardCard />}
+      {/* ── Contador de Horas de Predicación (solo precursores) ── */}
+      <FieldServiceDashboardCard />
 
       <TouchableOpacity
         style={styles.preachingCard}

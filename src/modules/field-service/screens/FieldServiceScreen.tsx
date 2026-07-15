@@ -16,7 +16,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -24,8 +23,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
+import { useUser } from '@/src/context/user-context';
+import { isPioneer } from '@/src/types/user';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { ErrorState } from '@/src/components/common/ErrorState';
+import { EmptyState } from '@/src/components/common/EmptyState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { useFieldService } from '@/src/modules/field-service/hooks/use-field-service';
 import { FieldServiceCalendar } from '@/src/modules/field-service/components/FieldServiceCalendar';
@@ -40,93 +42,14 @@ import {
 } from '@/src/modules/field-service/utils/field-service-dates';
 import type { SaveDayInput } from '@/src/modules/field-service/types/field-service.types';
 
-// ─── Pantalla de "solo disponible en app móvil" para uso en web ───────────────
-
-function WebOnlyNotice() {
-  const colors = useAppColors();
-  const router = useRouter();
-  const { t } = useI18n();
-  const handleBack = () => {
-    if (router.canGoBack?.()) {
-      router.back();
-      return;
-    }
-
-    router.replace('/(protected)/(tabs)' as never);
-  };
-
-  return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: colors.backgroundDark, alignItems: 'center', justifyContent: 'center', padding: 32 }}
-      edges={['top', 'bottom']}
-    >
-      <View
-        style={{
-          width: 72,
-          height: 72,
-          borderRadius: 20,
-          backgroundColor: colors.primary + '20',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 24,
-        }}
-      >
-        <Ionicons name="phone-portrait-outline" size={36} color={colors.primary} />
-      </View>
-
-      <Text
-        style={{
-          fontSize: 20,
-          fontWeight: '800',
-          color: colors.textPrimary,
-          textAlign: 'center',
-          marginBottom: 10,
-        }}
-      >
-        {t('fieldService.webOnly')}
-      </Text>
-      <Text
-        style={{
-          fontSize: 14,
-          color: colors.textMuted,
-          textAlign: 'center',
-          lineHeight: 22,
-          marginBottom: 32,
-          maxWidth: 320,
-        }}
-      >
-        {t('fieldService.webOnlyDesc')}
-      </Text>
-
-      <TouchableOpacity
-        onPress={handleBack}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-          backgroundColor: colors.primary,
-          paddingHorizontal: 24,
-          paddingVertical: 14,
-          borderRadius: 14,
-        }}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="arrow-back" size={18} color={colors.onPrimary} />
-        <Text style={{ color: colors.onPrimary, fontWeight: '700', fontSize: 15 }}>
-          {t('fieldService.backToHome')}
-        </Text>
-      </TouchableOpacity>
-    </SafeAreaView>
-  );
-}
-
-
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export function FieldServiceScreen() {
+  const router = useRouter();
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { t } = useI18n();
+  const { appUser } = useUser();
 
   // Estado local de navegación del calendario
   const now = new Date();
@@ -138,11 +61,6 @@ export function FieldServiceScreen() {
 
   // Modal de captura
   const [modalVisible, setModalVisible] = useState(false);
-  const [reportFeedback, setReportFeedback] = useState<{
-    type: 'success' | 'error';
-    message: string;
-  } | null>(null);
-
   const {
     loading,
     error,
@@ -154,7 +72,6 @@ export function FieldServiceScreen() {
     monthlyReportStatus,
     saveDay,
     removeDay,
-    submitMonthlyReport,
     reload,
     navigateMonth,
   } = useFieldService();
@@ -245,36 +162,29 @@ export function FieldServiceScreen() {
     await removeDay(selectedDate);
   }, [removeDay, selectedDate]);
 
-  const handleSubmitMonthlyReport = useCallback(async () => {
-    setReportFeedback(null);
-    const result = await submitMonthlyReport();
-
-    if (result.ok) {
-      setReportFeedback({
-        type: 'success',
-        message: t('fieldService.successSent', { month: reportMonthLabel }),
-      });
-      return;
-    }
-
-    if (result.reason === 'ALREADY_SENT') {
-      setReportFeedback({
-        type: 'error',
-        message: t('fieldService.errorAlreadySent'),
-      });
-      return;
-    }
-
-    setReportFeedback({
-      type: 'error',
-      message: t('fieldService.errorOutsideWindow', { days: result.status.window.graceDays }),
+  const handleSubmitMonthlyReport = useCallback(() => {
+    if (!monthlyReportStatus) return;
+    router.push({
+      pathname: '/(protected)/(tabs)/preaching',
+      params: { reportMonth: monthlyReportStatus.window.targetMonthKey },
     });
-  }, [submitMonthlyReport, reportMonthLabel, t]);
+  }, [monthlyReportStatus, router]);
 
   // ── Renderizado ──────────────────────────────────────────────────────────────
 
-  // Funcionalidad solo disponible en iOS/Android (usa almacenamiento local del dispositivo)
-  if (Platform.OS === 'web') return <WebOnlyNotice />;
+  // El contador de horas solo aplica a precursores (regulares o auxiliares)
+  if (!isPioneer(appUser)) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <PageHeader title={t('fieldService.title')} showBack />
+        <EmptyState
+          icon="time-outline"
+          title={t('fieldService.pioneersOnlyTitle')}
+          description={t('fieldService.pioneersOnlyDesc')}
+        />
+      </SafeAreaView>
+    );
+  }
 
   if (loading) return <LoadingState message={t('common.loading')} />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
@@ -294,6 +204,11 @@ export function FieldServiceScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {/* ── Header ── */}
       <PageHeader title={t('fieldService.title')} subtitle={t('fieldService.subtitle')} showBack />
+
+      <View style={styles.deviceNotice}>
+        <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
+        <Text style={styles.deviceNoticeText}>{t('fieldService.deviceOnlyNotice')}</Text>
+      </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -403,6 +318,11 @@ export function FieldServiceScreen() {
             <Text style={styles.reportHoursText}>
               {t('fieldService.recordedHours', { hours: formatMinutes(reportMonthSummary.totalMinutes) })}
             </Text>
+            {!monthlyReportStatus.alreadySent ? (
+              <Text style={styles.reportStatusText}>
+                {t('fieldService.reportPreparationHint')}
+              </Text>
+            ) : null}
 
             {monthlyReportStatus.alreadySent ? (
               <Text style={[styles.reportStatusText, { color: colors.success }]}>
@@ -433,7 +353,7 @@ export function FieldServiceScreen() {
               onPress={handleSubmitMonthlyReport}
               disabled={!monthlyReportStatus.canSubmit}
               activeOpacity={0.85}
-              accessibilityLabel="Enviar informe mensual de predicacion"
+              accessibilityLabel={t('fieldService.prepareReport', { month: reportMonthLabel })}
             >
               <Ionicons
                 name="paper-plane-outline"
@@ -446,48 +366,12 @@ export function FieldServiceScreen() {
                   { color: monthlyReportStatus.canSubmit ? '#fff' : colors.textDisabled },
                 ]}
               >
-                {monthlyReportStatus.alreadySent ? t('fieldService.sent') : t('fieldService.sendReport')}
+                {monthlyReportStatus.alreadySent
+                  ? t('fieldService.sent')
+                  : t('fieldService.prepareReport', { month: reportMonthLabel })}
               </Text>
             </TouchableOpacity>
 
-            {reportFeedback && (
-              <View
-                style={[
-                  styles.reportFeedbackBox,
-                  {
-                    backgroundColor:
-                      reportFeedback.type === 'success'
-                        ? colors.success + '20'
-                        : colors.error + '20',
-                    borderColor:
-                      reportFeedback.type === 'success'
-                        ? colors.success + '44'
-                        : colors.error + '44',
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={
-                    reportFeedback.type === 'success'
-                      ? 'checkmark-circle-outline'
-                      : 'alert-circle-outline'
-                  }
-                  size={14}
-                  color={reportFeedback.type === 'success' ? colors.success : colors.error}
-                />
-                <Text
-                  style={[
-                    styles.reportFeedbackText,
-                    {
-                      color:
-                        reportFeedback.type === 'success' ? colors.success : colors.error,
-                    },
-                  ]}
-                >
-                  {reportFeedback.message}
-                </Text>
-              </View>
-            )}
           </View>
         )}
 
@@ -553,6 +437,24 @@ const createStyles = (colors: ReturnType<typeof useAppColors>) =>
       padding: 16,
       gap: 16,
       paddingBottom: 40,
+      maxWidth: 720,
+      width: '100%',
+      alignSelf: 'center',
+    },
+    deviceNotice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      maxWidth: 720,
+      width: '100%',
+      alignSelf: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 8,
+    },
+    deviceNoticeText: {
+      fontSize: 11,
+      color: colors.textMuted,
+      flex: 1,
     },
     purgeBanner: {
       flexDirection: 'row',

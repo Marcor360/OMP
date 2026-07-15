@@ -1,6 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import {
+  Alert,
+  Platform,
+  StyleSheet,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
@@ -11,24 +18,41 @@ import { PreachingReportModal } from '@/src/components/preaching/PreachingReport
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
 import { usePreachingReport } from '@/src/hooks/usePreachingReport';
+import { useI18n } from '@/src/i18n/index';
+import {
+  getEntriesForMonth,
+  loadStore,
+  markMonthlyReportAsSent,
+} from '@/src/modules/field-service';
 import { getCongregationDisplayName } from '@/src/services/congregations/congregations-service';
 import {
   getCurrentMonthId,
   getMonthName,
+  shiftMonthId,
 } from '@/src/services/preaching-report.service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { isPioneer, isPreachingManager } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { createLogger } from '@/src/utils/logger';
 import { canManageTerritories } from '@/src/utils/permissions/permissions';
+
+const log = createLogger('preaching-screen');
 
 export function PreachingScreen() {
   const router = useRouter();
+  const { reportMonth } = useLocalSearchParams<{ reportMonth?: string }>();
+  const { width } = useWindowDimensions();
+  const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const useTwoColumns = width >= 768;
   const { appUser, congregationId, loadingProfile, profileError } = useUser();
   const [congregationName, setCongregationName] = useState('Sin congregacion');
   const [modalVisible, setModalVisible] = useState(false);
-  const monthId = getCurrentMonthId();
+  const currentMonthId = getCurrentMonthId();
+  const previousMonthId = shiftMonthId(currentMonthId, -1);
+  const [monthId, setMonthId] = useState(currentMonthId);
+  const [suggestedMinutes, setSuggestedMinutes] = useState<number | null>(null);
 
   const {
     report,
@@ -51,7 +75,7 @@ export function PreachingScreen() {
 
     let cancelled = false;
 
-    getCongregationDisplayName(congregationId, { forceServer: true })
+    getCongregationDisplayName(congregationId)
       .then((name) => {
         if (!cancelled) setCongregationName(name);
       })
@@ -64,17 +88,54 @@ export function PreachingScreen() {
     };
   }, [congregationId]);
 
+  useEffect(() => {
+    if (reportMonth !== previousMonthId && reportMonth !== currentMonthId) return;
+    setMonthId(reportMonth);
+    setModalVisible(true);
+  }, [currentMonthId, previousMonthId, reportMonth]);
+
+  useEffect(() => {
+    if (!isPioneer(appUser)) {
+      setSuggestedMinutes(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { store } = await loadStore();
+        const [year, month] = monthId.split('-').map(Number);
+        const entries = getEntriesForMonth(store, year, month);
+        const total = entries.reduce((sum, entry) => sum + entry.totalMinutes, 0);
+        if (!cancelled) setSuggestedMinutes(total > 0 ? total : null);
+      } catch {
+        if (!cancelled) setSuggestedMinutes(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appUser, monthId]);
+
   const handleSubmit = useCallback(
     async (...args: Parameters<typeof submit>) => {
       try {
         await submit(...args);
+        if (Platform.OS !== 'web' && monthId === previousMonthId) {
+          try {
+            await markMonthlyReportAsSent(monthId);
+          } catch (markError) {
+            log.warn('No se pudo marcar localmente el informe como enviado.', markError);
+          }
+        }
         setModalVisible(false);
         Alert.alert('Informe enviado', 'Tu informe mensual fue guardado correctamente.');
       } catch (requestError) {
         Alert.alert('Error', formatFirestoreError(requestError));
       }
     },
-    [submit]
+    [monthId, previousMonthId, submit]
   );
 
   if (loadingProfile || loading) return <LoadingState message="Cargando predicacion..." />;
@@ -92,7 +153,11 @@ export function PreachingScreen() {
   const userCanManageTerritories = canManageTerritories(appUser);
 
   return (
-    <ScreenContainer refreshing={loading} onRefresh={refresh}>
+    <ScreenContainer
+      refreshing={loading}
+      onRefresh={refresh}
+      contentStyle={styles.content}
+    >
       <PageHeader title="Predicacion" showBack />
 
       <View style={styles.hero}>
@@ -103,6 +168,19 @@ export function PreachingScreen() {
           <ThemedText style={styles.heroTitle}>Informe mensual</ThemedText>
           <ThemedText style={styles.heroSubtitle}>{getMonthName(monthId)}</ThemedText>
         </View>
+      </View>
+
+      <View style={styles.monthSelector}>
+        <MonthButton
+          label={getMonthName(previousMonthId)}
+          active={monthId === previousMonthId}
+          onPress={() => setMonthId(previousMonthId)}
+        />
+        <MonthButton
+          label={getMonthName(currentMonthId)}
+          active={monthId === currentMonthId}
+          onPress={() => setMonthId(currentMonthId)}
+        />
       </View>
 
       <View style={styles.statusCard}>
@@ -149,36 +227,48 @@ export function PreachingScreen() {
         </ThemedText>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.secondaryButton}
-        onPress={() => router.push('/(protected)/preaching/territories')}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="map-outline" size={18} color={colors.primary} />
-        <ThemedText style={styles.secondaryButtonText}>Territorios de predicacion</ThemedText>
-      </TouchableOpacity>
+      <View style={styles.accessSection}>
+        <ThemedText style={styles.accessTitle}>{t('preachingHub.accessTitle')}</ThemedText>
+        <View style={styles.navGrid}>
+          {userIsPioneer ? (
+            <NavTile
+              icon="time-outline"
+              title={t('preachingHub.hoursTitle')}
+              description={t('preachingHub.hoursDescription')}
+              twoColumns={useTwoColumns}
+              onPress={() => router.push('/(protected)/field-service')}
+            />
+          ) : null}
 
-      {userIsPreachingManager ? (
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={() => router.push('/(protected)/preaching/manager')}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="stats-chart-outline" size={18} color={colors.primary} />
-          <ThemedText style={styles.secondaryButtonText}>Panel de informes</ThemedText>
-        </TouchableOpacity>
-      ) : null}
+          <NavTile
+            icon="map-outline"
+            title={t('preachingHub.territoriesTitle')}
+            description={t('preachingHub.territoriesDescription')}
+            twoColumns={useTwoColumns}
+            onPress={() => router.push('/(protected)/preaching/territories')}
+          />
 
-      {userCanManageTerritories ? (
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={() => router.push('/(protected)/preaching/territories/manage')}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="settings-outline" size={18} color={colors.primary} />
-          <ThemedText style={styles.secondaryButtonText}>Administrar predicacion</ThemedText>
-        </TouchableOpacity>
-      ) : null}
+          {userIsPreachingManager ? (
+            <NavTile
+              icon="stats-chart-outline"
+              title={t('preachingHub.managerTitle')}
+              description={t('preachingHub.managerDescription')}
+              twoColumns={useTwoColumns}
+              onPress={() => router.push('/(protected)/preaching/manager')}
+            />
+          ) : null}
+
+          {userCanManageTerritories ? (
+            <NavTile
+              icon="settings-outline"
+              title={t('preachingHub.manageTitle')}
+              description={t('preachingHub.manageDescription')}
+              twoColumns={useTwoColumns}
+              onPress={() => router.push('/(protected)/preaching/territories/manage')}
+            />
+          ) : null}
+        </View>
+      </View>
 
       <PreachingReportModal
         visible={modalVisible}
@@ -186,11 +276,75 @@ export function PreachingScreen() {
         monthId={monthId}
         congregationName={congregationName}
         existingReport={report}
+        suggestedMinutes={suggestedMinutes}
         saving={saving}
         onClose={() => setModalVisible(false)}
         onSubmit={handleSubmit}
       />
     </ScreenContainer>
+  );
+}
+
+function NavTile({
+  icon,
+  title,
+  description,
+  twoColumns,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  description: string;
+  twoColumns: boolean;
+  onPress: () => void;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
+  return (
+    <TouchableOpacity
+      style={[styles.navTile, twoColumns && styles.navTileTwoColumns]}
+      onPress={onPress}
+      activeOpacity={0.82}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+    >
+      <View style={styles.navTileIcon}>
+        <Ionicons name={icon} size={22} color={colors.primary} />
+      </View>
+      <View style={styles.navTileText}>
+        <ThemedText style={styles.navTileTitle}>{title}</ThemedText>
+        <ThemedText style={styles.navTileDescription} numberOfLines={1}>
+          {description}
+        </ThemedText>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+    </TouchableOpacity>
+  );
+}
+
+function MonthButton({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const colors = useAppColors();
+  const styles = createStyles(colors);
+
+  return (
+    <TouchableOpacity
+      style={[styles.monthButton, active && styles.monthButtonActive]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <ThemedText style={[styles.monthButtonText, active && styles.monthButtonTextActive]}>
+        {label}
+      </ThemedText>
+    </TouchableOpacity>
   );
 }
 
@@ -219,6 +373,11 @@ function InfoPill({
 
 const createStyles = (colors: AppColorSet) =>
   StyleSheet.create({
+    content: {
+      width: '100%',
+      maxWidth: 720,
+      alignSelf: 'center',
+    },
     hero: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -236,6 +395,35 @@ const createStyles = (colors: AppColorSet) =>
     heroText: {
       flex: 1,
       minWidth: 0,
+    },
+    monthSelector: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 14,
+    },
+    monthButton: {
+      flex: 1,
+      minHeight: 38,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      paddingHorizontal: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    monthButtonActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    monthButtonText: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontWeight: '800',
+      textTransform: 'capitalize',
+    },
+    monthButtonTextActive: {
+      color: colors.onPrimary,
     },
     heroTitle: {
       fontSize: 20,
@@ -329,21 +517,58 @@ const createStyles = (colors: AppColorSet) =>
       fontSize: 15,
       fontWeight: '800',
     },
-    secondaryButton: {
-      minHeight: 50,
+    accessSection: {
+      marginTop: 8,
+      gap: 10,
+    },
+    accessTitle: {
+      color: colors.textPrimary,
+      fontSize: 17,
+      fontWeight: '800',
+    },
+    navGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    navTile: {
+      width: '100%',
+      minHeight: 72,
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
+      gap: 10,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: colors.primary + '55',
+      borderColor: colors.border,
       borderRadius: 12,
-      marginBottom: 10,
+      padding: 12,
     },
-    secondaryButtonText: {
-      color: colors.primary,
-      fontSize: 15,
+    navTileTwoColumns: {
+      width: 'auto',
+      flexBasis: '48%',
+      flexGrow: 1,
+    },
+    navTileIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.primary + '18',
+    },
+    navTileText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    navTileTitle: {
+      color: colors.textPrimary,
+      fontSize: 14,
       fontWeight: '800',
+    },
+    navTileDescription: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 2,
     },
   });

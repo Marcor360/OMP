@@ -11,12 +11,14 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, AppState, AppStateStatus, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, AppState, AppStateStatus } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
+import { useUser } from '@/src/context/user-context';
+import { isPioneer } from '@/src/types/user';
 import {
   formatMinutes,
   formatMonthHeader,
@@ -26,16 +28,17 @@ import { loadStore } from '@/src/modules/field-service/services/field-service-st
 import type { MonthSummary } from '@/src/modules/field-service/types/field-service.types';
 
 /**
- * Tarjeta wrapper: en web devuelve null, en iOS/Android monta la tarjeta nativa.
+ * Tarjeta wrapper: solo se muestra a precursores (regulares o auxiliares).
  * Se divide en dos componentes para respetar las reglas de hooks (no condicionales).
  */
 export function FieldServiceDashboardCard() {
-  if (Platform.OS === 'web') return null;
-  return <FieldServiceDashboardCardNative />;
+  const { appUser } = useUser();
+  if (!isPioneer(appUser)) return null;
+  return <FieldServiceDashboardCardContent />;
 }
 
-/** Implementación de la tarjeta — solo se monta en iOS/Android */
-function FieldServiceDashboardCardNative() {
+/** Implementación de la tarjeta — solo se monta para precursores */
+function FieldServiceDashboardCardContent() {
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();

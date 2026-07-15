@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Linking } from 'react-native';
 
 import {
   getPushNotificationPermissionStatus,
@@ -11,6 +11,15 @@ import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 import { useI18n } from '@/src/i18n/index';
 
 const STARTUP_PERMISSION_PROMPT_KEY = '@omp/startup-permission-prompt-v1';
+
+type StartupPromptFlag = 'accepted' | 'declined_once' | 'exhausted';
+
+const parseStartupPromptFlag = (value: string | null): StartupPromptFlag | null => {
+  if (value === 'accepted' || value === 'declined_once' || value === 'exhausted') {
+    return value;
+  }
+  return null;
+};
 
 type StartupPermissionPromptOptions = {
   uid: string | null;
@@ -41,15 +50,51 @@ export function useStartupPermissionPrompt({
 
     const maybePrompt = async () => {
       const userPromptKey = `${STARTUP_PERMISSION_PROMPT_KEY}:${uid}`;
-      const alreadyExplained = await AsyncStorage.getItem(userPromptKey);
+      const flag = parseStartupPromptFlag(await AsyncStorage.getItem(userPromptKey));
       const status = await getPushNotificationPermissionStatus();
 
-      if (cancelled || status !== 'undetermined') {
+      if (cancelled) {
         return;
       }
 
-      if (alreadyExplained === '1') {
-        await AsyncStorage.removeItem(userPromptKey);
+      // Ya concedido: garantizar que el flag y el token estén al día. Idempotente.
+      if (status === 'granted') {
+        if (flag !== 'accepted') {
+          await AsyncStorage.setItem(userPromptKey, 'accepted');
+        }
+        void registerExpoPushTokenForUser({ userId: uid, congregationId });
+        return;
+      }
+
+      // El sistema ya lo negó: no hay diálogo que mostrar, solo el camino a Ajustes,
+      // y solo una vez (evita re-preguntar en cada sesión).
+      if (status === 'denied') {
+        if (flag !== 'exhausted') {
+          await AsyncStorage.setItem(userPromptKey, 'exhausted');
+          promptedThisSession.current = true;
+
+          Alert.alert(
+            t('permission.startup.deniedTitle'),
+            t('permission.startup.deniedDescription'),
+            [
+              { text: t('permission.startup.notNow'), style: 'cancel' },
+              {
+                text: t('permission.action.openSettings'),
+                onPress: () => {
+                  void Linking.openSettings();
+                },
+              },
+            ]
+          );
+        }
+        return;
+      }
+
+      // status === 'undetermined'
+      // 'exhausted' ya agotó sus intentos. 'accepted' con estado undetermined es un caso
+      // raro (reinstalación del SO) y se trata como si no hubiera flag.
+      if (flag === 'exhausted') {
+        return;
       }
 
       promptedThisSession.current = true;
@@ -61,6 +106,12 @@ export function useStartupPermissionPrompt({
           {
             text: t('permission.startup.notNow'),
             style: 'cancel',
+            onPress: () => {
+              void AsyncStorage.setItem(
+                userPromptKey,
+                flag === 'declined_once' ? 'exhausted' : 'declined_once'
+              );
+            },
           },
           {
             text: t('permission.action.allow'),
@@ -69,13 +120,13 @@ export function useStartupPermissionPrompt({
                 const result = await requestPushNotificationPermission();
 
                 if (result === 'granted') {
-                  await AsyncStorage.setItem(userPromptKey, '1');
+                  await AsyncStorage.setItem(userPromptKey, 'accepted');
                   await registerExpoPushTokenForUser({ userId: uid, congregationId });
                   return;
                 }
 
                 if (result === 'denied') {
-                  await AsyncStorage.setItem(userPromptKey, '1');
+                  await AsyncStorage.setItem(userPromptKey, 'exhausted');
                 }
               })();
             },

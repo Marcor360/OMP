@@ -8,14 +8,21 @@ import { ThemedText } from '@/src/components/themed-text';
 import { useI18n } from '@/src/i18n/index';
 import { useAppColors } from '@/src/styles';
 import * as Application from 'expo-application';
+import Constants from 'expo-constants';
 
 export function AboutScreen() {
   const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
 
-  const appVersion = Application.nativeApplicationVersion ?? '1.0.1';
-  const buildVersion = Application.nativeBuildVersion ?? '1';
+  // Application.native* solo existe en iOS/Android; en web se usa el config de Expo
+  // (app.json) directamente, así que ambos quedan siempre sincronizados con una sola fuente.
+  const appVersion =
+    Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '1.5.0';
+  const buildVersion =
+    Application.nativeBuildVersion ??
+    (Constants.expoConfig?.ios as { buildNumber?: string } | undefined)?.buildNumber ??
+    '3';
 
   return (
     <ScreenContainer scrollable={false} padded={false}>

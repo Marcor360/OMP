@@ -24,6 +24,7 @@ export {
   loadStore,
   saveDay,
   submitMonthlyReport,
+  markMonthlyReportAsSent,
   getMonthlyReportStatus,
   getCurrentMonthlyReportWindow,
   removeDay,

@@ -433,6 +433,9 @@ const createStyles = (colors: ReturnType<typeof useAppColors>) =>
       shadowOpacity: 0.12,
       shadowRadius: 16,
       elevation: 10,
+      maxWidth: 480,
+      width: '100%',
+      alignSelf: 'center',
     },
     handle: {
       width: 36,

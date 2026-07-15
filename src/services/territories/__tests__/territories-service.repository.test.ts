@@ -2,6 +2,7 @@ import type {
   MonthlyTerritoryAssignment,
   MonthlyTerritoryAssignmentInput,
   PreachingGroup,
+  PreachingGroupInput,
   Territory,
   TerritoryInput,
 } from '@/src/types/territory';
@@ -13,6 +14,7 @@ import type {
 import {
   __resetTerritoryRepositoryForTests,
   __setTerritoryRepositoryForTests,
+  createPreachingGroup,
   createTerritory,
   deactivateTerritory,
   subscribeTerritories,
@@ -73,6 +75,13 @@ const group = (id: string): PreachingGroup => ({
 });
 
 class FakeTerritoryRepository implements TerritoryRepository {
+  readonly createPreachingGroupMock = jest.fn<Promise<void>, [{
+    congregationId: string;
+    groupId: string;
+    actorUid: string;
+    input: PreachingGroupInput;
+  }]>(() => Promise.resolve());
+
   readonly createTerritoryMock = jest.fn<Promise<void>, [{
     congregationId: string;
     territoryId: string;
@@ -143,8 +152,13 @@ class FakeTerritoryRepository implements TerritoryRepository {
     return () => undefined;
   }
 
-  createPreachingGroup(): Promise<void> {
-    return Promise.resolve();
+  createPreachingGroup(payload: {
+    congregationId: string;
+    groupId: string;
+    actorUid: string;
+    input: PreachingGroupInput;
+  }): Promise<void> {
+    return this.createPreachingGroupMock(payload);
   }
 
   updatePreachingGroup(): Promise<void> {
@@ -177,7 +191,30 @@ class FakeTerritoryRepository implements TerritoryRepository {
   }
 
   getActiveCongregationUsersForGroups(): Promise<AppUser[]> {
-    return Promise.resolve([]);
+    return Promise.resolve([
+      {
+        uid: 'user-1',
+        email: 'uno@example.com',
+        displayName: 'Usuario Uno',
+        role: 'user',
+        congregationId: 'c1',
+        isActive: true,
+        status: 'active',
+        isElder: false,
+        isMinisterialServant: false,
+      },
+      {
+        uid: 'user-2',
+        email: 'dos@example.com',
+        displayName: 'Usuario Dos',
+        role: 'user',
+        congregationId: 'c1',
+        isActive: true,
+        status: 'active',
+        isElder: false,
+        isMinisterialServant: false,
+      },
+    ]);
   }
 }
 
@@ -246,6 +283,23 @@ describe('territories-service repository seam', () => {
       actorUid: 'admin',
       input,
     });
+  });
+
+  it('rechaza integrantes que ya pertenecen a otro grupo activo', async () => {
+    await expect(
+      createPreachingGroup('c1', 'admin', {
+        number: 2,
+        captainUserId: 'user-1',
+        captainName: 'Usuario Uno',
+        assistantUserId: null,
+        assistantName: null,
+        memberIds: ['user-1'],
+        memberNames: ['Usuario Uno'],
+        isActive: true,
+      })
+    ).rejects.toThrow('Un usuario no puede pertenecer a mas de un grupo activo.');
+
+    expect(repo.createPreachingGroupMock).not.toHaveBeenCalled();
   });
 
   it('deactivateTerritory delegates to the repository', async () => {

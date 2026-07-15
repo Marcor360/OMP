@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
+import { useI18n } from '@/src/i18n/index';
 import { getMonthName } from '@/src/services/preaching-report.service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
@@ -24,6 +25,7 @@ interface PreachingReportModalProps {
   monthId: string;
   congregationName: string;
   existingReport?: PreachingReportSubmission | null;
+  suggestedMinutes?: number | null;
   saving?: boolean;
   onClose: () => void;
   onSubmit: (values: PreachingReportFormValues) => Promise<void>;
@@ -41,16 +43,24 @@ const parseHoursField = (value: string): number | null => {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 };
 
+const formatMinutes = (total: number): string => {
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`;
+};
+
 export function PreachingReportModal({
   visible,
   user,
   monthId,
   congregationName,
   existingReport,
+  suggestedMinutes = null,
   saving = false,
   onClose,
   onSubmit,
 }: PreachingReportModalProps) {
+  const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const userIsPioneer = isPioneer(user);
@@ -185,6 +195,26 @@ export function PreachingReportModal({
                 placeholder="0"
                 placeholderTextColor={colors.textDisabled}
               />
+              {typeof suggestedMinutes === 'number' && suggestedMinutes > 0 ? (
+                <View style={styles.suggestionRow}>
+                  <Ionicons name="time-outline" size={16} color={colors.primary} />
+                  <ThemedText style={styles.suggestionText}>
+                    {t('fieldService.counterSuggestion', {
+                      hours: formatMinutes(suggestedMinutes),
+                    })}
+                  </ThemedText>
+                  <TouchableOpacity
+                    style={styles.useSuggestionButton}
+                    onPress={() =>
+                      setHours(String(Math.round((suggestedMinutes / 60) * 100) / 100))
+                    }
+                  >
+                    <ThemedText style={styles.useSuggestionText}>
+                      {t('fieldService.useSuggestedHours')}
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </Field>
           ) : null}
 
@@ -329,6 +359,33 @@ const createStyles = (colors: AppColorSet) =>
     commentsInput: {
       minHeight: 82,
       textAlignVertical: 'top',
+    },
+    suggestionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 8,
+      borderRadius: 10,
+      backgroundColor: colors.primary + '12',
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    suggestionText: {
+      flex: 1,
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    useSuggestionButton: {
+      borderRadius: 8,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    useSuggestionText: {
+      color: colors.onPrimary,
+      fontSize: 12,
+      fontWeight: '800',
     },
     errorText: {
       color: colors.error,

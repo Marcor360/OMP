@@ -296,6 +296,61 @@ export function getMonthlyReportStatus(
   };
 }
 
+function buildMonthlyReportRecord(
+  store: FieldServiceStore,
+  window: MonthlyReportWindow
+): MonthlyReportRecord {
+  const monthEntries = getEntriesForMonth(store, window.targetYear, window.targetMonth);
+  const totalMinutes = monthEntries.reduce((sum, entry) => sum + entry.totalMinutes, 0);
+
+  return {
+    monthKey: window.targetMonthKey,
+    sentAt: new Date().toISOString(),
+    totalMinutes,
+    periodStart: window.periodStart,
+    periodEnd: window.periodEnd,
+    deadlineDate: window.windowEnd,
+    graceDays: window.graceDays,
+  };
+}
+
+function addMonthlyReport(
+  store: FieldServiceStore,
+  report: MonthlyReportRecord
+): FieldServiceStore {
+  return {
+    ...store,
+    meta: {
+      ...store.meta,
+      monthlyReports: {
+        ...store.meta.monthlyReports,
+        [report.monthKey]: report,
+      },
+    },
+  };
+}
+
+/**
+ * Refleja localmente un informe que ya fue enviado correctamente a la congregacion.
+ * Es idempotente: un mes marcado previamente se conserva sin crear otro registro.
+ */
+export async function markMonthlyReportAsSent(monthKey: string): Promise<void> {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(monthKey);
+  if (!match) throw new Error(`Mes de informe invalido: ${monthKey}.`);
+
+  const { store } = await loadStore();
+  const normalizedStore = normalizeStore(store);
+
+  if (normalizedStore.meta.monthlyReports[monthKey]) return;
+
+  const targetYear = Number(match[1]);
+  const targetMonth = Number(match[2]);
+  const window = getCurrentMonthlyReportWindow(new Date(targetYear, targetMonth, 1));
+
+  const report = buildMonthlyReportRecord(normalizedStore, window);
+  await saveStoreRaw(addMonthlyReport(normalizedStore, report));
+}
+
 /**
  * Marca como enviado el informe mensual del mes reportable actual.
  * Reglas:
@@ -337,33 +392,8 @@ export async function submitMonthlyReport(
     };
   }
 
-  const monthEntries = getEntriesForMonth(
-    normalizedStore,
-    status.window.targetYear,
-    status.window.targetMonth
-  );
-
-  const totalMinutes = monthEntries.reduce((sum, entry) => sum + entry.totalMinutes, 0);
-  const report: MonthlyReportRecord = {
-    monthKey: status.window.targetMonthKey,
-    sentAt: new Date().toISOString(),
-    totalMinutes,
-    periodStart: status.window.periodStart,
-    periodEnd: status.window.periodEnd,
-    deadlineDate: status.window.windowEnd,
-    graceDays: status.window.graceDays,
-  };
-
-  const updated: FieldServiceStore = {
-    ...normalizedStore,
-    meta: {
-      ...normalizedStore.meta,
-      monthlyReports: {
-        ...normalizedStore.meta.monthlyReports,
-        [report.monthKey]: report,
-      },
-    },
-  };
+  const report = buildMonthlyReportRecord(normalizedStore, status.window);
+  const updated = addMonthlyReport(normalizedStore, report);
 
   await saveStoreRaw(updated);
 
