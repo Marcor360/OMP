@@ -12,10 +12,13 @@
       "buildNumber": "1.13.3",
       "infoPlist": {
         "UIBackgroundModes": [
+          "remote-notification",
           "remote-notification"
         ],
-        "NSUserNotificationsUsageDescription": "Necesitamos enviarte notificaciones sobre asignaciones, reuniones y grupos de limpieza."
-      }
+        "NSUserNotificationsUsageDescription": "Necesitamos enviarte notificaciones sobre asignaciones, reuniones y grupos de limpieza.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.marcor360.omp"
     },
     "android": {
       "adaptiveIcon": {
@@ -73,6 +76,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "bca7d689-f52d-46b6-b90d-967bf4f429e4"
+      }
     }
   }
 }
