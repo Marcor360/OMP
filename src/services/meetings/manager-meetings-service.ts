@@ -4,6 +4,13 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/src/lib/firebase/app';
 import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import { AppError } from '@/src/utils/errors/errors';
+import {
+  getScheduledOutgoingSpeakerIdsForWeek,
+  isWeekendMeeting,
+} from '@/src/services/meetings/weekend-assignment-conflict-service';
+import { validateMeetingBeforeSaveWithPlanning } from '@/src/services/planning/planning-conflict-service';
+import { collectAssignedUserIds, type MeetingProgramSection } from '@/src/types/meeting/program';
+import { formatDateKey } from '@/src/utils/dates/date-key';
 
 type SerializableTimestamp = {
   seconds: number;
@@ -105,9 +112,67 @@ const isFunctionUnavailable = (error: unknown): boolean =>
   isFirebaseErrorCode(error, 'not-found') ||
   (isFirebaseErrorCode(error, 'internal') && hasNotFoundSignal(error));
 
+const toMeetingDate = (value: unknown): Date | null => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (value instanceof Timestamp) return value.toDate();
+  if (value && typeof value === 'object') {
+    const raw = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number };
+    if (typeof raw.toDate === 'function') return raw.toDate();
+    if (typeof raw.seconds === 'number') {
+      return new Timestamp(raw.seconds, raw.nanoseconds ?? 0).toDate();
+    }
+  }
+  return null;
+};
+
+const getUserNamesById = (sections: MeetingProgramSection[]): Map<string, string> => {
+  const names = new Map<string, string>();
+  sections.forEach((section) => {
+    section.assignments.forEach((assignment) => {
+      assignment.assignees.forEach((assignee) => {
+        if (assignee.assigneeUserId && assignee.assigneeNameSnapshot) {
+          names.set(assignee.assigneeUserId, assignee.assigneeNameSnapshot);
+        }
+      });
+    });
+  });
+  return names;
+};
+
+const assertNoWeekendOutgoingTalkConflict = async (params: {
+  congregationId: string;
+  meetingData: Record<string, unknown>;
+}): Promise<void> => {
+  if (!isWeekendMeeting(params.meetingData)) return;
+
+  const sections = Array.isArray(params.meetingData.sections)
+    ? params.meetingData.sections as MeetingProgramSection[]
+    : [];
+  const assignedUserIds = collectAssignedUserIds(sections);
+  if (assignedUserIds.length === 0) return;
+
+  const meetingDate = toMeetingDate(params.meetingData.meetingDate) ??
+    toMeetingDate(params.meetingData.startDate);
+  if (!meetingDate) throw new AppError('La reunion debe tener una fecha valida.');
+
+  const weekDate = formatDateKey(meetingDate);
+  const outgoingIds = await getScheduledOutgoingSpeakerIdsForWeek({
+    congregationId: params.congregationId,
+    weekDate,
+  });
+  const validation = validateMeetingBeforeSaveWithPlanning({
+    assignedUserIds,
+    scheduledOutgoingTalkSpeakerIds: [...outgoingIds],
+    userNamesById: getUserNamesById(sections),
+    weekDate,
+  });
+  if (!validation.ok) throw new AppError(validation.errors.join('\n'));
+};
+
 export const createMeetingByManager = async (
   params: CreateMeetingByManagerRequest
 ): Promise<string> => {
+  await assertNoWeekendOutgoingTalkConflict(params);
   const callable = httpsCallable<
     CreateMeetingByManagerRequest,
     { meetingId: string }
@@ -139,6 +204,7 @@ export const createMeetingByManager = async (
 export const updateMeetingByManager = async (
   params: UpdateMeetingByManagerRequest
 ): Promise<void> => {
+  await assertNoWeekendOutgoingTalkConflict(params);
   const callable = httpsCallable<
     UpdateMeetingByManagerRequest,
     { ok: true }

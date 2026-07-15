@@ -32,12 +32,9 @@ import {
   ActiveCongregationUser,
   getActiveCongregationUsers,
 } from '@/src/services/users/active-users-service';
-import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
 import {
   OUTGOING_TALK_BLOCK_MESSAGE,
-  getBlockedOutgoingTalkUserIds,
 } from '@/src/modules/assignments/utils/outgoing-talks';
-import { OutgoingTalk } from '@/src/modules/assignments/types/outgoing-talks.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   MIDWEEK_REQUIRED_SECTION_IDS,
@@ -194,7 +191,6 @@ export function MidweekMeetingFormScreen() {
 
   const [form, setForm] = useState<MidweekMeetingFormState>(initialFormState);
   const [availableUsers, setAvailableUsers] = useState<ActiveCongregationUser[]>([]);
-  const [outgoingTalks, setOutgoingTalks] = useState<OutgoingTalk[]>([]);
   const [errors, setErrors] = useState<MidweekMeetingFormErrors>({ assignments: {} });
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
@@ -252,34 +248,9 @@ export function MidweekMeetingFormScreen() {
     };
   }, [congregationId, id, loadingProfile, mode, router]);
 
-  const parsedAssignmentDate = React.useMemo(
-    () => parseInputDateTime(form.startDateInput) ?? new Date(),
-    [form.startDateInput]
-  );
-
-  useEffect(() => {
-    if (!congregationId) {
-      setOutgoingTalks([]);
-      return;
-    }
-
-    let cancelled = false;
-    void getScheduledOutgoingTalksForWeek(congregationId, parsedAssignmentDate)
-      .then((items) => {
-        if (!cancelled) setOutgoingTalks(items);
-      })
-      .catch(() => {
-        if (!cancelled) setOutgoingTalks([]);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [congregationId, parsedAssignmentDate]);
-
   const blockedOutgoingTalkUserIds = React.useMemo(
-    () => getBlockedOutgoingTalkUserIds(parsedAssignmentDate, outgoingTalks),
-    [outgoingTalks, parsedAssignmentDate]
+    () => new Set<string>(),
+    []
   );
 
   const validate = (): { isValid: boolean; startDate?: Date; endDate?: Date } => {

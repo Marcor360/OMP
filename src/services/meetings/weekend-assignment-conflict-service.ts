@@ -1,10 +1,11 @@
 import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
 import { resolveOutgoingTalkWeekRange } from '@/src/modules/assignments/utils/outgoing-talks';
-import { getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
-import { collectAssignedUserIds } from '@/src/types/meeting/program';
+import { congregationMeetingsCollectionRef } from '@/src/lib/firebase/refs';
+import { getDocs, query, Timestamp, where } from 'firebase/firestore';
+import { collectAssignedUserIds, type MeetingProgramSection } from '@/src/types/meeting/program';
 import { parseDateKey } from '@/src/utils/dates/date-key';
 
-const isWeekendMeeting = (meeting: {
+export const isWeekendMeeting = (meeting: {
   type?: string;
   meetingCategory?: string;
   status?: string;
@@ -37,26 +38,56 @@ export const getWeekendAssignedUserIdsForWeek = async (params: {
   weekDate: string;
 }): Promise<Set<string>> => {
   const { startDate, endDate } = getWeekDates(params.weekDate);
-  const meetings = await getMeetingsByWeek(params.congregationId, startDate, endDate, {
-    includeMidweek: false,
-    publicationStatus: 'all',
-    forceServer: true,
-    maxItems: 20,
-  });
+  const meetingsRef = congregationMeetingsCollectionRef(params.congregationId);
+  const [meetingDateSnap, startDateSnap] = await Promise.all([
+    getDocs(query(
+      meetingsRef,
+      where('meetingDate', '>=', Timestamp.fromDate(startDate)),
+      where('meetingDate', '<=', Timestamp.fromDate(endDate))
+    )),
+    getDocs(query(
+      meetingsRef,
+      where('startDate', '>=', Timestamp.fromDate(startDate)),
+      where('startDate', '<=', Timestamp.fromDate(endDate))
+    )),
+  ]);
+  const meetings = new Map(
+    [...meetingDateSnap.docs, ...startDateSnap.docs].map((docSnap) => [docSnap.id, docSnap.data()])
+  );
   const assigned = new Set<string>();
 
-  meetings
+  Array.from(meetings.values())
     .filter(isWeekendMeeting)
     .forEach((meeting) => {
       const ids =
         Array.isArray(meeting.assignedUserIds) && meeting.assignedUserIds.length > 0
-          ? meeting.assignedUserIds
-          : collectAssignedUserIds(meeting.sections ?? []);
+          ? meeting.assignedUserIds.filter((value): value is string => typeof value === 'string')
+          : collectAssignedUserIds(
+              Array.isArray(meeting.sections)
+                ? meeting.sections as MeetingProgramSection[]
+                : []
+            );
 
       ids.forEach((userId) => assigned.add(userId));
     });
 
   return assigned;
+};
+
+export const getScheduledOutgoingSpeakerIdsForWeek = async (params: {
+  congregationId: string;
+  weekDate: string;
+}): Promise<Set<string>> => {
+  const outgoingTalks = await getScheduledOutgoingTalksForWeek(
+    params.congregationId,
+    params.weekDate
+  );
+  return new Set(
+    outgoingTalks
+      .filter((talk) => talk.status === 'scheduled')
+      .map((talk) => talk.speakerUserId)
+      .filter(Boolean)
+  );
 };
 
 export const assertUserIsFreeForOutgoingTalk = async (params: {
@@ -89,4 +120,3 @@ export const assertUserIsFreeForOutgoingTalk = async (params: {
     throw new Error('Este hermano ya tiene una salida activa en esa misma semana.');
   }
 };
-

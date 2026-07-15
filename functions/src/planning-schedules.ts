@@ -1,4 +1,4 @@
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, WriteBatch } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { adminDb } from './config/firebaseAdmin.js';
@@ -22,12 +22,37 @@ type PublishSchedulePayload = {
   syncMeetings?: unknown;
 };
 
+type EnsurePlanningMeetingsPayload = {
+  congregationId?: unknown;
+  startDate?: unknown;
+  endDate?: unknown;
+  midweekDay?: unknown;
+  weekendDay?: unknown;
+};
+
+type SubstituteHospitalityAssignmentPayload = {
+  congregationId?: unknown;
+  scheduleId?: unknown;
+  itemId?: unknown;
+  newUserId?: unknown;
+};
+
+type EnsurePlanningMeetingsResult = {
+  ok: true;
+  createdMidweek: number;
+  createdWeekend: number;
+  existing: number;
+};
+
 type HospitalityMeetingType = 'midweek' | 'weekend';
 type HospitalityRoleKey =
+  | 'chairman'
   | 'microphoneOne'
   | 'microphoneTwo'
+  | 'microphoneThree'
   | 'attendantDoor'
   | 'attendantAuditorium'
+  | 'attendantExtra'
   | 'watchtowerReader'
   | 'midweekBibleStudyReader'
   | 'audioVideo';
@@ -46,13 +71,30 @@ type FirestoreRecord = Record<string, unknown>;
 const HOSPITALITY_SECTION_KEY = 'hospitalityMicrophones';
 
 const HOSPITALITY_ROLE_LABELS: Record<HospitalityRoleKey, string> = {
+  chairman: 'Presidente',
   microphoneOne: 'Microfono 1',
   microphoneTwo: 'Microfono 2',
+  microphoneThree: 'Microfono 3',
   attendantDoor: 'Acomodador de puerta',
   attendantAuditorium: 'Acomodador de auditorio',
+  attendantExtra: 'Acomodador extra',
   watchtowerReader: 'Lector del Estudio de la Atalaya',
   midweekBibleStudyReader: 'Lector del Estudio Biblico',
   audioVideo: 'Audio y video',
+};
+
+// Orden de aparicion en la seccion de la reunion: el presidente siempre va primero.
+const HOSPITALITY_ROLE_ORDER: Record<HospitalityRoleKey, number> = {
+  chairman: 0,
+  microphoneOne: 1,
+  microphoneTwo: 2,
+  microphoneThree: 3,
+  attendantDoor: 4,
+  attendantAuditorium: 5,
+  attendantExtra: 6,
+  audioVideo: 7,
+  watchtowerReader: 8,
+  midweekBibleStudyReader: 8,
 };
 
 const normalizeText = (value: unknown): string | undefined => {
@@ -83,6 +125,25 @@ const parsePayload = (raw: unknown): { congregationId: string; scheduleId: strin
     scheduleId,
     syncMeetings: data.syncMeetings === true,
   };
+};
+
+const parseSubstitutePayload = (
+  raw: unknown
+): { congregationId: string; scheduleId: string; itemId: string; newUserId: string } => {
+  const data = raw as SubstituteHospitalityAssignmentPayload;
+  const congregationId = normalizeText(data?.congregationId);
+  const scheduleId = normalizeText(data?.scheduleId);
+  const itemId = normalizeText(data?.itemId);
+  const newUserId = normalizeText(data?.newUserId);
+
+  if (!congregationId || !scheduleId || !itemId || !newUserId) {
+    throw new HttpsError(
+      'invalid-argument',
+      'congregationId, scheduleId, itemId y newUserId son obligatorios.'
+    );
+  }
+
+  return { congregationId, scheduleId, itemId, newUserId };
 };
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -229,6 +290,78 @@ const dayRange = (dateKey: string): { start: Timestamp; end: Timestamp } => {
   };
 };
 
+const MAX_PLANNING_DAYS = 62;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const formatDateKey = (date: Date): string =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate()
+  ).padStart(2, '0')}`;
+
+const parsePlanningDay = (value: unknown, fieldName: string): number => {
+  if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 6) {
+    throw new HttpsError('invalid-argument', `${fieldName} debe ser un entero entre 0 y 6.`);
+  }
+  return value as number;
+};
+
+const parseEnsurePlanningMeetingsPayload = (
+  raw: unknown
+): {
+  congregationId: string;
+  startDate: Date;
+  endDate: Date;
+  midweekDay: number;
+  weekendDay: number;
+} => {
+  const data = raw as EnsurePlanningMeetingsPayload;
+  const congregationId = normalizeText(data?.congregationId);
+  const startDateKey = normalizeText(data?.startDate);
+  const endDateKey = normalizeText(data?.endDate);
+
+  if (!congregationId || !startDateKey || !endDateKey) {
+    throw new HttpsError(
+      'invalid-argument',
+      'congregationId, startDate y endDate son obligatorios.'
+    );
+  }
+
+  const startDate = parseDateKey(startDateKey);
+  const endDate = parseDateKey(endDateKey);
+  if (!startDate || !endDate || startDate > endDate) {
+    throw new HttpsError('invalid-argument', 'El rango de fechas no es valido.');
+  }
+
+  const totalDays = Math.floor((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1;
+  if (totalDays > MAX_PLANNING_DAYS) {
+    throw new HttpsError(
+      'invalid-argument',
+      `La lista no puede cubrir mas de ${MAX_PLANNING_DAYS} dias.`
+    );
+  }
+
+  const monthIds = new Set<string>();
+  const cursor = new Date(startDate);
+  while (cursor <= endDate) {
+    monthIds.add(formatDateKey(cursor).slice(0, 7));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  if (monthIds.size > 2) {
+    throw new HttpsError(
+      'invalid-argument',
+      'La lista no puede cubrir mas de dos meses calendario.'
+    );
+  }
+
+  return {
+    congregationId,
+    startDate,
+    endDate,
+    midweekDay: parsePlanningDay(data.midweekDay, 'midweekDay'),
+    weekendDay: parsePlanningDay(data.weekendDay, 'weekendDay'),
+  };
+};
+
 const rangesOverlap = (
   leftStart: string,
   leftEnd: string,
@@ -306,8 +439,9 @@ const publishSchedule = async (params: {
   collectionName: 'cleaningSchedules' | 'hospitalitySchedules';
   scheduleId: string;
   requesterUid: string;
+  scheduleData?: Record<string, unknown>;
 }): Promise<Record<string, unknown>> => {
-  const data = await getScheduleForPublish(params);
+  const data = params.scheduleData ?? await getScheduleForPublish(params);
   await adminDb
     .collection('congregations')
     .doc(params.congregationId)
@@ -430,10 +564,13 @@ const syncCleaningScheduleToMeetings = async (params: {
 };
 
 const isHospitalityRoleKey = (value: unknown): value is HospitalityRoleKey =>
+  value === 'chairman' ||
   value === 'microphoneOne' ||
   value === 'microphoneTwo' ||
+  value === 'microphoneThree' ||
   value === 'attendantDoor' ||
   value === 'attendantAuditorium' ||
+  value === 'attendantExtra' ||
   value === 'watchtowerReader' ||
   value === 'midweekBibleStudyReader' ||
   value === 'audioVideo';
@@ -457,6 +594,111 @@ const normalizeHospitalityItem = (value: FirestoreRecord): HospitalityScheduleIt
     userId,
     userNameSnapshot,
   };
+};
+
+const getWeekStartDateKey = (dateKey: string): string => {
+  const date = parseDateKey(dateKey);
+  if (!date) throw new HttpsError('failed-precondition', 'La fecha de reunion no es valida.');
+  const shift = date.getDay() === 0 ? -6 : 1 - date.getDay();
+  date.setDate(date.getDate() + shift);
+  return formatDateKey(date);
+};
+
+const getWeekEndDateKey = (weekStartDate: string): string => {
+  const date = parseDateKey(weekStartDate);
+  if (!date) throw new HttpsError('failed-precondition', 'La semana de salida no es valida.');
+  date.setDate(date.getDate() + 6);
+  return formatDateKey(date);
+};
+
+const assertNoHospitalityOutgoingTalkConflicts = async (params: {
+  congregationId: string;
+  scheduleId: string;
+  scheduleData: Record<string, unknown>;
+}): Promise<void> => {
+  const startDate = normalizeText(params.scheduleData.startDate);
+  const endDate = normalizeText(params.scheduleData.endDate);
+  if (!startDate || !endDate) {
+    throw new HttpsError('failed-precondition', 'La lista no tiene rango valido.');
+  }
+
+  const startWeek = getWeekStartDateKey(startDate);
+  const endWeek = getWeekStartDateKey(endDate);
+  const [itemsSnap, outgoingSnap] = await Promise.all([
+    adminDb
+      .collection('congregations')
+      .doc(params.congregationId)
+      .collection('hospitalitySchedules')
+      .doc(params.scheduleId)
+      .collection('items')
+      .where('status', '==', 'scheduled')
+      .get(),
+    adminDb
+      .collection('congregations')
+      .doc(params.congregationId)
+      .collection('outgoingTalks')
+      .where('status', '==', 'scheduled')
+      .where('weekStartDate', '>=', startWeek)
+      .where('weekStartDate', '<=', endWeek)
+      .get(),
+  ]);
+
+  const outgoingTalks = outgoingSnap.docs.map((docSnap) => docSnap.data() as FirestoreRecord);
+  for (const itemDoc of itemsSnap.docs) {
+    const item = normalizeHospitalityItem(itemDoc.data() as FirestoreRecord);
+    if (!item || item.meetingType !== 'weekend') continue;
+
+    const conflict = outgoingTalks.find((talk) => {
+      const weekStartDate = normalizeText(talk.weekStartDate);
+      return normalizeText(talk.speakerUserId) === item.userId &&
+        Boolean(
+          weekStartDate &&
+          item.meetingDate >= weekStartDate &&
+          item.meetingDate <= getWeekEndDateKey(weekStartDate)
+        );
+    });
+    if (!conflict) continue;
+
+    const name = normalizeText(conflict.speakerName) ?? item.userNameSnapshot;
+    const date = normalizeText(conflict.talkDate) ?? item.meetingDate;
+    throw new HttpsError(
+      'failed-precondition',
+      `${name} no puede tener asignaciones el fin de semana: sale a discursar esa semana (${date}).`
+    );
+  }
+};
+
+// Version acotada a un solo usuario/fecha de assertNoHospitalityOutgoingTalkConflicts,
+// usada por la sustitucion puntual (AM-4) en vez de recorrer todo el rango de la lista.
+// Reutiliza la misma forma de query (status + rango de weekStartDate) para no requerir
+// un indice compuesto nuevo.
+const assertNoSingleHospitalitySubstitutionConflict = async (params: {
+  congregationId: string;
+  meetingDate: string;
+  newUserId: string;
+  newUserName: string;
+}): Promise<void> => {
+  const weekStart = getWeekStartDateKey(params.meetingDate);
+  const outgoingSnap = await adminDb
+    .collection('congregations')
+    .doc(params.congregationId)
+    .collection('outgoingTalks')
+    .where('status', '==', 'scheduled')
+    .where('weekStartDate', '>=', weekStart)
+    .where('weekStartDate', '<=', weekStart)
+    .get();
+
+  const conflict = outgoingSnap.docs
+    .map((docSnap) => docSnap.data() as FirestoreRecord)
+    .find((talk) => normalizeText(talk.speakerUserId) === params.newUserId);
+
+  if (!conflict) return;
+
+  const date = normalizeText(conflict.talkDate) ?? params.meetingDate;
+  throw new HttpsError(
+    'failed-precondition',
+    `${params.newUserName} no puede tener asignaciones el fin de semana: sale a discursar esa semana (${date}).`
+  );
 };
 
 const isReaderRole = (roleKey: HospitalityRoleKey): boolean =>
@@ -564,7 +806,10 @@ const upsertHospitalitySection = (
         (assignment) => !controlledKeys.has(normalizeText(assignment.assignmentKey) ?? '')
       )
     : [];
-  const controlledAssignments = nonReaderItems.map((item) => createHospitalityAssignment(item));
+  const orderedNonReaderItems = [...nonReaderItems].sort(
+    (left, right) => HOSPITALITY_ROLE_ORDER[left.roleKey] - HOSPITALITY_ROLE_ORDER[right.roleKey]
+  );
+  const controlledAssignments = orderedNonReaderItems.map((item) => createHospitalityAssignment(item));
   const nextSection: FirestoreRecord = {
     ...(existingSection ?? {}),
     sectionKey: HOSPITALITY_SECTION_KEY,
@@ -653,7 +898,7 @@ const groupHospitalityItemsByMeeting = (
   return grouped;
 };
 
-const findMeetingForScheduleItem = async (params: {
+const findMeetingForDateAndType = async (params: {
   congregationId: string;
   meetingDate: string;
   meetingType: HospitalityMeetingType;
@@ -676,6 +921,51 @@ const findMeetingForScheduleItem = async (params: {
       ? category === 'midweek' || type === 'midweek'
       : category === 'weekend' || type !== 'midweek';
   });
+};
+
+// Sincroniza una unica reunion a partir de los items de hospitalidad ya resueltos
+// para esa fecha/tipo. Compartido entre la sincronizacion masiva al publicar y la
+// sustitucion puntual de una asignacion (AM-4), para no duplicar la logica de merge
+// de secciones. Si se pasa `batch`, la escritura se agrega al batch en vez de aplicarse
+// de inmediato, permitiendo agruparla atomicamente con otras escrituras del llamador.
+const syncSingleMeetingFromItems = async (params: {
+  congregationId: string;
+  meetingDate: string;
+  meetingType: HospitalityMeetingType;
+  items: HospitalityScheduleItem[];
+  requesterUid: string;
+  batch?: WriteBatch;
+}): Promise<{ synced: boolean }> => {
+  const meetingDoc = await findMeetingForDateAndType({
+    congregationId: params.congregationId,
+    meetingDate: params.meetingDate,
+    meetingType: params.meetingType,
+  });
+
+  if (!meetingDoc) {
+    return { synced: false };
+  }
+
+  const meetingData = meetingDoc.data() as FirestoreRecord;
+  const sections = applyHospitalityItemsToMeetingSections(
+    meetingData,
+    params.items,
+    params.meetingType
+  );
+  const updatePayload = {
+    sections,
+    assignedUserIds: collectAssignedUserIdsFromSections(sections),
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: params.requesterUid,
+  };
+
+  if (params.batch) {
+    params.batch.update(meetingDoc.ref, updatePayload);
+  } else {
+    await meetingDoc.ref.update(updatePayload);
+  }
+
+  return { synced: true };
 };
 
 const syncHospitalityScheduleToMeetings = async (params: {
@@ -701,35 +991,117 @@ const syncHospitalityScheduleToMeetings = async (params: {
 
   for (const groupedItems of grouped.values()) {
     const firstItem = groupedItems[0];
-    const meetingDoc = await findMeetingForScheduleItem({
+    const result = await syncSingleMeetingFromItems({
       congregationId: params.congregationId,
       meetingDate: firstItem.meetingDate,
       meetingType: firstItem.meetingType,
+      items: groupedItems,
+      requesterUid: params.requesterUid,
     });
 
-    if (!meetingDoc) {
-      missingMeetings += 1;
-      continue;
-    }
-
-    const meetingData = meetingDoc.data() as FirestoreRecord;
-    const sections = applyHospitalityItemsToMeetingSections(
-      meetingData,
-      groupedItems,
-      firstItem.meetingType
-    );
-
-    await meetingDoc.ref.update({
-      sections,
-      assignedUserIds: collectAssignedUserIdsFromSections(sections),
-      updatedAt: FieldValue.serverTimestamp(),
-      updatedBy: params.requesterUid,
-    });
-    syncedMeetings += 1;
+    if (result.synced) syncedMeetings += 1;
+    else missingMeetings += 1;
   }
 
   return { syncedMeetings, missingMeetings };
 };
+
+export const ensurePlanningMeetingsByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<EnsurePlanningMeetingsResult> => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const rawData = request.data as EnsurePlanningMeetingsPayload;
+    const congregationId = normalizeText(rawData?.congregationId);
+    if (!congregationId) {
+      throw new HttpsError('invalid-argument', 'congregationId es obligatorio.');
+    }
+
+    const requester = await getRequesterProfile(request.auth.uid);
+    assertHospitalityManager(requester, congregationId);
+    const payload = parseEnsurePlanningMeetingsPayload(request.data);
+    const meetingsRef = adminDb
+      .collection('congregations')
+      .doc(payload.congregationId)
+      .collection('meetings');
+    const batch = adminDb.batch();
+    let createdMidweek = 0;
+    let createdWeekend = 0;
+    let existing = 0;
+
+    const candidates: { dateKey: string; meetingType: HospitalityMeetingType }[] = [];
+    const cursor = new Date(payload.startDate);
+    while (cursor <= payload.endDate) {
+      const dateKey = formatDateKey(cursor);
+      if (cursor.getDay() === payload.midweekDay) {
+        candidates.push({ dateKey, meetingType: 'midweek' });
+      }
+      if (cursor.getDay() === payload.weekendDay) {
+        candidates.push({ dateKey, meetingType: 'weekend' });
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    for (const candidate of candidates) {
+      const existingMeeting = await findMeetingForDateAndType({
+        congregationId: payload.congregationId,
+        meetingDate: candidate.dateKey,
+        meetingType: candidate.meetingType,
+      });
+      if (existingMeeting) {
+        existing += 1;
+        continue;
+      }
+
+      const meetingDate = parseDateKey(candidate.dateKey);
+      if (!meetingDate) continue;
+      const meetingTimestamp = Timestamp.fromDate(meetingDate);
+      const title = candidate.meetingType === 'midweek'
+        ? 'Reunion Vida y Ministerio Cristianos'
+        : 'Reunion del fin de semana';
+      const meetingRef = meetingsRef.doc(
+        `planning-${candidate.meetingType}-${candidate.dateKey}`
+      );
+
+      batch.set(meetingRef, {
+        congregationId: payload.congregationId,
+        title,
+        type: candidate.meetingType,
+        meetingCategory: candidate.meetingType,
+        status: 'scheduled',
+        publicationStatus: 'draft',
+        startDate: meetingTimestamp,
+        endDate: meetingTimestamp,
+        meetingDate: meetingTimestamp,
+        attendees: [request.auth.uid],
+        attendeeNames: requester.displayName ? [requester.displayName] : [],
+        sections: [],
+        assignedUserIds: [],
+        cleaningAssignmentMode: 'none',
+        cleaningGroupIds: [],
+        cleaningGroupNames: [],
+        searchableText: title.toLowerCase(),
+        organizerUid: request.auth.uid,
+        organizerName: requester.displayName ?? requester.email ?? 'Usuario',
+        createdBy: request.auth.uid,
+        updatedBy: request.auth.uid,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      if (candidate.meetingType === 'midweek') createdMidweek += 1;
+      else createdWeekend += 1;
+    }
+
+    if (createdMidweek + createdWeekend > 0) {
+      await batch.commit();
+    }
+
+    return { ok: true, createdMidweek, createdWeekend, existing };
+  }
+);
 
 export const publishCleaningScheduleByManager = onCall(
   { region: 'us-central1' },
@@ -773,11 +1145,22 @@ export const publishHospitalityScheduleByManager = onCall(
     const requester = await getRequesterProfile(request.auth.uid);
     assertHospitalityManager(requester, payload.congregationId);
 
+    const scheduleData = await getScheduleForPublish({
+      congregationId: payload.congregationId,
+      collectionName: 'hospitalitySchedules',
+      scheduleId: payload.scheduleId,
+    });
+    await assertNoHospitalityOutgoingTalkConflicts({
+      congregationId: payload.congregationId,
+      scheduleId: payload.scheduleId,
+      scheduleData,
+    });
     await publishSchedule({
       congregationId: payload.congregationId,
       collectionName: 'hospitalitySchedules',
       scheduleId: payload.scheduleId,
       requesterUid: request.auth.uid,
+      scheduleData,
     });
 
     const syncResult = payload.syncMeetings
@@ -789,5 +1172,138 @@ export const publishHospitalityScheduleByManager = onCall(
       : { syncedMeetings: 0, missingMeetings: 0 };
 
     return { ok: true, ...syncResult };
+  }
+);
+
+// Unica puerta de cambio para asignaciones de una lista de hospitalidad ya publicada:
+// valida al sustituto, actualiza el item y re-sincroniza solo la reunion afectada en
+// una escritura atomica (batch). El editor de reuniones sigue bloqueado para estos roles.
+export const substituteHospitalityAssignmentByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<{ ok: true; meetingSynced: boolean }> => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const payload = parseSubstitutePayload(request.data);
+    const requester = await getRequesterProfile(request.auth.uid);
+    assertHospitalityManager(requester, payload.congregationId);
+
+    const scheduleRef = adminDb
+      .collection('congregations')
+      .doc(payload.congregationId)
+      .collection('hospitalitySchedules')
+      .doc(payload.scheduleId);
+    const scheduleSnap = await scheduleRef.get();
+
+    if (!scheduleSnap.exists) {
+      throw new HttpsError('not-found', 'Lista no encontrada.');
+    }
+
+    const scheduleData = scheduleSnap.data() as FirestoreRecord;
+    if (normalizeText(scheduleData.congregationId) !== payload.congregationId) {
+      throw new HttpsError('permission-denied', 'La lista no pertenece a esta congregacion.');
+    }
+    if (scheduleData.status !== 'published') {
+      throw new HttpsError(
+        'failed-precondition',
+        'Solo se pueden sustituir asignaciones de listas publicadas.'
+      );
+    }
+
+    const itemRef = scheduleRef.collection('items').doc(payload.itemId);
+    const itemSnap = await itemRef.get();
+
+    if (!itemSnap.exists) {
+      throw new HttpsError('not-found', 'Asignacion no encontrada.');
+    }
+
+    const itemRaw = itemSnap.data() as FirestoreRecord;
+    if (itemRaw.status !== 'scheduled') {
+      throw new HttpsError('failed-precondition', 'Solo se pueden sustituir asignaciones activas.');
+    }
+
+    const item = normalizeHospitalityItem(itemRaw);
+    if (!item) {
+      throw new HttpsError('failed-precondition', 'La asignacion no tiene datos validos.');
+    }
+
+    const newUserSnap = await adminDb.collection('users').doc(payload.newUserId).get();
+    if (!newUserSnap.exists) {
+      throw new HttpsError('not-found', 'El usuario sustituto no existe.');
+    }
+
+    const newUserData = newUserSnap.data() as FirestoreRecord;
+    if (normalizeText(newUserData.congregationId) !== payload.congregationId) {
+      throw new HttpsError(
+        'failed-precondition',
+        'El usuario sustituto no pertenece a esta congregacion.'
+      );
+    }
+    if (!resolveIsActive(newUserData)) {
+      throw new HttpsError('failed-precondition', 'El usuario sustituto esta inactivo.');
+    }
+
+    const newUserName =
+      normalizeText(newUserData.displayName) ?? normalizeText(newUserData.email) ?? 'Usuario';
+
+    const siblingItemsSnap = await scheduleRef
+      .collection('items')
+      .where('meetingDate', '==', item.meetingDate)
+      .where('meetingType', '==', item.meetingType)
+      .where('status', '==', 'scheduled')
+      .get();
+
+    const siblingItems = siblingItemsSnap.docs
+      .map((doc) => ({ id: doc.id, item: normalizeHospitalityItem(doc.data() as FirestoreRecord) }))
+      .filter(
+        (entry): entry is { id: string; item: HospitalityScheduleItem } => entry.item !== null
+      );
+
+    const duplicateRole = siblingItems.find(
+      (entry) => entry.id !== payload.itemId && entry.item.userId === payload.newUserId
+    );
+    if (duplicateRole) {
+      throw new HttpsError(
+        'failed-precondition',
+        `${newUserName} ya tiene una asignacion (${duplicateRole.item.roleLabel}) en esa reunion.`
+      );
+    }
+
+    if (item.meetingType === 'weekend') {
+      await assertNoSingleHospitalitySubstitutionConflict({
+        congregationId: payload.congregationId,
+        meetingDate: item.meetingDate,
+        newUserId: payload.newUserId,
+        newUserName,
+      });
+    }
+
+    const batch = adminDb.batch();
+    batch.update(itemRef, {
+      userId: payload.newUserId,
+      userNameSnapshot: newUserName,
+      updatedBy: request.auth.uid,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    const updatedItems: HospitalityScheduleItem[] = siblingItems.map((entry) =>
+      entry.id === payload.itemId
+        ? { ...entry.item, userId: payload.newUserId, userNameSnapshot: newUserName }
+        : entry.item
+    );
+
+    const syncResult = await syncSingleMeetingFromItems({
+      congregationId: payload.congregationId,
+      meetingDate: item.meetingDate,
+      meetingType: item.meetingType,
+      items: updatedItems,
+      requesterUid: request.auth.uid,
+      batch,
+    });
+
+    await batch.commit();
+
+    return { ok: true, meetingSynced: syncResult.synced };
   }
 );

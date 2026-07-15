@@ -2,7 +2,7 @@
   "expo": {
     "name": "OMP",
     "slug": "omp",
-    "version": "1.5.0",
+    "version": "1.13.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ormeprassig",
@@ -42,7 +42,7 @@
         "android.permission.SCHEDULE_EXACT_ALARM"
       ],
       "package": "com.marcor360.omp",
-      "versionCode": 3
+      "versionCode": 11304
     },
     "web": {
       "bundler": "metro",

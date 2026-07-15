@@ -342,7 +342,7 @@ export function MeetingFormScreen() {
   }, [meetingType, selectedMidweekMeetingDate, selectedWeekendMeetingDate]);
 
   useEffect(() => {
-    if (!congregationId) {
+    if (!congregationId || meetingType !== 'weekend') {
       setOutgoingTalks([]);
       return;
     }
@@ -359,11 +359,13 @@ export function MeetingFormScreen() {
     return () => {
       cancelled = true;
     };
-  }, [congregationId, resolvedMeetingDate, setOutgoingTalks]);
+  }, [congregationId, meetingType, resolvedMeetingDate, setOutgoingTalks]);
 
   const blockedOutgoingTalkUserIds = useMemo(
-    () => getBlockedOutgoingTalkUserIds(resolvedMeetingDate, outgoingTalks),
-    [outgoingTalks, resolvedMeetingDate]
+    () => meetingType === 'weekend'
+      ? getBlockedOutgoingTalkUserIds(resolvedMeetingDate, outgoingTalks)
+      : new Set<string>(),
+    [meetingType, outgoingTalks, resolvedMeetingDate]
   );
 
   const selectedWeekLabel = useMemo(

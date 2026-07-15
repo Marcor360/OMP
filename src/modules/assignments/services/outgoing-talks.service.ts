@@ -103,6 +103,24 @@ export const getScheduledOutgoingTalksForWeek = async (
   return sortOutgoingTalks(snapshot.docs.map((doc) => normalizeOutgoingTalk(doc.id, doc.data())));
 };
 
+export const getScheduledOutgoingTalksInRange = async (
+  congregationId: string,
+  startDate: string,
+  endDate: string
+): Promise<OutgoingTalk[]> => {
+  if (!congregationId || !startDate || !endDate || startDate > endDate) return [];
+  const startWeek = resolveOutgoingTalkWeekRange(startDate).weekStartDate;
+  const endWeek = resolveOutgoingTalkWeekRange(endDate).weekStartDate;
+  const q = query(
+    outgoingTalksCollectionRef(congregationId),
+    where('status', '==', 'scheduled'),
+    where('weekStartDate', '>=', startWeek),
+    where('weekStartDate', '<=', endWeek)
+  );
+  const snapshot = await getDocs(q);
+  return sortOutgoingTalks(snapshot.docs.map((doc) => normalizeOutgoingTalk(doc.id, doc.data())));
+};
+
 export const createOutgoingTalkByManager = (payload: OutgoingTalkFormPayload): Promise<{ outgoingTalkId: string }> =>
   callOutgoingTalkFunction('createOutgoingTalkByManager', payload);
 

@@ -17,10 +17,13 @@ import { formatDateKey } from '@/src/utils/dates/date-key';
 const HOSPITALITY_SECTION_KEY = 'hospitalityMicrophones';
 
 const HOSPITALITY_ROLE_LABELS: Record<HospitalityRoleKey, string> = {
+  chairman: 'Presidente',
   microphoneOne: 'Microfono 1',
   microphoneTwo: 'Microfono 2',
+  microphoneThree: 'Microfono 3',
   attendantDoor: 'Acomodador de puerta',
   attendantAuditorium: 'Acomodador de auditorio',
+  attendantExtra: 'Acomodador extra',
   watchtowerReader: 'Lector del Estudio de la Atalaya',
   midweekBibleStudyReader: 'Lector del Estudio Biblico',
   audioVideo: 'Audio y video',
@@ -28,6 +31,20 @@ const HOSPITALITY_ROLE_LABELS: Record<HospitalityRoleKey, string> = {
 
 const isReaderRole = (roleKey: HospitalityRoleKey): boolean =>
   roleKey === 'watchtowerReader' || roleKey === 'midweekBibleStudyReader';
+
+// Orden de aparicion en la seccion de la reunion: el presidente siempre va primero.
+const HOSPITALITY_ROLE_ORDER: Record<HospitalityRoleKey, number> = {
+  chairman: 0,
+  microphoneOne: 1,
+  microphoneTwo: 2,
+  microphoneThree: 3,
+  attendantDoor: 4,
+  attendantAuditorium: 5,
+  attendantExtra: 6,
+  audioVideo: 7,
+  watchtowerReader: 8,
+  midweekBibleStudyReader: 8,
+};
 
 const createAssignee = (item: HospitalityScheduleItem) => ({
   id: `${item.roleKey}-${item.userId}`,
@@ -74,7 +91,10 @@ const upsertHospitalitySection = (
   const existingAssignments = existingSection?.assignments.filter(
     (assignment) => !controlledKeys.has(assignment.assignmentKey)
   ) ?? [];
-  const controlledAssignments = nonReaderItems.map((item, index) =>
+  const orderedNonReaderItems = [...nonReaderItems].sort(
+    (left, right) => HOSPITALITY_ROLE_ORDER[left.roleKey] - HOSPITALITY_ROLE_ORDER[right.roleKey]
+  );
+  const controlledAssignments = orderedNonReaderItems.map((item, index) =>
     createHospitalityAssignment(item, existingAssignments.length + index)
   );
   const nextSection: MeetingProgramSection = {
@@ -169,4 +189,3 @@ export const applyPublishedPlanningToMeeting = async (params: {
     warnings,
   };
 };
-

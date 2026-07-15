@@ -34,7 +34,7 @@ export function AssignmentsScreen() {
   const { appUser, congregationId, loadingProfile, profileError, uid } = useUser();
   const { t } = useI18n();
   const showOutgoingTalks = canManageOutgoingTalks(appUser);
-  const showReaders = canManageHospitalityMicrophones(appUser);
+  const canManageHospitality = canManageHospitalityMicrophones(appUser);
   const canCreateAssignments = canManageAssignments(appUser);
 
   const {
@@ -116,7 +116,7 @@ export function AssignmentsScreen() {
                 <ThemedText style={styles.createButtonText}>{t('assignments.btnOutgoingTalks')}</ThemedText>
               </TouchableOpacity>
             ) : null}
-            {showReaders ? (
+            {canManageHospitality ? (
               <TouchableOpacity
                 style={styles.createButton}
                 onPress={() => router.push('/(protected)/assignments/hospitality-microphones' as never)}
@@ -126,16 +126,14 @@ export function AssignmentsScreen() {
                 <ThemedText style={styles.createButtonText}>{t('assignments.btnPlan')}</ThemedText>
               </TouchableOpacity>
             ) : null}
-            {showReaders ? (
-              <TouchableOpacity
-                style={styles.createButton}
-                onPress={() => router.push('/(protected)/assignments/readers' as never)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="book-outline" size={16} color={colors.primary} />
-                <ThemedText style={styles.createButtonText}>{t('assignments.btnReaders')}</ThemedText>
-              </TouchableOpacity>
-            ) : null}
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={() => router.push('/(protected)/assignments/readers' as never)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="book-outline" size={16} color={colors.primary} />
+              <ThemedText style={styles.createButtonText}>{t('assignments.btnReaders')}</ThemedText>
+            </TouchableOpacity>
             {canCreateAssignments ? (
               <TouchableOpacity
                 style={styles.createButton}

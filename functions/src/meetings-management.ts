@@ -597,6 +597,8 @@ const assertNoOutgoingTalkAssignmentConflict = async (params: {
   congregationId: string;
   meetingData: Record<string, unknown>;
 }) => {
+  if (resolveMeetingType(params.meetingData) !== 'weekend') return;
+
   const sections = normalizeMeetingSectionsFromDoc(params.meetingData);
   const assignedUserIds = buildAssignedUserIdsFromSections(sections);
   if (assignedUserIds.length === 0) return;
@@ -629,9 +631,10 @@ const assertNoOutgoingTalkAssignmentConflict = async (params: {
 
   const conflict = assignedUserIds.find((userId) => blockedByUserId.has(userId));
   if (conflict) {
+    const dateKey = formatDateKey(meetingDate.toDate());
     throw new HttpsError(
       'failed-precondition',
-      `${blockedByUserId.get(conflict) ?? conflict} no esta disponible: salida a discursar esta semana.`
+      `${blockedByUserId.get(conflict) ?? conflict} no esta disponible el fin de semana de ${dateKey}: salida a discursar esta semana.`
     );
   }
 };

@@ -4,6 +4,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  serverTimestamp,
   updateDoc,
   where,
   writeBatch,
@@ -100,6 +101,7 @@ export const firestoreNotificationRepository: NotificationRepository = {
   ): Promise<void> => {
     await updateDoc(congregationNotificationDocRef(congregationId, notificationId), {
       isRead: true,
+      readAt: serverTimestamp(),
     });
   },
 
@@ -125,6 +127,7 @@ export const firestoreNotificationRepository: NotificationRepository = {
     snap.docs.forEach((docSnap) => {
       batch.update(docSnap.ref, {
         isRead: true,
+        readAt: serverTimestamp(),
       });
     });
 

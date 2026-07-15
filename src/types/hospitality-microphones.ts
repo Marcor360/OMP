@@ -6,13 +6,21 @@ export type HospitalityAssignmentStatus = 'scheduled' | 'cancelled' | 'completed
 export type HospitalityMeetingType = 'midweek' | 'weekend';
 
 export type HospitalityRoleKey =
+  | 'chairman'
   | 'microphoneOne'
   | 'microphoneTwo'
+  | 'microphoneThree'
   | 'attendantDoor'
   | 'attendantAuditorium'
+  | 'attendantExtra'
   | 'watchtowerReader'
   | 'midweekBibleStudyReader'
   | 'audioVideo';
+
+export interface HospitalityOptionalRoles {
+  microphoneThree: boolean;
+  attendantExtra: boolean;
+}
 
 export interface HospitalitySchedule {
   id: string;
@@ -28,6 +36,7 @@ export interface HospitalitySchedule {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   publishedAt?: Timestamp;
+  optionalRoles?: HospitalityOptionalRoles;
 }
 
 export interface HospitalityScheduleItem {

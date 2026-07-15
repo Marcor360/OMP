@@ -225,7 +225,7 @@ export const createMeeting = async (
     throw new AppError('No se pueden crear reuniones con fechas que ya pasaron.');
   }
 
-  let shouldUseManagerFunction = false;
+  let shouldUseManagerFunction = inferredType === 'weekend';
   let duplicatedMeeting: Meeting | null = null;
 
   try {
@@ -436,7 +436,7 @@ export const updateMeeting = async (
     timestampToDate(normalizedProgram.meetingDate);
   const updateRangeEnd = timestampToDate(data.endDate) ?? updateRangeStart;
 
-  let shouldUseManagerFunction = false;
+  let shouldUseManagerFunction = inferredType === 'weekend';
 
   if (updateRangeStart && updateRangeEnd) {
     try {

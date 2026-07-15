@@ -2,8 +2,12 @@ import type { HospitalityScheduleRepository } from '@/src/services/repositories/
 import {
   __resetHospitalityScheduleRepositoryForTests,
   __setHospitalityScheduleRepositoryForTests,
+  ensurePlanningMeetings,
+  getCurrentPublishedHospitalitySchedule,
+  getHospitalitySchedules,
   publishHospitalitySchedule,
   saveHospitalityScheduleItems,
+  substituteHospitalityAssignment,
 } from '@/src/services/hospitality-microphones/hospitality-microphones-service';
 import type {
   HospitalitySchedule,
@@ -14,16 +18,28 @@ jest.mock(
   '@/src/services/repositories/firestore/firestore-hospitality-schedule-repository',
   () => ({
     firestoreHospitalityScheduleRepository: {
+      ensurePlanningMeetings: async () => ({ createdMidweek: 0, createdWeekend: 0, existing: 0 }),
       listSchedules: async () => [],
       listPublishedSchedules: async () => [],
       listScheduleItems: async () => [],
       listScheduledItemsForDateAndType: async () => [],
       addSchedule: async () => 'sch-id',
+      updateScheduleOptionalRoles: async () => undefined,
+      archiveSchedule: async () => undefined,
       upsertScheduleItems: async () => undefined,
       publishSchedule: async () => ({ syncedMeetings: 0, missingMeetings: 0 }),
+      substituteAssignment: async () => ({ meetingSynced: true }),
     },
   })
 );
+
+jest.mock('@/src/modules/assignments/services/outgoing-talks.service', () => ({
+  getScheduledOutgoingTalksInRange: async () => [],
+}));
+
+jest.mock('@/src/services/users/active-users-service', () => ({
+  getActiveCongregationUsers: async () => [],
+}));
 
 const makeSchedule = (overrides: Partial<HospitalitySchedule> = {}): HospitalitySchedule => ({
   id: 'sch-1',
@@ -42,6 +58,8 @@ const makeSchedule = (overrides: Partial<HospitalitySchedule> = {}): Hospitality
 });
 
 class FakeHospitalityScheduleRepository implements HospitalityScheduleRepository {
+  public ensurePayload: Parameters<HospitalityScheduleRepository['ensurePlanningMeetings']>[0] | null = null;
+
   public publishPayload: {
     congregationId: string;
     scheduleId: string;
@@ -56,10 +74,19 @@ class FakeHospitalityScheduleRepository implements HospitalityScheduleRepository
   } | null = null;
 
   public publishedSchedules: HospitalitySchedule[] = [];
+  public schedules: HospitalitySchedule[] = [];
+  public archivedScheduleIds: string[] = [];
   public publishResult = { syncedMeetings: 5, missingMeetings: 0 };
 
+  async ensurePlanningMeetings(
+    params: Parameters<HospitalityScheduleRepository['ensurePlanningMeetings']>[0]
+  ): Promise<{ createdMidweek: number; createdWeekend: number; existing: number }> {
+    this.ensurePayload = params;
+    return { createdMidweek: 4, createdWeekend: 4, existing: 2 };
+  }
+
   async listSchedules(): Promise<HospitalitySchedule[]> {
-    return [];
+    return this.schedules;
   }
 
   async listPublishedSchedules(): Promise<HospitalitySchedule[]> {
@@ -76,6 +103,14 @@ class FakeHospitalityScheduleRepository implements HospitalityScheduleRepository
 
   async addSchedule(): Promise<string> {
     return 'sch-id';
+  }
+
+  async updateScheduleOptionalRoles(): Promise<void> {
+    return undefined;
+  }
+
+  async archiveSchedule(params: { scheduleId: string }): Promise<void> {
+    this.archivedScheduleIds.push(params.scheduleId);
   }
 
   async upsertScheduleItems(params: {
@@ -95,6 +130,25 @@ class FakeHospitalityScheduleRepository implements HospitalityScheduleRepository
     this.publishPayload = params;
     return this.publishResult;
   }
+
+  public substitutePayload: {
+    congregationId: string;
+    scheduleId: string;
+    itemId: string;
+    newUserId: string;
+  } | null = null;
+
+  public substituteResult = { meetingSynced: true };
+
+  async substituteAssignment(params: {
+    congregationId: string;
+    scheduleId: string;
+    itemId: string;
+    newUserId: string;
+  }): Promise<{ meetingSynced: boolean }> {
+    this.substitutePayload = params;
+    return this.substituteResult;
+  }
 }
 
 describe('hospitality-microphones-service repository port', () => {
@@ -107,6 +161,54 @@ describe('hospitality-microphones-service repository port', () => {
 
   afterEach(() => {
     __resetHospitalityScheduleRepositoryForTests();
+  });
+
+  it('delegates meeting generation to the repository', async () => {
+    const result = await ensurePlanningMeetings({
+      congregationId: 'cong-1',
+      startDate: '2026-01-01',
+      endDate: '2026-02-28',
+      midweekDay: 3,
+      weekendDay: 0,
+    });
+
+    expect(repo.ensurePayload).toEqual({
+      congregationId: 'cong-1',
+      startDate: '2026-01-01',
+      endDate: '2026-02-28',
+      midweekDay: 3,
+      weekendDay: 0,
+    });
+    expect(result).toEqual({ createdMidweek: 4, createdWeekend: 4, existing: 2 });
+  });
+
+  it('archives expired published schedules for managers and hides them', async () => {
+    repo.schedules = [
+      makeSchedule({ id: 'expired', endDate: '2026-01-31' }),
+      makeSchedule({ id: 'current', startDate: '2026-02-01', endDate: '2026-02-28' }),
+    ];
+
+    const result = await getHospitalitySchedules('cong-1', {
+      canManage: true,
+      actorUid: 'uid-1',
+      today: '2026-02-15',
+    });
+
+    expect(repo.archivedScheduleIds).toEqual(['expired']);
+    expect(result.map((schedule) => schedule.id)).toEqual(['current']);
+  });
+
+  it('returns only the currently published schedule to readers', async () => {
+    repo.publishedSchedules = [
+      makeSchedule({ id: 'expired', endDate: '2026-01-31' }),
+      makeSchedule({ id: 'current', startDate: '2026-02-01', endDate: '2026-02-28' }),
+      makeSchedule({ id: 'future', startDate: '2026-03-01', endDate: '2026-03-31' }),
+    ];
+
+    const result = await getCurrentPublishedHospitalitySchedule('cong-1', '2026-02-15');
+
+    expect(result?.id).toBe('current');
+    expect(repo.archivedScheduleIds).toEqual([]);
   });
 
   describe('publishHospitalitySchedule', () => {
@@ -208,6 +310,38 @@ describe('hospitality-microphones-service repository port', () => {
         items,
         actorUid: 'uid-1',
       });
+    });
+  });
+
+  describe('substituteHospitalityAssignment', () => {
+    it('passes the payload through to repo.substituteAssignment', async () => {
+      const result = await substituteHospitalityAssignment({
+        congregationId: 'cong-1',
+        scheduleId: 'sch-1',
+        itemId: 'item-1',
+        newUserId: 'uid-9',
+      });
+
+      expect(repo.substitutePayload).toEqual({
+        congregationId: 'cong-1',
+        scheduleId: 'sch-1',
+        itemId: 'item-1',
+        newUserId: 'uid-9',
+      });
+      expect(result).toEqual({ meetingSynced: true });
+    });
+
+    it('rejects locally without calling the repository when a required field is missing', async () => {
+      await expect(
+        substituteHospitalityAssignment({
+          congregationId: 'cong-1',
+          scheduleId: 'sch-1',
+          itemId: '',
+          newUserId: 'uid-9',
+        })
+      ).rejects.toThrow();
+
+      expect(repo.substitutePayload).toBeNull();
     });
   });
 });

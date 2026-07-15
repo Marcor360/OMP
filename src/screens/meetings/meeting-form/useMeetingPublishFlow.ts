@@ -159,7 +159,7 @@ export const useMeetingPublishFlow = ({
         .filter((candidate) => blockedOutgoingTalkUserIds.has(candidate))
     );
 
-    if (blockedAssignedUsers.size > 0) {
+    if (meetingType === 'weekend' && blockedAssignedUsers.size > 0) {
       const blockedErrors = Array.from(blockedAssignedUsers).map((userId) => {
         const name = availableUsers.find((item) => item.uid === userId)?.displayName ?? userId;
         return `${name}: ${OUTGOING_TALK_BLOCK_MESSAGE}.`;
@@ -173,7 +173,7 @@ export const useMeetingPublishFlow = ({
         const midweekParticipantErrors = validateMidweekParticipantInputs({
           sections,
           availableUsers,
-          blockedOutgoingTalkUserIds,
+          blockedOutgoingTalkUserIds: new Set<string>(),
         });
         if (midweekParticipantErrors.length > 0) {
           showPanelErrors(midweekParticipantErrors);

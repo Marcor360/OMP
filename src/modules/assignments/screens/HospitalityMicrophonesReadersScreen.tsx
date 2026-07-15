@@ -1,396 +1,216 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { EmptyState } from '@/src/components/common/EmptyState';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
-import { useI18n } from '@/src/i18n/index';
 import { useUser } from '@/src/context/user-context';
-import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
+import { useI18n } from '@/src/i18n';
 import {
-  OUTGOING_TALK_BLOCK_MESSAGE,
-  getBlockedOutgoingTalkUserIds,
-  isUserBlockedByOutgoingTalk,
-} from '@/src/modules/assignments/utils/outgoing-talks';
-import {
-  ControlledReaderSlot,
-  assignControlledReaderToMeeting,
-  listControlledReaderSlots,
-} from '@/src/modules/assignments/utils/meeting-readers';
-import { getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
-import {
-  ActiveCongregationUser,
-  getActiveCongregationUsers,
-} from '@/src/services/users/active-users-service';
+  getCurrentPublishedHospitalitySchedule,
+  getHospitalityScheduleItems,
+} from '@/src/services/hospitality-microphones/hospitality-microphones-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { Meeting } from '@/src/types/meeting';
-import { canManageHospitalityMicrophones } from '@/src/utils/permissions/permissions';
+import type { HospitalityScheduleItem } from '@/src/types/hospitality-microphones';
+import { parseDateKey } from '@/src/utils/dates/date-key';
+import { getWeekRangeForDate } from '@/src/utils/dates/week-range';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 
-type MeetingWithSlots = {
-  meeting: Meeting;
-  slots: ControlledReaderSlot[];
+type MeetingGroup = {
+  key: string;
+  date: string;
+  type: 'midweek' | 'weekend';
+  items: HospitalityScheduleItem[];
 };
 
-const toDate = (value: unknown): Date => {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
-  if (
-    typeof value === 'object' &&
-    value !== null &&
-    'toDate' in value &&
-    typeof (value as { toDate?: unknown }).toDate === 'function'
-  ) {
-    return (value as { toDate: () => Date }).toDate();
-  }
-  if (typeof value === 'string') {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
-  return new Date();
+type WeekGroup = { key: string; label: string; meetings: MeetingGroup[] };
+
+const ROLE_ORDER: HospitalityScheduleItem['roleKey'][] = [
+  'chairman',
+  'microphoneOne',
+  'microphoneTwo',
+  'microphoneThree',
+  'attendantDoor',
+  'attendantAuditorium',
+  'attendantExtra',
+  'watchtowerReader',
+  'midweekBibleStudyReader',
+  'audioVideo',
+];
+
+const compactDate = (dateKey: string, locale: string): string => {
+  const date = parseDateKey(dateKey);
+  if (!date) return dateKey;
+  const value = date.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
+  return value.charAt(0).toUpperCase() + value.slice(1);
 };
 
-const formatDate = (date: Date): string =>
-  new Intl.DateTimeFormat('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
+const weekLabel = (dateKey: string, locale: string): string => {
+  const { weekStartDate, weekEndDate } = getWeekRangeForDate(dateKey);
+  const start = parseDateKey(weekStartDate);
+  const end = parseDateKey(weekEndDate);
+  if (!start || !end) return dateKey;
+  const startMonth = start.toLocaleDateString(locale, { month: 'short' }).replace('.', '');
+  const endMonth = end.toLocaleDateString(locale, { month: 'short' }).replace('.', '');
+  return startMonth === endMonth
+    ? `${start.getDate()}–${end.getDate()} ${endMonth}`
+    : `${start.getDate()} ${startMonth}–${end.getDate()} ${endMonth}`;
+};
+
+const groupItems = (items: HospitalityScheduleItem[], locale: string): WeekGroup[] => {
+  const meetings = new Map<string, MeetingGroup>();
+  items.filter((item) => item.status === 'scheduled').forEach((item) => {
+    const key = `${item.meetingDate}:${item.meetingType}`;
+    const current = meetings.get(key) ?? { key, date: item.meetingDate, type: item.meetingType, items: [] };
+    current.items.push(item);
+    meetings.set(key, current);
+  });
+  const weeks = new Map<string, MeetingGroup[]>();
+  Array.from(meetings.values()).sort((left, right) => left.date.localeCompare(right.date)).forEach((meeting) => {
+    const key = getWeekRangeForDate(meeting.date).weekStartDate;
+    weeks.set(key, [...(weeks.get(key) ?? []), meeting]);
+  });
+  return Array.from(weeks.entries()).map(([key, groupedMeetings]) => ({
+    key,
+    label: weekLabel(key, locale),
+    meetings: groupedMeetings.map((meeting) => ({
+      ...meeting,
+      items: [...meeting.items].sort(
+        (left, right) => ROLE_ORDER.indexOf(left.roleKey) - ROLE_ORDER.indexOf(right.roleKey)
+      ),
+    })),
+  }));
+};
 
 export function HospitalityMicrophonesReadersScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const { appUser, congregationId, uid, loadingProfile } = useUser();
-  const { t } = useI18n();
-  const canManage = canManageHospitalityMicrophones(appUser);
-  const [users, setUsers] = useState<ActiveCongregationUser[]>([]);
-  const [meetings, setMeetings] = useState<MeetingWithSlots[]>([]);
-  const [blockedByMeetingId, setBlockedByMeetingId] = useState<Record<string, string[]>>({});
-  const [expandedSlot, setExpandedSlot] = useState<string | null>(null);
-  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const { width } = useWindowDimensions();
+  const { congregationId, uid, loadingProfile, profileError } = useUser();
+  const { language, t } = useI18n();
+  const [items, setItems] = useState<HospitalityScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!congregationId || !canManage) {
+    if (!congregationId) {
       setLoading(false);
       return;
     }
-
     setLoading(true);
     setError(null);
-
     try {
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 70);
-      end.setHours(23, 59, 59, 999);
-
-      const [loadedUsers, loadedMeetings] = await Promise.all([
-        getActiveCongregationUsers(congregationId),
-        getMeetingsByWeek(congregationId, start, end, {
-          includeMidweek: true,
-          publicationStatus: 'all',
-          forceServer: true,
-          maxItems: 80,
-        }),
-      ]);
-
-      setUsers(loadedUsers);
-      const meetingsWithSlots = loadedMeetings
-        .map((meeting) => ({ meeting, slots: listControlledReaderSlots(meeting) }))
-        .filter((item) => item.slots.length > 0);
-
-      const blockedEntries = await Promise.all(
-        meetingsWithSlots.map(async ({ meeting }) => {
-          const meetingDate = toDate(meeting.meetingDate ?? meeting.startDate);
-          const outgoingTalks = await getScheduledOutgoingTalksForWeek(congregationId, meetingDate);
-          return [
-            meeting.id,
-            Array.from(getBlockedOutgoingTalkUserIds(meetingDate, outgoingTalks)),
-          ] as const;
-        })
-      );
-
-      setMeetings(meetingsWithSlots);
-      setBlockedByMeetingId(Object.fromEntries(blockedEntries));
+      const schedule = await getCurrentPublishedHospitalitySchedule(congregationId);
+      setItems(schedule ? await getHospitalityScheduleItems({ congregationId, scheduleId: schedule.id }) : []);
     } catch (requestError) {
       setError(formatFirestoreError(requestError));
     } finally {
       setLoading(false);
     }
-  }, [canManage, congregationId]);
+  }, [congregationId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const usersById = useMemo(
-    () => new Map(users.map((user) => [user.uid, user])),
-    [users]
+  const weeks = useMemo(() => groupItems(items, language), [items, language]);
+  const myAssignments = useMemo(
+    () => items.filter((item) => item.status === 'scheduled' && item.userId === uid).sort((left, right) => left.meetingDate.localeCompare(right.meetingDate)),
+    [items, uid]
   );
 
-  const assignReader = useCallback(
-    async (meeting: Meeting, slot: ControlledReaderSlot, user: ActiveCongregationUser) => {
-      if (!congregationId || !uid) return;
-
-      const meetingDate = toDate(meeting.meetingDate ?? meeting.startDate);
-      const saveKey = `${meeting.id}:${slot.assignmentKey}`;
-      setSavingKey(saveKey);
-
-      try {
-        const outgoingTalks = await getScheduledOutgoingTalksForWeek(congregationId, meetingDate);
-        if (isUserBlockedByOutgoingTalk(user.uid, meetingDate, outgoingTalks)) {
-          Alert.alert('No disponible', `${user.displayName}: ${OUTGOING_TALK_BLOCK_MESSAGE}.`);
-          return;
-        }
-
-        await assignControlledReaderToMeeting({
-          congregationId,
-          meeting,
-          assignmentKey: slot.assignmentKey,
-          user,
-          actorUid: uid,
-        });
-
-        setExpandedSlot(null);
-        await load();
-      } catch (requestError) {
-        Alert.alert('Error', formatFirestoreError(requestError));
-      } finally {
-        setSavingKey(null);
-      }
-    },
-    [congregationId, load, uid]
-  );
-
-  if (loadingProfile || loading) {
-    return <LoadingState message={t('hospitality.readersLoading')} />;
-  }
-
-  if (!congregationId) {
-    return <ErrorState message={t('dashboard.noCongregation')} />;
-  }
-
-  if (!canManage) {
-    return <ErrorState message={t('hospitality.scheduleNoPermission')} />;
-  }
-
-  if (error) {
-    return <ErrorState message={error} onRetry={() => void load()} />;
-  }
+  if (loadingProfile || loading) return <LoadingState message={t('hospitality.readersLoading')} />;
+  if (!congregationId) return <ErrorState message={profileError ?? t('dashboard.noCongregation')} />;
+  if (error) return <ErrorState message={error} onRetry={() => void load()} />;
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
       <PageHeader title={t('hospitality.readersTitle')} subtitle={t('hospitality.readersSubtitle')} showBack />
-      <ScrollView contentContainerStyle={styles.content}>
-        {meetings.length === 0 ? (
-          <View style={styles.empty}>
-            <ThemedText style={styles.emptyText}>{t('hospitality.readersEmpty')}</ThemedText>
-          </View>
-        ) : (
-          meetings.map(({ meeting, slots }) => {
-            const meetingDate = toDate(meeting.meetingDate ?? meeting.startDate);
-            return (
-              <View key={meeting.id} style={styles.meetingBlock}>
-                <View style={styles.meetingHeader}>
-                  <View style={styles.meetingTitleWrap}>
-                    <ThemedText style={styles.meetingTitle}>{meeting.title}</ThemedText>
-                    <ThemedText style={styles.meetingDate}>{formatDate(meetingDate)}</ThemedText>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          {items.length === 0 ? (
+            <EmptyState icon="calendar-clear-outline" title={t('hospitality.publishedEmpty')} />
+          ) : (
+            <>
+              {myAssignments.length > 0 ? (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Ionicons name="person-circle-outline" size={20} color={colors.primary} />
+                    <ThemedText style={styles.sectionTitle}>{t('hospitality.myAssignments')}</ThemedText>
                   </View>
-                  <View style={styles.typePill}>
-                    <ThemedText style={styles.typePillText}>
-                      {meeting.type === 'midweek' || meeting.meetingCategory === 'midweek'
-                        ? t('hospitality.scheduleMidweek')
-                        : t('hospitality.scheduleWeekend')}
-                    </ThemedText>
+                  <View style={styles.myGrid}>
+                    {myAssignments.map((item) => (
+                      <View key={item.id} style={styles.myCard}>
+                        <ThemedText style={styles.myRole}>{item.roleLabel}</ThemedText>
+                        <ThemedText style={styles.myDate}>{compactDate(item.meetingDate, language)}</ThemedText>
+                        <ThemedText style={styles.myType}>{item.meetingType === 'midweek' ? t('hospitality.scheduleMidweek') : t('hospitality.scheduleWeekend')}</ThemedText>
+                      </View>
+                    ))}
                   </View>
                 </View>
+              ) : null}
 
-                {slots.map((slot) => {
-                  const slotKey = `${meeting.id}:${slot.assignmentKey}`;
-                  const expanded = expandedSlot === slotKey;
-                  const selectedName =
-                    slot.assignedUserName ??
-                    (slot.assignedUserId ? usersById.get(slot.assignedUserId)?.displayName : undefined) ??
-                    t('hospitality.scheduleUnassigned');
-                  const isSaving = savingKey === slotKey;
-
-                  return (
-                    <View key={slotKey} style={styles.slotBlock}>
-                      <TouchableOpacity
-                        style={styles.slotButton}
-                        onPress={() => setExpandedSlot(expanded ? null : slotKey)}
-                        disabled={isSaving}
-                      >
-                        <View style={styles.slotTextWrap}>
-                          <ThemedText style={styles.slotTitle}>{slot.title}</ThemedText>
-                          <ThemedText style={styles.slotAssignee}>{selectedName}</ThemedText>
+              <View style={styles.section}>
+                <ThemedText style={styles.sectionTitle}>{t('hospitality.fullPublishedList')}</ThemedText>
+                <View style={[styles.weekGrid, width >= 760 && styles.weekGridDesktop]}>
+                  {weeks.map((week) => (
+                    <View key={week.key} style={[styles.weekCard, width >= 760 && styles.weekCardDesktop]}>
+                      <View style={styles.weekHeader}>
+                        <ThemedText style={styles.weekTitle}>{week.label}</ThemedText>
+                      </View>
+                      {week.meetings.map((meeting) => (
+                        <View key={meeting.key} style={styles.meeting}>
+                          <View style={styles.meetingHeader}>
+                            <ThemedText style={styles.meetingDate}>{compactDate(meeting.date, language)}</ThemedText>
+                            <ThemedText style={styles.meetingType}>{meeting.type === 'midweek' ? t('hospitality.scheduleMidweek') : t('hospitality.scheduleWeekend')}</ThemedText>
+                          </View>
+                          <View style={styles.rolePairs}>
+                            {meeting.items.map((item) => (
+                              <View key={item.id} style={styles.rolePair}>
+                                <ThemedText style={styles.roleLabel}>{item.roleLabel}</ThemedText>
+                                <ThemedText style={styles.roleName} numberOfLines={1}>{item.userNameSnapshot}</ThemedText>
+                              </View>
+                            ))}
+                          </View>
                         </View>
-                        <Ionicons
-                          name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
-                          size={18}
-                          color={colors.textMuted}
-                        />
-                      </TouchableOpacity>
-
-                      {expanded ? (
-                        <View style={styles.userList}>
-                          {users.map((user) => (
-                            <TouchableOpacity
-                              key={user.uid}
-                              style={[
-                                styles.userOption,
-                                blockedByMeetingId[meeting.id]?.includes(user.uid) && styles.userOptionDisabled,
-                              ]}
-                              onPress={() => void assignReader(meeting, slot, user)}
-                              disabled={isSaving || blockedByMeetingId[meeting.id]?.includes(user.uid)}
-                            >
-                              <ThemedText
-                                style={[
-                                  styles.userName,
-                                  blockedByMeetingId[meeting.id]?.includes(user.uid) && styles.userNameDisabled,
-                                ]}
-                              >
-                                {user.displayName}
-                              </ThemedText>
-                              {user.email ? <ThemedText style={styles.userEmail}>{user.email}</ThemedText> : null}
-                              {blockedByMeetingId[meeting.id]?.includes(user.uid) ? (
-                                <ThemedText style={styles.blockedText}>{OUTGOING_TALK_BLOCK_MESSAGE}</ThemedText>
-                              ) : null}
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      ) : null}
+                      ))}
                     </View>
-                  );
-                })}
+                  ))}
+                </View>
               </View>
-            );
-          })
-        )}
+            </>
+          )}
+        </View>
       </ScrollView>
     </ScreenContainer>
   );
 }
 
-const createStyles = (colors: AppColorSet) =>
-  StyleSheet.create({
-    content: {
-      padding: 16,
-      gap: 12,
-    },
-    empty: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      padding: 16,
-    },
-    emptyText: {
-      color: colors.textMuted,
-      fontSize: 14,
-    },
-    meetingBlock: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      padding: 12,
-      gap: 12,
-    },
-    meetingHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      gap: 10,
-      alignItems: 'center',
-    },
-    meetingTitleWrap: {
-      flex: 1,
-      gap: 2,
-    },
-    meetingTitle: {
-      color: colors.textPrimary,
-      fontSize: 16,
-      fontWeight: '800',
-    },
-    meetingDate: {
-      color: colors.textMuted,
-      fontSize: 12,
-    },
-    typePill: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 999,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      backgroundColor: colors.backgroundLight,
-    },
-    typePillText: {
-      color: colors.textSecondary,
-      fontSize: 11,
-      fontWeight: '700',
-    },
-    slotBlock: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 10,
-      overflow: 'hidden',
-      backgroundColor: colors.backgroundLight,
-    },
-    slotButton: {
-      padding: 12,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: 8,
-    },
-    slotTextWrap: {
-      flex: 1,
-      gap: 2,
-    },
-    slotTitle: {
-      color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: '700',
-    },
-    slotAssignee: {
-      color: colors.textMuted,
-      fontSize: 12,
-    },
-    userList: {
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-      backgroundColor: colors.surface,
-    },
-    userOption: {
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    userOptionDisabled: {
-      opacity: 0.55,
-    },
-    userName: {
-      color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    userNameDisabled: {
-      color: colors.textDisabled,
-    },
-    userEmail: {
-      color: colors.textMuted,
-      fontSize: 11,
-    },
-    blockedText: {
-      color: colors.warning,
-      fontSize: 11,
-      fontWeight: '700',
-      marginTop: 2,
-    },
-  });
+const createStyles = (colors: AppColorSet) => StyleSheet.create({
+  scrollContent: { padding: 16, paddingBottom: 32 },
+  content: { width: '100%', maxWidth: 900, alignSelf: 'center', gap: 22 },
+  section: { gap: 10 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  sectionTitle: { color: colors.textPrimary, fontSize: 16, fontWeight: '900' },
+  myGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  myCard: { flexGrow: 1, minWidth: 180, borderWidth: 1, borderColor: `${colors.primary}55`, borderRadius: 12, padding: 12, backgroundColor: `${colors.primary}0B`, gap: 3 },
+  myRole: { color: colors.primary, fontSize: 14, fontWeight: '900' },
+  myDate: { color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
+  myType: { color: colors.textMuted, fontSize: 11 },
+  weekGrid: { gap: 12 },
+  weekGridDesktop: { flexDirection: 'row', flexWrap: 'wrap' },
+  weekCard: { borderWidth: 1, borderColor: colors.border, borderRadius: 14, backgroundColor: colors.surface, overflow: 'hidden' },
+  weekCardDesktop: { width: '48.8%' },
+  weekHeader: { paddingHorizontal: 12, paddingVertical: 9, backgroundColor: `${colors.primary}12`, borderBottomWidth: 1, borderBottomColor: colors.border },
+  weekTitle: { color: colors.primary, fontSize: 12, fontWeight: '900' },
+  meeting: { padding: 12, gap: 9, borderBottomWidth: 1, borderBottomColor: colors.border },
+  meetingHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  meetingDate: { color: colors.textPrimary, fontSize: 13, fontWeight: '800' },
+  meetingType: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
+  rolePairs: { gap: 6 },
+  rolePair: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  roleLabel: { width: '44%', color: colors.textMuted, fontSize: 10, fontWeight: '700' },
+  roleName: { flex: 1, color: colors.textPrimary, fontSize: 11, fontWeight: '700' },
+});

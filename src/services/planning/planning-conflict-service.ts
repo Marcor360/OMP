@@ -2,6 +2,7 @@ import {
   PlanningValidationResult,
   PlanningWindow,
 } from '@/src/services/planning/operational-planning-service';
+import { resolveOutgoingTalkWeekRange } from '@/src/modules/assignments/utils/outgoing-talks';
 
 type MeetingType = 'midweek' | 'weekend';
 
@@ -47,7 +48,37 @@ export type OutgoingTalkConflictCandidate = {
   id?: string;
   speakerUserId: string;
   weekStartDate: string;
+  talkDate?: string;
+  speakerName?: string;
   status: 'scheduled' | 'cancelled' | 'completed' | string;
+};
+
+const validateHospitalityOutgoingTalkConflicts = (params: {
+  items: HospitalityPlanningItem[];
+  outgoingTalks: OutgoingTalkConflictCandidate[];
+  users: PlanningUserCandidate[];
+}): PlanningValidationResult => {
+  const usersById = new Map(params.users.map((user) => [user.uid, user.displayName]));
+  const errors: string[] = [];
+
+  params.items.forEach((item) => {
+    if (item.meetingType !== 'weekend' || !item.userId) return;
+
+    const conflict = params.outgoingTalks.find((talk) => {
+      if (talk.status !== 'scheduled' || talk.speakerUserId !== item.userId) return false;
+      const range = resolveOutgoingTalkWeekRange(talk.weekStartDate);
+      return item.meetingDate >= range.weekStartDate && item.meetingDate <= range.weekEndDate;
+    });
+    if (!conflict) return;
+
+    const name = conflict.speakerName ?? usersById.get(item.userId) ?? item.userId;
+    const date = conflict.talkDate ?? item.meetingDate;
+    errors.push(
+      `${name} no puede tener asignaciones el fin de semana: sale a discursar esa semana (${date}).`
+    );
+  });
+
+  return errorResult(errors);
 };
 
 const okResult = (warnings: string[] = []): PlanningValidationResult => ({
@@ -165,6 +196,7 @@ export const validateHospitalityScheduleBeforePublish = (params: {
   scheduleId?: string;
   items: HospitalityPlanningItem[];
   users: PlanningUserCandidate[];
+  outgoingTalks: OutgoingTalkConflictCandidate[];
   requiredMeetingKeys?: string[];
 }): PlanningValidationResult => {
   const requiredMeetingKeys = params.requiredMeetingKeys ?? [];
@@ -192,6 +224,11 @@ export const validateHospitalityScheduleBeforePublish = (params: {
       users: params.users,
     }),
     validateNoDuplicateUsersPerMeeting(params.items),
+    validateHospitalityOutgoingTalkConflicts({
+      items: params.items,
+      outgoingTalks: params.outgoingTalks,
+      users: params.users,
+    }),
     errorResult([
       ...missingAssignments.map((item) => `Falta asignar ${item}.`),
       ...missingMeetings.map((item) => `Falta programar la reunion ${item}.`),
@@ -289,6 +326,8 @@ export const validateOutgoingTalkBeforeSave = (params: {
 export const validateMeetingBeforeSaveWithPlanning = (params: {
   assignedUserIds: string[];
   scheduledOutgoingTalkSpeakerIds: string[];
+  userNamesById?: Map<string, string>;
+  weekDate?: string;
 }): PlanningValidationResult => {
   const blocked = params.assignedUserIds.filter((userId) =>
     params.scheduledOutgoingTalkSpeakerIds.includes(userId)
@@ -297,7 +336,10 @@ export const validateMeetingBeforeSaveWithPlanning = (params: {
   if (blocked.length === 0) return okResult();
 
   return errorResult(
-    blocked.map((userId) => `${userId} no esta disponible: salida a discursar esta semana.`)
+    blocked.map((userId) =>
+      `${params.userNamesById?.get(userId) ?? userId} no esta disponible${
+        params.weekDate ? ` el fin de semana de ${params.weekDate}` : ''
+      }: salida a discursar esta semana.`
+    )
   );
 };
-

@@ -84,8 +84,10 @@ export {
 } from './cleaning.js';
 
 export {
+  ensurePlanningMeetingsByManager,
   publishCleaningScheduleByManager,
   publishHospitalityScheduleByManager,
+  substituteHospitalityAssignmentByManager,
 } from './planning-schedules.js';
 
 export {

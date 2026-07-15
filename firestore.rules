@@ -1848,6 +1848,25 @@ service cloud.firestore {
         && (!('relatedId' in data) || data.relatedId is string);
     }
 
+    function validOwnNotificationReadUpdate(congregationId) {
+      return (
+          (
+            'userId' in resource.data
+            && resource.data.userId == currentUid()
+          )
+          || (
+            'userIds' in resource.data
+            && resource.data.userIds is list
+            && currentUid() in resource.data.userIds
+          )
+        )
+        && sameKeysOnUpdate(['isRead', 'readAt'])
+        && request.resource.data.isRead == true
+        && request.resource.data.readAt is timestamp
+        && request.resource.data.readAt == request.time
+        && sameCongregation(congregationId);
+    }
+
     function validOutgoingTalkStatus(status) {
       return status is string && status in ['scheduled', 'cancelled', 'completed'];
     }
@@ -1932,10 +1951,13 @@ service cloud.firestore {
     function validHospitalityRoleKey(value) {
       return value is string
         && value in [
+          'chairman',
           'microphoneOne',
           'microphoneTwo',
+          'microphoneThree',
           'attendantDoor',
           'attendantAuditorium',
+          'attendantExtra',
           'watchtowerReader',
           'midweekBibleStudyReader',
           'audioVideo'
@@ -1955,7 +1977,8 @@ service cloud.firestore {
           'updatedBy',
           'createdAt',
           'updatedAt',
-          'publishedAt'
+          'publishedAt',
+          'optionalRoles'
         ])
         && hasAllKeys(data, [
           'congregationId',
@@ -1985,7 +2008,8 @@ service cloud.firestore {
         && data.updatedBy is string
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
-        && (!('publishedAt' in data) || data.publishedAt is timestamp);
+        && (!('publishedAt' in data) || data.publishedAt is timestamp)
+        && (!('optionalRoles' in data) || data.optionalRoles is map);
     }
 
     function validCleaningScheduleItemData(data, congregationId, scheduleId) {
@@ -2662,25 +2686,10 @@ service cloud.firestore {
           && canAccessCongregationData(congregationId)
           && validNotificationData(request.resource.data, congregationId);
 
-        allow update: if (
+        allow update: if validOwnNotificationReadUpdate(congregationId) || (
             (isAdmin() || isGlobalScreenAccess() || hasPermission('avisos', 'edit') || hasPermission('avisos', 'manage'))
             && canAccessCongregationData(congregationId)
             && validNotificationData(request.resource.data, congregationId)
-          ) || (
-            canAccessCongregationData(congregationId)
-            && resource.data.userId == currentUid()
-            && request.resource.data.congregationId == resource.data.congregationId
-            && request.resource.data.userId == resource.data.userId
-            && request.resource.data.title == resource.data.title
-            && request.resource.data.body == resource.data.body
-            && request.resource.data.type == resource.data.type
-            && (
-              !('relatedId' in resource.data)
-              || request.resource.data.relatedId == resource.data.relatedId
-            )
-            && sameKeysOnUpdate(['isRead', 'readAt'])
-            && request.resource.data.isRead is bool
-            && (!('readAt' in request.resource.data) || request.resource.data.readAt is string)
           );
 
         allow delete: if isAdmin();
