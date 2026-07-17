@@ -244,6 +244,7 @@ export const en = {
   'about.description': 'OMP is an internal digital tool to support congregation organization. Its purpose is to centralize management of meetings, assignments, cleaning groups, hospitality, and notifications, making coordination and access to information easier.',
   'about.version': 'Version',
   'about.build': 'Build',
+  'settings.versionUnknown': 'Unknown',
 
   // Roles
   'role.admin': 'Administrator',

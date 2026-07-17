@@ -1,0 +1,55 @@
+{
+  "$schema": "Matriz de contrato para el dominio avisos/eventos. Consumida por src/shared/__tests__/capabilities.avisos.test.ts, functions/src/__tests__/capabilities.avisos.test.ts y firestore-rules/events.rules.test.ts. Todos los perfiles se asumen isActive=true y en la misma congregacion que el evento: esos dos guardas se validan por separado en cada capa (assertEventManager, canManageEvents() en firestore.rules) y no forman parte de esta matriz de capacidad pura.",
+  "cases": [
+    {
+      "description": "admin administra eventos sin permisos granulares",
+      "profile": { "role": "admin" },
+      "expected": true
+    },
+    {
+      "description": "supervisor SIN permiso granular avisos no administra eventos",
+      "profile": { "role": "supervisor" },
+      "expected": false
+    },
+    {
+      "description": "supervisor con avisos.manage administra eventos",
+      "profile": { "role": "supervisor", "permissions": { "avisos": { "manage": true } } },
+      "expected": true
+    },
+    {
+      "description": "usuario comun con avisos.manage administra eventos",
+      "profile": { "role": "user", "permissions": { "avisos": { "manage": true } } },
+      "expected": true
+    },
+    {
+      "description": "usuario comun con avisos.create + avisos.edit (sin manage) administra eventos",
+      "profile": { "role": "user", "permissions": { "avisos": { "create": true, "edit": true } } },
+      "expected": true
+    },
+    {
+      "description": "usuario comun con solo avisos.create (sin edit) no administra eventos",
+      "profile": { "role": "user", "permissions": { "avisos": { "create": true } } },
+      "expected": false
+    },
+    {
+      "description": "usuario comun con permiso de otro departamento (asignaciones.manage) no administra eventos",
+      "profile": { "role": "user", "permissions": { "asignaciones": { "manage": true } } },
+      "expected": false
+    },
+    {
+      "description": "coordinador via servicePosition singular administra eventos (isGlobalScreenAccess)",
+      "profile": { "role": "user", "servicePosition": "coordinador" },
+      "expected": true
+    },
+    {
+      "description": "secretario via serviceAssignments[] (sin servicePosition singular) administra eventos",
+      "profile": { "role": "user", "serviceAssignments": [{ "position": "secretario", "department": "" }] },
+      "expected": true
+    },
+    {
+      "description": "usuario comun sin permisos ni asignaciones no administra eventos",
+      "profile": { "role": "user" },
+      "expected": false
+    }
+  ]
+}

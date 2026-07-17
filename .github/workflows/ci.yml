@@ -20,6 +20,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Version consistency
+        run: npm run check:versions
       - name: Lint
         run: npm run lint
       - name: Typecheck

@@ -81,6 +81,8 @@ export type RequesterProfile = {
   displayName?: string;
   email?: string;
   servicePosition?: ServicePosition;
+  serviceDepartment?: ServiceDepartment;
+  serviceAssignments?: StoredServiceAssignment[];
   protectedFromDeletion?: boolean;
   isSystemUser?: boolean;
   isPrimaryAdmin?: boolean;

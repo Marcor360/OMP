@@ -330,11 +330,13 @@ Rules:
 
 ## Versioning, Builds, And Android Permissions
 
-Current detected app version is `1.0.1` in `package.json` and `app.json`. Verify the intended release version before release changes.
+`package.json` is the source of truth for the app version. `app.json` must use the same version, and both Android `versionCode` and iOS `buildNumber` must use the numeric `MAJOR * 10000 + MINOR * 100 + PATCH` convention. For example, `1.13.4` maps to `11304`.
 
 Rules:
 
 - Update `package.json`, `app.json`, Android `versionName`, and `versionCode` together for releases.
+- Keep `app.json` iOS `buildNumber` equal to the Android `versionCode`, encoded as a decimal string.
+- Run `npm run check:versions` before release commits.
 - Regenerate AAB after version or permission changes.
 - Do not commit keystores, credentials, private env files, logs, or generated builds.
 - Do not add Android permissions without a clear functional reason.
@@ -345,6 +347,22 @@ Allowed Android permissions currently include:
 - `android.permission.POST_NOTIFICATIONS`
 
 Blocked sensitive permissions include external storage, audio recording, overlay, boot completed, and exact alarm.
+
+## Commit Convention
+
+Use descriptive Conventional Commit messages:
+
+```text
+type(scope): description
+```
+
+Release commits must use:
+
+```text
+chore(release): vX.Y.Z
+```
+
+Never use a version number by itself as a commit message.
 
 ## Never Do These Things
 

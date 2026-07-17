@@ -8,6 +8,7 @@ import {
   UserRole,
   UserServiceAssignment,
 } from '@/src/types/user';
+import { canManageEvents as canManageEventsCapability } from '@/src/shared/capabilities';
 
 export const ROLE_HIERARCHY: Record<UserRole, number> = {
   admin: 3,
@@ -406,15 +407,31 @@ export const canManageAssignments = (
     hasPermission(user, 'asignaciones', 'edit')
   );
 
+/**
+ * Dominio piloto de la spec compartida (src/shared/capabilities.ts, espejada
+ * en functions/src/shared/capabilities.ts y verificada contra
+ * firestore.rules por tests de contrato). Incluye acceso de coordinador y
+ * secretario (hasGlobalScreenAccess), igual que canManageEvents() en las
+ * reglas de Firestore.
+ */
 export const canManageEvents = (
-  user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
-): boolean =>
-  isAdmin(user) ||
-  hasPermission(user, 'avisos', 'manage') ||
-  (
-    hasPermission(user, 'avisos', 'create') &&
-    hasPermission(user, 'avisos', 'edit')
-  );
+  user:
+    | Pick<
+        AppUser,
+        | 'role'
+        | 'permissions'
+        | 'servicePosition'
+        | 'serviceDepartment'
+        | 'serviceAssignments'
+        | 'protectedFromDeletion'
+        | 'isSystemUser'
+        | 'isPrimaryAdmin'
+        | 'isRootAdmin'
+        | 'systemProtected'
+      >
+    | null
+    | undefined
+): boolean => canManageEventsCapability(user);
 
 export const canManageOutgoingTalks = (
   profile:

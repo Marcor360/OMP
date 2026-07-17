@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "3",
+      "buildNumber": "11304",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification",

@@ -5,6 +5,9 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { adminDb } from './config/firebaseAdmin.js';
+import { getRequesterProfile } from './users/authorization.js';
+import type { RequesterProfile } from './users/types.js';
+import { canManageEvents } from './shared/capabilities.js';
 
 type EventType =
   | 'conmemoracion'
@@ -194,21 +197,10 @@ const parseEventData = (raw: EventWritePayload['eventData']) => {
   };
 };
 
-const getRequesterProfile = async (uid: string): Promise<Record<string, unknown>> => {
-  const snap = await adminDb.collection('users').doc(uid).get();
-
-  if (!snap.exists) {
-    throw new HttpsError('permission-denied', 'No se encontro tu perfil.');
-  }
-
-  return snap.data() as Record<string, unknown>;
-};
-
 const assertEventManager = (params: {
-  requester: Record<string, unknown>;
+  requester: RequesterProfile;
   congregationId: string;
-}) => {
-  const role = params.requester.role;
+}): void => {
   const requesterCongregationId = asNonEmptyString(params.requester.congregationId);
   const isActive = params.requester.isActive === true;
 
@@ -216,8 +208,8 @@ const assertEventManager = (params: {
     throw new HttpsError('permission-denied', 'No tienes permisos para realizar esta operacion.');
   }
 
-  if (role !== 'admin' && role !== 'supervisor') {
-    throw new HttpsError('permission-denied', 'Solo administradores y supervisores pueden administrar eventos.');
+  if (!canManageEvents(params.requester)) {
+    throw new HttpsError('permission-denied', 'No tienes permisos para administrar eventos.');
   }
 };
 
