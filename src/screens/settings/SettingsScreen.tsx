@@ -491,9 +491,7 @@ export function SettingsScreen() {
                   title={t('settings.admin.notifications')}
                   description={t('settings.admin.notifications.desc')}
                   cols={3}
-                  onPress={() => {
-                    // Placeholder: open notifications screen if needed.
-                  }}
+                  onPress={() => router.push('/(protected)/notifications')}
                 />
               </View>
             </View>
@@ -579,22 +577,6 @@ export function SettingsScreen() {
           </Section>
 
           <Section title={t('settings.section.legal')}>
-            <SettingRow
-              icon="document-text-outline"
-              label={t('settings.legal.terms')}
-              showArrow
-              onPress={() => {
-                // Placeholder for terms screen.
-              }}
-            />
-            <SettingRow
-              icon="lock-closed-outline"
-              label={t('settings.legal.privacy')}
-              showArrow
-              onPress={() => {
-                // Placeholder for privacy screen.
-              }}
-            />
             <SettingRow
               icon="information-circle-outline"
               label={t('settings.legal.about')}
