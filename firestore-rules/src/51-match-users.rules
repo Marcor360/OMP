@@ -1,0 +1,51 @@
+    match /users/{userId} {
+      allow get: if isSuperAdmin() 
+        || isSameUser(userId)
+        || (canReadUsers() && storedDocInMyCongregation());
+
+      allow list: if isSuperAdmin() 
+        || (
+          canListCongregationUsers()
+          && resource.data.congregationId == myCongregationId()
+        );
+
+      // La creación administrativa pasa exclusivamente por Cloud Functions.
+      allow create: if isSuperAdmin()
+        && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
+        && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments));
+
+      allow update: if (
+          isSuperAdmin()
+          && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
+          && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments))
+        ) || (
+          validSelfUserUpdate(userId)
+        ) || (
+          // Registro de token push: el propio usuario actualiza SOLO su token.
+          validPushTokenUpdate(userId)
+        ) || (
+          // Gestion de grupos de limpieza: solo campos de membresia de limpieza.
+          validCleaningMembershipUserUpdate()
+        );
+
+      // La eliminación administrativa pasa exclusivamente por Cloud Functions.
+      allow delete: if isSuperAdmin();
+
+      match /pushTokens/{tokenDocId} {
+        allow get, list: if isSameUser(userId);
+        allow create, update: if validExpoPushTokenDoc(userId);
+        allow delete: if isSameUser(userId);
+      }
+
+      match /viewedAnnouncements/{announcementId} {
+        allow get, list: if isSameUser(userId);
+        allow create, update: if isSameUser(userId)
+          && validViewedAnnouncementData(announcementId);
+        allow delete: if false;
+      }
+    }
+
+    // =========================================================================
+    // REGLAS: CONGREGATIONS
+    // =========================================================================
+

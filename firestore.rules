@@ -1,3 +1,7 @@
+// ARCHIVO GENERADO -- editar firestore-rules/src, no este archivo.
+// Se reconstruye con: node scripts/build-firestore-rules.mjs
+// Ver docs/firestore-rules-build.md para el flujo completo
+// (editar fuentes -> build -> npm run test:rules -> npm run deploy:rules).
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {

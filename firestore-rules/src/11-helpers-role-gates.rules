@@ -1,0 +1,330 @@
+    function isCleaningManager() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPermission('limpieza', 'manage')
+          || (
+            hasPermission('limpieza', 'create')
+            && hasPermission('limpieza', 'edit')
+          )
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && (
+                  !('serviceDepartment' in currentUserData())
+                  || currentUserData().serviceDepartment == 'limpieza'
+                )
+              )
+              || hasServiceAssignmentKey('encargado', 'limpieza')
+            )
+          )
+        );
+    }
+
+    function isHospitalityMicrophonesManager() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPermission('acomodadores_microfonos', 'manage')
+          || (
+            hasPermission('acomodadores_microfonos', 'create')
+            && hasPermission('acomodadores_microfonos', 'edit')
+          )
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && currentUserData().serviceDepartment == 'acomodadores_microfonos'
+              )
+              || hasServiceAssignmentKey('encargado', 'acomodadores_microfonos')
+            )
+          )
+        );
+    }
+
+    function isPreachingManager() {
+      return isActive()
+        && (
+          (
+            (
+              currentUserData().serviceDepartment == 'predicacion'
+              || currentUserData().serviceDepartment == 'territorios'
+            )
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && currentUserData().privileges is map
+                && currentUserData().privileges.isElder == true
+              )
+              || currentUserData().servicePosition == 'auxiliar'
+            )
+          )
+          || (currentUserData().privileges is map
+            && currentUserData().privileges.isElder == true
+            && hasServiceAssignmentKey('encargado', 'predicacion'))
+          || hasServiceAssignmentKey('auxiliar', 'predicacion')
+        );
+    }
+
+    function isOutgoingTalksManager() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && currentUserData().serviceDepartment == 'discursos'
+              )
+              || hasServiceAssignmentKey('encargado', 'discursos')
+            )
+          )
+        );
+    }
+
+    function isMeetingsManager() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('reuniones', 'manage')
+          || (
+            hasPermission('reuniones', 'create')
+            && hasPermission('reuniones', 'edit')
+          )
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && currentUserData().serviceDepartment == 'reuniones'
+              )
+              || hasServiceAssignmentKey('encargado', 'reuniones')
+            )
+          )
+        );
+    }
+
+    function isPioneer() {
+      return isActive()
+        && currentUserData().privileges is map
+        && (
+          currentUserData().privileges.isRegularPioneer == true
+          || currentUserData().privileges.isAuxiliaryPioneer == true
+        );
+    }
+
+    function hasPermission(department, action) {
+      return isActive()
+        && currentUserData().permissions is map
+        && currentUserData().permissions[department] is map
+        && (
+          currentUserData().permissions[department][action] == true
+          || (
+            action != 'manage'
+            && currentUserData().permissions[department].manage == true
+          )
+        );
+    }
+
+    function hasTerritoryPermission(action) {
+      return isActive()
+        && currentUserData().permissions is map
+        && currentUserData().permissions.predicacion is map
+        && (
+          currentUserData().permissions.predicacion.manageTerritories == true
+          || (
+            currentUserData().permissions.predicacion.territories is map
+            && (
+              currentUserData().permissions.predicacion.territories[action] == true
+              || currentUserData().permissions.predicacion.territories.manage == true
+            )
+          )
+        );
+    }
+
+    function hasPreachingAssignment(position) {
+      return isActive()
+        && (
+          (
+            currentUserData().servicePosition == position
+            && (
+              currentUserData().serviceDepartment == 'predicacion'
+              || currentUserData().serviceDepartment == 'territorios'
+            )
+          )
+          || hasServiceAssignmentKey(position, 'predicacion')
+          || hasServiceAssignmentKey(position, 'territorios')
+        );
+    }
+
+    function canCreateTerritories() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('create'));
+    }
+
+    function canEditTerritories() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('edit'));
+    }
+
+    function canDeactivateTerritories() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('delete'));
+    }
+
+    function canManageDepartments(congregationId) {
+      return canAccessCongregationData(congregationId)
+        && administrativeWritesAllowed(congregationId)
+        && (
+          isGlobalScreenAccess()
+          || hasServicePosition('coordinador')
+          || hasServicePosition('secretario')
+        );
+    }
+
+    function canManageTerritorySchedule() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPreachingAssignment('encargado')
+          || hasPermission('predicacion', 'manage')
+          || hasTerritoryPermission('manage')
+          || hasTerritoryPermission('assign')
+        );
+    }
+
+    function canManagePreachingGroups() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPreachingAssignment('encargado')
+          || hasTerritoryPermission('manage')
+        );
+    }
+
+    function canReadUsers() {
+      return isAdmin()
+        || isSupervisor()
+        || hasPermission('usuarios', 'view')
+        || hasPermission('usuarios', 'manage')
+        || isGlobalScreenAccess()
+        || (
+          currentUserData().permissions is map
+          && (
+            (currentUserData().permissions.departments is map
+              && currentUserData().permissions.departments.manage == true)
+            || (currentUserData().permissions.organigrama is map
+              && currentUserData().permissions.organigrama.manage == true)
+          )
+        );
+    }
+
+    function canCreateUsers() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPermission('usuarios', 'create') || hasPermission('usuarios', 'manage'));
+    }
+
+    function canEditUsers() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPermission('usuarios', 'edit') || hasPermission('usuarios', 'manage'));
+    }
+
+    function canDeleteUsers() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPermission('usuarios', 'delete') || hasPermission('usuarios', 'manage'));
+    }
+
+    function canManageEvents() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('avisos', 'manage')
+          || (
+            hasPermission('avisos', 'create')
+            && hasPermission('avisos', 'edit')
+          )
+        );
+    }
+
+    function canManagePersons() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('usuarios', 'manage')
+          || (
+            hasPermission('usuarios', 'create')
+            && hasPermission('usuarios', 'edit')
+          )
+        );
+    }
+
+    function canManageAssignments() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('asignaciones', 'manage')
+          || (
+            hasPermission('asignaciones', 'create')
+            && hasPermission('asignaciones', 'edit')
+          )
+        );
+    }
+
+    function safeDelegatedUserCreate() {
+      return isAdmin()
+        || (
+          request.resource.data.role == 'user'
+          && !('permissions' in request.resource.data)
+          && !('privileges' in request.resource.data)
+          && !('responsibilities' in request.resource.data)
+          && !('serviceAssignments' in request.resource.data)
+          && !('servicePosition' in request.resource.data)
+          && !('serviceDepartment' in request.resource.data)
+        );
+    }
+
+    function safeDelegatedUserUpdate() {
+      return isAdmin()
+        || (
+          request.resource.data.role == resource.data.role
+          && request.resource.data.congregationId == resource.data.congregationId
+          && (
+            !('permissions' in request.resource.data) && !('permissions' in resource.data)
+            || request.resource.data.permissions == resource.data.permissions
+          )
+          && (
+            !('privileges' in request.resource.data) && !('privileges' in resource.data)
+            || request.resource.data.privileges == resource.data.privileges
+          )
+          && (
+            !('responsibilities' in request.resource.data) && !('responsibilities' in resource.data)
+            || request.resource.data.responsibilities == resource.data.responsibilities
+          )
+          && (
+            !('serviceAssignments' in request.resource.data) && !('serviceAssignments' in resource.data)
+            || request.resource.data.serviceAssignments == resource.data.serviceAssignments
+          )
+          && (
+            !('servicePosition' in request.resource.data) && !('servicePosition' in resource.data)
+            || request.resource.data.servicePosition == resource.data.servicePosition
+          )
+          && (
+            !('serviceDepartment' in request.resource.data) && !('serviceDepartment' in resource.data)
+            || request.resource.data.serviceDepartment == resource.data.serviceDepartment
+          )
+        );
+    }
+
+    function canListCongregationUsers() {
+      return canAccessCongregationData(myCongregationId())
+        && canReadUsers();
+    }
+

@@ -1,0 +1,50 @@
+
+    // =========================================================================
+    // REGLAS: DASHBOARD SUMMARY
+    // Documento de resumen pre-calculado por Cloud Functions.
+    // Solo lectura para usuarios activos de la misma congregacion.
+    // Escritura reservada exclusivamente para Cloud Functions.
+    // =========================================================================
+
+    match /dashboardSummary/{congregationId} {
+      allow read: if isSuperAdmin() || canAccessCongregationData(congregationId);
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // REGLAS: CLEANING GROUPS
+    // Grupos de limpieza - acceso por congregacion.
+    // =========================================================================
+
+    match /cleaningGroups/{groupId} {
+      // Coleccion raiz legacy cerrada para mantener el aislamiento por
+      // congregacion en /congregations/{id}/cleaningGroups.
+      allow read, write: if false;
+    }
+
+    match /cleaning_groups/{groupId} {
+      // Coleccion raiz legacy cerrada para evitar duplicar reglas y mantener
+      // el acceso moderno en /congregations/{id}/cleaningGroups.
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // REGLAS: NOTIFICATIONS (coleccion raiz)
+    // Nota: las notificaciones de congregacion estan en
+    // /congregations/{id}/notifications. Esta coleccion raiz es para
+    // notificaciones globales o de sistema (si se usan).
+    // =========================================================================
+
+    match /notifications/{notificationId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    // =========================================================================
+    // REGLAS: STRIPE WEBHOOK EVENTS (ledger de idempotencia)
+    // Solo lo escribe Cloud Functions con el Admin SDK (omite reglas).
+    // Ningun cliente debe leer ni escribir aqui.
+    // =========================================================================
+
+    match /stripeWebhookEvents/{eventId} {
+      allow read, write: if false;
+    }

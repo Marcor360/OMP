@@ -1,0 +1,45 @@
+    function allowedCleaningGroupKeys() {
+      return [
+        'name',
+        'description',
+        'congregationId',
+        'groupType',
+        'memberIds',
+        'memberCount',
+        'isActive',
+        'createdBy',
+        'createdAt',
+        'updatedAt'
+      ];
+    }
+
+    function validCleaningGroupData(data, congregationId) {
+      return hasOnlyKeys(data, allowedCleaningGroupKeys())
+        && hasAllKeys(data, [
+          'name',
+          'congregationId',
+          'groupType',
+          'memberIds',
+          'memberCount',
+          'isActive',
+          'createdBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && isNonEmptyString(data.name)
+        && data.name.size() <= 80
+        && data.groupType in ['standard', 'family']
+        && data.memberIds is list
+        && data.memberIds.size() <= 200
+        && data.memberCount is int
+        && data.memberCount >= 0
+        && data.memberCount <= 200
+        && data.memberCount == data.memberIds.size()
+        && data.isActive is bool
+        && data.createdBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('description' in data) || (data.description is string && data.description.size() <= 300));
+    }
+

@@ -1,0 +1,308 @@
+    function allowedUserKeys() {
+      return [
+        'uid',
+        'email',
+        // emailKey es el email normalizado (lowercase) escrito por createUserByAdmin via Admin SDK.
+        // Debe estar aqui para que request.resource.data no falle hasOnlyKeys en updates del cliente.
+        'emailKey',
+        'firstName',
+        'middleName',
+        'lastName',
+        'secondLastName',
+        'displayName',
+        'phone',
+        'gender',
+        'photoURL',
+        'role',
+        'isActive',
+        // 'status' es gestionado exclusivamente por Cloud Functions (createUserByAdmin / updateUserByAdmin).
+        // Se incluye aqui para que validUserData no rechace documentos que ya lo contienen
+        // cuando el cliente realiza actualizaciones parciales.
+        'status',
+        'congregationId',
+        'congregationDomain',
+        // Campos de asignacion de servicio - escritura por Cloud Functions.
+        'servicePosition',
+        'serviceDepartment',
+        'serviceAssignments',
+        'serviceAssignmentKeys',
+        'department',
+        'privileges',
+        'responsibilities',
+        'permissions',
+        'isElder',
+        'isMinisterialServant',
+        'createdAt',
+        'updatedAt',
+        // Campos de notificaciones push - escritura controlada por validPushTokenUpdate()
+        'notificationTokens',
+        'pushTokenUpdatedAt',
+        // Campos de preferencias de notificacion
+        'notificationsEnabled',
+        'platformNotifications',
+        'cleaningNotifications',
+        'hospitalityNotifications',
+        // Campos de modulo de limpieza
+        'cleaningEligible',
+        'cleaningGroupId',
+        'cleaningGroupName',
+        'createdBy',
+        'createdByName',
+        'createdByEmail',
+        'updatedBy',
+        'updatedByName',
+        'updatedByEmail'
+      ];
+    }
+
+    function requiredUserKeys() {
+      return [
+        'email',
+        'firstName',
+        'lastName',
+        'role',
+        'isActive',
+        'congregationId'
+      ];
+    }
+
+    function validUserData(data, userId) {
+      return hasOnlyKeys(data, allowedUserKeys())
+        && hasAllKeys(data, requiredUserKeys())
+        && isNonEmptyString(data.email)
+        && isNonEmptyString(data.firstName)
+        && isNonEmptyString(data.lastName)
+        && isValidRole(data.role)
+        && data.isActive is bool
+        && isNonEmptyString(data.congregationId)
+        && (
+          !('uid' in data)
+          || (data.uid is string && data.uid == userId)
+        )
+        && (
+          !('displayName' in data)
+          || data.displayName is string
+        )
+        && (
+          !('phone' in data)
+          || data.phone is string
+        )
+        && (
+          !('gender' in data)
+          || data.gender in ['masculino', 'femenino']
+        )
+        && (
+          !('photoURL' in data)
+          || data.photoURL is string
+        )
+        && (
+          !('notificationTokens' in data)
+          || data.notificationTokens is list
+        )
+        && (
+          !('pushTokenUpdatedAt' in data)
+          || data.pushTokenUpdatedAt is timestamp
+        )
+        && (
+          !('cleaningEligible' in data)
+          || data.cleaningEligible is bool
+        )
+        && (
+          !('cleaningGroupId' in data)
+          || data.cleaningGroupId == null
+          || data.cleaningGroupId is string
+        )
+        && (
+          !('cleaningGroupName' in data)
+          || data.cleaningGroupName == null
+          || data.cleaningGroupName is string
+        )
+        && (
+          !('privileges' in data)
+          || validUserPrivileges(data.privileges)
+        )
+        && (
+          !('responsibilities' in data)
+          || validUserResponsibilities(data.responsibilities)
+        )
+        && (
+          !('permissions' in data)
+          || validUserPermissions(data.permissions)
+        )
+        && (
+          !('serviceAssignments' in data)
+          || validUserServiceAssignments(data.serviceAssignments)
+        )
+        && (
+          !('serviceAssignmentKeys' in data)
+          || (data.serviceAssignmentKeys is list && data.serviceAssignmentKeys.size() <= 20)
+        )
+        && (
+          !('isElder' in data)
+          || data.isElder is bool
+        )
+        && (
+          !('isMinisterialServant' in data)
+          || data.isMinisterialServant is bool
+        )
+        && (
+          !('createdBy' in data)
+          || data.createdBy is string
+        )
+        && (
+          !('createdByName' in data)
+          || data.createdByName is string
+        )
+        && (
+          !('createdByEmail' in data)
+          || data.createdByEmail is string
+        )
+        && (
+          !('updatedBy' in data)
+          || data.updatedBy is string
+        )
+        && (
+          !('updatedByName' in data)
+          || data.updatedByName is string
+        )
+        && (
+          !('updatedByEmail' in data)
+          || data.updatedByEmail is string
+        );
+    }
+
+    function isSystemPrincipalUserData(data) {
+      return (
+          ('uid' in data)
+          && data.uid is string
+          && exists(/databases/$(database)/documents/superAdmins/$(data.uid))
+        )
+        || (
+          ('protectedFromDeletion' in data && data.protectedFromDeletion == true)
+          || ('isSystemUser' in data && data.isSystemUser == true)
+          || ('isPrimaryAdmin' in data && data.isPrimaryAdmin == true)
+          || ('isRootAdmin' in data && data.isRootAdmin == true)
+          || ('systemProtected' in data && data.systemProtected == true)
+        );
+    }
+
+    function validUserServiceAssignments(assignments) {
+      return assignments is list
+        && assignments.size() <= 20;
+    }
+
+    function validUserPrivileges(privileges) {
+      return privileges is map
+        && privileges.keys().hasOnly([
+          'isElder',
+          'isMinisterialServant',
+          'isRegularPioneer',
+          'isAuxiliaryPioneer'
+        ])
+        && (!('isElder' in privileges) || privileges.isElder is bool)
+        && (!('isMinisterialServant' in privileges) || privileges.isMinisterialServant is bool)
+        && (!('isRegularPioneer' in privileges) || privileges.isRegularPioneer is bool)
+        && (!('isAuxiliaryPioneer' in privileges) || privileges.isAuxiliaryPioneer is bool)
+        && !(privileges.isElder == true && privileges.isMinisterialServant == true)
+        && !(privileges.isRegularPioneer == true && privileges.isAuxiliaryPioneer == true);
+    }
+
+    function validUserResponsibilities(responsibilities) {
+      return responsibilities is map
+        && responsibilities.keys().hasOnly(['isPreachingManager'])
+        && (!('isPreachingManager' in responsibilities) || responsibilities.isPreachingManager is bool);
+    }
+
+    function validPermissionActions(actions) {
+      return actions is map
+        && actions.keys().hasOnly(['view', 'create', 'edit', 'delete', 'manage', 'approve', 'export', 'territories', 'manageTerritories'])
+        && (!('view' in actions) || actions.view is bool)
+        && (!('create' in actions) || actions.create is bool)
+        && (!('edit' in actions) || actions.edit is bool)
+        && (!('delete' in actions) || actions.delete is bool)
+        && (!('manage' in actions) || actions.manage is bool)
+        && (!('approve' in actions) || actions.approve is bool)
+        && (!('export' in actions) || actions.export is bool)
+        && (!('manageTerritories' in actions) || actions.manageTerritories is bool)
+        && (!('territories' in actions) || validTerritoryPermissions(actions.territories));
+    }
+
+    function validTerritoryPermissions(territories) {
+      return territories is map
+        && territories.keys().hasOnly(['view', 'create', 'edit', 'delete', 'assign', 'manage'])
+        && (!('view' in territories) || territories.view is bool)
+        && (!('create' in territories) || territories.create is bool)
+        && (!('edit' in territories) || territories.edit is bool)
+        && (!('delete' in territories) || territories.delete is bool)
+        && (!('assign' in territories) || territories.assign is bool)
+        && (!('manage' in territories) || territories.manage is bool);
+    }
+
+    function validUserPermissions(permissions) {
+      return permissions is map
+        && permissions.keys().hasOnly([
+          'usuarios',
+          'reuniones',
+          'limpieza',
+          'departments',
+          'predicacion',
+          'tesoreria',
+          'pagos',
+          'configuracion',
+          'avisos',
+          'asignaciones',
+          'organigrama',
+          'acomodadores_microfonos'
+        ])
+        && (!('usuarios' in permissions) || validPermissionActions(permissions.usuarios))
+        && (!('reuniones' in permissions) || validPermissionActions(permissions.reuniones))
+        && (!('limpieza' in permissions) || validPermissionActions(permissions.limpieza))
+        && (!('departments' in permissions) || validPermissionActions(permissions.departments))
+        && (!('predicacion' in permissions) || validPermissionActions(permissions.predicacion))
+        && (!('tesoreria' in permissions) || validPermissionActions(permissions.tesoreria))
+        && (!('pagos' in permissions) || validPermissionActions(permissions.pagos))
+        && (!('configuracion' in permissions) || validPermissionActions(permissions.configuracion))
+        && (!('avisos' in permissions) || validPermissionActions(permissions.avisos))
+        && (!('asignaciones' in permissions) || validPermissionActions(permissions.asignaciones))
+        && (!('organigrama' in permissions) || validPermissionActions(permissions.organigrama))
+        && (!('acomodadores_microfonos' in permissions) || validPermissionActions(permissions.acomodadores_microfonos));
+    }
+
+    function validUserCreate(userId) {
+      return validUserData(request.resource.data, userId);
+    }
+
+    function validUserUpdateByAdmin(userId) {
+      return validUserData(request.resource.data, userId)
+        && preservesCreatedAt();
+    }
+
+    function validSelfUserUpdate(userId) {
+      return isSameUser(userId)
+        && validUserData(request.resource.data, userId)
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.isActive == resource.data.isActive
+        && request.resource.data.congregationId == resource.data.congregationId
+        && preservesCreatedAt()
+        && sameKeysOnUpdate([
+          'firstName',
+          'lastName',
+          'displayName',
+          'phone',
+          'photoURL',
+          'updatedAt'
+        ]);
+    }
+
+    // Permite al propio usuario actualizar SOLO su token de notificacion push.
+    // El cliente llama setDoc(..., { uid, notificationTokens: arrayUnion(token),
+    //   pushTokenUpdatedAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true }).
+    // Esta condicion es independiente de validSelfUserUpdate para no interferir
+    // con las validaciones de perfil.
+    function validPushTokenUpdate(userId) {
+      return isSameUser(userId)
+        && isActive()
+        && sameKeysOnUpdate(['notificationTokens', 'pushTokenUpdatedAt', 'updatedAt', 'uid']);
+    }
+

@@ -62,11 +62,13 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
       - name: Install
         run: npm ci
       - name: Guard índices collectionGroup
         run: npm run check:indexes
+      - name: Guard firestore.rules generado (firestore-rules/src -> firestore.rules)
+        run: node scripts/build-firestore-rules.mjs --check
       - name: Resolve firebase-tools version
         id: ft
         run: echo "version=$(node -p "require('firebase-tools/package.json').version")" >> "$GITHUB_OUTPUT"

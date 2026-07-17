@@ -1,0 +1,192 @@
+    function isSameUser(userId) {
+      return isAuthenticated() && currentUid() == userId;
+    }
+
+    function myCongregationId() {
+      return hasCurrentUserDoc() ? currentUserData().congregationId : null;
+    }
+
+    function sameCongregation(congregationId) {
+      return isActive()
+        && isNonEmptyString(congregationId)
+        && myCongregationId() == congregationId;
+    }
+
+    function congregationPath(congregationId) {
+      return /databases/$(database)/documents/congregations/$(congregationId);
+    }
+
+    function congregationAccessBlocked(congregationId) {
+      return exists(congregationPath(congregationId))
+        && !accessBlockExpired(get(congregationPath(congregationId)).data)
+        && (
+          get(congregationPath(congregationId)).data.disabled == true
+          || get(congregationPath(congregationId)).data.deactivated == true
+          || get(congregationPath(congregationId)).data.accessDisabled == true
+          || get(congregationPath(congregationId)).data.isActive == false
+          || get(congregationPath(congregationId)).data.active == false
+          || get(congregationPath(congregationId)).data.enabled == false
+          || get(congregationPath(congregationId)).data.status in [
+            'inactive',
+            'inactivo',
+            'disabled',
+            'desactivada',
+            'suspended',
+            'suspendida',
+            'maintenance',
+            'mantenimiento'
+          ]
+        );
+    }
+
+    function billingExemptionActive(data) {
+      return 'billingExemption' in data
+        && data.billingExemption is map
+        && data.billingExemption.exempt == true
+        && (
+          !('expiresAt' in data.billingExemption)
+          || data.billingExemption.expiresAt == null
+          || (
+            data.billingExemption.expiresAt is timestamp
+            && data.billingExemption.expiresAt > request.time
+          )
+        );
+    }
+
+    function congregationBillingAdministrativeRestricted(congregationId) {
+      return isNonEmptyString(congregationId)
+        && exists(congregationPath(congregationId))
+        && !billingExemptionActive(get(congregationPath(congregationId)).data)
+        && 'billing' in get(congregationPath(congregationId)).data
+        && get(congregationPath(congregationId)).data.billing is map
+        && get(congregationPath(congregationId)).data.billing.provider == 'stripe'
+        && (
+          get(congregationPath(congregationId)).data.billing.adminRestricted == true
+          || get(congregationPath(congregationId)).data.billing.status in [
+            'unpaid',
+            'canceled',
+            'incomplete_expired'
+          ]
+          || (
+            get(congregationPath(congregationId)).data.billing.status in [
+              'past_due',
+              'payment_action_required',
+              'incomplete'
+            ]
+            && 'graceUntil' in get(congregationPath(congregationId)).data.billing
+            && get(congregationPath(congregationId)).data.billing.graceUntil is timestamp
+            && get(congregationPath(congregationId)).data.billing.graceUntil <= request.time
+          )
+        );
+    }
+
+    function administrativeWritesAllowed(congregationId) {
+      return !isNonEmptyString(congregationId)
+        || !congregationBillingAdministrativeRestricted(congregationId);
+    }
+
+    function systemMaintenanceBlocked() {
+      return systemMaintenanceDocBlocked(/databases/$(database)/documents/system/maintenance)
+        || systemMaintenanceDocBlocked(/databases/$(database)/documents/system/congregationAccess)
+        || systemMaintenanceDocBlocked(/databases/$(database)/documents/system/platform);
+    }
+
+    function systemMaintenanceDocBlocked(systemDocPath) {
+      return exists(systemDocPath)
+        && !accessBlockExpired(get(systemDocPath).data)
+        && (
+          get(systemDocPath).data.maintenanceMode == true
+          || get(systemDocPath).data.systemMaintenance == true
+          || get(systemDocPath).data.disableCongregations == true
+          || get(systemDocPath).data.allCongregationsDisabled == true
+          || get(systemDocPath).data.congregationsDisabled == true
+          || get(systemDocPath).data.enabled == false
+          || get(systemDocPath).data.isActive == false
+        );
+    }
+
+    function accessBlockExpired(data) {
+      return explicitAccessBlockExpired(data)
+        || maxAccessBlockExpired(data);
+    }
+
+    function explicitAccessBlockExpired(data) {
+      return (
+        ('blockedUntil' in data)
+        && data.blockedUntil is timestamp
+        && data.blockedUntil <= request.time
+      ) || (
+        ('disabledUntil' in data)
+        && data.disabledUntil is timestamp
+        && data.disabledUntil <= request.time
+      ) || (
+        ('deactivatedUntil' in data)
+        && data.deactivatedUntil is timestamp
+        && data.deactivatedUntil <= request.time
+      ) || (
+        ('maintenanceUntil' in data)
+        && data.maintenanceUntil is timestamp
+        && data.maintenanceUntil <= request.time
+      ) || (
+        ('maintenanceEndsAt' in data)
+        && data.maintenanceEndsAt is timestamp
+        && data.maintenanceEndsAt <= request.time
+      ) || (
+        ('unlockAt' in data)
+        && data.unlockAt is timestamp
+        && data.unlockAt <= request.time
+      ) || (
+        ('reactivateAt' in data)
+        && data.reactivateAt is timestamp
+        && data.reactivateAt <= request.time
+      ) || (
+        ('reactivationAt' in data)
+        && data.reactivationAt is timestamp
+        && data.reactivationAt <= request.time
+      ) || (
+        ('expiresAt' in data)
+        && data.expiresAt is timestamp
+        && data.expiresAt <= request.time
+      ) || (
+        ('endsAt' in data)
+        && data.endsAt is timestamp
+        && data.endsAt <= request.time
+      );
+    }
+
+    function maxAccessBlockExpired(data) {
+      return accessStartExpired(data, 'deactivatedAt')
+        || accessStartExpired(data, 'disabledAt')
+        || accessStartExpired(data, 'blockedAt')
+        || accessStartExpired(data, 'maintenanceStartedAt')
+        || accessStartExpired(data, 'startedAt')
+        || accessStartExpired(data, 'updatedAt')
+        || accessStartExpired(data, 'createdAt');
+    }
+
+    function accessStartExpired(data, field) {
+      return field in data
+        && data[field] is timestamp
+        && data[field] + duration.value(5, 'h') <= request.time;
+    }
+
+    function canAccessCongregationData(congregationId) {
+      return sameCongregation(congregationId)
+        && !congregationAccessBlocked(congregationId)
+        && !systemMaintenanceBlocked();
+    }
+
+    function storedDocInMyCongregation() {
+      return resource.data.congregationId is string
+        && canAccessCongregationData(resource.data.congregationId);
+    }
+
+    function targetDocInMyCongregation() {
+      return request.resource.data.congregationId is string
+        && canAccessCongregationData(request.resource.data.congregationId);
+    }
+
+    // =========================================================================
+    // USERS
+    // =========================================================================
+

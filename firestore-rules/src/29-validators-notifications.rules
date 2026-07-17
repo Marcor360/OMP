@@ -1,0 +1,49 @@
+    // =========================================================================
+    // NOTIFICATIONS
+    // =========================================================================
+
+    function allowedNotificationKeys() {
+      return [
+        'congregationId',
+        'userId',
+        'title',
+        'body',
+        'type',
+        'isRead',
+        'relatedId',
+        'createdAt',
+        'readAt'
+      ];
+    }
+
+    function validNotificationData(data, congregationId) {
+      return hasOnlyKeys(data, allowedNotificationKeys())
+        && hasAllKeys(data, ['congregationId', 'title', 'body', 'type', 'isRead'])
+        && data.congregationId == congregationId
+        && isNonEmptyString(data.title)
+        && isNonEmptyString(data.body)
+        && isNonEmptyString(data.type)
+        && data.isRead is bool
+        && (!('userId' in data) || data.userId is string)
+        && (!('relatedId' in data) || data.relatedId is string);
+    }
+
+    function validOwnNotificationReadUpdate(congregationId) {
+      return (
+          (
+            'userId' in resource.data
+            && resource.data.userId == currentUid()
+          )
+          || (
+            'userIds' in resource.data
+            && resource.data.userIds is list
+            && currentUid() in resource.data.userIds
+          )
+        )
+        && sameKeysOnUpdate(['isRead', 'readAt'])
+        && request.resource.data.isRead == true
+        && request.resource.data.readAt is timestamp
+        && request.resource.data.readAt == request.time
+        && sameCongregation(congregationId);
+    }
+

@@ -1,0 +1,121 @@
+    function allowedChangeLogKeys() {
+      return [
+        'congregationId',
+        'actorUserId',
+        'actorName',
+        'action',
+        'entityType',
+        'entityId',
+        'description',
+        'metadata',
+        'createdAt'
+      ];
+    }
+
+    function validChangeLogData(data, congregationId) {
+      return hasOnlyKeys(data, allowedChangeLogKeys())
+        && hasAllKeys(data, ['congregationId', 'actorUserId', 'action', 'entityType', 'entityId', 'createdAt'])
+        && data.congregationId == congregationId
+        && data.actorUserId == currentUid()
+        && isNonEmptyString(data.action)
+        && isNonEmptyString(data.entityType)
+        && isNonEmptyString(data.entityId)
+        && (!('actorName' in data) || data.actorName is string)
+        && (!('description' in data) || data.description is string)
+        && (!('metadata' in data) || data.metadata is map);
+    }
+
+    function validMonthId(monthId) {
+      return monthId is string
+        && monthId.matches('^\\d{4}-(0[1-9]|1[0-2])$');
+    }
+
+    function allowedPreachingReportKeys() {
+      return [
+        'userId',
+        'userName',
+        'congregationId',
+        'congregationName',
+        'monthId',
+        'monthName',
+        'participated',
+        'bibleStudies',
+        'returnVisits',
+        'comments',
+        'isPioneer',
+        'pioneerType',
+        'hours',
+        'submittedAt',
+        'updatedAt',
+        'submittedBy'
+      ];
+    }
+
+    function validPreachingReportWrite(data, congregationId, monthId, userId) {
+      return hasOnlyKeys(data, allowedPreachingReportKeys())
+        && hasAllKeys(data, [
+          'userId',
+          'userName',
+          'congregationId',
+          'monthId',
+          'monthName',
+          'participated',
+          'bibleStudies',
+          'returnVisits',
+          'isPioneer',
+          'submittedAt',
+          'updatedAt',
+          'submittedBy'
+        ])
+        && validMonthId(monthId)
+        && data.userId == userId
+        && data.userId == currentUid()
+        && data.submittedBy == currentUid()
+        && data.congregationId == congregationId
+        && data.monthId == monthId
+        && data.userName is string
+        && data.monthName is string
+        && (!('congregationName' in data) || data.congregationName is string)
+        && data.participated is bool
+        && data.bibleStudies is int
+        && data.bibleStudies >= 0
+        && data.returnVisits is int
+        && data.returnVisits >= 0
+        && (
+          !('comments' in data)
+          || data.comments == null
+          || (data.comments is string && data.comments.size() <= 500)
+        )
+        && data.isPioneer is bool
+        && data.isPioneer == isPioneer()
+        && (
+          !('pioneerType' in data)
+          || data.pioneerType == null
+          || data.pioneerType in ['regular', 'auxiliary']
+        )
+        && data.submittedAt is timestamp
+        && data.updatedAt is timestamp
+        && (
+          isPioneer()
+          || !('hours' in data)
+          || data.hours == null
+        )
+        && (
+          !isPioneer()
+          || data.hours is number
+          || data.hours == null
+        )
+        && (
+          !isPioneer()
+          || data.hours == null
+          || data.hours >= 0
+        );
+    }
+
+    // =========================================================================
+    // REGLAS: SYSTEM
+    // Solo lectura para usuarios autenticados.
+    // Usado por cache-control-service.ts para leer system/cacheControl.
+    // Escritura reservada exclusivamente para Cloud Functions / consola admin.
+    // =========================================================================
+

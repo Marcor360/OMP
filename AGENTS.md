@@ -106,6 +106,35 @@ Mandatory principles:
 - Common users must not escalate their own permissions.
 - Users must not change their own `role`, `isActive`, or `congregationId`.
 
+## Firestore Rules Source Of Truth
+
+`firestore.rules` is a **generated file**. Do not edit it directly — it
+starts with an `// ARCHIVO GENERADO` header for a reason. The real source
+lives in `firestore-rules/src/*.rules`, split by domain (helpers,
+validators, match blocks). Full details in `docs/firestore-rules-build.md`.
+
+Workflow, in order, no exceptions:
+
+1. Edit the relevant domain file(s) under `firestore-rules/src/`.
+2. Regenerate: `npm run build:rules`.
+3. Run the contract tests: `npm run test:rules` (needs Java 21+ for the
+   Firestore emulator via `firebase-tools`; Java 17 is not enough).
+4. Deploy rules independently from a full deploy, always:
+   `npm run deploy:rules` (this already runs `build:rules:check` first).
+
+`npm run validate` runs `build:rules:check` (a text comparison, no
+emulator needed) so a hand-edited `firestore.rules` fails fast locally.
+CI (`rules` job in `.github/workflows/ci.yml`) enforces the same check
+before it even starts the emulator.
+
+Every domain under `firestore-rules/*.rules.test.ts` must keep contract
+tests covering: same role in another congregation (denied), inactive
+user (denied), a granular `permissions.<department>.<action>` holder vs.
+without it, and — where the collection is Cloud-Functions-only — a
+direct client write (denied). See
+`firestore-rules/VERDICTS-SNAPSHOT.md` for the current case list and its
+verification status.
+
 ## Roles, Privileges, And Departments
 
 Technical roles:

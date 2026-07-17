@@ -1,0 +1,68 @@
+    function allowedAssignmentKeys() {
+      return [
+        'congregationId',
+        'meetingId',
+        'category',
+        'type',
+        'section',
+        'title',
+        'description',
+        'priority',
+        'assignedToUid',
+        'assignedByUid',
+        'assignedByName',
+        'createdBy',
+        'updatedBy',
+        'cleaningGroupId',
+        'cleaningGroupName',
+        'assignedUsers',
+        'date',
+        'dueDate',
+        'assignedToUserId',
+        'assignedToPersonId',
+        'assignedToName',
+        'assistantUserId',
+        'assistantPersonId',
+        'assistantName',
+        'startTime',
+        'endTime',
+        'durationMinutes',
+        'status',
+        'notes',
+        'createdAt',
+        'updatedAt'
+      ];
+    }
+
+    function validStandaloneAssignmentData(data, congregationId) {
+      return hasOnlyKeys(data, allowedAssignmentKeys())
+        && hasAllKeys(data, ['congregationId', 'category', 'type', 'title'])
+        && data.congregationId == congregationId
+        && isNonEmptyString(data.category)
+        && isNonEmptyString(data.type)
+        && isNonEmptyString(data.title)
+        && (!('meetingId' in data) || data.meetingId is string)
+        && (!('section' in data) || data.section is string)
+        && (!('description' in data) || data.description is string)
+        && (!('priority' in data) || data.priority is string)
+        && (!('assignedToUid' in data) || data.assignedToUid is string)
+        && (!('assignedByUid' in data) || data.assignedByUid is string)
+        && (!('assignedByName' in data) || data.assignedByName is string)
+        && (!('createdBy' in data) || data.createdBy is string)
+        && (!('updatedBy' in data) || data.updatedBy is string)
+        && (!('cleaningGroupId' in data) || data.cleaningGroupId is string)
+        && (!('cleaningGroupName' in data) || data.cleaningGroupName is string)
+        && (!('assignedUsers' in data) || data.assignedUsers is list)
+        && (!('assignedToUserId' in data) || data.assignedToUserId is string)
+        && (!('assignedToPersonId' in data) || data.assignedToPersonId is string)
+        && (!('assignedToName' in data) || data.assignedToName is string)
+        && (!('assistantUserId' in data) || data.assistantUserId is string)
+        && (!('assistantPersonId' in data) || data.assistantPersonId is string)
+        && (!('assistantName' in data) || data.assistantName is string)
+        && (!('startTime' in data) || data.startTime is string)
+        && (!('endTime' in data) || data.endTime is string)
+        && (!('durationMinutes' in data) || data.durationMinutes is int)
+        && (!('status' in data) || data.status is string)
+        && (!('notes' in data) || data.notes is string);
+    }
+

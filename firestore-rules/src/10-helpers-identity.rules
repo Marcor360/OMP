@@ -1,0 +1,126 @@
+
+    // =========================================================================
+    // AUTENTICACION Y USUARIO ACTUAL
+    // =========================================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function currentUid() {
+      return request.auth != null ? request.auth.uid : null;
+    }
+
+    function currentUserPath() {
+      return /databases/$(database)/documents/users/$(currentUid());
+    }
+
+    function hasCurrentUserDoc() {
+      return isAuthenticated() && exists(currentUserPath());
+    }
+
+    function currentUserData() {
+      return get(currentUserPath()).data;
+    }
+
+    function isSuperAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/superAdmins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/superAdmins/$(request.auth.uid)).data.isActive == true;
+    }
+
+    // =========================================================================
+    // VALIDACIONES BASE
+    // =========================================================================
+
+    function isNonEmptyString(value) {
+      return value is string && value.size() > 0;
+    }
+
+    function isValidRole(role) {
+      return role is string && role in ['admin', 'administrador', 'supervisor', 'user', 'usuario'];
+    }
+
+    function hasOnlyKeys(data, allowed) {
+      return data.keys().hasOnly(allowed);
+    }
+
+    function hasAllKeys(data, required) {
+      return data.keys().hasAll(required);
+    }
+
+    function sameKeysOnUpdate(allowedChangedKeys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedChangedKeys);
+    }
+
+    function preservesCreatedAt() {
+      return !('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    // =========================================================================
+    // ESTADO DEL USUARIO ACTUAL
+    // =========================================================================
+
+    function currentUserHasRequiredShape() {
+      return hasCurrentUserDoc()
+        && isValidRole(currentUserData().role)
+        && isNonEmptyString(currentUserData().congregationId)
+        && currentUserData().isActive is bool;
+    }
+
+    function isActive() {
+      return currentUserHasRequiredShape()
+        && currentUserData().isActive == true;
+    }
+
+    function isAdmin() {
+      return isActive()
+        && (currentUserData().role == 'admin' || currentUserData().role == 'administrador');
+    }
+
+    function isSupervisor() {
+      return isActive() && currentUserData().role == 'supervisor';
+    }
+
+    function isAdminOrSupervisor() {
+      return isAdmin() || isSupervisor();
+    }
+
+    function hasServicePosition(position) {
+      return isActive()
+        && (
+          currentUserData().servicePosition == position
+          || hasServiceAssignmentKey(position, '')
+        );
+    }
+
+    function hasServiceAssignmentKey(position, department) {
+      return isActive()
+        && currentUserData().serviceAssignmentKeys is list
+        && currentUserData().serviceAssignmentKeys.hasAny([position + ':' + department]);
+    }
+
+    function isCoordinatorOrSecretary() {
+      return isActive()
+        && (
+          currentUserData().servicePosition in ['coordinador', 'secretario']
+          || hasServiceAssignmentKey('coordinador', '')
+          || hasServiceAssignmentKey('secretario', '')
+        );
+    }
+
+    function isGlobalScreenAccess() {
+      return isSuperAdmin()
+        || isCoordinatorOrSecretary()
+        || (
+          isActive()
+          && (
+            currentUserData().protectedFromDeletion == true
+            || currentUserData().isSystemUser == true
+            || currentUserData().isPrimaryAdmin == true
+            || currentUserData().isRootAdmin == true
+            || currentUserData().systemProtected == true
+          )
+        );
+    }
+
