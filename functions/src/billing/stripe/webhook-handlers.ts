@@ -10,6 +10,7 @@ import {
   type WebhookClaimResult,
 } from '../webhook-idempotency.js';
 import { getBillingReminderTargets } from './authorization.js';
+import { logError } from '../../shared/logging.js';
 import {
   asTrimmedString,
   findCongregationBySubscription,
@@ -286,7 +287,7 @@ export const stripeWebhook = onRequest(
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error('[billing] webhook signature verification failed', { message });
+      logError('[billing] webhook signature verification failed', { congregationId: null }, error);
       response.status(400).send(`Webhook Error: ${message}`);
       return;
     }
@@ -303,8 +304,7 @@ export const stripeWebhook = onRequest(
     try {
       claim = await claimWebhookEvent(eventClaimRef, event.type);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error('[billing] webhook claim failed', { eventId: event.id, message });
+      logError('[billing] webhook claim failed', { congregationId: null, eventId: event.id }, error);
       response.status(500).send('Webhook claim failed');
       return;
     }
@@ -317,8 +317,8 @@ export const stripeWebhook = onRequest(
       return;
     }
 
+    let congregationId: string | null = null;
     try {
-      let congregationId: string | null = null;
       const eventObject = event.data.object as unknown as Record<string, unknown>;
 
       if (event.type === 'checkout.session.completed') {
@@ -358,10 +358,11 @@ export const stripeWebhook = onRequest(
       // Liberamos la reclamacion para que el reintento de Stripe vuelva a procesar
       // un evento que fallo a mitad de camino.
       await releaseWebhookEvent(eventClaimRef, event.id);
-      logger.error('[billing] webhook processing failed', {
+      logError('[billing] webhook processing failed', {
+        congregationId,
+        eventId: event.id,
         eventType: event.type,
-        message: error instanceof Error ? error.message : String(error),
-      });
+      }, error);
       response.status(500).send('Webhook processing failed');
     }
   }

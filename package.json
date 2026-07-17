@@ -23,7 +23,8 @@
     "validate": "npm run check:versions && npm run check:indexes && npm run build:rules:check && npm run lint && tsc --noEmit && npm test -- --runInBand && npm --prefix functions run lint && npm --prefix functions run build && npm --prefix functions test -- --runInBand",
     "deploy:rules": "npm run build:rules:check && firebase deploy --only firestore:rules,firestore:indexes",
     "deploy:functions": "firebase deploy --only functions",
-    "deploy:all": "npm run deploy:rules && npm run deploy:functions"
+    "deploy:all": "npm run deploy:rules && npm run deploy:functions",
+    "release:check": "node scripts/release-readiness-check.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
