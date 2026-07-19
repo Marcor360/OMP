@@ -8,6 +8,7 @@ import {
   StyleSheet,
   RefreshControl,
   type ViewStyle,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
@@ -42,7 +43,9 @@ export function ScreenContainer({
   keyboardVerticalOffset = 0,
 }: ScreenContainerProps) {
   const colors = useAppColors();
-  const styles = createStyles(colors);
+  const { width } = useWindowDimensions();
+  const isWideWeb = Platform.OS === 'web' && width >= 1024;
+  const styles = createStyles(colors, isWideWeb);
   const keyboardBehavior: KeyboardAvoidingViewProps['behavior'] =
     Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined;
 
@@ -90,7 +93,7 @@ export function ScreenContainer({
   );
 }
 
-const createStyles = (colors: AppColorSet) =>
+const createStyles = (colors: AppColorSet, isWideWeb: boolean) =>
   StyleSheet.create({
     safe: {
       flex: 1,
@@ -107,8 +110,9 @@ const createStyles = (colors: AppColorSet) =>
     },
     inner: {
       flex: 1,
+      width: '100%',
     },
     padded: {
-      padding: 16,
+      padding: isWideWeb ? 24 : 16,
     },
   });

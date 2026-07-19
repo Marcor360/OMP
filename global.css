@@ -1,3 +1,26 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * React Native Web renders most measurements as fixed CSS pixels. On large
+ * monitors, small mobile-first type can look soft when the page is scaled by
+ * the browser. Keep the document at its native scale and favor the platform's
+ * sub-pixel text rendering.
+ */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+img,
+svg,
+canvas {
+  image-rendering: auto;
+}

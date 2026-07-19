@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { Platform, View, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useI18n } from '@/src/i18n/index';
@@ -48,7 +48,8 @@ export function DashboardScreen() {
   } = useUser();
   const colors = useAppColors();
   const isCompact = width < 520;
-  const styles = createStyles(colors, isCompact);
+  const isDesktop = Platform.OS === 'web' && width >= 1024;
+  const styles = createStyles(colors, isCompact, isDesktop);
   const { t } = useI18n();
 
   const [metrics, setMetrics] = useState<Partial<DashboardMetrics>>({});
@@ -377,14 +378,14 @@ export function DashboardScreen() {
   );
 }
 
-const createStyles = (colors: AppColorSet, isCompact: boolean) =>
+const createStyles = (colors: AppColorSet, isCompact: boolean, isDesktop: boolean) =>
   StyleSheet.create({
     greeting: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
       gap: 12,
-      marginBottom: 20,
+      marginBottom: isDesktop ? 24 : 20,
     },
     greetingMain: {
       flex: 1,
@@ -392,11 +393,11 @@ const createStyles = (colors: AppColorSet, isCompact: boolean) =>
       paddingRight: 8,
     },
     greetingLabel: {
-      fontSize: isCompact ? 13 : 14,
+      fontSize: isCompact ? 13 : isDesktop ? 16 : 14,
       color: colors.textMuted,
     },
     greetingName: {
-      fontSize: isCompact ? 22 : 26,
+      fontSize: isCompact ? 22 : isDesktop ? 32 : 26,
       fontWeight: '800',
       color: colors.textPrimary,
     },
@@ -415,14 +416,14 @@ const createStyles = (colors: AppColorSet, isCompact: boolean) =>
       paddingVertical: isCompact ? 4 : 6,
     },
     congregationPillText: {
-      fontSize: isCompact ? 12 : 13,
+      fontSize: isCompact ? 12 : isDesktop ? 14 : 13,
       color: colors.textSecondary,
       fontWeight: '600',
       flexShrink: 1,
     },
     notificationsButton: {
-      minWidth: 42,
-      height: 42,
+      minWidth: isDesktop ? 48 : 42,
+      height: isDesktop ? 48 : 42,
       borderRadius: 12,
       borderWidth: 1,
       borderColor: colors.border,
@@ -435,8 +436,8 @@ const createStyles = (colors: AppColorSet, isCompact: boolean) =>
     },
     statsRow: {
       flexDirection: 'row',
-      gap: 12,
-      marginBottom: 12,
+      gap: isDesktop ? 16 : 12,
+      marginBottom: isDesktop ? 16 : 12,
     },
     alertBanner: {
       flexDirection: 'row',
@@ -462,7 +463,7 @@ const createStyles = (colors: AppColorSet, isCompact: boolean) =>
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 12,
-      padding: 14,
+      padding: isDesktop ? 18 : 14,
       marginBottom: 16,
     },
     preachingIcon: {
@@ -478,12 +479,12 @@ const createStyles = (colors: AppColorSet, isCompact: boolean) =>
       minWidth: 0,
     },
     preachingTitle: {
-      fontSize: 15,
+      fontSize: isDesktop ? 17 : 15,
       fontWeight: '800',
       color: colors.textPrimary,
     },
     preachingSubtitle: {
-      fontSize: 12,
+      fontSize: isDesktop ? 14 : 12,
       color: colors.textMuted,
       fontWeight: '600',
     },
@@ -498,12 +499,12 @@ const createStyles = (colors: AppColorSet, isCompact: boolean) =>
       marginBottom: 12,
     },
     sectionTitle: {
-      fontSize: 16,
+      fontSize: isDesktop ? 18 : 16,
       fontWeight: '700',
       color: colors.textPrimary,
     },
     seeAll: {
-      fontSize: 13,
+      fontSize: isDesktop ? 14 : 13,
       color: colors.primary,
       fontWeight: '600',
     },
@@ -511,7 +512,7 @@ const createStyles = (colors: AppColorSet, isCompact: boolean) =>
       gap: 10,
     },
     emptyText: {
-      fontSize: 13,
+      fontSize: isDesktop ? 14 : 13,
       color: colors.textMuted,
       textAlign: 'center',
       paddingVertical: 16,

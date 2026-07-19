@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MobileSideMenu } from '@/src/components/navigation/MobileSideMenu';
@@ -19,8 +19,9 @@ export default function TabsLayout() {
   const bottomInset = Math.max(insets.bottom, 10);
   const useMobileSideMenu = width < 768;
   const showTabLabels = !useMobileSideMenu;
-  const tabIconSize = 22;
-  const tabBarHeight = (showTabLabels ? 56 : 48) + bottomInset;
+  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+  const tabIconSize = isDesktopWeb ? 24 : 22;
+  const tabBarHeight = (showTabLabels ? (isDesktopWeb ? 64 : 56) : 48) + bottomInset;
   const styles = createStyles(colors);
 
   const hide = (tab: string) => !visible.includes(tab as never);
@@ -53,7 +54,11 @@ export default function TabsLayout() {
             tabBarIconStyle: {
               marginTop: showTabLabels ? 0 : 2,
             },
-            tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginBottom: 2 },
+            tabBarLabelStyle: {
+              fontSize: isDesktopWeb ? 12 : 10,
+              fontWeight: '600',
+              marginBottom: 2,
+            },
           }}
         >
           <Tabs.Screen

@@ -1,5 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, type ViewStyle } from 'react-native';
+import {
+  Platform,
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  type ViewStyle,
+  useWindowDimensions,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
@@ -29,7 +36,9 @@ export function StatCard({
   accessibilityLabel,
 }: StatCardProps) {
   const colors = useAppColors();
-  const styles = createStyles(colors);
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 1024;
+  const styles = createStyles(colors, isDesktop);
   const iconColor = color ?? colors.primary;
 
   const content = (
@@ -66,39 +75,39 @@ export function StatCard({
   return <View style={[styles.card, style]}>{content}</View>;
 }
 
-const createStyles = (colors: AppColorSet) =>
+const createStyles = (colors: AppColorSet, isDesktop: boolean) =>
   StyleSheet.create({
     card: {
       flex: 1,
       backgroundColor: colors.surface,
       borderRadius: 16,
-      padding: 16,
+      padding: isDesktop ? 20 : 16,
       gap: 4,
       borderWidth: 1,
       borderColor: colors.border,
       minWidth: 140,
     },
     iconWrap: {
-      width: 40,
-      height: 40,
+      width: isDesktop ? 44 : 40,
+      height: isDesktop ? 44 : 40,
       borderRadius: 10,
       justifyContent: 'center',
       alignItems: 'center',
       marginBottom: 8,
     },
     value: {
-      fontSize: 28,
+      fontSize: isDesktop ? 30 : 28,
       fontWeight: '800',
       color: colors.textPrimary,
       lineHeight: 32,
     },
     title: {
-      fontSize: 13,
+      fontSize: isDesktop ? 15 : 13,
       fontWeight: '600',
       color: colors.textSecondary,
     },
     subtitle: {
-      fontSize: 11,
+      fontSize: isDesktop ? 13 : 11,
       color: colors.textMuted,
       marginTop: 2,
     },
