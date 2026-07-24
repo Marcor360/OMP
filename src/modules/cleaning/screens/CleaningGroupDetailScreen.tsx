@@ -121,9 +121,7 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
     setAddingMembers(true);
     setActionError(null);
     try {
-      await addUsersToCleaningGroup(groupId, selectedIds, group?.name, {
-        congregationId,
-      });
+      await addUsersToCleaningGroup(groupId, selectedIds, congregationId);
       setShowAddModal(false);
       await syncCaches();
     } catch (err) {

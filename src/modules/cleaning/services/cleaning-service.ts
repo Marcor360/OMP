@@ -37,13 +37,6 @@ const resolveIsUserActive = (userData: Record<string, unknown>): boolean => {
   return false;
 };
 
-const resolveUserCongregationId = (userData: Record<string, unknown>): string | null => {
-  if (typeof userData.congregationId === 'string' && userData.congregationId.length > 0) {
-    return userData.congregationId;
-  }
-  return null;
-};
-
 const resolveCleaningGroupType = (value: unknown): CleaningGroupType =>
   value === 'family' ? 'family' : 'standard';
 
@@ -402,111 +395,34 @@ export const updateCleaningGroup = async (
 
 // ─── addUsersToCleaningGroup ──────────────────────────────────────────────────
 
-/**
- * Agrega uno o varios usuarios al grupo dentro de una transacción.
- * Verifica disponibilidad en la transacción para evitar doble asignación.
- */
+/** Agrega uno o varios usuarios al grupo mediante una Cloud Function. */
 export const addUsersToCleaningGroup = async (
   groupId: string,
   userIds: string[],
-  groupName?: string,
-  options?: {
-    congregationId?: string | null;
-    storageMode?: CleaningGroupStorageMode;
-  }
+  congregationId: string
 ): Promise<void> => {
   if (userIds.length === 0) return;
-  const uniqueUserIds = Array.from(new Set(userIds));
-  const storageMode =
-    options?.storageMode ??
-    (await resolveExistingGroupStorageMode(groupId, options?.congregationId));
-  const groupRef = cleaningGroupDocRefByMode(
-    storageMode,
-    groupId,
-    options?.congregationId
+  if (!congregationId) {
+    throw new CleaningServiceError('INVALID_DATA', 'congregationId es requerido.');
+  }
+
+  const callable = httpsCallable<
+    { congregationId: string; groupId: string; userIds: string[] },
+    { added: number; skipped: number }
+  >(
+    functions,
+    'addCleaningGroupMembersByManager'
   );
 
-  await runTransaction(db, async (tx) => {
-    // 1. Leer el grupo dentro de la transacción
-    const groupSnap = await tx.get(groupRef);
-    if (!groupSnap.exists()) {
-      throw new CleaningServiceError('GROUP_NOT_FOUND', 'El grupo no existe.');
-    }
-
-    const groupData = groupSnap.data() as Record<string, unknown>;
-    const currentMemberIds: string[] = Array.isArray(groupData.memberIds)
-      ? (groupData.memberIds as string[])
-      : [];
-    const groupCongregationId =
-      typeof groupData.congregationId === 'string' ? groupData.congregationId : '';
-    const resolvedGroupName =
-      groupName ?? (typeof groupData.name === 'string' ? groupData.name : '');
-
-    // 2. Leer todos los usuarios candidatos
-    const userSnaps = await Promise.all(
-      uniqueUserIds.map((uid) => tx.get(userDocRef(uid)))
-    );
-
-    const newMemberIds = [...currentMemberIds];
-
-    for (let i = 0; i < userSnaps.length; i++) {
-      const snap = userSnaps[i];
-      const uid = uniqueUserIds[i];
-
-      if (!snap.exists()) continue;
-
-      const data = snap.data() as Record<string, unknown>;
-      const userCongregationId = resolveUserCongregationId(data);
-      if (
-        groupCongregationId.length > 0 &&
-        (!userCongregationId || userCongregationId !== groupCongregationId)
-      ) {
-        throw new CleaningServiceError(
-          'INVALID_DATA',
-          `El usuario "${data.displayName ?? uid}" no pertenece a la congregacion del grupo.`
-        );
-      }
-
-      const isActive = resolveIsUserActive(data);
-      const eligible =
-        typeof data.cleaningEligible === 'boolean' ? data.cleaningEligible : true;
-      const existingGroupId =
-        typeof data.cleaningGroupId === 'string' && data.cleaningGroupId.length > 0
-          ? data.cleaningGroupId
-          : null;
-
-      // Validación fuerte: si ya tiene grupo diferente, lanzar error
-      if (existingGroupId && existingGroupId !== groupId) {
-        const existingName =
-          typeof data.cleaningGroupName === 'string'
-            ? data.cleaningGroupName
-            : 'otro grupo';
-        throw new CleaningServiceError(
-          'USER_ALREADY_ASSIGNED',
-          `El usuario "${data.displayName ?? uid}" ya pertenece a "${existingName}".`
-        );
-      }
-
-      if (!isActive || !eligible) continue; // Omitir sin error
-      if (newMemberIds.includes(uid)) continue; // Ya está en el grupo
-
-      // 3. Actualizar el usuario dentro de la transacción
-      tx.update(userDocRef(uid), {
-        cleaningGroupId: groupId,
-        cleaningGroupName: resolvedGroupName,
-        updatedAt: serverTimestamp(),
-      });
-
-      newMemberIds.push(uid);
-    }
-
-    // 4. Actualizar el grupo
-    tx.update(groupRef, {
-      memberIds: newMemberIds,
-      memberCount: newMemberIds.length,
-      updatedAt: serverTimestamp(),
+  try {
+    await callable({
+      congregationId,
+      groupId,
+      userIds: Array.from(new Set(userIds)),
     });
-  });
+  } catch (error) {
+    throw mapCallableErrorToCleaningError(error);
+  }
 };
 
 // ─── removeUserFromCleaningGroup ──────────────────────────────────────────────
