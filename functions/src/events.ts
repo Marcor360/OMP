@@ -5,6 +5,9 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { adminDb } from './config/firebaseAdmin.js';
+import { canManageEvents } from './shared/events-access.js';
+import type { EventsAvisosAction } from './shared/events-access.js';
+import { assertAdministrativeBillingAccess } from './users/authorization.js';
 
 type EventType =
   | 'conmemoracion'
@@ -204,11 +207,25 @@ const getRequesterProfile = async (uid: string): Promise<Record<string, unknown>
   return snap.data() as Record<string, unknown>;
 };
 
-const assertEventManager = (params: {
+const readAvisosPermission = (
+  requester: Record<string, unknown>
+): ((action: EventsAvisosAction) => boolean) => {
+  const permissions = requester.permissions;
+  if (typeof permissions !== 'object' || permissions === null || Array.isArray(permissions)) {
+    return () => false;
+  }
+  const avisos = (permissions as Record<string, unknown>).avisos;
+  if (typeof avisos !== 'object' || avisos === null || Array.isArray(avisos)) {
+    return () => false;
+  }
+  const block = avisos as Record<string, unknown>;
+  return (action) => block[action] === true || block.manage === true;
+};
+
+const assertEventManager = async (params: {
   requester: Record<string, unknown>;
   congregationId: string;
-}) => {
-  const role = params.requester.role;
+}): Promise<void> => {
   const requesterCongregationId = asNonEmptyString(params.requester.congregationId);
   const isActive = params.requester.isActive === true;
 
@@ -216,9 +233,20 @@ const assertEventManager = (params: {
     throw new HttpsError('permission-denied', 'No tienes permisos para realizar esta operacion.');
   }
 
-  if (role !== 'admin' && role !== 'supervisor') {
-    throw new HttpsError('permission-denied', 'Solo administradores y supervisores pueden administrar eventos.');
+  const allowed = canManageEvents(
+    {
+      role: typeof params.requester.role === 'string' ? params.requester.role : undefined,
+      isActive,
+      congregationId: requesterCongregationId,
+    },
+    { hasAvisosPermission: readAvisosPermission(params.requester) }
+  );
+
+  if (!allowed) {
+    throw new HttpsError('permission-denied', 'No tienes permisos para administrar eventos.');
   }
+
+  await assertAdministrativeBillingAccess(params.congregationId);
 };
 
 const cleanUndefined = (value: Record<string, unknown>): Record<string, unknown> => {
@@ -246,7 +274,7 @@ export const createEventByManager = onCall(
     const payload = request.data as EventWritePayload;
     const congregationId = parseRequiredString(payload.congregationId, 'congregationId');
     const requester = await getRequesterProfile(request.auth.uid);
-    assertEventManager({ requester, congregationId });
+    await assertEventManager({ requester, congregationId });
 
     const eventData = parseEventData(payload.eventData);
     const ref = await adminDb.collection(EVENTS_COLLECTION).add(
@@ -279,7 +307,7 @@ export const updateEventByManager = onCall(
     const congregationId = parseRequiredString(payload.congregationId, 'congregationId');
     const eventId = parseRequiredString(payload.eventId, 'eventId');
     const requester = await getRequesterProfile(request.auth.uid);
-    assertEventManager({ requester, congregationId });
+    await assertEventManager({ requester, congregationId });
 
     const ref = adminDb.collection(EVENTS_COLLECTION).doc(eventId);
     const snap = await ref.get();
@@ -324,7 +352,7 @@ export const deleteEventByManager = onCall(
     const congregationId = parseRequiredString(payload.congregationId, 'congregationId');
     const eventId = parseRequiredString(payload.eventId, 'eventId');
     const requester = await getRequesterProfile(request.auth.uid);
-    assertEventManager({ requester, congregationId });
+    await assertEventManager({ requester, congregationId });
 
     const ref = adminDb.collection(EVENTS_COLLECTION).doc(eventId);
     const snap = await ref.get();
