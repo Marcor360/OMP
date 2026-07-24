@@ -174,27 +174,44 @@ service cloud.firestore {
         );
     }
 
+    // Espejo en rules de isPreachingManager() de src/types/user/index.ts:252.
+    // El requisito privileges.isElder para 'encargado' es intencional y existe
+    // en ambas capas. Si se elimina, debe eliminarse en las dos a la vez.
     function isPreachingManager() {
+      let user = currentUserData();
       return isActive()
         && (
           (
             (
-              currentUserData().serviceDepartment == 'predicacion'
-              || currentUserData().serviceDepartment == 'territorios'
+              user.serviceDepartment == 'predicacion'
+              || user.serviceDepartment == 'territorios'
             )
             && (
               (
-                currentUserData().servicePosition == 'encargado'
-                && currentUserData().privileges is map
-                && currentUserData().privileges.isElder == true
+                user.servicePosition == 'encargado'
+                && user.privileges is map
+                && user.privileges.isElder == true
               )
-              || currentUserData().servicePosition == 'auxiliar'
+              || user.servicePosition == 'auxiliar'
             )
           )
-          || (currentUserData().privileges is map
-            && currentUserData().privileges.isElder == true
-            && hasServiceAssignmentKey('encargado', 'predicacion'))
-          || hasServiceAssignmentKey('auxiliar', 'predicacion')
+          || (
+            user.serviceAssignmentKeys is list
+            && (
+              (
+                user.privileges is map
+                && user.privileges.isElder == true
+                && user.serviceAssignmentKeys.hasAny([
+                  'encargado:predicacion',
+                  'encargado:territorios'
+                ])
+              )
+              || user.serviceAssignmentKeys.hasAny([
+                'auxiliar:predicacion',
+                'auxiliar:territorios'
+              ])
+            )
+          )
         );
     }
 
@@ -333,6 +350,51 @@ service cloud.firestore {
           isAdmin()
           || hasPreachingAssignment('encargado')
           || hasTerritoryPermission('manage')
+        );
+    }
+
+    // Espejo en rules de canViewBilling() de functions/src/shared/billing-access.ts.
+    // Si cambia alla, cambia aqui. Son la misma decision escrita dos veces
+    // porque las rules no pueden importar TypeScript.
+    function canViewBillingData() {
+      let user = currentUserData();
+      return isActive()
+        && (
+          user.role == 'admin'
+          || user.role == 'administrador'
+          || isSuperAdmin()
+          || user.protectedFromDeletion == true
+          || user.isSystemUser == true
+          || user.isPrimaryAdmin == true
+          || user.isRootAdmin == true
+          || user.systemProtected == true
+          || user.servicePosition in ['coordinador', 'secretario']
+          || (
+            user.servicePosition == 'encargado'
+            && user.serviceDepartment == 'tesoreria'
+          )
+          || (
+            user.servicePosition == 'auxiliar'
+            && user.serviceDepartment == 'tesoreria'
+          )
+          || (
+            user.serviceAssignmentKeys is list
+            && user.serviceAssignmentKeys.hasAny([
+              'coordinador:',
+              'secretario:',
+              'encargado:tesoreria',
+              'auxiliar:tesoreria'
+            ])
+          )
+          || (
+            user.permissions is map
+            && user.permissions.pagos is map
+            && (
+              user.permissions.pagos.view == true
+              || user.permissions.pagos.create == true
+              || user.permissions.pagos.manage == true
+            )
+          )
         );
     }
 
@@ -2727,12 +2789,7 @@ service cloud.firestore {
       // -----------------------------------------------------------------------
       match /billingHistory/{eventId} {
         allow get, list: if canAccessCongregationData(congregationId)
-          && (
-            isAdminOrSupervisor()
-            || isGlobalScreenAccess()
-            || hasPermission('pagos', 'view')
-            || hasPermission('pagos', 'manage')
-          );
+          && canViewBillingData();
 
         allow create, update, delete: if false;
       }

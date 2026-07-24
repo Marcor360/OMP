@@ -58,3 +58,6 @@ app-example
 
 # emulator jar cache (do not commit 138 MB binary)
 .cache/
+
+# scratch output from audit/dry-run scripts (may contain PII, never commit)
+tmp/

@@ -67,9 +67,15 @@ export const getPriceId = (planKey: BillingPlanKey): string =>
 
 export const priceToPlanKey = (priceId: string | null): BillingPlanKey | undefined => {
   if (!priceId) return undefined;
-  return (Object.keys(PLAN_PRICE_SECRETS) as BillingPlanKey[]).find(
-    (planKey) => getSecret(PLAN_PRICE_SECRETS[planKey]) === priceId
-  );
+  return (Object.keys(PLAN_PRICE_SECRETS) as BillingPlanKey[]).find((planKey) => {
+    try {
+      return getSecret(PLAN_PRICE_SECRETS[planKey]) === priceId;
+    } catch {
+      // Un price secret sin configurar no debe tumbar la resolucion de los
+      // demas planes ni el webhook completo. Ese plan simplemente no matchea.
+      return false;
+    }
+  });
 };
 
 export const isBillingPlanKey = (value: unknown): value is BillingPlanKey =>
