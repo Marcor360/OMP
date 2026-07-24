@@ -1,0 +1,30 @@
+    // =========================================================================
+    // AUTENTICACION Y USUARIO ACTUAL
+    // =========================================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function currentUid() {
+      return request.auth != null ? request.auth.uid : null;
+    }
+
+    function currentUserPath() {
+      return /databases/$(database)/documents/users/$(currentUid());
+    }
+
+    function hasCurrentUserDoc() {
+      return isAuthenticated() && exists(currentUserPath());
+    }
+
+    function currentUserData() {
+      return get(currentUserPath()).data;
+    }
+
+    function isSuperAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/superAdmins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/superAdmins/$(request.auth.uid)).data.isActive == true;
+    }
+

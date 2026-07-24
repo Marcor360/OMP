@@ -1,0 +1,131 @@
+    function validDepartmentData(data) {
+      return hasOnlyKeys(data, [
+          'id',
+          'congregationId',
+          'name',
+          'description',
+          'icon',
+          'color',
+          'order',
+          'isActive',
+          'allowMultipleManagers',
+          'allowMultipleAssistants',
+          'createdAt',
+          'updatedAt',
+          'createdBy',
+          'updatedBy'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'name',
+          'order',
+          'isActive',
+          'allowMultipleManagers',
+          'allowMultipleAssistants'
+        ])
+        && data.congregationId is string
+        && isNonEmptyString(data.name)
+        && data.name.size() <= 80
+        && (!('id' in data) || data.id is string)
+        && (!('description' in data) || data.description is string)
+        && (!('icon' in data) || data.icon is string)
+        && (!('color' in data) || data.color is string)
+        && data.order is number
+        && data.isActive is bool
+        && data.allowMultipleManagers is bool
+        && data.allowMultipleAssistants is bool
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp)
+        && (!('createdBy' in data) || data.createdBy is string)
+        && (!('updatedBy' in data) || data.updatedBy is string);
+    }
+
+    function validDepartmentCreate(data) {
+      return validDepartmentData(data)
+        && data.isActive == true;
+    }
+
+    function validDepartmentUpdate(data) {
+      return validDepartmentData(data)
+        && preservesCreatedAt();
+    }
+
+    function validOrganizationPosition(position) {
+      return position in ['coordinador', 'secretario', 'encargado', 'auxiliar', 'apoyo'];
+    }
+
+    function validDepartmentAssignmentData(data) {
+      return hasOnlyKeys(data, [
+          'id',
+          'congregationId',
+          'departmentId',
+          'departmentName',
+          'userId',
+          'displayName',
+          'email',
+          'position',
+          'title',
+          'parentAssignmentId',
+          'level',
+          'order',
+          'isActive',
+          'createdAt',
+          'updatedAt',
+          'createdBy',
+          'updatedBy'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'departmentId',
+          'departmentName',
+          'userId',
+          'displayName',
+          'position',
+          'title',
+          'level',
+          'order',
+          'isActive'
+        ])
+        && data.congregationId is string
+        && isNonEmptyString(data.departmentId)
+        && isNonEmptyString(data.departmentName)
+        && isNonEmptyString(data.userId)
+        && isNonEmptyString(data.displayName)
+        && validOrganizationPosition(data.position)
+        && isNonEmptyString(data.title)
+        && (!('id' in data) || data.id is string)
+        && (!('email' in data) || data.email is string)
+        && (!('parentAssignmentId' in data) || data.parentAssignmentId == null || data.parentAssignmentId is string)
+        && data.level is number
+        && data.order is number
+        && data.isActive is bool
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp)
+        && (!('createdBy' in data) || data.createdBy is string)
+        && (!('updatedBy' in data) || data.updatedBy is string)
+        && (data.position != 'coordinador' || data.departmentId == 'coordinacion')
+        && (data.position != 'secretario' || data.departmentId == 'secretaria');
+    }
+
+    function validDepartmentAssignmentCreate(data) {
+      return validDepartmentAssignmentData(data)
+        && data.isActive == true
+        && exists(/databases/$(database)/documents/users/$(data.userId))
+        && get(/databases/$(database)/documents/users/$(data.userId)).data.congregationId == data.congregationId
+        && get(/databases/$(database)/documents/users/$(data.userId)).data.isActive == true
+        && exists(/databases/$(database)/documents/congregations/$(data.congregationId)/departments/$(data.departmentId));
+    }
+
+    function validDepartmentAssignmentUpdate(data) {
+      return validDepartmentAssignmentData(data)
+        && data.departmentId == resource.data.departmentId
+        && data.userId == resource.data.userId
+        && preservesCreatedAt()
+        && exists(/databases/$(database)/documents/users/$(data.userId))
+        && get(/databases/$(database)/documents/users/$(data.userId)).data.congregationId == data.congregationId
+        && (
+          data.isActive == false
+          || get(/databases/$(database)/documents/users/$(data.userId)).data.isActive == true
+        );
+    }
+

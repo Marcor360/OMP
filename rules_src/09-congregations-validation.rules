@@ -1,0 +1,32 @@
+    // =========================================================================
+    // CONGREGATIONS
+    // =========================================================================
+
+    function allowedCongregationKeys() {
+      return [
+        'name',
+        'code',
+        'country',
+        'state',
+        'city',
+        'language',
+        'timezone',
+        'isActive',
+        'createdAt',
+        'updatedAt'
+      ];
+    }
+
+    function validCongregationData(data) {
+      return hasOnlyKeys(data, allowedCongregationKeys())
+        && hasAllKeys(data, ['name', 'isActive'])
+        && isNonEmptyString(data.name)
+        && data.isActive is bool
+        && (!('code' in data) || data.code is string)
+        && (!('country' in data) || data.country is string)
+        && (!('state' in data) || data.state is string)
+        && (!('city' in data) || data.city is string)
+        && (!('language' in data) || data.language is string)
+        && (!('timezone' in data) || data.timezone is string);
+    }
+

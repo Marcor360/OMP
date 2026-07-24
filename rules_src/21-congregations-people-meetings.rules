@@ -1,0 +1,160 @@
+    // =========================================================================
+    // REGLAS: CONGREGATIONS
+    // =========================================================================
+
+    match /congregations/{congregationId} {
+      allow get: if isSuperAdmin() || sameCongregation(congregationId);
+      allow list: if isSuperAdmin();
+
+      allow create: if isSuperAdmin() || (isAdmin()
+        && canAccessCongregationData(congregationId)
+        && validCongregationData(request.resource.data));
+
+      allow update: if isSuperAdmin() || (isAdmin()
+        && canAccessCongregationData(congregationId)
+        && validCongregationData(request.resource.data)
+        && preservesCreatedAt());
+
+      allow delete: if false;
+
+      match /private/{privateDocId} {
+        allow get, list: if sameCongregation(congregationId)
+          && canAccessCongregationData(congregationId)
+          && isAdmin();
+        allow write: if false;
+      }
+
+      // -----------------------------------------------------------------------
+      // PERSONS
+      // -----------------------------------------------------------------------
+      match /persons/{personId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canManagePersons()
+          && canAccessCongregationData(congregationId)
+          && validPersonData(request.resource.data, congregationId);
+
+        allow update: if canManagePersons()
+          && canAccessCongregationData(congregationId)
+          && validPersonData(request.resource.data, congregationId)
+          && preservesCreatedAt();
+
+        allow delete: if isAdmin();
+      }
+
+      // -----------------------------------------------------------------------
+      // MEETINGS
+      // -----------------------------------------------------------------------
+      match /meetings/{meetingId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if isMeetingsManager()
+          && canAccessCongregationData(congregationId)
+          && validMeetingData(request.resource.data, congregationId);
+
+        allow update: if isMeetingsManager()
+          && canAccessCongregationData(congregationId)
+          && validMeetingData(request.resource.data, congregationId)
+          && preservesCreatedAt();
+
+        allow delete: if isAdmin();
+
+        // ---------------------------------------------------------------------
+        // ASSIGNMENTS
+        // ---------------------------------------------------------------------
+        match /assignments/{assignmentId} {
+          allow get, list: if canAccessCongregationData(congregationId);
+
+          allow create, update: if false;
+
+          allow delete: if isAdmin();
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // ASSIGNMENTS (congregation scoped: limpieza, hospitalidad u otras tareas)
+      // -----------------------------------------------------------------------
+      match /assignments/{assignmentId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canManageAssignments()
+          && canAccessCongregationData(congregationId)
+          && validStandaloneAssignmentData(request.resource.data, congregationId);
+
+        allow update: if canManageAssignments()
+          && canAccessCongregationData(congregationId)
+          && validStandaloneAssignmentData(request.resource.data, congregationId)
+          && preservesCreatedAt();
+
+        allow delete: if isAdmin();
+      }
+
+      // -----------------------------------------------------------------------
+      // TERRITORIES
+      // -----------------------------------------------------------------------
+      match /territories/{territoryId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canCreateTerritories()
+          && canAccessCongregationData(congregationId)
+          && validTerritoryCreate(request.resource.data, congregationId);
+
+        allow update: if (
+            (resource.data.status == 'active' && request.resource.data.status == 'inactive' && canDeactivateTerritories())
+            || (
+              request.resource.data.status == resource.data.status
+              && canEditTerritories()
+            )
+          )
+          && canAccessCongregationData(congregationId)
+          && resource.data.congregationId == congregationId
+          && validTerritoryUpdate(request.resource.data, congregationId);
+
+        allow delete: if false;
+      }
+
+      match /preachingGroups/{groupId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canManagePreachingGroups()
+          && canAccessCongregationData(congregationId)
+          && validPreachingGroupCreate(request.resource.data, congregationId);
+
+        allow update: if canManagePreachingGroups()
+          && canAccessCongregationData(congregationId)
+          && resource.data.congregationId == congregationId
+          && validPreachingGroupUpdate(request.resource.data, congregationId);
+
+        allow delete: if false;
+      }
+
+      match /monthlyTerritoryAssignments/{monthId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId)
+          && validMonthlyTerritoryAssignmentCreate(request.resource.data, congregationId, monthId);
+
+        allow update: if canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId)
+          && resource.data.congregationId == congregationId
+          && validMonthlyTerritoryAssignmentUpdate(request.resource.data, congregationId, monthId);
+
+        allow delete: if false;
+      }
+
+      match /territorySchedule/{scheduleId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId)
+          && validTerritoryScheduleCreate(request.resource.data, scheduleId);
+
+        allow update: if canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId)
+          && validTerritoryScheduleUpdate(request.resource.data, scheduleId);
+
+        allow delete: if canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId);
+      }
+

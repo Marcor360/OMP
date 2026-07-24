@@ -1,0 +1,228 @@
+    function validPreachingGroupData(data, congregationId) {
+      return hasOnlyKeys(data, [
+          'id',
+          'congregationId',
+          'name',
+          'number',
+          'captainUserId',
+          'captainName',
+          'assistantUserId',
+          'assistantName',
+          'memberIds',
+          'memberNames',
+          'memberCount',
+          'isActive',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'name',
+          'number',
+          'captainUserId',
+          'captainName',
+          'memberIds',
+          'memberNames',
+          'memberCount',
+          'isActive',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && (!('id' in data) || data.id is string)
+        && isNonEmptyString(data.name)
+        && data.name.size() <= 40
+        && data.number is int
+        && data.number > 0
+        && isNonEmptyString(data.captainUserId)
+        && isNonEmptyString(data.captainName)
+        && (!('assistantUserId' in data) || data.assistantUserId == null || data.assistantUserId is string)
+        && (!('assistantName' in data) || data.assistantName == null || data.assistantName is string)
+        && data.memberIds is list
+        && data.memberIds.size() > 0
+        && data.memberIds.size() <= 200
+        && data.memberIds.hasAny([data.captainUserId])
+        && (!('assistantUserId' in data) || data.assistantUserId == null || data.memberIds.hasAny([data.assistantUserId]))
+        && data.memberNames is list
+        && data.memberNames.size() == data.memberIds.size()
+        && data.memberCount is int
+        && data.memberCount == data.memberIds.size()
+        && data.isActive is bool
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validPreachingGroupCreate(data, congregationId) {
+      return validPreachingGroupData(data, congregationId)
+        && data.isActive == true
+        && data.createdBy == currentUid()
+        && data.updatedBy == currentUid();
+    }
+
+    function validPreachingGroupUpdate(data, congregationId) {
+      return validPreachingGroupData(data, congregationId)
+        && data.congregationId == resource.data.congregationId
+        && data.createdBy == resource.data.createdBy
+        && data.createdAt == resource.data.createdAt
+        && data.updatedBy == currentUid();
+    }
+
+    function validMonthlyTerritoryTarget(target) {
+      return target is map
+        && target.keys().hasOnly(['id', 'scope', 'groupId', 'groupName', 'territoryIds', 'territoryNumbers', 'notes'])
+        && isNonEmptyString(target.id)
+        && target.scope in ['congregation', 'group']
+        && (!('groupId' in target) || target.groupId == null || target.groupId is string)
+        && (!('groupName' in target) || target.groupName == null || target.groupName is string)
+        && target.territoryIds is list
+        && target.territoryIds.size() <= 200
+        && target.territoryNumbers is list
+        && target.territoryNumbers.size() == target.territoryIds.size()
+        && (!('notes' in target) || target.notes == null || (target.notes is string && target.notes.size() <= 200));
+    }
+
+    function validMonthlyTerritoryTargets(targets) {
+      return targets is list
+        && targets.size() <= 10
+        && (targets.size() < 1 || validMonthlyTerritoryTarget(targets[0]))
+        && (targets.size() < 2 || validMonthlyTerritoryTarget(targets[1]))
+        && (targets.size() < 3 || validMonthlyTerritoryTarget(targets[2]))
+        && (targets.size() < 4 || validMonthlyTerritoryTarget(targets[3]))
+        && (targets.size() < 5 || validMonthlyTerritoryTarget(targets[4]))
+        && (targets.size() < 6 || validMonthlyTerritoryTarget(targets[5]))
+        && (targets.size() < 7 || validMonthlyTerritoryTarget(targets[6]))
+        && (targets.size() < 8 || validMonthlyTerritoryTarget(targets[7]))
+        && (targets.size() < 9 || validMonthlyTerritoryTarget(targets[8]))
+        && (targets.size() < 10 || validMonthlyTerritoryTarget(targets[9]));
+    }
+
+    function validMonthlyTerritoryAssignmentData(data, congregationId, monthId) {
+      return hasOnlyKeys(data, [
+          'id',
+          'congregationId',
+          'monthId',
+          'assignments',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'monthId',
+          'assignments',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && (!('id' in data) || data.id == monthId)
+        && data.congregationId == congregationId
+        && data.monthId == monthId
+        && monthId.matches('^\\d{4}-\\d{2}$')
+        && validMonthlyTerritoryTargets(data.assignments)
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validMonthlyTerritoryAssignmentCreate(data, congregationId, monthId) {
+      return validMonthlyTerritoryAssignmentData(data, congregationId, monthId)
+        && data.createdBy == currentUid()
+        && data.updatedBy == currentUid();
+    }
+
+    function validMonthlyTerritoryAssignmentUpdate(data, congregationId, monthId) {
+      return validMonthlyTerritoryAssignmentData(data, congregationId, monthId)
+        && data.createdBy == resource.data.createdBy
+        && data.createdAt == resource.data.createdAt
+        && data.updatedBy == currentUid();
+    }
+
+    function validTerritoryUpdate(data, congregationId) {
+      return validTerritoryData(data, congregationId)
+        && data.congregationId == resource.data.congregationId
+        && data.createdBy == resource.data.createdBy
+        && data.createdAt == resource.data.createdAt
+        && data.updatedBy == currentUid();
+    }
+
+    function validTerritoryScheduleItem(item) {
+      return item is map
+        && item.keys().hasOnly(['number', 'description', 'enabled'])
+        && item.number is number
+        && item.number > 0
+        && item.description is string
+        && item.description.size() > 0
+        && item.description.size() <= 100
+        && item.enabled is bool;
+    }
+
+    function validTerritoryScheduleItems(items) {
+      return items is list
+        && items.size() > 0
+        && items.size() <= 12
+        && (items.size() < 1 || validTerritoryScheduleItem(items[0]))
+        && (items.size() < 2 || validTerritoryScheduleItem(items[1]))
+        && (items.size() < 3 || validTerritoryScheduleItem(items[2]))
+        && (items.size() < 4 || validTerritoryScheduleItem(items[3]))
+        && (items.size() < 5 || validTerritoryScheduleItem(items[4]))
+        && (items.size() < 6 || validTerritoryScheduleItem(items[5]))
+        && (items.size() < 7 || validTerritoryScheduleItem(items[6]))
+        && (items.size() < 8 || validTerritoryScheduleItem(items[7]))
+        && (items.size() < 9 || validTerritoryScheduleItem(items[8]))
+        && (items.size() < 10 || validTerritoryScheduleItem(items[9]))
+        && (items.size() < 11 || validTerritoryScheduleItem(items[10]))
+        && (items.size() < 12 || validTerritoryScheduleItem(items[11]));
+    }
+
+    function validTerritoryScheduleData(data, scheduleId) {
+      return hasOnlyKeys(data, [
+          'dayOfWeek',
+          'territories',
+          'active',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'dayOfWeek',
+          'territories',
+          'active',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.dayOfWeek == scheduleId
+        && isValidTerritoryDay(data.dayOfWeek)
+        && validTerritoryScheduleItems(data.territories)
+        && data.active is bool
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validTerritoryScheduleCreate(data, scheduleId) {
+      return validTerritoryScheduleData(data, scheduleId)
+        && data.createdBy == currentUid()
+        && data.updatedBy == currentUid();
+    }
+
+    function validTerritoryScheduleUpdate(data, scheduleId) {
+      return validTerritoryScheduleData(data, scheduleId)
+        && data.dayOfWeek == resource.data.dayOfWeek
+        && data.createdBy == resource.data.createdBy
+        && data.createdAt == resource.data.createdAt
+        && data.updatedBy == currentUid();
+    }
+

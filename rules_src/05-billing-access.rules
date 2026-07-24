@@ -1,0 +1,42 @@
+    function canViewBillingData() {
+      let user = currentUserData();
+      return isActive()
+        && (
+          user.role == 'admin'
+          || user.role == 'administrador'
+          || isSuperAdmin()
+          || user.protectedFromDeletion == true
+          || user.isSystemUser == true
+          || user.isPrimaryAdmin == true
+          || user.isRootAdmin == true
+          || user.systemProtected == true
+          || user.servicePosition in ['coordinador', 'secretario']
+          || (
+            user.servicePosition == 'encargado'
+            && user.serviceDepartment == 'tesoreria'
+          )
+          || (
+            user.servicePosition == 'auxiliar'
+            && user.serviceDepartment == 'tesoreria'
+          )
+          || (
+            user.serviceAssignmentKeys is list
+            && user.serviceAssignmentKeys.hasAny([
+              'coordinador:',
+              'secretario:',
+              'encargado:tesoreria',
+              'auxiliar:tesoreria'
+            ])
+          )
+          || (
+            user.permissions is map
+            && user.permissions.pagos is map
+            && (
+              user.permissions.pagos.view == true
+              || user.permissions.pagos.create == true
+              || user.permissions.pagos.manage == true
+            )
+          )
+        );
+    }
+

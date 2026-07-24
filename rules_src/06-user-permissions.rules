@@ -1,0 +1,121 @@
+    function canReadUsers() {
+      return isAdmin()
+        || isSupervisor()
+        || hasPermission('usuarios', 'view')
+        || hasPermission('usuarios', 'manage')
+        || isGlobalScreenAccess()
+        || (
+          currentUserData().permissions is map
+          && (
+            (currentUserData().permissions.departments is map
+              && currentUserData().permissions.departments.manage == true)
+            || (currentUserData().permissions.organigrama is map
+              && currentUserData().permissions.organigrama.manage == true)
+          )
+        );
+    }
+
+    function canCreateUsers() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPermission('usuarios', 'create') || hasPermission('usuarios', 'manage'));
+    }
+
+    function canEditUsers() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPermission('usuarios', 'edit') || hasPermission('usuarios', 'manage'));
+    }
+
+    function canDeleteUsers() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPermission('usuarios', 'delete') || hasPermission('usuarios', 'manage'));
+    }
+
+    function canManageEvents() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('avisos', 'manage')
+          || (
+            hasPermission('avisos', 'create')
+            && hasPermission('avisos', 'edit')
+          )
+        );
+    }
+
+    function canManagePersons() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('usuarios', 'manage')
+          || (
+            hasPermission('usuarios', 'create')
+            && hasPermission('usuarios', 'edit')
+          )
+        );
+    }
+
+    function canManageAssignments() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('asignaciones', 'manage')
+          || (
+            hasPermission('asignaciones', 'create')
+            && hasPermission('asignaciones', 'edit')
+          )
+        );
+    }
+
+    function safeDelegatedUserCreate() {
+      return isAdmin()
+        || (
+          request.resource.data.role == 'user'
+          && !('permissions' in request.resource.data)
+          && !('privileges' in request.resource.data)
+          && !('responsibilities' in request.resource.data)
+          && !('serviceAssignments' in request.resource.data)
+          && !('servicePosition' in request.resource.data)
+          && !('serviceDepartment' in request.resource.data)
+        );
+    }
+
+    function safeDelegatedUserUpdate() {
+      return isAdmin()
+        || (
+          request.resource.data.role == resource.data.role
+          && request.resource.data.congregationId == resource.data.congregationId
+          && (
+            !('permissions' in request.resource.data) && !('permissions' in resource.data)
+            || request.resource.data.permissions == resource.data.permissions
+          )
+          && (
+            !('privileges' in request.resource.data) && !('privileges' in resource.data)
+            || request.resource.data.privileges == resource.data.privileges
+          )
+          && (
+            !('responsibilities' in request.resource.data) && !('responsibilities' in resource.data)
+            || request.resource.data.responsibilities == resource.data.responsibilities
+          )
+          && (
+            !('serviceAssignments' in request.resource.data) && !('serviceAssignments' in resource.data)
+            || request.resource.data.serviceAssignments == resource.data.serviceAssignments
+          )
+          && (
+            !('servicePosition' in request.resource.data) && !('servicePosition' in resource.data)
+            || request.resource.data.servicePosition == resource.data.servicePosition
+          )
+          && (
+            !('serviceDepartment' in request.resource.data) && !('serviceDepartment' in resource.data)
+            || request.resource.data.serviceDepartment == resource.data.serviceDepartment
+          )
+        );
+    }
+
+    function canListCongregationUsers() {
+      return canAccessCongregationData(myCongregationId())
+        && canReadUsers();
+    }
+

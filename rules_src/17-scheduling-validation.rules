@@ -1,0 +1,175 @@
+    function validPlanningMonthIds(value) {
+      return value is list
+        && value.size() > 0
+        && value.size() <= 2;
+    }
+
+    function validScheduleStatus(value) {
+      return value is string && value in ['draft', 'published', 'archived'];
+    }
+
+    function validScheduleItemStatus(value) {
+      return value is string && value in ['scheduled', 'cancelled', 'completed'];
+    }
+
+    function validPlanningMeetingType(value) {
+      return value is string && value in ['midweek', 'weekend'];
+    }
+
+    function validHospitalityRoleKey(value) {
+      return value is string
+        && value in [
+          'chairman',
+          'microphoneOne',
+          'microphoneTwo',
+          'microphoneThree',
+          'attendantDoor',
+          'attendantAuditorium',
+          'attendantExtra',
+          'watchtowerReader',
+          'midweekBibleStudyReader',
+          'audioVideo'
+        ];
+    }
+
+    function validPlanningScheduleData(data, congregationId) {
+      return hasOnlyKeys(data, [
+          'congregationId',
+          'title',
+          'startDate',
+          'endDate',
+          'monthIds',
+          'totalMeetings',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt',
+          'publishedAt',
+          'optionalRoles'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'title',
+          'startDate',
+          'endDate',
+          'monthIds',
+          'totalMeetings',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && isNonEmptyString(data.title)
+        && data.title.size() <= 120
+        && validDateKey(data.startDate)
+        && validDateKey(data.endDate)
+        && data.startDate <= data.endDate
+        && validPlanningMonthIds(data.monthIds)
+        && data.totalMeetings is int
+        && data.totalMeetings >= 1
+        && data.totalMeetings <= 20
+        && validScheduleStatus(data.status)
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('publishedAt' in data) || data.publishedAt is timestamp)
+        && (!('optionalRoles' in data) || data.optionalRoles is map);
+    }
+
+    function validCleaningScheduleItemData(data, congregationId, scheduleId) {
+      return hasOnlyKeys(data, [
+          'congregationId',
+          'scheduleId',
+          'meetingId',
+          'meetingDate',
+          'meetingType',
+          'cleaningGroupId',
+          'cleaningGroupName',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'scheduleId',
+          'meetingDate',
+          'meetingType',
+          'cleaningGroupId',
+          'cleaningGroupName',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && data.scheduleId == scheduleId
+        && validDateKey(data.meetingDate)
+        && validPlanningMeetingType(data.meetingType)
+        && isNonEmptyString(data.cleaningGroupId)
+        && isNonEmptyString(data.cleaningGroupName)
+        && data.cleaningGroupName.size() <= 120
+        && validScheduleItemStatus(data.status)
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('meetingId' in data) || data.meetingId is string);
+    }
+
+    function validHospitalityScheduleItemData(data, congregationId, scheduleId) {
+      return hasOnlyKeys(data, [
+          'congregationId',
+          'scheduleId',
+          'meetingId',
+          'meetingDate',
+          'meetingType',
+          'roleKey',
+          'roleLabel',
+          'userId',
+          'userNameSnapshot',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && hasAllKeys(data, [
+          'congregationId',
+          'scheduleId',
+          'meetingDate',
+          'meetingType',
+          'roleKey',
+          'roleLabel',
+          'userId',
+          'userNameSnapshot',
+          'status',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.congregationId == congregationId
+        && data.scheduleId == scheduleId
+        && validDateKey(data.meetingDate)
+        && validPlanningMeetingType(data.meetingType)
+        && validHospitalityRoleKey(data.roleKey)
+        && isNonEmptyString(data.roleLabel)
+        && data.roleLabel.size() <= 120
+        && isNonEmptyString(data.userId)
+        && isNonEmptyString(data.userNameSnapshot)
+        && data.userNameSnapshot.size() <= 160
+        && validScheduleItemStatus(data.status)
+        && data.createdBy is string
+        && data.updatedBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('meetingId' in data) || data.meetingId is string);
+    }
+

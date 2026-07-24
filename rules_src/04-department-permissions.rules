@@ -1,0 +1,92 @@
+    function hasPermission(department, action) {
+      return isActive()
+        && currentUserData().permissions is map
+        && currentUserData().permissions[department] is map
+        && (
+          currentUserData().permissions[department][action] == true
+          || (
+            action != 'manage'
+            && currentUserData().permissions[department].manage == true
+          )
+        );
+    }
+
+    function hasTerritoryPermission(action) {
+      return isActive()
+        && currentUserData().permissions is map
+        && currentUserData().permissions.predicacion is map
+        && (
+          currentUserData().permissions.predicacion.manageTerritories == true
+          || (
+            currentUserData().permissions.predicacion.territories is map
+            && (
+              currentUserData().permissions.predicacion.territories[action] == true
+              || currentUserData().permissions.predicacion.territories.manage == true
+            )
+          )
+        );
+    }
+
+    function hasPreachingAssignment(position) {
+      return isActive()
+        && (
+          (
+            currentUserData().servicePosition == position
+            && (
+              currentUserData().serviceDepartment == 'predicacion'
+              || currentUserData().serviceDepartment == 'territorios'
+            )
+          )
+          || hasServiceAssignmentKey(position, 'predicacion')
+          || hasServiceAssignmentKey(position, 'territorios')
+        );
+    }
+
+    function canCreateTerritories() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('create'));
+    }
+
+    function canEditTerritories() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('edit'));
+    }
+
+    function canDeactivateTerritories() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (isAdmin() || hasPreachingAssignment('encargado') || hasTerritoryPermission('delete'));
+    }
+
+    function canManageDepartments(congregationId) {
+      return canAccessCongregationData(congregationId)
+        && administrativeWritesAllowed(congregationId)
+        && (
+          isGlobalScreenAccess()
+          || hasServicePosition('coordinador')
+          || hasServicePosition('secretario')
+        );
+    }
+
+    function canManageTerritorySchedule() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPreachingAssignment('encargado')
+          || hasPermission('predicacion', 'manage')
+          || hasTerritoryPermission('manage')
+          || hasTerritoryPermission('assign')
+        );
+    }
+
+    function canManagePreachingGroups() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPreachingAssignment('encargado')
+          || hasTerritoryPermission('manage')
+        );
+    }
+
+    // Espejo en rules de canViewBilling() de functions/src/shared/billing-access.ts.
+    // Si cambia alla, cambia aqui. Son la misma decision escrita dos veces
+    // porque las rules no pueden importar TypeScript.

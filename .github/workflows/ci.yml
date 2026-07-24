@@ -65,6 +65,8 @@ jobs:
         run: npm ci
       - name: Guard índices collectionGroup
         run: npm run check:indexes
+      - name: Verificar que firestore.rules coincide con rules_src
+        run: node build-rules.js --check
       - name: Resolve firebase-tools version
         id: ft
         run: echo "version=$(node -p "require('firebase-tools/package.json').version")" >> "$GITHUB_OUTPUT"

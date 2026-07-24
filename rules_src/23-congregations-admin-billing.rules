@@ -1,0 +1,130 @@
+      // -----------------------------------------------------------------------
+      // DEPARTMENTS / ORG CHART
+      // -----------------------------------------------------------------------
+      match /departments/{departmentId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canManageDepartments(congregationId)
+          && request.resource.data.congregationId == congregationId
+          && validDepartmentCreate(request.resource.data);
+
+        allow update: if canManageDepartments(congregationId)
+          && resource.data.congregationId == congregationId
+          && request.resource.data.congregationId == congregationId
+          && validDepartmentUpdate(request.resource.data);
+
+        allow delete: if false;
+      }
+
+      match /departmentAssignments/{assignmentId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canManageDepartments(congregationId)
+          && request.resource.data.congregationId == congregationId
+          && validDepartmentAssignmentCreate(request.resource.data);
+
+        allow update: if canManageDepartments(congregationId)
+          && resource.data.congregationId == congregationId
+          && request.resource.data.congregationId == congregationId
+          && validDepartmentAssignmentUpdate(request.resource.data);
+
+        allow delete: if false;
+      }
+
+      // -----------------------------------------------------------------------
+      // NOTIFICATIONS
+      // -----------------------------------------------------------------------
+      match /notifications/{notificationId} {
+        allow get: if canAccessCongregationData(congregationId)
+          && (
+            !('userId' in resource.data)
+            || resource.data.userId == currentUid()
+            || (
+              'userIds' in resource.data
+              && resource.data.userIds is list
+              && currentUid() in resource.data.userIds
+            )
+            || isAdminOrSupervisor()
+            || isGlobalScreenAccess()
+          );
+
+        allow list: if canAccessCongregationData(congregationId)
+          && (
+            (
+              'userId' in resource.data
+              && resource.data.userId == currentUid()
+            )
+            || (
+              'userIds' in resource.data
+              && resource.data.userIds is list
+              && currentUid() in resource.data.userIds
+            )
+            || isAdminOrSupervisor()
+            || isGlobalScreenAccess()
+          );
+
+        allow create: if (isAdmin() || isGlobalScreenAccess() || hasPermission('avisos', 'create') || hasPermission('avisos', 'manage'))
+          && canAccessCongregationData(congregationId)
+          && validNotificationData(request.resource.data, congregationId);
+
+        allow update: if validOwnNotificationReadUpdate(congregationId) || (
+            (isAdmin() || isGlobalScreenAccess() || hasPermission('avisos', 'edit') || hasPermission('avisos', 'manage'))
+            && canAccessCongregationData(congregationId)
+            && validNotificationData(request.resource.data, congregationId)
+          );
+
+        allow delete: if isAdmin();
+      }
+
+      // -----------------------------------------------------------------------
+      // PREACHING REPORTS
+      // -----------------------------------------------------------------------
+      match /preachingReports/{monthId}/submissions/{userId} {
+        allow get: if canAccessCongregationData(congregationId)
+          && (
+            isSameUser(userId)
+            || isPreachingManager()
+            || isAdminOrSupervisor()
+            || isGlobalScreenAccess()
+          );
+
+        allow list: if canAccessCongregationData(congregationId)
+          && (
+            isPreachingManager()
+            || isAdminOrSupervisor()
+            || isGlobalScreenAccess()
+          );
+
+        allow create, update: if canAccessCongregationData(congregationId)
+          && isSameUser(userId)
+          && validPreachingReportWrite(request.resource.data, congregationId, monthId, userId);
+
+        allow delete: if false;
+      }
+
+      // -----------------------------------------------------------------------
+      // BILLING HISTORY
+      // Historial de eventos Stripe. Escritura exclusiva de Cloud Functions.
+      // -----------------------------------------------------------------------
+      match /billingHistory/{eventId} {
+        allow get, list: if canAccessCongregationData(congregationId)
+          && canViewBillingData();
+
+        allow create, update, delete: if false;
+      }
+
+      // -----------------------------------------------------------------------
+      // CHANGE LOGS
+      // -----------------------------------------------------------------------
+      match /changeLogs/{logId} {
+        allow get, list: if (isAdminOrSupervisor() || isGlobalScreenAccess())
+          && canAccessCongregationData(congregationId);
+
+        allow create: if isActive()
+          && canAccessCongregationData(congregationId)
+          && validChangeLogData(request.resource.data, congregationId);
+
+        allow update, delete: if false;
+      }
+    }
+

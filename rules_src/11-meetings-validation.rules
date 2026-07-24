@@ -1,0 +1,100 @@
+    // =========================================================================
+    // MEETINGS
+    // =========================================================================
+
+    function allowedMeetingKeys() {
+      return [
+        'congregationId',
+        'type',
+        'meetingCategory',
+        'title',
+        'description',
+        'date',
+        'status',
+        'publicationStatus',
+        'weekLabel',
+        'bibleReading',
+        'startDate',
+        'endDate',
+        'meetingDate',
+        'publishedAt',
+        'location',
+        'meetingUrl',
+        'zoomMeetingId',
+        'zoomPasscode',
+        'organizerUid',
+        'organizerName',
+        'attendees',
+        'attendeeNames',
+        'assignedUserIds',
+        'cleaningAssignmentMode',
+        'cleaningGroupIds',
+        'cleaningGroupNames',
+        'searchableText',
+        'notes',
+        'openingSong',
+        'openingPrayer',
+        'middleSong',
+        'closingSong',
+        'closingPrayer',
+        'chairman',
+        'sections',
+        'midweekSections',
+        'createdBy',
+        'updatedBy',
+        'createdAt',
+        'updatedAt'
+      ];
+    }
+
+    function validMeetingType(value) {
+      return value is string
+        && value in ['midweek', 'weekend', 'internal', 'external', 'review', 'training', 'cleaning', 'hospitality'];
+    }
+
+    function validMeetingData(data, congregationId) {
+      return hasOnlyKeys(data, allowedMeetingKeys())
+        && hasAllKeys(data, ['type', 'title', 'startDate', 'endDate', 'meetingDate', 'status'])
+        && (!('congregationId' in data) || data.congregationId == congregationId)
+        && validMeetingType(data.type)
+        && isNonEmptyString(data.title)
+        && data.startDate is timestamp
+        && data.endDate is timestamp
+        && data.meetingDate is timestamp
+        && data.startDate <= data.endDate
+        && data.status in ['pending', 'scheduled', 'in_progress', 'completed', 'cancelled']
+        && (!('meetingCategory' in data) || data.meetingCategory in ['general', 'midweek', 'weekend'])
+        && (!('publicationStatus' in data) || data.publicationStatus in ['draft', 'published'])
+        && (!('publishedAt' in data) || data.publishedAt is timestamp)
+        && (!('date' in data) || data.date is string)
+        && (!('description' in data) || data.description is string)
+        && (!('weekLabel' in data) || data.weekLabel is string)
+        && (!('bibleReading' in data) || data.bibleReading is string)
+        && (!('location' in data) || data.location is string)
+        && (!('meetingUrl' in data) || data.meetingUrl is string)
+        && (!('zoomMeetingId' in data) || data.zoomMeetingId is string)
+        && (!('zoomPasscode' in data) || data.zoomPasscode is string)
+        && (!('organizerUid' in data) || data.organizerUid is string)
+        && (!('organizerName' in data) || data.organizerName is string)
+        && (!('attendees' in data) || data.attendees is list)
+        && (!('attendeeNames' in data) || data.attendeeNames is list)
+        && (!('assignedUserIds' in data) || data.assignedUserIds is list)
+        && (!('cleaningAssignmentMode' in data) || data.cleaningAssignmentMode in ['none', 'selected', 'all'])
+        && (!('cleaningGroupIds' in data) || data.cleaningGroupIds is list)
+        && (!('cleaningGroupNames' in data) || data.cleaningGroupNames is list)
+        && (!('searchableText' in data) || data.searchableText is string)
+        && (!('notes' in data) || data.notes is string)
+        && (!('openingSong' in data) || data.openingSong is string)
+        && (!('openingPrayer' in data) || data.openingPrayer is string)
+        && (!('middleSong' in data) || data.middleSong is string)
+        && (!('closingSong' in data) || data.closingSong is string)
+        && (!('closingPrayer' in data) || data.closingPrayer is string)
+        && (!('chairman' in data) || data.chairman is string)
+        && (!('sections' in data) || data.sections is list)
+        && (!('midweekSections' in data) || data.midweekSections is list)
+        && (!('createdBy' in data) || data.createdBy is string)
+        && (!('updatedBy' in data) || data.updatedBy is string)
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+

@@ -1,0 +1,31 @@
+    // =========================================================================
+    // REGLAS: SYSTEM
+    // Solo lectura para usuarios autenticados.
+    // Usado por cache-control-service.ts para leer system/cacheControl.
+    // Escritura reservada exclusivamente para Cloud Functions / consola admin.
+    // =========================================================================
+
+    match /system/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // REGLAS: SYSTEM ANNOUNCEMENTS
+    // Avisos globales administrados desde la app administrativa.
+    // =========================================================================
+
+    match /systemAnnouncements/{announcementId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // =========================================================================
+    // REGLAS: SUPER ADMINS
+    // =========================================================================
+
+    match /superAdmins/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update, delete: if false;
+    }
+

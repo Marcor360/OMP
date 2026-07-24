@@ -1,0 +1,142 @@
+      // -----------------------------------------------------------------------
+      // OUTGOING TALKS
+      // Escritura directa cerrada: las altas/cambios pasan por Cloud Functions.
+      // -----------------------------------------------------------------------
+      match /outgoingTalks/{outgoingTalkId} {
+        allow get, list: if canAccessCongregationData(congregationId)
+          && isOutgoingTalksManager();
+
+        allow create, update: if false
+          && canAccessCongregationData(congregationId)
+          && isOutgoingTalksManager()
+          && validOutgoingTalkData(request.resource.data, congregationId);
+
+        allow delete: if false;
+      }
+
+      // -----------------------------------------------------------------------
+      // CLEANING GROUPS
+      // -----------------------------------------------------------------------
+      match /cleaningGroups/{groupId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if isCleaningManager()
+          && canAccessCongregationData(congregationId)
+          && validCleaningGroupData(request.resource.data, congregationId);
+
+        allow update: if isCleaningManager()
+          && canAccessCongregationData(congregationId)
+          && resource.data.congregationId == congregationId
+          && validCleaningGroupData(request.resource.data, congregationId)
+          && preservesCreatedAt();
+
+        allow delete: if isAdmin()
+          && canAccessCongregationData(congregationId)
+          && resource.data.congregationId == congregationId;
+      }
+
+      // Compatibilidad con el nombre legacy usado por versiones anteriores.
+      match /cleaning_groups/{groupId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if isCleaningManager()
+          && canAccessCongregationData(congregationId)
+          && validCleaningGroupData(request.resource.data, congregationId);
+
+        allow update: if isCleaningManager()
+          && canAccessCongregationData(congregationId)
+          && resource.data.congregationId == congregationId
+          && validCleaningGroupData(request.resource.data, congregationId)
+          && preservesCreatedAt();
+
+        allow delete: if isAdmin()
+          && canAccessCongregationData(congregationId)
+          && resource.data.congregationId == congregationId;
+      }
+
+      // -----------------------------------------------------------------------
+      // CLEANING SCHEDULES
+      // -----------------------------------------------------------------------
+      match /cleaningSchedules/{scheduleId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canAccessCongregationData(congregationId)
+          && isCleaningManager()
+          && validPlanningScheduleData(request.resource.data, congregationId)
+          && request.resource.data.createdBy == currentUid()
+          && request.resource.data.updatedBy == currentUid();
+
+        allow update: if canAccessCongregationData(congregationId)
+          && isCleaningManager()
+          && resource.data.congregationId == congregationId
+          && validPlanningScheduleData(request.resource.data, congregationId)
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedBy == currentUid();
+
+        allow delete: if false;
+
+        match /items/{itemId} {
+          allow get, list: if canAccessCongregationData(congregationId);
+
+          allow create: if canAccessCongregationData(congregationId)
+            && isCleaningManager()
+            && validCleaningScheduleItemData(request.resource.data, congregationId, scheduleId)
+            && request.resource.data.createdBy == currentUid()
+            && request.resource.data.updatedBy == currentUid();
+
+          allow update: if canAccessCongregationData(congregationId)
+            && isCleaningManager()
+            && resource.data.congregationId == congregationId
+            && validCleaningScheduleItemData(request.resource.data, congregationId, scheduleId)
+            && request.resource.data.createdBy == resource.data.createdBy
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.updatedBy == currentUid();
+
+          allow delete: if false;
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // HOSPITALITY / MICROPHONES SCHEDULES
+      // -----------------------------------------------------------------------
+      match /hospitalitySchedules/{scheduleId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+
+        allow create: if canAccessCongregationData(congregationId)
+          && isHospitalityMicrophonesManager()
+          && validPlanningScheduleData(request.resource.data, congregationId)
+          && request.resource.data.createdBy == currentUid()
+          && request.resource.data.updatedBy == currentUid();
+
+        allow update: if canAccessCongregationData(congregationId)
+          && isHospitalityMicrophonesManager()
+          && resource.data.congregationId == congregationId
+          && validPlanningScheduleData(request.resource.data, congregationId)
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedBy == currentUid();
+
+        allow delete: if false;
+
+        match /items/{itemId} {
+          allow get, list: if canAccessCongregationData(congregationId);
+
+          allow create: if canAccessCongregationData(congregationId)
+            && isHospitalityMicrophonesManager()
+            && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
+            && request.resource.data.createdBy == currentUid()
+            && request.resource.data.updatedBy == currentUid();
+
+          allow update: if canAccessCongregationData(congregationId)
+            && isHospitalityMicrophonesManager()
+            && resource.data.congregationId == congregationId
+            && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
+            && request.resource.data.createdBy == resource.data.createdBy
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.updatedBy == currentUid();
+
+          allow delete: if false;
+        }
+      }
+

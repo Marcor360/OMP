@@ -1,0 +1,38 @@
+    // =========================================================================
+    // PERSONS
+    // =========================================================================
+
+    function allowedPersonKeys() {
+      return [
+        'congregationId',
+        'firstName',
+        'lastName',
+        'displayName',
+        'gender',
+        'phone',
+        'email',
+        'isBaptized',
+        'isPublisher',
+        'isActive',
+        'notes',
+        'createdAt',
+        'updatedAt'
+      ];
+    }
+
+    function validPersonData(data, congregationId) {
+      return hasOnlyKeys(data, allowedPersonKeys())
+        && hasAllKeys(data, ['congregationId', 'firstName', 'lastName', 'isActive'])
+        && data.congregationId == congregationId
+        && isNonEmptyString(data.firstName)
+        && isNonEmptyString(data.lastName)
+        && data.isActive is bool
+        && (!('displayName' in data) || data.displayName is string)
+        && (!('gender' in data) || data.gender is string)
+        && (!('phone' in data) || data.phone is string)
+        && (!('email' in data) || data.email is string)
+        && (!('isBaptized' in data) || data.isBaptized is bool)
+        && (!('isPublisher' in data) || data.isPublisher is bool)
+        && (!('notes' in data) || data.notes is string);
+    }
+

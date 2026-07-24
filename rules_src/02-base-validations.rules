@@ -1,0 +1,28 @@
+    // =========================================================================
+    // VALIDACIONES BASE
+    // =========================================================================
+
+    function isNonEmptyString(value) {
+      return value is string && value.size() > 0;
+    }
+
+    function isValidRole(role) {
+      return role is string && role in ['admin', 'administrador', 'supervisor', 'user', 'usuario'];
+    }
+
+    function hasOnlyKeys(data, allowed) {
+      return data.keys().hasOnly(allowed);
+    }
+
+    function hasAllKeys(data, required) {
+      return data.keys().hasAll(required);
+    }
+
+    function sameKeysOnUpdate(allowedChangedKeys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedChangedKeys);
+    }
+
+    function preservesCreatedAt() {
+      return !('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt;
+    }
+

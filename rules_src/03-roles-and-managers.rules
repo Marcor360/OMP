@@ -1,0 +1,204 @@
+    // =========================================================================
+    // ESTADO DEL USUARIO ACTUAL
+    // =========================================================================
+
+    function currentUserHasRequiredShape() {
+      return hasCurrentUserDoc()
+        && isValidRole(currentUserData().role)
+        && isNonEmptyString(currentUserData().congregationId)
+        && currentUserData().isActive is bool;
+    }
+
+    function isActive() {
+      return currentUserHasRequiredShape()
+        && currentUserData().isActive == true;
+    }
+
+    function isAdmin() {
+      return isActive()
+        && (currentUserData().role == 'admin' || currentUserData().role == 'administrador');
+    }
+
+    function isSupervisor() {
+      return isActive() && currentUserData().role == 'supervisor';
+    }
+
+    function isAdminOrSupervisor() {
+      return isAdmin() || isSupervisor();
+    }
+
+    function hasServicePosition(position) {
+      return isActive()
+        && (
+          currentUserData().servicePosition == position
+          || hasServiceAssignmentKey(position, '')
+        );
+    }
+
+    function hasServiceAssignmentKey(position, department) {
+      return isActive()
+        && currentUserData().serviceAssignmentKeys is list
+        && currentUserData().serviceAssignmentKeys.hasAny([position + ':' + department]);
+    }
+
+    function isCoordinatorOrSecretary() {
+      return isActive()
+        && (
+          currentUserData().servicePosition in ['coordinador', 'secretario']
+          || hasServiceAssignmentKey('coordinador', '')
+          || hasServiceAssignmentKey('secretario', '')
+        );
+    }
+
+    function isGlobalScreenAccess() {
+      return isSuperAdmin()
+        || isCoordinatorOrSecretary()
+        || (
+          isActive()
+          && (
+            currentUserData().protectedFromDeletion == true
+            || currentUserData().isSystemUser == true
+            || currentUserData().isPrimaryAdmin == true
+            || currentUserData().isRootAdmin == true
+            || currentUserData().systemProtected == true
+          )
+        );
+    }
+
+    function isCleaningManager() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPermission('limpieza', 'manage')
+          || (
+            hasPermission('limpieza', 'create')
+            && hasPermission('limpieza', 'edit')
+          )
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && (
+                  !('serviceDepartment' in currentUserData())
+                  || currentUserData().serviceDepartment == 'limpieza'
+                )
+              )
+              || hasServiceAssignmentKey('encargado', 'limpieza')
+            )
+          )
+        );
+    }
+
+    function isHospitalityMicrophonesManager() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || hasPermission('acomodadores_microfonos', 'manage')
+          || (
+            hasPermission('acomodadores_microfonos', 'create')
+            && hasPermission('acomodadores_microfonos', 'edit')
+          )
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && currentUserData().serviceDepartment == 'acomodadores_microfonos'
+              )
+              || hasServiceAssignmentKey('encargado', 'acomodadores_microfonos')
+            )
+          )
+        );
+    }
+
+    // Espejo en rules de isPreachingManager() de src/types/user/index.ts:252.
+    // El requisito privileges.isElder para 'encargado' es intencional y existe
+    // en ambas capas. Si se elimina, debe eliminarse en las dos a la vez.
+    function isPreachingManager() {
+      let user = currentUserData();
+      return isActive()
+        && (
+          (
+            (
+              user.serviceDepartment == 'predicacion'
+              || user.serviceDepartment == 'territorios'
+            )
+            && (
+              (
+                user.servicePosition == 'encargado'
+                && user.privileges is map
+                && user.privileges.isElder == true
+              )
+              || user.servicePosition == 'auxiliar'
+            )
+          )
+          || (
+            user.serviceAssignmentKeys is list
+            && (
+              (
+                user.privileges is map
+                && user.privileges.isElder == true
+                && user.serviceAssignmentKeys.hasAny([
+                  'encargado:predicacion',
+                  'encargado:territorios'
+                ])
+              )
+              || user.serviceAssignmentKeys.hasAny([
+                'auxiliar:predicacion',
+                'auxiliar:territorios'
+              ])
+            )
+          )
+        );
+    }
+
+    function isOutgoingTalksManager() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && currentUserData().serviceDepartment == 'discursos'
+              )
+              || hasServiceAssignmentKey('encargado', 'discursos')
+            )
+          )
+        );
+    }
+
+    function isMeetingsManager() {
+      return administrativeWritesAllowed(myCongregationId())
+        && (
+          isAdmin()
+          || isGlobalScreenAccess()
+          || hasPermission('reuniones', 'manage')
+          || (
+            hasPermission('reuniones', 'create')
+            && hasPermission('reuniones', 'edit')
+          )
+          || (
+            isActive()
+            && (
+              (
+                currentUserData().servicePosition == 'encargado'
+                && currentUserData().serviceDepartment == 'reuniones'
+              )
+              || hasServiceAssignmentKey('encargado', 'reuniones')
+            )
+          )
+        );
+    }
+
+    function isPioneer() {
+      return isActive()
+        && currentUserData().privileges is map
+        && (
+          currentUserData().privileges.isRegularPioneer == true
+          || currentUserData().privileges.isAuxiliaryPioneer == true
+        );
+    }
+
