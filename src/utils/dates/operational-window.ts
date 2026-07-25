@@ -192,3 +192,16 @@ export function getOperationalStatusColor(status: OperationalStatus): string {
       return 'textPrimary';
   }
 }
+
+/**
+ * Obtiene los limites de la ventana operativa en formato YYYY-MM-DD.
+ */
+export function getOperationalDateBounds(): { minDate: string; maxDate: string } {
+  const { start, end } = getOperationalWindow();
+  const formatDate = (date: Date): string =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+      date.getDate()
+    ).padStart(2, '0')}`;
+
+  return { minDate: formatDate(start), maxDate: formatDate(end) };
+}

@@ -281,12 +281,28 @@ export const firestoreUserRepository: UserRepository = {
       return { users: [], cursor: null, hasMore: false, total: 0 };
     }
 
-    return listUsersPageForCurrentCongregation({
-      activeOnly: options?.activeOnly,
-      cursor: options?.cursor ?? undefined,
-      pageSize: options?.pageSize,
-      includeTotal: options?.includeTotal,
-    });
+    try {
+      return await listUsersPageForCurrentCongregation({
+        activeOnly: options?.activeOnly,
+        cursor: options?.cursor ?? undefined,
+        pageSize: options?.pageSize,
+        includeTotal: options?.includeTotal,
+      });
+    } catch (error) {
+      if (!shouldFallbackToFirestoreList(error)) {
+        throw error;
+      }
+
+      log.warn(
+        'listUsersPageForCurrentCongregation failed; falling back to Firestore query.',
+        error
+      );
+      const users = await listUsersForCongregationFromFirestore(congregationId, {
+        activeOnly: options?.activeOnly,
+      });
+
+      return { users, cursor: null, hasMore: false, total: users.length };
+    }
   },
 
   create: async (uid: string, payload: Record<string, unknown>): Promise<void> => {

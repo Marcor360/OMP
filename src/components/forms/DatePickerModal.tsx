@@ -17,6 +17,7 @@ interface DatePickerModalProps {
   selectedDate: string | null;
   title?: string;
   minDate?: string;
+  maxDate?: string;
   onSelectDate: (date: string) => void;
   onClose: () => void;
 }
@@ -92,6 +93,7 @@ export function DatePickerModal({
   selectedDate,
   title,
   minDate,
+  maxDate,
   onSelectDate,
   onClose,
 }: DatePickerModalProps) {
@@ -112,13 +114,16 @@ export function DatePickerModal({
     visibleMonth.getMonth()
   );
   const minDateValue = minDate ?? toDateInput(new Date());
+  const nextMonth = addMonths(visibleMonth, 1);
+  const canGoNextMonth =
+    !maxDate || toDateInput(nextMonth) <= maxDate;
 
   const moveMonth = (offset: number) => {
     setVisibleMonth((current) => addMonths(current, offset));
   };
 
   const handleSelect = (date: string) => {
-    if (date < minDateValue) {
+    if (date < minDateValue || (maxDate && date > maxDate)) {
       return;
     }
 
@@ -152,7 +157,11 @@ export function DatePickerModal({
               <Ionicons name="chevron-back" size={19} color={colors.textPrimary} />
             </TouchableOpacity>
             <ThemedText style={styles.monthTitle}>{monthLabel}</ThemedText>
-            <TouchableOpacity style={styles.navButton} onPress={() => moveMonth(1)}>
+            <TouchableOpacity
+              style={[styles.navButton, !canGoNextMonth && styles.navButtonDisabled]}
+              onPress={() => moveMonth(1)}
+              disabled={!canGoNextMonth}
+            >
               <Ionicons name="chevron-forward" size={19} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
@@ -169,7 +178,8 @@ export function DatePickerModal({
             <View key={weekIndex} style={styles.weekRow}>
               {week.map((cell) => {
                 const selected = selectedDate === cell.date;
-                const disabled = cell.date < minDateValue;
+                const disabled =
+                  cell.date < minDateValue || Boolean(maxDate && cell.date > maxDate);
                 return (
                   <TouchableOpacity
                     key={cell.date}
@@ -265,6 +275,9 @@ const createStyles = (colors: AppColorSet) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surfaceRaised,
+    },
+    navButtonDisabled: {
+      opacity: 0.35,
     },
     monthTitle: {
       fontSize: 15,
