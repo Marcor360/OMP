@@ -7,7 +7,6 @@ import {
   doc,
   getDocs,
   query,
-  runTransaction,
   serverTimestamp,
   updateDoc,
   where,
@@ -16,9 +15,6 @@ import {
 import { httpsCallable } from 'firebase/functions';
 
 import { db, functions } from '@/src/lib/firebase/app';
-import {
-  userDocRef,
-} from '@/src/lib/firebase/refs';
 import { getAllUsers } from '@/src/services/users/users-service';
 import {
   CleaningAssignableUser,
@@ -224,7 +220,7 @@ const mapCallableErrorToCleaningError = (error: unknown): CleaningServiceError =
   const message =
     typeof error === 'object' && error !== null && 'message' in error
       ? String((error as { message?: unknown }).message)
-      : 'No se pudo crear el grupo de limpieza.';
+      : 'No se pudo completar la operacion de limpieza.';
 
   if (code.includes('permission-denied') || code.includes('unauthenticated')) {
     return new CleaningServiceError('PERMISSION_DENIED', message);
@@ -233,7 +229,13 @@ const mapCallableErrorToCleaningError = (error: unknown): CleaningServiceError =
     return new CleaningServiceError('INVALID_DATA', message);
   }
   if (code.includes('failed-precondition')) {
+    if (message === 'El usuario no pertenece a este grupo.') {
+      return new CleaningServiceError('USER_NOT_IN_GROUP', message);
+    }
     return new CleaningServiceError('INVALID_DATA', message);
+  }
+  if (code.includes('not-found')) {
+    return new CleaningServiceError('GROUP_NOT_FOUND', message);
   }
   return new CleaningServiceError('TRANSACTION_FAILED', message);
 };
@@ -429,88 +431,53 @@ export const addUsersToCleaningGroup = async (
 
 /**
  * Remueve un usuario del grupo liberando cleaningGroupId y cleaningGroupName.
- * Usa transacción para garantizar consistencia.
+ * La Cloud Function valida autorizacion y garantiza consistencia atomica.
  */
 export const removeUserFromCleaningGroup = async (
   groupId: string,
   userId: string,
   congregationId?: string | null
 ): Promise<void> => {
-  const storageMode = await resolveExistingGroupStorageMode(groupId, congregationId);
-  const groupRef = cleaningGroupDocRefByMode(storageMode, groupId, congregationId);
+  if (!congregationId) {
+    throw new CleaningServiceError('INVALID_DATA', 'congregationId es requerido.');
+  }
 
-  await runTransaction(db, async (tx) => {
-    const groupSnap = await tx.get(groupRef);
-    if (!groupSnap.exists()) {
-      throw new CleaningServiceError('GROUP_NOT_FOUND', 'El grupo no existe.');
-    }
+  const callable = httpsCallable<
+    { congregationId: string; groupId: string; userId: string },
+    { removed: true }
+  >(functions, 'removeCleaningGroupMemberByManager');
 
-    const groupData = groupSnap.data() as Record<string, unknown>;
-    const currentMemberIds: string[] = Array.isArray(groupData.memberIds)
-      ? (groupData.memberIds as string[])
-      : [];
-
-    if (!currentMemberIds.includes(userId)) {
-      throw new CleaningServiceError(
-        'USER_NOT_IN_GROUP',
-        'El usuario no pertenece a este grupo.'
-      );
-    }
-
-    const newMemberIds = currentMemberIds.filter((id) => id !== userId);
-
-    // Liberar el usuario
-    tx.update(userDocRef(userId), {
-      cleaningGroupId: null,
-      cleaningGroupName: null,
-      updatedAt: serverTimestamp(),
-    });
-
-    // Actualizar el grupo
-    tx.update(groupRef, {
-      memberIds: newMemberIds,
-      memberCount: newMemberIds.length,
-      updatedAt: serverTimestamp(),
-    });
-  });
+  try {
+    await callable({ congregationId, groupId, userId });
+  } catch (error) {
+    throw mapCallableErrorToCleaningError(error);
+  }
 };
 
 // ─── deleteCleaningGroup ──────────────────────────────────────────────────────
 
 /**
  * Elimina un grupo (hard delete).
- * Primero libera a todos sus integrantes dentro de una transacción.
+ * La Cloud Function libera a sus integrantes y elimina el grupo.
  */
 export const deleteCleaningGroup = async (
   groupId: string,
   congregationId?: string | null
 ): Promise<void> => {
-  const storageMode = await resolveExistingGroupStorageMode(groupId, congregationId);
-  const groupRef = cleaningGroupDocRefByMode(storageMode, groupId, congregationId);
+  if (!congregationId) {
+    throw new CleaningServiceError('INVALID_DATA', 'congregationId es requerido.');
+  }
 
-  await runTransaction(db, async (tx) => {
-    const groupSnap = await tx.get(groupRef);
-    if (!groupSnap.exists()) {
-      throw new CleaningServiceError('GROUP_NOT_FOUND', 'El grupo no existe.');
-    }
+  const callable = httpsCallable<
+    { congregationId: string; groupId: string },
+    { deleted: true; released: number }
+  >(functions, 'deleteCleaningGroupByManager');
 
-    const groupData = groupSnap.data() as Record<string, unknown>;
-    const memberIds: string[] = Array.isArray(groupData.memberIds)
-      ? (groupData.memberIds as string[])
-      : [];
-
-    // Liberar integrantes
-    for (const uid of memberIds) {
-      tx.update(userDocRef(uid), {
-        cleaningGroupId: null,
-        cleaningGroupName: null,
-        updatedAt: serverTimestamp(),
-      });
-    }
-
-    // Eliminar el grupo
-    tx.delete(groupRef);
-  });
+  try {
+    await callable({ congregationId, groupId });
+  } catch (error) {
+    throw mapCallableErrorToCleaningError(error);
+  }
 };
 
 // ─── deactivateCleaningGroup (soft delete) ────────────────────────────────────
@@ -523,35 +490,20 @@ export const deactivateCleaningGroup = async (
   groupId: string,
   congregationId?: string | null
 ): Promise<void> => {
-  const storageMode = await resolveExistingGroupStorageMode(groupId, congregationId);
-  const groupRef = cleaningGroupDocRefByMode(storageMode, groupId, congregationId);
+  if (!congregationId) {
+    throw new CleaningServiceError('INVALID_DATA', 'congregationId es requerido.');
+  }
 
-  await runTransaction(db, async (tx) => {
-    const groupSnap = await tx.get(groupRef);
-    if (!groupSnap.exists()) {
-      throw new CleaningServiceError('GROUP_NOT_FOUND', 'El grupo no existe.');
-    }
+  const callable = httpsCallable<
+    { congregationId: string; groupId: string },
+    { deactivated: true; released: number }
+  >(functions, 'deactivateCleaningGroupByManager');
 
-    const groupData = groupSnap.data() as Record<string, unknown>;
-    const memberIds: string[] = Array.isArray(groupData.memberIds)
-      ? (groupData.memberIds as string[])
-      : [];
-
-    for (const uid of memberIds) {
-      tx.update(userDocRef(uid), {
-        cleaningGroupId: null,
-        cleaningGroupName: null,
-        updatedAt: serverTimestamp(),
-      });
-    }
-
-    tx.update(groupRef, {
-      isActive: false,
-      memberIds: [],
-      memberCount: 0,
-      updatedAt: serverTimestamp(),
-    });
-  });
+  try {
+    await callable({ congregationId, groupId });
+  } catch (error) {
+    throw mapCallableErrorToCleaningError(error);
+  }
 };
 
 // ─── getCleaningAssignableUsers ───────────────────────────────────────────────

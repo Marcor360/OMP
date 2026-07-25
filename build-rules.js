@@ -36,6 +36,17 @@ const buildRules = () => {
 };
 
 const main = () => {
+  const listed = new Set(readManifest());
+  const orphans = fs
+    .readdirSync(SRC_DIR)
+    .filter((name) => name.endsWith('.rules') && !listed.has(name));
+  if (orphans.length > 0) {
+    throw new Error(
+      `Modulos .rules no listados en manifest.json: ${orphans.join(', ')}. ` +
+        'Anadelos al manifest o borralos.'
+    );
+  }
+
   const generated = buildRules();
 
   if (checkOnly) {

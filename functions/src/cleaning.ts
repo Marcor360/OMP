@@ -1,5 +1,12 @@
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import {
+  MAX_CLEANING_MEMBERS,
+  canManageCleaningFromProfile,
+  exceedsCleaningMemberLimit,
+  resolveCleaningMemberOutcome,
+  resolveExistingCleaningGroupIndex,
+} from './shared/cleaning-access.js';
 import { assertAdministrativeBillingAccess } from './users/authorization.js';
 
 const CLEANING_COLLECTION_PATHS = [
@@ -84,50 +91,6 @@ export const listCleaningGroupsForCurrentUser = onCall(
 
 const MAX_CLEANING_NAME = 80;
 const MAX_CLEANING_DESCRIPTION = 300;
-const MAX_CLEANING_MEMBERS = 200;
-
-type CleaningAssignmentLike = { position?: unknown; department?: unknown };
-
-const hasEncargadoLimpiezaAssignment = (user: Record<string, unknown>): boolean => {
-  if (user.servicePosition === 'encargado' && user.serviceDepartment === 'limpieza') {
-    return true;
-  }
-
-  const assignments = Array.isArray(user.serviceAssignments)
-    ? (user.serviceAssignments as CleaningAssignmentLike[])
-    : [];
-
-  return assignments.some(
-    (assignment) => assignment?.position === 'encargado' && assignment?.department === 'limpieza'
-  );
-};
-
-const storedLimpiezaFlag = (user: Record<string, unknown>, action: string): boolean => {
-  const permissions = user.permissions;
-  if (typeof permissions !== 'object' || permissions === null) return false;
-
-  const limpieza = (permissions as Record<string, unknown>).limpieza;
-  if (typeof limpieza !== 'object' || limpieza === null) return false;
-
-  return (limpieza as Record<string, unknown>)[action] === true;
-};
-
-// Espejo de canManageCleaning (frontend): admin | limpieza.manage | (limpieza.create && edit)
-// | encargado de limpieza. Auxiliar de limpieza no gestiona (paridad con frontend y reglas).
-const canManageCleaningFromProfile = (user: Record<string, unknown>): boolean => {
-  if (user.isActive !== true) return false;
-  if (user.role === 'admin' || user.role === 'administrador') return true;
-  if (storedLimpiezaFlag(user, 'manage')) return true;
-  if (storedLimpiezaFlag(user, 'create') && storedLimpiezaFlag(user, 'edit')) return true;
-  return hasEncargadoLimpiezaAssignment(user);
-};
-
-const resolveCleaningMemberActive = (user: Record<string, unknown>): boolean => {
-  if (typeof user.isActive === 'boolean') return user.isActive;
-  if (typeof user.active === 'boolean') return user.active;
-  if (typeof user.status === 'string') return user.status === 'active';
-  return false;
-};
 
 type CreateCleaningGroupPayload = {
   congregationId: string;
@@ -400,7 +363,9 @@ export const addCleaningGroupMembersByManager = onCall(
       const groupSnaps = await Promise.all(
         groupRefs.map((groupRef) => transaction.get(groupRef))
       );
-      const groupIndex = groupSnaps.findIndex((snap) => snap.exists);
+      const groupIndex = resolveExistingCleaningGroupIndex(
+        groupSnaps.map((snap) => snap.exists)
+      );
 
       if (groupIndex < 0) {
         throw new HttpsError('not-found', 'El grupo no existe.');
@@ -421,8 +386,12 @@ export const addCleaningGroupMembersByManager = onCall(
       }
 
       const currentMemberIds = Array.isArray(groupData.memberIds)
-        ? groupData.memberIds.filter(
-            (value): value is string => typeof value === 'string'
+        ? Array.from(
+            new Set(
+              groupData.memberIds.filter(
+                (value): value is string => typeof value === 'string'
+              )
+            )
           )
         : [];
       const resolvedGroupName =
@@ -447,39 +416,18 @@ export const addCleaningGroupMembersByManager = onCall(
         }
 
         const member = snap.data() as Record<string, unknown>;
-        const displayName =
-          typeof member.displayName === 'string' ? member.displayName : memberId;
-        const memberCongregationId =
-          typeof member.congregationId === 'string' ? member.congregationId : '';
+        const outcome = resolveCleaningMemberOutcome(
+          memberId,
+          member,
+          requesterCongregationId,
+          payload.groupId,
+          newMemberIds
+        );
 
-        if (memberCongregationId !== requesterCongregationId) {
-          throw new HttpsError(
-            'failed-precondition',
-            `El usuario "${displayName}" no pertenece a la congregacion del grupo.`
-          );
+        if (outcome.kind === 'error') {
+          throw new HttpsError('failed-precondition', outcome.message);
         }
-
-        const existingGroupId =
-          typeof member.cleaningGroupId === 'string' && member.cleaningGroupId.length > 0
-            ? member.cleaningGroupId
-            : null;
-
-        if (existingGroupId && existingGroupId !== payload.groupId) {
-          const existingName =
-            typeof member.cleaningGroupName === 'string'
-              ? member.cleaningGroupName
-              : 'otro grupo';
-          throw new HttpsError(
-            'failed-precondition',
-            `El usuario "${displayName}" ya pertenece a "${existingName}".`
-          );
-        }
-
-        const memberActive = resolveCleaningMemberActive(member);
-        const eligible =
-          typeof member.cleaningEligible === 'boolean' ? member.cleaningEligible : true;
-
-        if (!memberActive || !eligible || newMemberIds.includes(memberId)) {
+        if (outcome.kind === 'skipped') {
           skipped += 1;
           return;
         }
@@ -493,6 +441,13 @@ export const addCleaningGroupMembersByManager = onCall(
         added += 1;
       });
 
+      if (exceedsCleaningMemberLimit(newMemberIds)) {
+        throw new HttpsError(
+          'failed-precondition',
+          `Un grupo no puede exceder ${MAX_CLEANING_MEMBERS} integrantes.`
+        );
+      }
+
       transaction.update(groupRef, {
         memberIds: newMemberIds,
         memberCount: newMemberIds.length,
@@ -500,6 +455,333 @@ export const addCleaningGroupMembersByManager = onCall(
       });
 
       return { added, skipped };
+    });
+  }
+);
+
+type CleaningGroupMutationPayload = {
+  congregationId: string;
+  groupId: string;
+  userId: string;
+};
+
+const parseCleaningGroupMutationPayload = (
+  raw: unknown,
+  requireUserId = false
+): CleaningGroupMutationPayload => {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new HttpsError('invalid-argument', 'Payload invalido.');
+  }
+
+  const data = raw as Record<string, unknown>;
+  const congregationId =
+    typeof data.congregationId === 'string' ? data.congregationId.trim() : '';
+  const groupId = typeof data.groupId === 'string' ? data.groupId.trim() : '';
+  const userId = typeof data.userId === 'string' ? data.userId.trim() : '';
+
+  if (!congregationId) {
+    throw new HttpsError('invalid-argument', 'congregationId es requerido.');
+  }
+  if (!groupId) {
+    throw new HttpsError('invalid-argument', 'groupId es requerido.');
+  }
+  if (requireUserId && !userId) {
+    throw new HttpsError('invalid-argument', 'userId es requerido.');
+  }
+
+  return { congregationId, groupId, userId };
+};
+
+const cleaningGroupRefs = (
+  db: FirebaseFirestore.Firestore,
+  congregationId: string,
+  groupId: string
+) => [
+  db.collection('congregations')
+    .doc(congregationId)
+    .collection('cleaningGroups')
+    .doc(groupId),
+  db.collection('congregations')
+    .doc(congregationId)
+    .collection('cleaning_groups')
+    .doc(groupId),
+  db.collection('cleaningGroups').doc(groupId),
+  db.collection('cleaning_groups').doc(groupId),
+];
+
+const loadCleaningManagerContext = async (
+  uid: string,
+  requestedCongregationId: string
+): Promise<{ db: FirebaseFirestore.Firestore; congregationId: string }> => {
+  const db = getFirestore();
+  const requesterSnap = await db.collection('users').doc(uid).get();
+
+  if (!requesterSnap.exists) {
+    throw new HttpsError('permission-denied', 'No se encontro el perfil del usuario.');
+  }
+
+  const requester = requesterSnap.data() as Record<string, unknown>;
+  const congregationId =
+    typeof requester.congregationId === 'string' ? requester.congregationId : '';
+
+  if (requester.isActive !== true || !congregationId) {
+    throw new HttpsError('permission-denied', 'No tienes permisos para gestionar limpieza.');
+  }
+  if (requestedCongregationId !== congregationId) {
+    throw new HttpsError('permission-denied', 'No puedes gestionar grupos de otra congregacion.');
+  }
+
+  await assertAdministrativeBillingAccess(congregationId);
+
+  if (!canManageCleaningFromProfile(requester)) {
+    throw new HttpsError('permission-denied', 'No tienes permisos para gestionar limpieza.');
+  }
+
+  return { db, congregationId };
+};
+
+export const removeCleaningGroupMemberByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<{ removed: true }> => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const payload = parseCleaningGroupMutationPayload(request.data, true);
+    const { db, congregationId } = await loadCleaningManagerContext(
+      uid,
+      payload.congregationId
+    );
+    const groupRefs = cleaningGroupRefs(db, congregationId, payload.groupId);
+    const userRef = db.collection('users').doc(payload.userId);
+    const now = FieldValue.serverTimestamp();
+
+    await db.runTransaction(async (transaction) => {
+      const groupSnaps = await Promise.all(groupRefs.map((ref) => transaction.get(ref)));
+      const groupIndex = resolveExistingCleaningGroupIndex(
+        groupSnaps.map((snap) => snap.exists)
+      );
+      if (groupIndex < 0) {
+        throw new HttpsError('not-found', 'El grupo no existe.');
+      }
+
+      const groupRef = groupRefs[groupIndex];
+      const groupSnap = groupSnaps[groupIndex];
+      if (!groupRef || !groupSnap) {
+        throw new HttpsError('not-found', 'El grupo no existe.');
+      }
+
+      const groupData = groupSnap.data() as Record<string, unknown>;
+      if (groupData.congregationId !== congregationId) {
+        throw new HttpsError('permission-denied', 'No puedes gestionar grupos de otra congregacion.');
+      }
+
+      const currentMemberIds = Array.isArray(groupData.memberIds)
+        ? groupData.memberIds.filter((value): value is string => typeof value === 'string')
+        : [];
+      if (!currentMemberIds.includes(payload.userId)) {
+        throw new HttpsError('failed-precondition', 'El usuario no pertenece a este grupo.');
+      }
+
+      const userSnap = await transaction.get(userRef);
+      if (!userSnap.exists) {
+        throw new HttpsError('failed-precondition', 'El usuario no existe.');
+      }
+      const userData = userSnap.data() as Record<string, unknown>;
+      if (userData.congregationId !== congregationId) {
+        throw new HttpsError('failed-precondition', 'El usuario no pertenece a la congregacion.');
+      }
+      if (
+        typeof userData.cleaningGroupId === 'string' &&
+        userData.cleaningGroupId.length > 0 &&
+        userData.cleaningGroupId !== payload.groupId
+      ) {
+        throw new HttpsError('failed-precondition', 'El usuario pertenece a otro grupo.');
+      }
+
+      const newMemberIds = currentMemberIds.filter((memberId) => memberId !== payload.userId);
+      transaction.update(userRef, {
+        cleaningGroupId: null,
+        cleaningGroupName: null,
+        updatedAt: now,
+      });
+      transaction.update(groupRef, {
+        memberIds: newMemberIds,
+        memberCount: newMemberIds.length,
+        updatedAt: now,
+      });
+    });
+
+    return { removed: true };
+  }
+);
+
+export const deleteCleaningGroupByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<{ deleted: true; released: number }> => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const payload = parseCleaningGroupMutationPayload(request.data);
+    const { db, congregationId } = await loadCleaningManagerContext(
+      uid,
+      payload.congregationId
+    );
+    const groupRefs = cleaningGroupRefs(db, congregationId, payload.groupId);
+    const now = FieldValue.serverTimestamp();
+
+    return db.runTransaction(async (transaction) => {
+      const groupSnaps = await Promise.all(groupRefs.map((ref) => transaction.get(ref)));
+      const groupIndex = resolveExistingCleaningGroupIndex(
+        groupSnaps.map((snap) => snap.exists)
+      );
+      if (groupIndex < 0) {
+        throw new HttpsError('not-found', 'El grupo no existe.');
+      }
+
+      const groupRef = groupRefs[groupIndex];
+      const groupSnap = groupSnaps[groupIndex];
+      if (!groupRef || !groupSnap) {
+        throw new HttpsError('not-found', 'El grupo no existe.');
+      }
+
+      const groupData = groupSnap.data() as Record<string, unknown>;
+      if (groupData.congregationId !== congregationId) {
+        throw new HttpsError('permission-denied', 'No puedes gestionar grupos de otra congregacion.');
+      }
+
+      const memberIds = Array.isArray(groupData.memberIds)
+        ? Array.from(
+            new Set(
+              groupData.memberIds.filter(
+                (value): value is string => typeof value === 'string' && value.length > 0
+              )
+            )
+          )
+        : [];
+      const memberRefs = memberIds.map((memberId) => db.collection('users').doc(memberId));
+      const memberSnaps = await Promise.all(
+        memberRefs.map((memberRef) => transaction.get(memberRef))
+      );
+
+      memberSnaps.forEach((memberSnap, index) => {
+        const memberRef = memberRefs[index];
+        if (!memberRef || !memberSnap.exists) return;
+
+        const member = memberSnap.data() as Record<string, unknown>;
+        if (member.congregationId !== congregationId) {
+          throw new HttpsError(
+            'failed-precondition',
+            'El grupo contiene un usuario de otra congregacion.'
+          );
+        }
+
+        if (member.cleaningGroupId === payload.groupId) {
+          transaction.update(memberRef, {
+            cleaningGroupId: null,
+            cleaningGroupName: null,
+            updatedAt: now,
+          });
+        }
+      });
+
+      transaction.delete(groupRef);
+      return {
+        deleted: true,
+        released: memberSnaps.filter(
+          (snap) => snap.exists && snap.data()?.cleaningGroupId === payload.groupId
+        ).length,
+      };
+    });
+  }
+);
+
+export const deactivateCleaningGroupByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<{ deactivated: true; released: number }> => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const payload = parseCleaningGroupMutationPayload(request.data);
+    const { db, congregationId } = await loadCleaningManagerContext(
+      uid,
+      payload.congregationId
+    );
+    const groupRefs = cleaningGroupRefs(db, congregationId, payload.groupId);
+    const now = FieldValue.serverTimestamp();
+
+    return db.runTransaction(async (transaction) => {
+      const groupSnaps = await Promise.all(groupRefs.map((ref) => transaction.get(ref)));
+      const groupIndex = resolveExistingCleaningGroupIndex(
+        groupSnaps.map((snap) => snap.exists)
+      );
+      if (groupIndex < 0) {
+        throw new HttpsError('not-found', 'El grupo no existe.');
+      }
+
+      const groupRef = groupRefs[groupIndex];
+      const groupSnap = groupSnaps[groupIndex];
+      if (!groupRef || !groupSnap) {
+        throw new HttpsError('not-found', 'El grupo no existe.');
+      }
+
+      const groupData = groupSnap.data() as Record<string, unknown>;
+      if (groupData.congregationId !== congregationId) {
+        throw new HttpsError('permission-denied', 'No puedes gestionar grupos de otra congregacion.');
+      }
+
+      const memberIds = Array.isArray(groupData.memberIds)
+        ? Array.from(
+            new Set(
+              groupData.memberIds.filter(
+                (value): value is string => typeof value === 'string' && value.length > 0
+              )
+            )
+          )
+        : [];
+      const memberRefs = memberIds.map((memberId) => db.collection('users').doc(memberId));
+      const memberSnaps = await Promise.all(
+        memberRefs.map((memberRef) => transaction.get(memberRef))
+      );
+
+      memberSnaps.forEach((memberSnap, index) => {
+        const memberRef = memberRefs[index];
+        if (!memberRef || !memberSnap.exists) return;
+
+        const member = memberSnap.data() as Record<string, unknown>;
+        if (member.congregationId !== congregationId) {
+          throw new HttpsError(
+            'failed-precondition',
+            'El grupo contiene un usuario de otra congregacion.'
+          );
+        }
+
+        if (member.cleaningGroupId === payload.groupId) {
+          transaction.update(memberRef, {
+            cleaningGroupId: null,
+            cleaningGroupName: null,
+            updatedAt: now,
+          });
+        }
+      });
+
+      transaction.update(groupRef, {
+        isActive: false,
+        memberIds: [],
+        memberCount: 0,
+        updatedAt: now,
+      });
+      return {
+        deactivated: true,
+        released: memberSnaps.filter(
+          (snap) => snap.exists && snap.data()?.cleaningGroupId === payload.groupId
+        ).length,
+      };
     });
   }
 );

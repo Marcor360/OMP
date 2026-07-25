@@ -1,107 +1,16 @@
 /**
  * Pruebas unitarias — addCleaningGroupMembersByManager (PR 8)
  *
- * Verifica los helpers puros de autorizacion y resolucion de negocio usados por
- * addCleaningGroupMembersByManager (functions/src/cleaning.ts), que no dependen
- * de Firestore. Espejo deliberado de esas funciones, al estilo de
- * hospitality-substitution.test.ts: cleaning.ts no las exporta, asi que se
- * replican aqui. Si cambia la logica en cleaning.ts, hay que actualizar este
- * archivo tambien.
+ * Importa los helpers puros usados realmente por las callables para evitar que
+ * las pruebas y la implementacion puedan divergir silenciosamente.
  */
 
-type CleaningAssignmentLike = { position?: unknown; department?: unknown };
-
-const hasEncargadoLimpiezaAssignment = (user: Record<string, unknown>): boolean => {
-  if (user.servicePosition === 'encargado' && user.serviceDepartment === 'limpieza') {
-    return true;
-  }
-
-  const assignments = Array.isArray(user.serviceAssignments)
-    ? (user.serviceAssignments as CleaningAssignmentLike[])
-    : [];
-
-  return assignments.some(
-    (assignment) => assignment?.position === 'encargado' && assignment?.department === 'limpieza'
-  );
-};
-
-const storedLimpiezaFlag = (user: Record<string, unknown>, action: string): boolean => {
-  const permissions = user.permissions;
-  if (typeof permissions !== 'object' || permissions === null) return false;
-
-  const limpieza = (permissions as Record<string, unknown>).limpieza;
-  if (typeof limpieza !== 'object' || limpieza === null) return false;
-
-  return (limpieza as Record<string, unknown>)[action] === true;
-};
-
-const canManageCleaningFromProfile = (user: Record<string, unknown>): boolean => {
-  if (user.isActive !== true) return false;
-  if (user.role === 'admin' || user.role === 'administrador') return true;
-  if (storedLimpiezaFlag(user, 'manage')) return true;
-  if (storedLimpiezaFlag(user, 'create') && storedLimpiezaFlag(user, 'edit')) return true;
-  return hasEncargadoLimpiezaAssignment(user);
-};
-
-const resolveCleaningMemberActive = (user: Record<string, unknown>): boolean => {
-  if (typeof user.isActive === 'boolean') return user.isActive;
-  if (typeof user.active === 'boolean') return user.active;
-  if (typeof user.status === 'string') return user.status === 'active';
-  return false;
-};
-
-// Espejo de la resolucion de grupo dentro de la transaccion: prueba las 4 rutas
-// candidatas en orden y usa la primera que exista.
-const resolveGroupIndex = (existsFlags: boolean[]): number => existsFlags.findIndex(Boolean);
-
-type MemberOutcome =
-  | { kind: 'added' }
-  | { kind: 'skipped' }
-  | { kind: 'error'; message: string };
-
-// Espejo de la decision por integrante dentro de la transaccion de
-// addCleaningGroupMembersByManager (functions/src/cleaning.ts).
-const resolveMemberOutcome = (
-  memberId: string,
-  member: Record<string, unknown>,
-  requesterCongregationId: string,
-  targetGroupId: string,
-  currentMemberIds: string[]
-): MemberOutcome => {
-  const displayName = typeof member.displayName === 'string' ? member.displayName : 'uid';
-  const memberCongregationId =
-    typeof member.congregationId === 'string' ? member.congregationId : '';
-
-  if (memberCongregationId !== requesterCongregationId) {
-    return {
-      kind: 'error',
-      message: `El usuario "${displayName}" no pertenece a la congregacion del grupo.`,
-    };
-  }
-
-  const existingGroupId =
-    typeof member.cleaningGroupId === 'string' && member.cleaningGroupId.length > 0
-      ? member.cleaningGroupId
-      : null;
-
-  if (existingGroupId && existingGroupId !== targetGroupId) {
-    const existingName =
-      typeof member.cleaningGroupName === 'string' ? member.cleaningGroupName : 'otro grupo';
-    return {
-      kind: 'error',
-      message: `El usuario "${displayName}" ya pertenece a "${existingName}".`,
-    };
-  }
-
-  const active = resolveCleaningMemberActive(member);
-  const eligible = typeof member.cleaningEligible === 'boolean' ? member.cleaningEligible : true;
-
-  if (!active || !eligible || currentMemberIds.includes(memberId)) {
-    return { kind: 'skipped' };
-  }
-
-  return { kind: 'added' };
-};
+import {
+  canManageCleaningFromProfile,
+  exceedsCleaningMemberLimit,
+  resolveCleaningMemberOutcome,
+  resolveExistingCleaningGroupIndex,
+} from '../shared/cleaning-access.js';
 
 // Espejo minimo de la rama "adminRestricted" de assertAdministrativeBillingAccess
 // (functions/src/users/authorization.ts): solo el caso directo, sin depender de
@@ -180,21 +89,33 @@ describe('addCleaningGroupMembersByManager business rules', () => {
     it('picks the legacy root collection when the scoped ones do not exist', () => {
       // [congregations/{cid}/cleaningGroups, congregations/{cid}/cleaning_groups,
       //  cleaningGroups (raiz), cleaning_groups (raiz)]
-      expect(resolveGroupIndex([false, false, true, false])).toBe(2);
+      expect(resolveExistingCleaningGroupIndex([false, false, true, false])).toBe(2);
     });
 
     it('prefers the scoped collection when both exist', () => {
-      expect(resolveGroupIndex([true, false, false, false])).toBe(0);
+      expect(resolveExistingCleaningGroupIndex([true, false, false, false])).toBe(0);
     });
 
     it('returns -1 when the group does not exist in any collection', () => {
-      expect(resolveGroupIndex([false, false, false, false])).toBe(-1);
+      expect(resolveExistingCleaningGroupIndex([false, false, false, false])).toBe(-1);
+    });
+  });
+
+  describe('member limit', () => {
+    it('rejects a resulting total above 200 members', () => {
+      const resultingMemberIds = Array.from({ length: 205 }, (_, index) => `user-${index}`);
+      expect(exceedsCleaningMemberLimit(resultingMemberIds)).toBe(true);
+    });
+
+    it('allows exactly 200 resulting members', () => {
+      const resultingMemberIds = Array.from({ length: 200 }, (_, index) => `user-${index}`);
+      expect(exceedsCleaningMemberLimit(resultingMemberIds)).toBe(false);
     });
   });
 
   describe('per-member resolution', () => {
     it('rejects a member who belongs to a different congregation than the group', () => {
-      const outcome = resolveMemberOutcome(
+      const outcome = resolveCleaningMemberOutcome(
         'ana-uid',
         { displayName: 'Ana', congregationId: 'c2' },
         'c1',
@@ -208,7 +129,7 @@ describe('addCleaningGroupMembersByManager business rules', () => {
     });
 
     it('rejects a member who already belongs to a different cleaning group', () => {
-      const outcome = resolveMemberOutcome(
+      const outcome = resolveCleaningMemberOutcome(
         'luis-uid',
         {
           displayName: 'Luis',
@@ -227,7 +148,7 @@ describe('addCleaningGroupMembersByManager business rules', () => {
     });
 
     it('adds an active, eligible member with no prior group', () => {
-      const outcome = resolveMemberOutcome(
+      const outcome = resolveCleaningMemberOutcome(
         'carla-uid',
         { displayName: 'Carla', congregationId: 'c1', isActive: true },
         'c1',
@@ -238,7 +159,7 @@ describe('addCleaningGroupMembersByManager business rules', () => {
     });
 
     it('re-adding the same group is not treated as a conflict', () => {
-      const outcome = resolveMemberOutcome(
+      const outcome = resolveCleaningMemberOutcome(
         'carla-uid',
         { displayName: 'Carla', congregationId: 'c1', isActive: true, cleaningGroupId: 'group-1' },
         'c1',
@@ -249,7 +170,7 @@ describe('addCleaningGroupMembersByManager business rules', () => {
     });
 
     it('skips an inactive member without erroring', () => {
-      const outcome = resolveMemberOutcome(
+      const outcome = resolveCleaningMemberOutcome(
         'dan-uid',
         { displayName: 'Dan', congregationId: 'c1', isActive: false },
         'c1',
@@ -260,7 +181,7 @@ describe('addCleaningGroupMembersByManager business rules', () => {
     });
 
     it('skips a member explicitly marked as not cleaningEligible', () => {
-      const outcome = resolveMemberOutcome(
+      const outcome = resolveCleaningMemberOutcome(
         'eva-uid',
         { displayName: 'Eva', congregationId: 'c1', isActive: true, cleaningEligible: false },
         'c1',
@@ -271,7 +192,7 @@ describe('addCleaningGroupMembersByManager business rules', () => {
     });
 
     it('skips a member already present in the group memberIds (idempotent re-add)', () => {
-      const outcome = resolveMemberOutcome(
+      const outcome = resolveCleaningMemberOutcome(
         'fer-uid',
         { displayName: 'Fer', congregationId: 'c1', isActive: true },
         'c1',
