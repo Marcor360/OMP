@@ -7,8 +7,6 @@ import {
   doc,
   getDocs,
   query,
-  serverTimestamp,
-  updateDoc,
   where,
   getDoc,
 } from 'firebase/firestore';
@@ -133,37 +131,6 @@ const cleaningGroupDocRefByMode = (
       : cleaningGroupScopedLegacyDocRef(congregationId, groupId);
   }
   return cleaningGroupDocRefByName(mode, groupId);
-};
-
-const resolveExistingGroupStorageMode = async (
-  groupId: string,
-  congregationId?: string | null
-): Promise<CleaningGroupStorageMode> => {
-  let permissionError: unknown = null;
-  let hadReadableCollection = false;
-  const modes = resolveGroupStorageModes(congregationId);
-
-  for (const mode of modes) {
-    try {
-      const snap = await getDoc(cleaningGroupDocRefByMode(mode, groupId, congregationId));
-      hadReadableCollection = true;
-      if (snap.exists()) {
-        return mode;
-      }
-    } catch (error) {
-      if (isPermissionDeniedError(error)) {
-        permissionError = permissionError ?? error;
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  if (!hadReadableCollection && permissionError) {
-    throw permissionError;
-  }
-
-  return modes[0];
 };
 
 // ─── Mapeador: raw Firestore doc → CleaningGroup ─────────────────────────────
@@ -384,15 +351,34 @@ export const updateCleaningGroup = async (
   dto: UpdateCleaningGroupDTO,
   congregationId?: string | null
 ): Promise<void> => {
-  const payload: Record<string, unknown> = { updatedAt: serverTimestamp() };
+  if (!congregationId) {
+    throw new CleaningServiceError('INVALID_DATA', 'congregationId es requerido.');
+  }
 
-  if (dto.name !== undefined) payload.name = dto.name.trim();
-  if (dto.description !== undefined) payload.description = dto.description.trim();
-  if (dto.groupType !== undefined) payload.groupType = dto.groupType;
-  if (typeof dto.isActive === 'boolean') payload.isActive = dto.isActive;
+  const callable = httpsCallable<
+    {
+      congregationId: string;
+      groupId: string;
+      name?: string;
+      description?: string;
+      groupType?: CleaningGroupType;
+      isActive?: boolean;
+    },
+    { updated: true }
+  >(functions, 'updateCleaningGroupByManager');
 
-  const storageMode = await resolveExistingGroupStorageMode(groupId, congregationId);
-  await updateDoc(cleaningGroupDocRefByMode(storageMode, groupId, congregationId), payload);
+  try {
+    await callable({
+      congregationId,
+      groupId,
+      ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+      ...(dto.description !== undefined ? { description: dto.description.trim() } : {}),
+      ...(dto.groupType !== undefined ? { groupType: dto.groupType } : {}),
+      ...(typeof dto.isActive === 'boolean' ? { isActive: dto.isActive } : {}),
+    });
+  } catch (error) {
+    throw mapCallableErrorToCleaningError(error);
+  }
 };
 
 // ─── addUsersToCleaningGroup ──────────────────────────────────────────────────

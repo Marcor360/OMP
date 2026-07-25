@@ -4,6 +4,7 @@ import {
   MAX_CLEANING_MEMBERS,
   canManageCleaningFromProfile,
   exceedsCleaningMemberLimit,
+  isCleaningGroupDeleteAdmin,
   resolveCleaningMemberOutcome,
   resolveExistingCleaningGroupIndex,
 } from './shared/cleaning-access.js';
@@ -492,6 +493,75 @@ const parseCleaningGroupMutationPayload = (
   return { congregationId, groupId, userId };
 };
 
+type UpdateCleaningGroupPayload = {
+  congregationId: string;
+  groupId: string;
+  updates: {
+    name?: string;
+    description?: string;
+    groupType?: 'standard' | 'family';
+    isActive?: boolean;
+  };
+};
+
+const parseUpdateCleaningGroupPayload = (raw: unknown): UpdateCleaningGroupPayload => {
+  const base = parseCleaningGroupMutationPayload(raw);
+  const data = raw as Record<string, unknown>;
+  const updates: UpdateCleaningGroupPayload['updates'] = {};
+
+  if (Object.prototype.hasOwnProperty.call(data, 'name')) {
+    if (typeof data.name !== 'string' || !data.name.trim()) {
+      throw new HttpsError('invalid-argument', 'El nombre del grupo es requerido.');
+    }
+    const name = data.name.trim();
+    if (name.length > MAX_CLEANING_NAME) {
+      throw new HttpsError(
+        'invalid-argument',
+        `El nombre no puede exceder ${MAX_CLEANING_NAME} caracteres.`
+      );
+    }
+    updates.name = name;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(data, 'description')) {
+    if (typeof data.description !== 'string') {
+      throw new HttpsError('invalid-argument', 'La descripcion debe ser texto.');
+    }
+    const description = data.description.trim();
+    if (description.length > MAX_CLEANING_DESCRIPTION) {
+      throw new HttpsError(
+        'invalid-argument',
+        `La descripcion no puede exceder ${MAX_CLEANING_DESCRIPTION} caracteres.`
+      );
+    }
+    updates.description = description;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(data, 'groupType')) {
+    if (data.groupType !== 'standard' && data.groupType !== 'family') {
+      throw new HttpsError('invalid-argument', 'El tipo de grupo no es valido.');
+    }
+    updates.groupType = data.groupType;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(data, 'isActive')) {
+    if (typeof data.isActive !== 'boolean') {
+      throw new HttpsError('invalid-argument', 'isActive debe ser booleano.');
+    }
+    updates.isActive = data.isActive;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new HttpsError('invalid-argument', 'No hay cambios para guardar.');
+  }
+
+  return {
+    congregationId: base.congregationId,
+    groupId: base.groupId,
+    updates,
+  };
+};
+
 const cleaningGroupRefs = (
   db: FirebaseFirestore.Firestore,
   congregationId: string,
@@ -512,7 +582,11 @@ const cleaningGroupRefs = (
 const loadCleaningManagerContext = async (
   uid: string,
   requestedCongregationId: string
-): Promise<{ db: FirebaseFirestore.Firestore; congregationId: string }> => {
+): Promise<{
+  db: FirebaseFirestore.Firestore;
+  congregationId: string;
+  requester: Record<string, unknown>;
+}> => {
   const db = getFirestore();
   const requesterSnap = await db.collection('users').doc(uid).get();
 
@@ -537,8 +611,53 @@ const loadCleaningManagerContext = async (
     throw new HttpsError('permission-denied', 'No tienes permisos para gestionar limpieza.');
   }
 
-  return { db, congregationId };
+  return { db, congregationId, requester };
 };
+
+export const updateCleaningGroupByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<{ updated: true }> => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const payload = parseUpdateCleaningGroupPayload(request.data);
+    const { db, congregationId } = await loadCleaningManagerContext(
+      uid,
+      payload.congregationId
+    );
+    const groupRefs = cleaningGroupRefs(db, congregationId, payload.groupId);
+
+    await db.runTransaction(async (transaction) => {
+      const groupSnaps = await Promise.all(groupRefs.map((ref) => transaction.get(ref)));
+      const groupIndex = resolveExistingCleaningGroupIndex(
+        groupSnaps.map((snap) => snap.exists)
+      );
+      if (groupIndex < 0) {
+        throw new HttpsError('not-found', 'El grupo no existe.');
+      }
+
+      const groupRef = groupRefs[groupIndex];
+      const groupSnap = groupSnaps[groupIndex];
+      if (!groupRef || !groupSnap) {
+        throw new HttpsError('not-found', 'El grupo no existe.');
+      }
+
+      const groupData = groupSnap.data() as Record<string, unknown>;
+      if (groupData.congregationId !== congregationId) {
+        throw new HttpsError('permission-denied', 'No puedes gestionar grupos de otra congregacion.');
+      }
+
+      transaction.update(groupRef, {
+        ...payload.updates,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    return { updated: true };
+  }
+);
 
 export const removeCleaningGroupMemberByManager = onCall(
   { region: 'us-central1' },
@@ -626,10 +745,16 @@ export const deleteCleaningGroupByManager = onCall(
     }
 
     const payload = parseCleaningGroupMutationPayload(request.data);
-    const { db, congregationId } = await loadCleaningManagerContext(
+    const { db, congregationId, requester } = await loadCleaningManagerContext(
       uid,
       payload.congregationId
     );
+    if (!isCleaningGroupDeleteAdmin(requester)) {
+      throw new HttpsError(
+        'permission-denied',
+        'Solo un administrador puede eliminar grupos de limpieza.'
+      );
+    }
     const groupRefs = cleaningGroupRefs(db, congregationId, payload.groupId);
     const now = FieldValue.serverTimestamp();
 

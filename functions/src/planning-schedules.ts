@@ -701,7 +701,7 @@ const assertNoSingleHospitalitySubstitutionConflict = async (params: {
   );
 };
 
-const isReaderRole = (roleKey: HospitalityRoleKey): boolean =>
+export const isReaderRole = (roleKey: HospitalityRoleKey): boolean =>
   roleKey === 'watchtowerReader' || roleKey === 'midweekBibleStudyReader';
 
 const createHospitalityAssignee = (item: HospitalityScheduleItem): FirestoreRecord => ({
@@ -728,7 +728,7 @@ const createHospitalityAssignment = (item: HospitalityScheduleItem): FirestoreRe
     assignees: [createHospitalityAssignee(item)],
   });
 
-const isControlledReaderAssignment = (sectionKey: string, assignment: FirestoreRecord): boolean => {
+export const isControlledReaderAssignment = (sectionKey: string, assignment: FirestoreRecord): boolean => {
   const roleLabel = normalizeComparableText(assignment.roleLabel);
   const title = normalizeComparableText(assignment.title);
 
@@ -751,17 +751,18 @@ const getSectionAssignments = (section: FirestoreRecord): FirestoreRecord[] =>
     ? section.assignments.filter((item): item is FirestoreRecord => item !== null && typeof item === 'object')
     : [];
 
-const applyReaderItemsToSections = (
+export const applyReaderItemsToSections = (
   sections: FirestoreRecord[],
   items: HospitalityScheduleItem[],
   meetingType: HospitalityMeetingType
-): FirestoreRecord[] => {
+): { sections: FirestoreRecord[]; placed: boolean } => {
   const targetRole =
     meetingType === 'midweek' ? 'midweekBibleStudyReader' : 'watchtowerReader';
   const item = items.find((candidate) => candidate.roleKey === targetRole);
-  if (!item) return sections;
+  if (!item) return { sections, placed: false };
 
-  return sections.map((section) => {
+  let placed = false;
+  const nextSections = sections.map((section) => {
     const sectionKey = normalizeText(section.sectionKey) ?? '';
     return {
       ...section,
@@ -770,6 +771,7 @@ const applyReaderItemsToSections = (
           return assignment;
         }
 
+        placed = true;
         const existingAssignee = Array.isArray(assignment.assignees)
           ? assignment.assignees.find((assignee) => assignee && typeof assignee === 'object') as FirestoreRecord | undefined
           : undefined;
@@ -787,33 +789,36 @@ const applyReaderItemsToSections = (
       }),
     };
   });
+
+  return { sections: nextSections, placed };
 };
 
-const upsertHospitalitySection = (
+export const upsertHospitalitySection = (
   sections: FirestoreRecord[],
-  items: HospitalityScheduleItem[]
+  items: HospitalityScheduleItem[],
+  includeReaders: boolean
 ): FirestoreRecord[] => {
-  const nonReaderItems = items.filter((item) => !isReaderRole(item.roleKey));
-  if (nonReaderItems.length === 0) return sections;
+  const sectionItems = includeReaders ? items : items.filter((item) => !isReaderRole(item.roleKey));
+  if (sectionItems.length === 0) return sections;
 
   const existingIndex = sections.findIndex((section) => section.sectionKey === HOSPITALITY_SECTION_KEY);
   const existingSection = existingIndex >= 0 ? sections[existingIndex] : undefined;
   const controlledKeys = new Set(
-    nonReaderItems.map((item) => `${HOSPITALITY_SECTION_KEY}-${item.roleKey}`)
+    sectionItems.map((item) => `${HOSPITALITY_SECTION_KEY}-${item.roleKey}`)
   );
   const existingAssignments = existingSection
     ? getSectionAssignments(existingSection).filter(
         (assignment) => !controlledKeys.has(normalizeText(assignment.assignmentKey) ?? '')
       )
     : [];
-  const orderedNonReaderItems = [...nonReaderItems].sort(
+  const orderedSectionItems = [...sectionItems].sort(
     (left, right) => HOSPITALITY_ROLE_ORDER[left.roleKey] - HOSPITALITY_ROLE_ORDER[right.roleKey]
   );
-  const controlledAssignments = orderedNonReaderItems.map((item) => createHospitalityAssignment(item));
+  const controlledAssignments = orderedSectionItems.map((item) => createHospitalityAssignment(item));
   const nextSection: FirestoreRecord = {
     ...(existingSection ?? {}),
     sectionKey: HOSPITALITY_SECTION_KEY,
-    title: 'Acomodadores y Microfonos',
+    title: 'Micrófonos, Acomodadores y Lectores',
     order:
       typeof existingSection?.order === 'number' && Number.isFinite(existingSection.order)
         ? existingSection.order
@@ -874,14 +879,15 @@ const getMeetingSections = (meetingData: FirestoreRecord): FirestoreRecord[] => 
     .map((section, index) => ({ ...section, order: index }));
 };
 
-const applyHospitalityItemsToMeetingSections = (
+export const applyHospitalityItemsToMeetingSections = (
   meetingData: FirestoreRecord,
   items: HospitalityScheduleItem[],
   meetingType: HospitalityMeetingType
 ): FirestoreRecord[] => {
   let sections = getMeetingSections(meetingData);
-  sections = applyReaderItemsToSections(sections, items, meetingType);
-  sections = upsertHospitalitySection(sections, items);
+  const reader = applyReaderItemsToSections(sections, items, meetingType);
+  sections = reader.sections;
+  sections = upsertHospitalitySection(sections, items, !reader.placed);
   return sections;
 };
 

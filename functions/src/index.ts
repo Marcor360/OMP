@@ -85,6 +85,7 @@ export {
   deleteCleaningGroupByManager,
   listCleaningGroupsForCurrentUser,
   removeCleaningGroupMemberByManager,
+  updateCleaningGroupByManager,
 } from './cleaning.js';
 
 export {

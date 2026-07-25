@@ -609,7 +609,7 @@ export const es = {
     readOnlyPanel: 'Panel de solo lectura',
     btnOutgoingTalks: 'Salidas',
     btnPlan: 'Plan',
-    btnReaders: 'Lista de acomodadores',
+    btnReaders: 'Micrófonos, acomodadores y lectores',
     btnNew: 'Nuevo',
     resultCount: '{{count}} resultado en {{category}}',
     resultCount_plural: '{{count}} resultados en {{category}}',
@@ -755,7 +755,7 @@ export const es = {
   },
   // Hospitality
   hospitality: {
-    scheduleTitle: 'Acomodadores',
+    scheduleTitle: 'Micrófonos, Acomodadores y Lectores',
     scheduleSubtitle: 'Planeación y micrófonos',
     scheduleLoadMeetings: 'Cargar reuniones',
     scheduleGenerateMeetings: 'Generar reuniones del rango',
@@ -822,8 +822,8 @@ export const es = {
       friday: 'Vie',
       saturday: 'Sáb',
     },
-    readersTitle: 'Lista de acomodadores',
-    readersSubtitle: 'Acomodadores, micrófonos, presidentes y lectores',
+    readersTitle: 'Micrófonos, Acomodadores y Lectores',
+    readersSubtitle: 'Micrófonos, acomodadores, presidentes y lectores',
     readersLoading: 'Cargando lista publicada...',
     readersEmpty: 'Aún no hay una lista publicada.',
     publishedEmpty: 'Aún no hay una lista publicada',

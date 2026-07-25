@@ -8,6 +8,7 @@
 import {
   canManageCleaningFromProfile,
   exceedsCleaningMemberLimit,
+  isCleaningGroupDeleteAdmin,
   resolveCleaningMemberOutcome,
   resolveExistingCleaningGroupIndex,
 } from '../shared/cleaning-access.js';
@@ -82,6 +83,28 @@ describe('addCleaningGroupMembersByManager business rules', () => {
           serviceDepartment: 'limpieza',
         })
       ).toBe(false);
+    });
+  });
+
+  describe('hard delete authorization', () => {
+    it('allows active admin roles used by Firestore rules', () => {
+      expect(isCleaningGroupDeleteAdmin({ isActive: true, role: 'admin' })).toBe(true);
+      expect(isCleaningGroupDeleteAdmin({ isActive: true, role: 'administrador' })).toBe(true);
+    });
+
+    it('denies a cleaning manager who is not an admin', () => {
+      expect(
+        isCleaningGroupDeleteAdmin({
+          isActive: true,
+          role: 'user',
+          servicePosition: 'encargado',
+          serviceDepartment: 'limpieza',
+        })
+      ).toBe(false);
+    });
+
+    it('denies an inactive admin', () => {
+      expect(isCleaningGroupDeleteAdmin({ isActive: false, role: 'admin' })).toBe(false);
     });
   });
 

@@ -609,7 +609,7 @@ export const en = {
     readOnlyPanel: 'Read-only panel',
     btnOutgoingTalks: 'Talks',
     btnPlan: 'Plan',
-    btnReaders: 'Attendants list',
+    btnReaders: 'Microphones, Attendants & Readers',
     btnNew: 'New',
     resultCount: '{{count}} result in {{category}}',
     resultCount_plural: '{{count}} results in {{category}}',
@@ -762,7 +762,7 @@ export const en = {
   },
   // Hospitality
   hospitality: {
-    scheduleTitle: 'Attendants',
+    scheduleTitle: 'Microphones, Attendants & Readers',
     scheduleSubtitle: 'Planning and microphones',
     scheduleLoadMeetings: 'Load meetings',
     scheduleGenerateMeetings: 'Generate meetings for range',
@@ -829,8 +829,8 @@ export const en = {
       friday: 'Fri',
       saturday: 'Sat',
     },
-    readersTitle: 'Attendants list',
-    readersSubtitle: 'Attendants, microphones, chairmen and readers',
+    readersTitle: 'Microphones, Attendants & Readers',
+    readersSubtitle: 'Microphones, attendants, chairmen and readers',
     readersLoading: 'Loading published list...',
     readersEmpty: 'There is no published list yet.',
     publishedEmpty: 'There is no published list yet',

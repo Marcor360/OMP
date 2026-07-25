@@ -36,6 +36,8 @@ const buildRules = () => {
 };
 
 const main = () => {
+  // Estricto tanto al comprobar como al generar: nunca construir o desplegar
+  // mientras exista un modulo .rules omitido silenciosamente del manifest.
   const listed = new Set(readManifest());
   const orphans = fs
     .readdirSync(SRC_DIR)

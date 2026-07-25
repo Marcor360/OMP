@@ -49,6 +49,12 @@ export const canManageCleaningFromProfile = (
   return hasEncargadoLimpiezaAssignment(user);
 };
 
+export const isCleaningGroupDeleteAdmin = (
+  user: Record<string, unknown>
+): boolean =>
+  user.isActive === true &&
+  (user.role === 'admin' || user.role === 'administrador');
+
 export const resolveCleaningMemberActive = (
   user: Record<string, unknown>
 ): boolean => {
