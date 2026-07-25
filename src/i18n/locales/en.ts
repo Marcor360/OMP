@@ -629,6 +629,7 @@ export const en = {
     errorDestCongRequired: 'Destination congregation is required.',
     errorDateRequired: 'Date is required.',
     errorDateWeekend: 'Date must be a Saturday or Sunday.',
+    errorDateOutOfWindow: 'Select a date within the next two months.',
     errorTimeRequired: 'Time is required.',
     errorDuplicate: 'This brother already has an active talk scheduled in that same week.',
     successUpdate: 'Talk updated.',

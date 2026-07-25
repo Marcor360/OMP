@@ -629,6 +629,7 @@ export const es = {
     errorDestCongRequired: 'La congregación destino es obligatoria.',
     errorDateRequired: 'La fecha es obligatoria.',
     errorDateWeekend: 'La fecha debe ser sábado o domingo.',
+    errorDateOutOfWindow: 'Selecciona una fecha dentro de los próximos dos meses.',
     errorTimeRequired: 'La hora es obligatoria.',
     errorDuplicate: 'Este hermano ya tiene una salida activa en esa misma semana.',
     successUpdate: 'Salida actualizada.',

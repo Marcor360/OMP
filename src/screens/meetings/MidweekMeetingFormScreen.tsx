@@ -13,6 +13,7 @@ import { Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 
 import { AssignmentCardEditorErrors } from '@/src/components/meetings/midweek/AssignmentCardEditor';
+import { DatePickerModal } from '@/src/components/forms/DatePickerModal';
 import { MidweekSectionEditor } from '@/src/components/meetings/midweek/MidweekSectionEditor';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
@@ -44,9 +45,11 @@ import {
 } from '@/src/types/midweek-meeting';
 import { MeetingStatus, MEETING_STATUS_LABELS } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { getOperationalDateBounds } from '@/src/utils/dates/operational-window';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
 type Mode = 'create' | 'edit';
+type DatePickerTarget = 'start' | 'end' | null;
 
 interface MidweekMeetingFormState {
   title: string;
@@ -124,6 +127,22 @@ const parseInputDateTime = (value: string): Date | null => {
   return parsed;
 };
 
+const getDatePart = (value: string): string => {
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? '';
+};
+
+const getTimePart = (value: string): string => {
+  const match = value.match(/(\d{2}:\d{2})$/);
+  return match?.[1] ?? '';
+};
+
+const replaceDatePart = (value: string, date: string, fallbackTime: string): string =>
+  `${date} ${getTimePart(value) || fallbackTime}`;
+
+const replaceTimePart = (value: string, time: string): string =>
+  `${getDatePart(value)} ${time}`;
+
 const initialFormState = (): MidweekMeetingFormState => {
   const template = createMidweekMeetingTemplate();
 
@@ -188,12 +207,14 @@ export function MidweekMeetingFormScreen() {
   const styles = createStyles(colors);
 
   const mode: Mode = id ? 'edit' : 'create';
+  const operationalBounds = React.useMemo(() => getOperationalDateBounds(), []);
 
   const [form, setForm] = useState<MidweekMeetingFormState>(initialFormState);
   const [availableUsers, setAvailableUsers] = useState<ActiveCongregationUser[]>([]);
   const [errors, setErrors] = useState<MidweekMeetingFormErrors>({ assignments: {} });
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
+  const [datePickerTarget, setDatePickerTarget] = useState<DatePickerTarget>(null);
 
   useEffect(() => {
     if (loadingProfile) return;
@@ -547,28 +568,54 @@ export function MidweekMeetingFormScreen() {
 
           <View style={styles.inlineRow}>
             <View style={styles.inlineField}>
-              <Field label="Inicio (YYYY-MM-DD HH:mm)" error={errors.startDateInput}>
-                <TextInput
-                  style={[styles.input, errors.startDateInput && styles.inputError]}
-                  value={form.startDateInput}
-                  onChangeText={(value) => setForm((current) => ({ ...current, startDateInput: value }))}
-                  placeholder="2026-07-06 19:30"
-                  placeholderTextColor={colors.textDisabled}
-                  editable={canEdit}
-                />
+              <Field label="Inicio" error={errors.startDateInput}>
+                <View style={styles.dateTimeRow}>
+                  <TouchableOpacity
+                    style={[styles.input, styles.dateButton, errors.startDateInput && styles.inputError]}
+                    onPress={() => setDatePickerTarget('start')}
+                    disabled={!canEdit}
+                  >
+                    <ThemedText style={styles.dateButtonText}>{getDatePart(form.startDateInput)}</ThemedText>
+                    <Ionicons name="calendar-outline" size={17} color={colors.primary} />
+                  </TouchableOpacity>
+                  <TextInput
+                    style={[styles.input, styles.timeInput, errors.startDateInput && styles.inputError]}
+                    value={getTimePart(form.startDateInput)}
+                    onChangeText={(value) => setForm((current) => ({
+                      ...current,
+                      startDateInput: replaceTimePart(current.startDateInput, value),
+                    }))}
+                    placeholder="19:30"
+                    placeholderTextColor={colors.textDisabled}
+                    editable={canEdit}
+                  />
+                </View>
               </Field>
             </View>
 
             <View style={styles.inlineField}>
-              <Field label="Fin (YYYY-MM-DD HH:mm)" error={errors.endDateInput}>
-                <TextInput
-                  style={[styles.input, errors.endDateInput && styles.inputError]}
-                  value={form.endDateInput}
-                  onChangeText={(value) => setForm((current) => ({ ...current, endDateInput: value }))}
-                  placeholder="2026-07-06 21:00"
-                  placeholderTextColor={colors.textDisabled}
-                  editable={canEdit}
-                />
+              <Field label="Fin" error={errors.endDateInput}>
+                <View style={styles.dateTimeRow}>
+                  <TouchableOpacity
+                    style={[styles.input, styles.dateButton, errors.endDateInput && styles.inputError]}
+                    onPress={() => setDatePickerTarget('end')}
+                    disabled={!canEdit}
+                  >
+                    <ThemedText style={styles.dateButtonText}>{getDatePart(form.endDateInput)}</ThemedText>
+                    <Ionicons name="calendar-outline" size={17} color={colors.primary} />
+                  </TouchableOpacity>
+                  <TextInput
+                    style={[styles.input, styles.timeInput, errors.endDateInput && styles.inputError]}
+                    value={getTimePart(form.endDateInput)}
+                    onChangeText={(value) => setForm((current) => ({
+                      ...current,
+                      endDateInput: replaceTimePart(current.endDateInput, value),
+                    }))}
+                    placeholder="21:00"
+                    placeholderTextColor={colors.textDisabled}
+                    editable={canEdit}
+                  />
+                </View>
               </Field>
             </View>
           </View>
@@ -768,6 +815,40 @@ export function MidweekMeetingFormScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+      <DatePickerModal
+        visible={datePickerTarget !== null}
+        selectedDate={
+          datePickerTarget === 'end'
+            ? getDatePart(form.endDateInput)
+            : getDatePart(form.startDateInput)
+        }
+        minDate={
+          datePickerTarget === 'end'
+            ? getDatePart(form.startDateInput) || operationalBounds.minDate
+            : operationalBounds.minDate
+        }
+        maxDate={operationalBounds.maxDate}
+        onSelectDate={(date) => {
+          setForm((current) => {
+            if (datePickerTarget === 'end') {
+              return {
+                ...current,
+                endDateInput: replaceDatePart(current.endDateInput, date, '21:00'),
+              };
+            }
+
+            return {
+              ...current,
+              startDateInput: replaceDatePart(current.startDateInput, date, '19:30'),
+              endDateInput:
+                date > getDatePart(current.endDateInput)
+                  ? replaceDatePart(current.endDateInput, date, '21:00')
+                  : current.endDateInput,
+            };
+          });
+        }}
+        onClose={() => setDatePickerTarget(null)}
+      />
     </ScreenContainer>
   );
 }
@@ -929,6 +1010,22 @@ const createStyles = (colors: AppColorSet) =>
     },
     inlineField: {
       flex: 1,
+    },
+    dateTimeRow: {
+      gap: 8,
+    },
+    dateButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    dateButtonText: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    timeInput: {
+      textAlign: 'center',
     },
     chipsRow: {
       flexDirection: 'row',

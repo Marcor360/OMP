@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,6 +15,7 @@ import { AssignmentCardEditorErrors } from '@/src/components/meetings/midweek/As
 import { MidweekSectionEditor } from '@/src/components/meetings/midweek/MidweekSectionEditor';
 import { WeekendSessionsEditor } from '@/src/components/meetings/weekend/WeekendSessionsEditor';
 import { LoadingState } from '@/src/components/common/LoadingState';
+import { DatePickerModal } from '@/src/components/forms/DatePickerModal';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
@@ -54,6 +55,8 @@ import {
   moveMeetingSection,
 } from '@/src/types/meeting/program';
 import { formatWeekLabel, getWeekStart, moveWeek } from '@/src/utils/dates/week-range';
+import { formatDateKey, parseDateKey } from '@/src/utils/dates/date-key';
+import { getOperationalDateBounds } from '@/src/utils/dates/operational-window';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import {
   CleaningSelectionMode,
@@ -105,6 +108,8 @@ export function MeetingFormScreen() {
   const mode: Mode = id ? 'edit' : 'create';
   const initialType: MeetingProgramType = typeParam === 'midweek' ? 'midweek' : 'weekend';
   const initialWeekStart = getWeekStart(new Date());
+  const operationalBounds = useMemo(() => getOperationalDateBounds(), []);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
 
   const {
     title,
@@ -305,6 +310,20 @@ export function MeetingFormScreen() {
     [meetingType]
   );
 
+  const maxSelectableMeetingDate = useMemo(() => {
+    const operationalEnd = parseDateKey(operationalBounds.maxDate);
+    if (!operationalEnd) return operationalBounds.maxDate;
+
+    let latestWeekStart = getWeekStart(operationalEnd);
+    let latestRange = activeMeetingTemplate.getMeetingDateRange(latestWeekStart);
+    if (formatDateKey(latestRange.endDate) > operationalBounds.maxDate) {
+      latestWeekStart = moveWeek(latestWeekStart, -1);
+      latestRange = activeMeetingTemplate.getMeetingDateRange(latestWeekStart);
+    }
+
+    return formatDateKey(latestRange.endDate);
+  }, [activeMeetingTemplate, operationalBounds.maxDate]);
+
   const resolvedMeetingDateRange = useMemo(
     () => activeMeetingTemplate.getMeetingDateRange(selectedWeekStart),
     [activeMeetingTemplate, selectedWeekStart]
@@ -464,15 +483,13 @@ export function MeetingFormScreen() {
         if (nextRange.endDate < getTodayStart()) {
           return current;
         }
+        if (formatDateKey(nextRange.endDate) > maxSelectableMeetingDate) {
+          return current;
+        }
       }
 
       return next;
     });
-  };
-
-  const goToCurrentWeek = () => {
-    if (!canManage) return;
-    setSelectedWeekStart(getWeekStart(new Date()));
   };
 
   const showPanelErrors = (messages: string[]) => {
@@ -609,7 +626,7 @@ export function MeetingFormScreen() {
             checkingDuplicate={checkingDuplicate}
             onTypeChange={setTypeForCreate}
             onShiftWeek={shiftWeek}
-            onCurrentWeek={goToCurrentWeek}
+            onOpenDatePicker={() => setDatePickerVisible(true)}
             onWeekendDayChange={setWeekendMeetingDay}
             onMidweekDayChange={setMidweekMeetingDay}
           />
@@ -712,6 +729,17 @@ export function MeetingFormScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <DatePickerModal
+        visible={datePickerVisible}
+        selectedDate={formatDateKey(selectedWeekStart)}
+        minDate={operationalBounds.minDate}
+        maxDate={maxSelectableMeetingDate}
+        onSelectDate={(date) => {
+          const parsedDate = parseDateKey(date);
+          if (parsedDate) setSelectedWeekStart(getWeekStart(parsedDate));
+        }}
+        onClose={() => setDatePickerVisible(false)}
+      />
     </ScreenContainer>
   );
 }
@@ -799,7 +827,7 @@ function MeetingDateStep({
   checkingDuplicate,
   onTypeChange,
   onShiftWeek,
-  onCurrentWeek,
+  onOpenDatePicker,
   onWeekendDayChange,
   onMidweekDayChange,
 }: {
@@ -818,7 +846,7 @@ function MeetingDateStep({
   checkingDuplicate: boolean;
   onTypeChange: (type: MeetingProgramType) => void;
   onShiftWeek: (offset: number) => void;
-  onCurrentWeek: () => void;
+  onOpenDatePicker: () => void;
   onWeekendDayChange: (day: WeekendMeetingDay) => void;
   onMidweekDayChange: (day: MidweekMeetingDay) => void;
 }) {
@@ -860,7 +888,7 @@ function MeetingDateStep({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.weekCurrentButton}
-            onPress={onCurrentWeek}
+            onPress={onOpenDatePicker}
             disabled={!canManage}
           >
             <Ionicons name="calendar-outline" size={15} color={colors.primary} />

@@ -1,5 +1,3 @@
-import { Redirect } from 'expo-router';
+import { AssignmentFormScreen } from '@/src/modules/assignments/screens/AssignmentFormScreen';
 
-export default function AssignmentEditRedirect() {
-  return <Redirect href='/(protected)/(tabs)/assignments' />;
-}
+export default AssignmentFormScreen;

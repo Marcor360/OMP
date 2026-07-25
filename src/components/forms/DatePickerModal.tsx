@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -114,9 +114,24 @@ export function DatePickerModal({
     visibleMonth.getMonth()
   );
   const minDateValue = minDate ?? toDateInput(new Date());
+  const previousMonth = addMonths(visibleMonth, -1);
   const nextMonth = addMonths(visibleMonth, 1);
+  const previousMonthEnd = new Date(
+    previousMonth.getFullYear(),
+    previousMonth.getMonth() + 1,
+    0
+  );
+  const canGoPreviousMonth = toDateInput(previousMonthEnd) >= minDateValue;
   const canGoNextMonth =
     !maxDate || toDateInput(nextMonth) <= maxDate;
+
+  useEffect(() => {
+    if (!visible) return;
+    const nextVisibleDate = parseDateInput(selectedDate);
+    setVisibleMonth(
+      new Date(nextVisibleDate.getFullYear(), nextVisibleDate.getMonth(), 1)
+    );
+  }, [selectedDate, visible]);
 
   const moveMonth = (offset: number) => {
     setVisibleMonth((current) => addMonths(current, offset));
@@ -153,7 +168,11 @@ export function DatePickerModal({
           </View>
 
           <View style={styles.monthRow}>
-            <TouchableOpacity style={styles.navButton} onPress={() => moveMonth(-1)}>
+            <TouchableOpacity
+              style={[styles.navButton, !canGoPreviousMonth && styles.navButtonDisabled]}
+              onPress={() => moveMonth(-1)}
+              disabled={!canGoPreviousMonth}
+            >
               <Ionicons name="chevron-back" size={19} color={colors.textPrimary} />
             </TouchableOpacity>
             <ThemedText style={styles.monthTitle}>{monthLabel}</ThemedText>

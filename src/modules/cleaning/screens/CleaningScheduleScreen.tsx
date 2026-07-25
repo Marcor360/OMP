@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { EmptyState } from '@/src/components/common/EmptyState';
 import { ErrorState } from '@/src/components/common/ErrorState';
+import { DatePickerModal } from '@/src/components/forms/DatePickerModal';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
@@ -38,6 +39,7 @@ import {
 } from '@/src/types/cleaning-schedule';
 import { Meeting } from '@/src/types/meeting';
 import { formatDateKey, parseDateKey } from '@/src/utils/dates/date-key';
+import { getOperationalDateBounds } from '@/src/utils/dates/operational-window';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { canManageCleaning } from '@/src/utils/permissions/permissions';
 
@@ -48,6 +50,8 @@ type CleaningPlanningRow = {
   meetingType: CleaningScheduleMeetingType;
   cleaningGroupId?: string;
 };
+
+type DatePickerTarget = 'start' | 'end' | null;
 
 const todayKey = (): string => formatDateKey(new Date());
 
@@ -131,6 +135,7 @@ export function CleaningScheduleScreen() {
   const { appUser, congregationId, uid, loadingProfile, profileError } = useUser();
   const { t } = useI18n();
   const canManage = canManageCleaning(appUser);
+  const operationalBounds = useMemo(() => getOperationalDateBounds(), []);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -141,6 +146,7 @@ export function CleaningScheduleScreen() {
   const [title, setTitle] = useState(t('cleaning.scheduleTitle'));
   const [startDate, setStartDate] = useState(todayKey());
   const [endDate, setEndDate] = useState(addDaysKey(todayKey(), 45));
+  const [datePickerTarget, setDatePickerTarget] = useState<DatePickerTarget>(null);
   const [rows, setRows] = useState<CleaningPlanningRow[]>([]);
   const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
 
@@ -205,7 +211,7 @@ export function CleaningScheduleScreen() {
         setLoading(false);
       }
     },
-    [congregationId, endDate, startDate]
+    [congregationId, endDate, startDate, t]
   );
 
   const loadInitial = useCallback(async () => {
@@ -328,6 +334,7 @@ export function CleaningScheduleScreen() {
     selectedSchedule,
     startDate,
     title,
+    t,
     uid,
   ]);
 
@@ -418,22 +425,22 @@ export function CleaningScheduleScreen() {
                 placeholderTextColor={colors.textDisabled}
               />
               <View style={styles.dateRow}>
-                <TextInput
+                <TouchableOpacity
                   style={[styles.input, styles.dateInput]}
-                  value={startDate}
-                  onChangeText={setStartDate}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.textDisabled}
-                  autoCapitalize="none"
-                />
-                <TextInput
+                  onPress={() => setDatePickerTarget('start')}
+                  disabled={saving || publishing}
+                >
+                  <ThemedText style={styles.dateText}>{startDate}</ThemedText>
+                  <Ionicons name="calendar-outline" size={17} color={colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity
                   style={[styles.input, styles.dateInput]}
-                  value={endDate}
-                  onChangeText={setEndDate}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.textDisabled}
-                  autoCapitalize="none"
-                />
+                  onPress={() => setDatePickerTarget('end')}
+                  disabled={saving || publishing}
+                >
+                  <ThemedText style={styles.dateText}>{endDate}</ThemedText>
+                  <Ionicons name="calendar-outline" size={17} color={colors.primary} />
+                </TouchableOpacity>
               </View>
               <View style={styles.formActions}>
                 <TouchableOpacity
@@ -584,6 +591,21 @@ export function CleaningScheduleScreen() {
         }
         showsVerticalScrollIndicator={false}
       />
+      <DatePickerModal
+        visible={datePickerTarget !== null}
+        selectedDate={datePickerTarget === 'end' ? endDate : startDate}
+        minDate={datePickerTarget === 'end' ? startDate : operationalBounds.minDate}
+        maxDate={operationalBounds.maxDate}
+        onSelectDate={(date) => {
+          if (datePickerTarget === 'start') {
+            setStartDate(date);
+            if (date > endDate) setEndDate(date);
+          } else if (datePickerTarget === 'end') {
+            setEndDate(date);
+          }
+        }}
+        onClose={() => setDatePickerTarget(null)}
+      />
     </ScreenContainer>
   );
 }
@@ -637,6 +659,14 @@ const createStyles = (colors: AppColorSet) =>
     },
     dateInput: {
       flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    dateText: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: '700',
     },
     formActions: {
       flexDirection: 'row',

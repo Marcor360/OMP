@@ -20,8 +20,8 @@
     "test:rules": "npm run build:rules && firebase emulators:exec --only firestore --project demo-omp \"jest --config jest.rules.config.js --runInBand\"",
     "check:indexes": "node scripts/check-collection-group-indexes.mjs",
     "validate": "npm run check:indexes && npm run lint && tsc --noEmit && npm test -- --runInBand && npm --prefix functions run lint && npm --prefix functions run build && npm --prefix functions test -- --runInBand",
-    "deploy:rules": "npm run build:rules && firebase deploy --only firestore:rules,firestore:indexes",
-    "deploy:functions": "firebase deploy --only functions",
+    "deploy:rules": "npm run build:rules && node scripts/firebase-deploy-retry.js --only firestore:rules,firestore:indexes",
+    "deploy:functions": "node scripts/firebase-deploy-retry.js --only functions",
     "deploy:all": "npm run deploy:rules && npm run deploy:functions"
   },
   "dependencies": {

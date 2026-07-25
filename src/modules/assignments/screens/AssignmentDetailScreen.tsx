@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { TouchableOpacity } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
@@ -11,7 +13,9 @@ import { useUser } from '@/src/context/user-context';
 import { AssignmentDetailSection } from '@/src/modules/assignments/components/AssignmentDetailSection';
 import { getAssignmentById } from '@/src/modules/assignments/services/assignments.service';
 import { Assignment } from '@/src/modules/assignments/types/assignment.types';
+import { useAppColors } from '@/src/styles';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { canManageAssignments, canManageMeetings } from '@/src/utils/permissions/permissions';
 
 export function AssignmentDetailScreen() {
   const { id, meetingId, source } = useLocalSearchParams<{
@@ -19,8 +23,12 @@ export function AssignmentDetailScreen() {
     meetingId?: string;
     source?: 'meeting' | 'congregation';
   }>();
-  const { congregationId, loadingProfile, profileError } = useUser();
+  const router = useRouter();
+  const colors = useAppColors();
+  const { appUser, congregationId, loadingProfile, profileError } = useUser();
   const { t } = useI18n();
+  const canEditMeetingAssignment =
+    canManageAssignments(appUser) && canManageMeetings(appUser);
 
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,7 +80,7 @@ export function AssignmentDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [congregationId, id, loadingProfile, meetingId, profileError, source]);
+  }, [congregationId, id, loadingProfile, meetingId, profileError, source, t]);
 
   if (loading || loadingProfile) {
     return <LoadingState message={t('assignments.loadingDetail')} />;
@@ -82,9 +90,49 @@ export function AssignmentDetailScreen() {
     return <ErrorState message={error ?? t('assignments.errorNotFound')} />;
   }
 
+  const isEditableMeetingAssignment =
+    canEditMeetingAssignment &&
+    assignment.source === 'meeting' &&
+    Boolean(assignment.meetingId) &&
+    !assignment.sourceKey.startsWith('meeting-program:');
+
+  const openEdit = () => {
+    if (!assignment.meetingId) return;
+    router.push(
+      `/(protected)/assignments/edit/${encodeURIComponent(assignment.id)}?meetingId=${encodeURIComponent(assignment.meetingId)}` as never
+    );
+  };
+
   return (
     <ScreenContainer>
-      <PageHeader title={t('assignments.detailTitle')} subtitle={t('assignments.detailSubtitle')} showBack />
+      <PageHeader
+        title={t('assignments.detailTitle')}
+        subtitle={t('assignments.detailSubtitle')}
+        showBack
+        actions={
+          isEditableMeetingAssignment ? (
+            <TouchableOpacity
+              onPress={openEdit}
+              accessibilityRole="button"
+              accessibilityLabel={t('common.edit')}
+              style={{
+                minHeight: 36,
+                paddingHorizontal: 12,
+                borderRadius: 9,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                backgroundColor: colors.primary,
+              }}
+            >
+              <Ionicons name="create-outline" size={16} color={colors.onPrimary} />
+              <ThemedText style={{ color: colors.onPrimary, fontWeight: '800' }}>
+                {t('common.edit')}
+              </ThemedText>
+            </TouchableOpacity>
+          ) : null
+        }
+      />
 
       {assignment.title ? (
         <ThemedText

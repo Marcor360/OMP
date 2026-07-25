@@ -13,11 +13,13 @@ import { Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LoadingState } from '@/src/components/common/LoadingState';
+import { DatePickerModal } from '@/src/components/forms/DatePickerModal';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
+import { useI18n } from '@/src/i18n/index';
 import {
   createAssignment,
   createCleaningGroupAssignment,
@@ -39,6 +41,8 @@ import { AssignmentPriority, UpdateAssignmentDTO } from '@/src/types/assignment'
 import { Meeting } from '@/src/types/meeting';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { formatDateKey, parseDateKey } from '@/src/utils/dates/date-key';
+import { getOperationalDateBounds } from '@/src/utils/dates/operational-window';
 import { canManageAssignments } from '@/src/utils/permissions/permissions';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
@@ -77,18 +81,11 @@ const MONTH_NAMES = [
   'Diciembre',
 ];
 
-const WEEKDAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
-
 const startOfDay = (value: Date): Date => {
   const next = new Date(value);
   next.setHours(0, 0, 0, 0);
   return next;
 };
-
-const sameCalendarDay = (left: Date, right: Date): boolean =>
-  left.getFullYear() === right.getFullYear() &&
-  left.getMonth() === right.getMonth() &&
-  left.getDate() === right.getDate();
 
 const formatDateLabel = (value: Date): string =>
   `${value.getDate()} ${MONTH_NAMES[value.getMonth()].toLowerCase()} ${value.getFullYear()}`;
@@ -111,10 +108,12 @@ export function AssignmentFormScreen() {
 
   const { user } = useAuth();
   const { appUser, congregationId, loadingProfile, profileError } = useUser();
+  const { t } = useI18n();
   const canManage = canManageAssignments(appUser);
 
   const mode: Mode = id ? 'edit' : 'create';
   const today = useMemo(() => startOfDay(new Date()), []);
+  const operationalBounds = useMemo(() => getOperationalDateBounds(), []);
 
   const [title, setTitle] = useState<string>(PRESET_ASSIGNMENT_TITLES[0]);
   const [description, setDescription] = useState('');
@@ -125,9 +124,7 @@ export function AssignmentFormScreen() {
   const [assignedToUid, setAssignedToUid] = useState('');
   const [manualAssigneeName, setManualAssigneeName] = useState('');
   const [selectedDueDate, setSelectedDueDate] = useState<Date>(today);
-  const [visibleMonth, setVisibleMonth] = useState<Date>(
-    () => new Date(today.getFullYear(), today.getMonth(), 1)
-  );
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [outgoingTalks, setOutgoingTalks] = useState<OutgoingTalk[]>([]);
   const [userSearch, setUserSearch] = useState('');
@@ -223,7 +220,6 @@ export function AssignmentFormScreen() {
         const parsedDueDate = assignmentDoc.dueDate?.toDate?.();
         const safeDueDate = parsedDueDate && parsedDueDate >= today ? startOfDay(parsedDueDate) : today;
         setSelectedDueDate(safeDueDate);
-        setVisibleMonth(new Date(safeDueDate.getFullYear(), safeDueDate.getMonth(), 1));
         setMeetingId(assignmentDoc.meetingId ?? '');
       } catch (requestError) {
         Alert.alert('Error', formatFirestoreError(requestError));
@@ -278,6 +274,8 @@ export function AssignmentFormScreen() {
       dueDate:
         selectedDueDate < today
           ? 'Selecciona una fecha de hoy en adelante.'
+          : formatDateKey(selectedDueDate) > operationalBounds.maxDate
+            ? t('assignments.errorDateOutOfWindow')
           : undefined,
       meetingId:
         targetMode === 'person'
@@ -482,31 +480,6 @@ export function AssignmentFormScreen() {
     canManage &&
     targetMode === 'cleaningGroup' &&
     cleaningGroups.length === 0;
-  const visibleMonthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
-  const visibleMonthEnd = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0);
-  const calendarLeadingBlanks = visibleMonthStart.getDay();
-  const calendarDays = Array.from({ length: visibleMonthEnd.getDate() }, (_, index) => {
-    const date = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), index + 1);
-    return startOfDay(date);
-  });
-  const canGoPreviousMonth =
-    visibleMonth.getFullYear() > today.getFullYear() ||
-    (visibleMonth.getFullYear() === today.getFullYear() &&
-      visibleMonth.getMonth() > today.getMonth());
-
-  const moveCalendarMonth = (offset: number) => {
-    setVisibleMonth((current) => {
-      const next = new Date(current.getFullYear(), current.getMonth() + offset, 1);
-      if (
-        next.getFullYear() < today.getFullYear() ||
-        (next.getFullYear() === today.getFullYear() && next.getMonth() < today.getMonth())
-      ) {
-        return current;
-      }
-      return next;
-    });
-  };
-
   return (
     <ScreenContainer scrollable={false} padded={false}>
       <PageHeader title={mode === 'create' ? 'Nueva asignacion' : 'Editar asignacion'} showBack />
@@ -606,68 +579,17 @@ export function AssignmentFormScreen() {
         </Field>
 
         <Field label="Dia que toca *" error={errors.dueDate}>
-          <View style={styles.calendarBox}>
-            <View style={styles.calendarHeader}>
-              <TouchableOpacity
-                style={[styles.calendarNavButton, !canGoPreviousMonth && styles.disabled]}
-                onPress={() => moveCalendarMonth(-1)}
-                disabled={!canGoPreviousMonth || !canEditForm}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="chevron-back" size={18} color={colors.textPrimary} />
-              </TouchableOpacity>
-              <ThemedText style={styles.calendarTitle}>
-                {MONTH_NAMES[visibleMonth.getMonth()]} {visibleMonth.getFullYear()}
-              </ThemedText>
-              <TouchableOpacity
-                style={styles.calendarNavButton}
-                onPress={() => moveCalendarMonth(1)}
-                disabled={!canEditForm}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="chevron-forward" size={18} color={colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.calendarGrid}>
-              {WEEKDAY_LABELS.map((item) => (
-                <ThemedText key={item} style={styles.weekdayText}>
-                  {item}
-                </ThemedText>
-              ))}
-              {Array.from({ length: calendarLeadingBlanks }).map((_, index) => (
-                <View key={`blank-${index}`} style={styles.calendarDay} />
-              ))}
-              {calendarDays.map((date) => {
-                const disabledDate = date < today;
-                const selected = sameCalendarDay(date, selectedDueDate);
-
-                return (
-                  <TouchableOpacity
-                    key={date.toISOString()}
-                    style={[
-                      styles.calendarDay,
-                      selected && styles.calendarDaySelected,
-                      disabledDate && styles.calendarDayDisabled,
-                    ]}
-                    onPress={() => setSelectedDueDate(date)}
-                    disabled={disabledDate || !canEditForm}
-                    activeOpacity={0.8}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.calendarDayText,
-                        selected && styles.calendarDayTextSelected,
-                        disabledDate && styles.calendarDayTextDisabled,
-                      ]}
-                    >
-                      {date.getDate()}
-                    </ThemedText>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+          <TouchableOpacity
+            style={styles.selectTrigger}
+            onPress={() => setDatePickerVisible(true)}
+            disabled={!canEditForm}
+            activeOpacity={0.8}
+          >
+            <ThemedText style={styles.selectTriggerText}>
+              {formatDateLabel(selectedDueDate)}
+            </ThemedText>
+            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+          </TouchableOpacity>
           <ThemedText style={styles.hintText}>Seleccionado: {formatDateLabel(selectedDueDate)}</ThemedText>
         </Field>
 
@@ -877,6 +799,17 @@ export function AssignmentFormScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+      <DatePickerModal
+        visible={datePickerVisible}
+        selectedDate={formatDateKey(selectedDueDate)}
+        minDate={operationalBounds.minDate}
+        maxDate={operationalBounds.maxDate}
+        onSelectDate={(date) => {
+          const parsedDate = parseDateKey(date);
+          if (parsedDate) setSelectedDueDate(startOfDay(parsedDate));
+        }}
+        onClose={() => setDatePickerVisible(false)}
+      />
     </ScreenContainer>
   );
 }
@@ -934,77 +867,6 @@ const createStyles = (colors: AppColorSet) =>
     },
     chipText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
     chipTextActive: { color: colors.onPrimary },
-    calendarBox: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 10,
-      backgroundColor: colors.surface,
-      padding: 10,
-      gap: 10,
-    },
-    calendarHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 8,
-    },
-    calendarNavButton: {
-      width: 34,
-      height: 34,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.backgroundLight,
-    },
-    calendarTitle: {
-      flex: 1,
-      textAlign: 'center',
-      color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: '800',
-    },
-    calendarGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 6,
-    },
-    weekdayText: {
-      width: 38,
-      textAlign: 'center',
-      color: colors.textMuted,
-      fontSize: 11,
-      fontWeight: '800',
-    },
-    calendarDay: {
-      width: 38,
-      height: 34,
-      borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.backgroundLight,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    calendarDaySelected: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
-    calendarDayDisabled: {
-      opacity: 0.35,
-    },
-    calendarDayText: {
-      color: colors.textPrimary,
-      fontSize: 13,
-      fontWeight: '700',
-    },
-    calendarDayTextSelected: {
-      color: colors.onPrimary,
-    },
-    calendarDayTextDisabled: {
-      color: colors.textDisabled,
-    },
     saveButton: {
       backgroundColor: colors.primary,
       borderRadius: 12,
