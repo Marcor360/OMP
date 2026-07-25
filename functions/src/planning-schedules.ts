@@ -839,7 +839,7 @@ export const upsertHospitalitySection = (
   );
 };
 
-const collectAssignedUserIdsFromSections = (sections: FirestoreRecord[]): string[] => {
+export const collectAssignedUserIdsFromSections = (sections: FirestoreRecord[]): string[] => {
   const ids = new Set<string>();
 
   sections.forEach((section) => {
