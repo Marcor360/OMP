@@ -15,6 +15,7 @@ import {
 import { assertCongregationHasUserCapacity } from './capacity.js';
 import { resolveCongregationEmailDomain, resolveGeneratedEmail, splitDisplayName } from './email.js';
 import { logCreateUserFailure } from './logging.js';
+import { updateDashboardUserCountsIfPresent } from './dashboard-user-counts.js';
 import {
   ensureAdminElderPrivileges,
   buildServiceAssignmentKeys,
@@ -158,6 +159,10 @@ export const createUserByAdmin = onCall(
         }
 
         await db.collection('users').doc(userRecord.uid).set(userDoc);
+        await updateDashboardUserCountsIfPresent(payload.congregationId, {
+          total: 1,
+          active: payload.isActive ? 1 : 0,
+        });
 
         return {
           uid: userRecord.uid,
@@ -401,6 +406,16 @@ export const updateUserByAdmin = onCall(
 
     await targetRef.update(docUpdates);
 
+    if (
+      !isSystemPrincipalUser(target as Record<string, unknown>) &&
+      typeof payload.isActive === 'boolean' &&
+      payload.isActive !== currentIsActive
+    ) {
+      await updateDashboardUserCountsIfPresent(target.congregationId, {
+        active: payload.isActive ? 1 : -1,
+      });
+    }
+
     const updatedSnap = await targetRef.get();
     const updatedData = updatedSnap.data() as {
       role?: Role;
@@ -519,7 +534,16 @@ export const disableUserByAdmin = onCall(
       throw new HttpsError('not-found', 'Usuario no encontrado.');
     }
 
-    const target = targetSnap.data() as { congregationId: string; role?: Role };
+    const target = targetSnap.data() as {
+      congregationId: string;
+      role?: Role;
+      isActive?: boolean;
+      protectedFromDeletion?: boolean;
+      isSystemUser?: boolean;
+      isPrimaryAdmin?: boolean;
+      isRootAdmin?: boolean;
+      systemProtected?: boolean;
+    };
 
     if (target.congregationId !== requester.congregationId) {
       throw new HttpsError('permission-denied', 'No puedes desactivar usuarios de otra congregacion.');
@@ -538,6 +562,10 @@ export const disableUserByAdmin = onCall(
       updatedByEmail: resolveActorEmail(requester),
       updatedAt: FieldValue.serverTimestamp(),
     });
+
+    if (target.isActive === true && !isSystemPrincipalUser(target as Record<string, unknown>)) {
+      await updateDashboardUserCountsIfPresent(target.congregationId, { active: -1 });
+    }
 
     return { ok: true };
   }
@@ -568,7 +596,16 @@ export const deleteUserByAdmin = onCall(
       throw new HttpsError('not-found', 'Usuario no encontrado.');
     }
 
-    const target = targetSnap.data() as { congregationId: string; role?: Role };
+    const target = targetSnap.data() as {
+      congregationId: string;
+      role?: Role;
+      isActive?: boolean;
+      protectedFromDeletion?: boolean;
+      isSystemUser?: boolean;
+      isPrimaryAdmin?: boolean;
+      isRootAdmin?: boolean;
+      systemProtected?: boolean;
+    };
 
     if (target.congregationId !== requester.congregationId) {
       throw new HttpsError('permission-denied', 'No puedes eliminar usuarios de otra congregacion.');
@@ -587,6 +624,10 @@ export const deleteUserByAdmin = onCall(
 
     await getAuth().deleteUser(uid);
     await targetRef.delete();
+    await updateDashboardUserCountsIfPresent(target.congregationId, {
+      total: -1,
+      active: target.isActive === true ? -1 : 0,
+    });
 
     return { ok: true };
   }

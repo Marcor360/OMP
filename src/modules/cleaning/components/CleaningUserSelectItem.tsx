@@ -3,10 +3,10 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAppColors } from '@/src/styles';
+import { useI18n } from '@/src/i18n/index';
 import {
   CleaningAssignableUser,
   CleaningMemberStatus,
-  CLEANING_MEMBER_STATUS_LABELS,
 } from '@/src/modules/cleaning/types/cleaning-group.types';
 
 interface CleaningUserSelectItemProps {
@@ -17,8 +17,8 @@ interface CleaningUserSelectItemProps {
 
 // Colores y íconos por estado
 const STATUS_ICON: Record<CleaningMemberStatus, React.ComponentProps<typeof Ionicons>['name']> = {
-  available: 'ellipse-outline',
-  assigned_here: 'checkmark-circle',
+  available: 'person-add-outline',
+  assigned_here: 'people-outline',
   assigned_other: 'lock-closed-outline',
   inactive: 'ban-outline',
   not_eligible: 'close-circle-outline',
@@ -31,13 +31,11 @@ export function CleaningUserSelectItem({
   onToggle,
 }: CleaningUserSelectItemProps) {
   const colors = useAppColors();
-
-  const isDisabled =
-    user.memberStatus === 'assigned_other' ||
-    user.memberStatus === 'inactive' ||
-    user.memberStatus === 'not_eligible';
+  const { t } = useI18n();
 
   const isInGroup = user.memberStatus === 'assigned_here';
+  const isSelectable = user.memberStatus === 'available';
+  const isDisabled = !isSelectable;
 
   const resolveStatusColor = (): string => {
     switch (user.memberStatus) {
@@ -65,7 +63,7 @@ export function CleaningUserSelectItem({
       paddingVertical: 12,
       paddingHorizontal: 16,
       gap: 12,
-      opacity: isDisabled && !isInGroup ? 0.55 : 1,
+      opacity: isInGroup ? 0.72 : isDisabled ? 0.55 : 1,
     },
     avatar: {
       width: 38,
@@ -116,18 +114,18 @@ export function CleaningUserSelectItem({
 
   const subtitle =
     user.memberStatus === 'assigned_other' && user.cleaningGroupName
-      ? `Asignado a: ${user.cleaningGroupName}`
-      : CLEANING_MEMBER_STATUS_LABELS[user.memberStatus];
+      ? t('cleaning.memberStatus.assignedOtherWithGroup', { name: user.cleaningGroupName })
+      : t(`cleaning.memberStatus.${user.memberStatus}`);
 
   return (
     <>
       <TouchableOpacity
         style={styles.row}
-        onPress={() => !isDisabled && !isInGroup && onToggle(user.uid)}
-        disabled={isDisabled || isInGroup}
+        onPress={() => isSelectable && onToggle(user.uid)}
+        disabled={!isSelectable}
         activeOpacity={0.7}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: selected || isInGroup, disabled: isDisabled }}
+        accessibilityRole={isSelectable ? 'checkbox' : 'text'}
+        accessibilityState={isSelectable ? { checked: selected } : { disabled: true }}
         accessibilityLabel={`${user.displayName} - ${subtitle}`}
       >
         <View style={styles.avatar}>
@@ -152,7 +150,7 @@ export function CleaningUserSelectItem({
 
         <View style={styles.checkboxArea}>
           {isInGroup ? (
-            <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+            <Ionicons name="people-outline" size={20} color={colors.textMuted} />
           ) : isDisabled ? (
             <Ionicons name="lock-closed-outline" size={18} color={colors.textDisabled} />
           ) : selected ? (

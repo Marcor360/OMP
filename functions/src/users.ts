@@ -1,5 +1,6 @@
 export {
   listUsersForCurrentCongregation,
+  listUsersPageForCurrentCongregation,
   listOrgChartUsersForCurrentCongregation,
 } from './users/list-handlers.js';
 export {

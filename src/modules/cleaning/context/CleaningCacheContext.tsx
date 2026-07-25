@@ -1,26 +1,32 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 
+import { useUser } from '@/src/context/user-context';
+import { getCleaningGroups } from '@/src/modules/cleaning/services/cleaning-service';
 import {
-  getCleaningGroups,
-  getCleaningAssignableUsers,
-} from '@/src/modules/cleaning/services/cleaning-service';
-import {
-  CleaningGroup,
-  CleaningAssignableUser,
-} from '@/src/modules/cleaning/types/cleaning-group.types';
+  CleaningCacheScope,
+  createCleaningCacheScope,
+  getCleaningCacheScopeIdentity,
+  readScopedCleaningCache,
+  writeScopedCleaningGroups,
+} from '@/src/modules/cleaning/services/cleaning-cache-storage';
+import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { createLogger } from '@/src/utils/logger';
 
-const CACHE_KEY_GROUPS = '@cleaning_groups';
-const CACHE_KEY_USERS = '@cleaning_assignable_users';
-const CACHE_EXPIRATION_MS = 10 * 60 * 1000; // 10 minutos
+const CACHE_EXPIRATION_MS = 10 * 60 * 1000;
 const log = createLogger('cleaning-cache');
 
 interface CacheState {
   groups: CleaningGroup[];
-  assignableUsers: CleaningAssignableUser[];
   lastSyncAt: number | null;
   loading: boolean;
   error: string | null;
@@ -28,149 +34,178 @@ interface CacheState {
 
 interface CleaningCacheContextValue extends CacheState {
   refreshGroups: (congregationId: string) => Promise<void>;
-  refreshUsers: (congregationId: string, currentGroupId?: string | null) => Promise<void>;
   refreshAll: (congregationId: string) => Promise<void>;
   invalidate: () => void;
-  // Métodos óptimistas
   setOptimisticGroups: (groups: CleaningGroup[]) => void;
-  setOptimisticUsers: (users: CleaningAssignableUser[]) => void;
 }
+
+const createEmptyState = (loading = false): CacheState => ({
+  groups: [],
+  lastSyncAt: null,
+  loading,
+  error: null,
+});
 
 const CleaningCacheContext = createContext<CleaningCacheContextValue | undefined>(undefined);
 
+/**
+ * Resuelve el scope desde la sesion real y remonta el estado interno cuando cambia.
+ * La key evita que un render del usuario B pueda observar memoria del usuario A.
+ */
 export const CleaningCacheProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<CacheState>({
-    groups: [],
-    assignableUsers: [],
-    lastSyncAt: null,
-    loading: false,
-    error: null,
-  });
+  const { uid, congregationId } = useUser();
+  const scope = useMemo(
+    () => createCleaningCacheScope(uid, congregationId),
+    [congregationId, uid]
+  );
+  const scopeIdentity = scope
+    ? getCleaningCacheScopeIdentity(scope)
+    : 'without-authenticated-scope';
 
-  // Hidratar desde AsyncStorage al montar
+  return (
+    <ScopedCleaningCacheProvider key={scopeIdentity} scope={scope}>
+      {children}
+    </ScopedCleaningCacheProvider>
+  );
+};
+
+interface ScopedCleaningCacheProviderProps {
+  children: React.ReactNode;
+  scope: CleaningCacheScope | null;
+}
+
+const ScopedCleaningCacheProvider: React.FC<ScopedCleaningCacheProviderProps> = ({
+  children,
+  scope,
+}) => {
+  const [state, setState] = useState<CacheState>(() => createEmptyState(scope !== null));
+  const mountedRef = useRef(true);
+  const hydratingRef = useRef(scope !== null);
+  const pendingRequestsRef = useRef(0);
+  const groupsRevisionRef = useRef(0);
+  const freshGroupsAppliedRef = useRef(false);
+  const groupsWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const updateLoadingState = useCallback(() => {
+    if (!mountedRef.current) return;
+    const loading = hydratingRef.current || pendingRequestsRef.current > 0;
+    setState((previous) =>
+      previous.loading === loading ? previous : { ...previous, loading }
+    );
+  }, []);
+
   useEffect(() => {
-    let mounted = true;
-    const hydrate = async () => {
+    let cancelled = false;
+    mountedRef.current = true;
+    hydratingRef.current = scope !== null;
+
+    if (!scope) {
+      setState(createEmptyState(false));
+      return () => {
+        cancelled = true;
+        mountedRef.current = false;
+      };
+    }
+
+    void readScopedCleaningCache(scope)
+      .then((cached) => {
+        if (cancelled || !mountedRef.current || freshGroupsAppliedRef.current) return;
+        setState((previous) => ({ ...previous, groups: cached.groups }));
+      })
+      .catch((error) => {
+        log.warn('No se pudo hidratar la cache scoped de limpieza:', error);
+      })
+      .finally(() => {
+        if (cancelled || !mountedRef.current) return;
+        hydratingRef.current = false;
+        updateLoadingState();
+      });
+
+    return () => {
+      cancelled = true;
+      mountedRef.current = false;
+    };
+  }, [scope, updateLoadingState]);
+
+  const beginRequest = useCallback(() => {
+    pendingRequestsRef.current += 1;
+    if (mountedRef.current) {
+      setState((previous) => ({ ...previous, loading: true, error: null }));
+    }
+  }, []);
+
+  const finishRequest = useCallback(() => {
+    pendingRequestsRef.current = Math.max(0, pendingRequestsRef.current - 1);
+    updateLoadingState();
+  }, [updateLoadingState]);
+
+  const matchesScope = useCallback(
+    (congregationId: string): boolean =>
+      Boolean(scope && scope.congregationId === congregationId.trim()),
+    [scope]
+  );
+
+  const persistGroups = useCallback(
+    (groups: CleaningGroup[]) => {
+      if (!scope) return;
+      groupsWriteQueueRef.current = groupsWriteQueueRef.current
+        .catch(() => undefined)
+        .then(() => writeScopedCleaningGroups(scope, groups))
+        .catch((error) => {
+          log.warn('No se pudo persistir la cache scoped de grupos:', error);
+        });
+    },
+    [scope]
+  );
+
+  const refreshGroups = useCallback(
+    async (congregationId: string) => {
+      if (!matchesScope(congregationId)) return;
+
+      const revision = ++groupsRevisionRef.current;
+      beginRequest();
       try {
-        const cachedGroups = await AsyncStorage.getItem(CACHE_KEY_GROUPS);
-        const cachedUsers = await AsyncStorage.getItem(CACHE_KEY_USERS);
-        
-        if (mounted) {
-          setState((prev) => ({
-            ...prev,
-            groups: cachedGroups ? JSON.parse(cachedGroups) : [],
-            assignableUsers: cachedUsers ? JSON.parse(cachedUsers) : [],
-            loading: false,
+        const groups = await getCleaningGroups(congregationId.trim());
+        if (!mountedRef.current || revision !== groupsRevisionRef.current) return;
+
+        freshGroupsAppliedRef.current = true;
+        const now = Date.now();
+        setState((previous) => ({
+          ...previous,
+          groups,
+          error: null,
+          lastSyncAt: now,
+        }));
+        persistGroups(groups);
+      } catch (error) {
+        if (mountedRef.current && revision === groupsRevisionRef.current) {
+          setState((previous) => ({
+            ...previous,
+            error: formatFirestoreError(error),
           }));
         }
-      } catch (err) {
-        log.warn('Error hidratando caché de limpieza:', err);
-        if (mounted) setState((prev) => ({ ...prev, loading: false }));
-      }
-    };
-    void hydrate();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const saveToAsyncStorage = async (groups: CleaningGroup[], users: CleaningAssignableUser[]) => {
-    try {
-      await Promise.all([
-        AsyncStorage.setItem(CACHE_KEY_GROUPS, JSON.stringify(groups)),
-        AsyncStorage.setItem(CACHE_KEY_USERS, JSON.stringify(users)),
-      ]);
-    } catch (e) {
-      log.warn('Error guardando en caché:', e);
-    }
-  };
-
-  const refreshGroups = useCallback(async (congregationId: string) => {
-    if (!congregationId) return;
-    try {
-      const data = await getCleaningGroups(congregationId);
-      const now = Date.now();
-      setState((prev) => {
-        const newState = { ...prev, groups: data, error: null, lastSyncAt: now };
-        void saveToAsyncStorage(data, prev.assignableUsers);
-        return newState;
-      });
-    } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        error: formatFirestoreError(err),
-      }));
-    }
-  }, []);
-
-  const refreshUsers = useCallback(async (congregationId: string, currentGroupId: string | null = null) => {
-    if (!congregationId) return;
-    try {
-      const data = await getCleaningAssignableUsers(congregationId, currentGroupId);
-      const now = Date.now();
-      setState((prev) => {
-        const newState = { ...prev, assignableUsers: data, error: null, lastSyncAt: now };
-        void saveToAsyncStorage(prev.groups, data);
-        return newState;
-      });
-    } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        error: formatFirestoreError(err),
-      }));
-    }
-  }, []);
-
-  const refreshAll = useCallback(
-    async (congregationId: string) => {
-      if (!congregationId) return;
-      setState((prev) => ({ ...prev, loading: true, error: null }));
-      try {
-        const [groupsData, usersData] = await Promise.all([
-          getCleaningGroups(congregationId),
-          getCleaningAssignableUsers(congregationId, null),
-        ]);
-        
-        const now = Date.now();
-        setState({
-          groups: groupsData,
-          assignableUsers: usersData,
-          lastSyncAt: now,
-          loading: false,
-          error: null,
-        });
-        
-        await saveToAsyncStorage(groupsData, usersData);
-      } catch (err) {
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          error: formatFirestoreError(err),
-        }));
+      } finally {
+        finishRequest();
       }
     },
-    []
+    [beginRequest, finishRequest, matchesScope, persistGroups]
   );
 
   const invalidate = useCallback(() => {
-    setState((prev) => ({ ...prev, lastSyncAt: null })); // Fuerza sincronización la próxima vez
+    setState((previous) => ({ ...previous, lastSyncAt: null }));
   }, []);
 
-  const setOptimisticGroups = useCallback((groups: CleaningGroup[]) => {
-    setState((prev) => {
-      void saveToAsyncStorage(groups, prev.assignableUsers);
-      return { ...prev, groups };
-    });
-  }, []);
+  const setOptimisticGroups = useCallback(
+    (groups: CleaningGroup[]) => {
+      if (!scope) return;
+      groupsRevisionRef.current += 1;
+      freshGroupsAppliedRef.current = true;
+      setState((previous) => ({ ...previous, groups }));
+      persistGroups(groups);
+    },
+    [persistGroups, scope]
+  );
 
-  const setOptimisticUsers = useCallback((users: CleaningAssignableUser[]) => {
-    setState((prev) => {
-      void saveToAsyncStorage(prev.groups, users);
-      return { ...prev, assignableUsers: users };
-    });
-  }, []);
-
-  // Sincronización automática de fondo si la caché expiró (stale-while-revalidate base)
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active' && state.lastSyncAt) {
@@ -178,28 +213,32 @@ export const CleaningCacheProvider: React.FC<{ children: React.ReactNode }> = ({
         if (isStale) invalidate();
       }
     };
-    const sub = AppState.addEventListener('change', handleAppStateChange);
-    return () => sub.remove();
-  }, [state.lastSyncAt, invalidate]);
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [invalidate, state.lastSyncAt]);
 
-  const value = {
-    ...state,
-    refreshGroups,
-    refreshUsers,
-    refreshAll,
-    invalidate,
-    setOptimisticGroups,
-    setOptimisticUsers,
-  };
+  const value = useMemo<CleaningCacheContextValue>(
+    () => ({
+      ...state,
+      refreshGroups,
+      refreshAll: refreshGroups,
+      invalidate,
+      setOptimisticGroups,
+    }),
+    [invalidate, refreshGroups, setOptimisticGroups, state]
+  );
 
-  return <CleaningCacheContext.Provider value={value}>{children}</CleaningCacheContext.Provider>;
+  return (
+    <CleaningCacheContext.Provider value={value}>
+      {children}
+    </CleaningCacheContext.Provider>
+  );
 };
 
-export const useCleaningCache = () => {
+export const useCleaningCache = (): CleaningCacheContextValue => {
   const context = useContext(CleaningCacheContext);
   if (!context) {
     throw new Error('useCleaningCache debe usarse dentro de un CleaningCacheProvider');
   }
   return context;
 };
-

@@ -4,29 +4,31 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   View,
   KeyboardAvoidingView,
   ScrollView,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { AuthErrorBanner } from '@/src/components/auth/AuthErrorBanner';
 import { ThemedText } from '@/src/components/themed-text';
 import { ThemedView } from '@/src/components/themed-view';
 import { useAuth } from '@/src/hooks/use-auth';
 import { type AppColors, useAppColors } from '@/src/styles';
-import { handleAuthError } from '@/src/utils/firebase-auth-errors';
+import { isValidLoginEmail } from '@/src/utils/auth-validation';
+import { mapAuthError } from '@/src/utils/firebase-auth-errors';
 import { LoginValidationErrors } from '@/src/types/auth.types';
 import { useI18n } from '@/src/i18n/index';
 
 export default function LoginScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const { language, t } = useI18n();
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [errors, setErrors] = useState<LoginValidationErrors>({});
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
   const { login } = useAuth();
@@ -34,9 +36,7 @@ export default function LoginScreen() {
   const validateForm = (): boolean => {
     const newErrors: LoginValidationErrors = {};
 
-    if (!email) {
-      newErrors.email = t('auth.validation.emailRequired');
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
+    if (!isValidLoginEmail(email)) {
       newErrors.email = t('auth.validation.emailInvalid');
     }
 
@@ -48,7 +48,21 @@ export default function LoginScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    setAuthErrorMessage(null);
+    setErrors((current) => ({ ...current, email: undefined }));
+  };
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value);
+    setAuthErrorMessage(null);
+    setErrors((current) => ({ ...current, password: undefined }));
+  };
+
   const handleLogin = async () => {
+    setAuthErrorMessage(null);
+
     if (!validateForm()) {
       return;
     }
@@ -56,10 +70,16 @@ export default function LoginScreen() {
     setIsLoggingIn(true);
 
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       // La navegacion se maneja en el layout protegido
     } catch (error) {
-      Alert.alert(t('auth.login.errorTitle'), handleAuthError(error, language === 'en' ? 'en' : 'es'));
+      const mappedError = mapAuthError(error);
+
+      if (mappedError.target === 'email') {
+        setErrors((current) => ({ ...current, email: t(mappedError.messageKey) }));
+      } else {
+        setAuthErrorMessage(t(mappedError.messageKey));
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -85,6 +105,14 @@ export default function LoginScreen() {
             <ThemedText style={styles.subtitle}>{t('auth.login.subtitle')}</ThemedText>
 
             <View style={styles.form}>
+              {authErrorMessage ? (
+                <AuthErrorBanner
+                  message={authErrorMessage}
+                  dismissLabel={t('auth.login.error.dismiss')}
+                  onDismiss={() => setAuthErrorMessage(null)}
+                />
+              ) : null}
+
               <View style={styles.inputContainer}>
                 <ThemedText style={styles.label}>{t('auth.login.email')}</ThemedText>
                 <TextInput
@@ -92,25 +120,29 @@ export default function LoginScreen() {
                   placeholder="tu@email.com"
                   placeholderTextColor={colors.textDisabled}
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={handleEmailChange}
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="email-address"
                   returnKeyType="next"
                   editable={!isLoggingIn}
                 />
-                {errors.email ? <ThemedText style={styles.errorText}>{errors.email}</ThemedText> : null}
+                {errors.email ? (
+                  <ThemedText style={styles.errorText} accessibilityLiveRegion="polite">
+                    {errors.email}
+                  </ThemedText>
+                ) : null}
               </View>
 
               <View style={styles.inputContainer}>
                 <ThemedText style={styles.label}>{t('auth.login.password')}</ThemedText>
-                <View style={styles.passwordWrapper}>
+                <View style={[styles.passwordWrapper, errors.password && styles.inputError]}>
                   <TextInput
-                    style={[styles.passwordInput, errors.password && styles.inputError]}
+                    style={styles.passwordInput}
                     placeholder="********"
                     placeholderTextColor={colors.textDisabled}
                     value={password}
-                    onChangeText={setPassword}
+                    onChangeText={handlePasswordChange}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -131,7 +163,11 @@ export default function LoginScreen() {
                     />
                   </TouchableOpacity>
                 </View>
-                {errors.password ? <ThemedText style={styles.errorText}>{errors.password}</ThemedText> : null}
+                {errors.password ? (
+                  <ThemedText style={styles.errorText} accessibilityLiveRegion="polite">
+                    {errors.password}
+                  </ThemedText>
+                ) : null}
               </View>
 
               <TouchableOpacity
@@ -139,6 +175,9 @@ export default function LoginScreen() {
                 onPress={handleLogin}
                 disabled={isLoggingIn}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={t('auth.login.submit')}
+                accessibilityState={{ disabled: isLoggingIn, busy: isLoggingIn }}
               >
                 {isLoggingIn ? (
                   <ActivityIndicator color={colors.onPrimary} />

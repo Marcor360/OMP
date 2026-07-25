@@ -25,7 +25,7 @@ import {
   logFirestoreListenerCreated,
   logFirestoreListenerDestroyed,
 } from '@/src/services/firebase/firestore-debug';
-import type { UserRepository } from '@/src/services/repositories/ports/user-repository.port';
+import type { UserRepository, UsersPage } from '@/src/services/repositories/ports/user-repository.port';
 import {
   getDocumentCacheFirst,
   invalidateCacheEntry,
@@ -56,6 +56,20 @@ type ListUsersForCurrentCongregationPayload = {
 
 type ListUsersForCurrentCongregationResult = {
   users?: (Record<string, unknown> & { uid?: string })[];
+};
+
+type ListUsersPagePayload = {
+  activeOnly?: boolean;
+  cursor?: string;
+  pageSize?: number;
+  includeTotal?: boolean;
+};
+
+type ListUsersPageResult = {
+  users?: (Record<string, unknown> & { uid?: string })[];
+  cursor?: string | null;
+  hasMore?: boolean;
+  total?: number | null;
 };
 
 const sortUsers = (items: AppUser[]): AppUser[] => {
@@ -115,6 +129,32 @@ const listUsersForCurrentCongregation = async (
         .filter((user) => !isSystemPrincipalUser(user))
     )
   );
+};
+
+const listUsersPageForCurrentCongregation = async (
+  payload: ListUsersPagePayload
+): Promise<UsersPage> => {
+  const callable = httpsCallable<ListUsersPagePayload, ListUsersPageResult>(
+    functions,
+    'listUsersPageForCurrentCongregation'
+  );
+  const result = await callable(payload);
+  const rawUsers = Array.isArray(result.data?.users) ? result.data.users : [];
+  const users = sortUsers(
+    dedupeUsersByEmail(
+      rawUsers
+        .map((user) => normalizeUser(typeof user.uid === 'string' ? user.uid : '', user))
+        .filter((user) => user.uid.length > 0)
+        .filter((user) => !isSystemPrincipalUser(user))
+    )
+  );
+
+  return {
+    users,
+    cursor: typeof result.data?.cursor === 'string' ? result.data.cursor : null,
+    hasMore: result.data?.hasMore === true,
+    total: typeof result.data?.total === 'number' ? result.data.total : null,
+  };
 };
 
 const shouldFallbackToFirestoreList = (error: unknown): boolean =>
@@ -230,6 +270,22 @@ export const firestoreUserRepository: UserRepository = {
   getActiveByCongregation: async (congregationId: string): Promise<AppUser[]> => {
     return getUsersForCurrentCongregationCached(congregationId, {
       activeOnly: true,
+    });
+  },
+
+  getPageByCongregation: async (
+    congregationId: string,
+    options?: { cursor?: string | null; pageSize?: number; activeOnly?: boolean; includeTotal?: boolean }
+  ): Promise<UsersPage> => {
+    if (!congregationId) {
+      return { users: [], cursor: null, hasMore: false, total: 0 };
+    }
+
+    return listUsersPageForCurrentCongregation({
+      activeOnly: options?.activeOnly,
+      cursor: options?.cursor ?? undefined,
+      pageSize: options?.pageSize,
+      includeTotal: options?.includeTotal,
     });
   },
 

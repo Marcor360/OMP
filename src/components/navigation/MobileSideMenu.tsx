@@ -67,7 +67,7 @@ export function MobileSideMenu({ visibleTabs }: MobileSideMenuProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [isOpen, setIsOpen] = useState(false);
-  const drawerWidth = Math.min(Math.max(Math.round(width * 0.5), 180), 280);
+  const drawerWidth = Math.round(width * 0.5);
   const slideX = useRef(new Animated.Value(-drawerWidth)).current;
   const styles = useMemo(
     () => createStyles(colors, insets.top, insets.bottom, drawerWidth),
@@ -109,9 +109,7 @@ export function MobileSideMenu({ visibleTabs }: MobileSideMenuProps) {
         href: getTabHref(tab),
         icon: getTabIcon(tab),
         label:
-          tab === 'preaching'
-            ? 'Predicacion'
-            : tab === 'org-chart'
+          tab === 'org-chart'
               ? t('tabs.orgChart')
               : t(`tabs.${tab === 'index' ? 'home' : tab}`),
       })),
@@ -128,7 +126,8 @@ export function MobileSideMenu({ visibleTabs }: MobileSideMenuProps) {
       <View style={styles.topBar}>
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityLabel="Abrir menu"
+          accessibilityLabel={t('navigation.openMenu')}
+          accessibilityState={{ expanded: isOpen }}
           activeOpacity={0.8}
           onPress={openMenu}
           style={styles.menuButton}
@@ -137,7 +136,7 @@ export function MobileSideMenu({ visibleTabs }: MobileSideMenuProps) {
         </TouchableOpacity>
         <View style={styles.topBarText}>
           <Text style={styles.topBarTitle}>OMP</Text>
-          <Text style={styles.topBarSubtitle}>Menu</Text>
+          <Text style={styles.topBarSubtitle}>{t('navigation.menu')}</Text>
         </View>
       </View>
 
@@ -150,13 +149,21 @@ export function MobileSideMenu({ visibleTabs }: MobileSideMenuProps) {
         onRequestClose={closeMenu}
       >
         <View style={styles.modalRoot}>
-          <Pressable style={styles.backdrop} onPress={closeMenu} />
-          <Animated.View style={[styles.drawer, { transform: [{ translateX: slideX }] }]}>
+          <Pressable
+            style={styles.backdrop}
+            onPress={closeMenu}
+            accessibilityRole="button"
+            accessibilityLabel={t('navigation.closeMenu')}
+          />
+          <Animated.View
+            style={[styles.drawer, { transform: [{ translateX: slideX }] }]}
+            accessibilityViewIsModal
+          >
             <View style={styles.drawerHeader}>
               <Text style={styles.drawerTitle}>OMP</Text>
               <TouchableOpacity
                 accessibilityRole="button"
-                accessibilityLabel="Cerrar menu"
+                accessibilityLabel={t('navigation.closeMenu')}
                 activeOpacity={0.8}
                 onPress={closeMenu}
                 style={styles.closeButton}
@@ -179,6 +186,8 @@ export function MobileSideMenu({ visibleTabs }: MobileSideMenuProps) {
                   <TouchableOpacity
                     key={item.tab}
                     accessibilityRole="button"
+                    accessibilityLabel={item.label}
+                    accessibilityState={{ selected: isActive }}
                     activeOpacity={0.78}
                     onPress={() => handleNavigate(item.href)}
                     style={[styles.menuItem, isActive && styles.menuItemActive]}
@@ -261,8 +270,6 @@ const createStyles = (
     },
     drawer: {
       width: drawerWidth,
-      minWidth: 180,
-      maxWidth: 280,
       paddingTop: Math.max(topInset + 18, 28),
       paddingBottom: Math.max(bottomInset, 12) + 16,
       paddingHorizontal: 12,
@@ -288,9 +295,9 @@ const createStyles = (
       fontWeight: '900',
     },
     closeButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
+      width: 44,
+      height: 44,
+      borderRadius: 12,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surfaceRaised,

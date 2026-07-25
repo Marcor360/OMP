@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/src/components/themed-text';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
@@ -22,7 +23,8 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const colors = useAppColors();
-  const styles = createStyles(colors);
+  const insets = useSafeAreaInsets();
+  const styles = createStyles(colors, insets.bottom);
   const progress = useRef(new Animated.Value(1)).current;
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -70,7 +72,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       <View pointerEvents="none" style={styles.toastLayer}>
         {toast ? (
-          <View style={[styles.toast, { borderColor: accent + '66' }]}>
+          <View
+            style={[styles.toast, { borderColor: accent + '66' }]}
+            accessibilityRole="alert"
+            accessibilityLiveRegion={toast.type === 'error' ? 'assertive' : 'polite'}
+            accessibilityLabel={toast.message}
+          >
             <View style={styles.toastBody}>
               <Ionicons name={icon} size={18} color={accent} />
               <ThemedText style={styles.toastMessage}>{toast.message}</ThemedText>
@@ -106,13 +113,13 @@ export function useToast() {
   return context;
 }
 
-const createStyles = (colors: AppColorSet) =>
+const createStyles = (colors: AppColorSet, bottomInset: number) =>
   StyleSheet.create({
     toastLayer: {
       position: Platform.OS === 'web' ? 'fixed' as never : 'absolute',
       left: 0,
       right: 0,
-      bottom: 20,
+      bottom: bottomInset + 12,
       zIndex: 999,
       alignItems: 'center',
       paddingHorizontal: 16,

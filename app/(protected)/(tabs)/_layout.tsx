@@ -93,7 +93,7 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="preaching"
             options={{
-              title: 'Predicacion',
+              title: t('tabs.preaching'),
               href: hide('preaching') ? null : undefined,
               tabBarIcon: ({ color }) => (
                 <Ionicons name="document-text-outline" size={tabIconSize} color={color} />

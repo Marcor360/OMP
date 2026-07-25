@@ -1,76 +1,53 @@
-type AuthErrorLanguage = 'es' | 'en';
+export type LoginAuthErrorTarget = 'email' | 'banner';
 
-const AUTH_ERROR_MESSAGES: Record<AuthErrorLanguage, Record<string, string>> = {
-  es: {
-    // Errores de email
-    'auth/invalid-email': 'El correo electrónico no es válido.',
-    'auth/email-already-in-use': 'Este correo ya está registrado.',
-    'auth/user-not-found': 'No existe una cuenta con este correo.',
+export interface LoginAuthErrorMapping {
+  target: LoginAuthErrorTarget;
+  messageKey:
+    | 'auth.validation.emailInvalid'
+    | 'auth.login.error.invalidCredentials'
+    | 'auth.login.error.tooManyRequests'
+    | 'auth.login.error.network'
+    | 'auth.login.error.default';
+}
 
-    // Errores de contraseña
-    'auth/wrong-password': 'Contraseña incorrecta.',
-    'auth/weak-password': 'La contraseña es demasiado débil.',
+const INVALID_CREDENTIAL_CODES = new Set([
+  'auth/invalid-credential',
+  'auth/wrong-password',
+  'auth/user-not-found',
+  'auth/user-disabled',
+]);
 
-    // Errores de cuenta
-    'auth/user-disabled': 'Esta cuenta ha sido deshabilitada.',
-    'auth/account-exists-with-different-credential':
-      'Ya existe una cuenta con este email usando otro método de acceso.',
+function getAuthErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object' || !('code' in error)) {
+    return null;
+  }
 
-    // Errores de red/operación
-    'auth/network-request-failed': 'Error de conexión. Verifica tu internet.',
-    'auth/too-many-requests': 'Demasiados intentos. Intenta más tarde.',
-    'auth/operation-not-allowed': 'Este método de autenticación no está habilitado.',
-
-    // Errores de sesión
-    'auth/requires-recent-login': 'Esta operación requiere que vuelvas a iniciar sesión.',
-    'auth/credential-already-in-use': 'Esta credencial ya está en uso por otra cuenta.',
-
-    // Errores generales
-    'auth/invalid-credential': 'Credenciales inválidas. Verifica tu email y contraseña.',
-    'auth/invalid-verification-code': 'Código de verificación inválido.',
-    'auth/invalid-verification-id': 'ID de verificación inválido.',
-  },
-  en: {
-    'auth/invalid-email': 'The email address is not valid.',
-    'auth/email-already-in-use': 'This email is already registered.',
-    'auth/user-not-found': 'No account exists with this email.',
-    'auth/wrong-password': 'Incorrect password.',
-    'auth/weak-password': 'The password is too weak.',
-    'auth/user-disabled': 'This account has been disabled.',
-    'auth/account-exists-with-different-credential':
-      'An account already exists with this email using another sign-in method.',
-    'auth/network-request-failed': 'Connection error. Check your internet connection.',
-    'auth/too-many-requests': 'Too many attempts. Try again later.',
-    'auth/operation-not-allowed': 'This authentication method is not enabled.',
-    'auth/requires-recent-login': 'This operation requires you to sign in again.',
-    'auth/credential-already-in-use': 'This credential is already used by another account.',
-    'auth/invalid-credential': 'Invalid credentials. Check your email and password.',
-    'auth/invalid-verification-code': 'Invalid verification code.',
-    'auth/invalid-verification-id': 'Invalid verification ID.',
-  },
-};
-
-/**
- * Traduce códigos de error de Firebase Auth al idioma activo.
- */
-export function getAuthErrorMessage(
-  errorCode: string,
-  language: AuthErrorLanguage = 'es'
-): string {
-  const messages = AUTH_ERROR_MESSAGES[language] ?? AUTH_ERROR_MESSAGES.es;
-  return messages[errorCode] || (
-    language === 'en' ? 'An error occurred. Try again.' : 'Ocurrió un error. Intenta nuevamente.'
-  );
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : null;
 }
 
 /**
- * Extrae el código de error de Firebase y devuelve el mensaje traducido
+ * Maps Firebase Auth login failures to safe, localized UI message keys.
+ * Credential failures deliberately share one message to avoid account enumeration.
  */
-export function handleAuthError(error: unknown, language: AuthErrorLanguage = 'es'): string {
-  if (error && typeof error === 'object' && 'code' in error) {
-    return getAuthErrorMessage((error as { code: string }).code, language);
+export function mapAuthError(error: unknown): LoginAuthErrorMapping {
+  const code = getAuthErrorCode(error);
+
+  if (code === 'auth/invalid-email') {
+    return { target: 'email', messageKey: 'auth.validation.emailInvalid' };
   }
-  return language === 'en'
-    ? 'An unexpected error occurred. Try again.'
-    : 'Ocurrió un error inesperado. Intenta nuevamente.';
+
+  if (code && INVALID_CREDENTIAL_CODES.has(code)) {
+    return { target: 'banner', messageKey: 'auth.login.error.invalidCredentials' };
+  }
+
+  if (code === 'auth/too-many-requests') {
+    return { target: 'banner', messageKey: 'auth.login.error.tooManyRequests' };
+  }
+
+  if (code === 'auth/network-request-failed') {
+    return { target: 'banner', messageKey: 'auth.login.error.network' };
+  }
+
+  return { target: 'banner', messageKey: 'auth.login.error.default' };
 }

@@ -9,6 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAppColors } from '@/src/styles';
+import { useI18n } from '@/src/i18n/index';
 
 interface CleaningMemberItemProps {
   uid: string;
@@ -17,6 +18,8 @@ interface CleaningMemberItemProps {
   department?: string;
   onRemove?: (uid: string) => void;
   removing?: boolean;
+  disabled?: boolean;
+  showSeparator?: boolean;
 }
 
 /** Ítem de integrante en la lista del detalle de grupo. */
@@ -27,8 +30,11 @@ export function CleaningMemberItem({
   department,
   onRemove,
   removing = false,
+  disabled = false,
+  showSeparator = true,
 }: CleaningMemberItemProps) {
   const colors = useAppColors();
+  const { t } = useI18n();
 
   // Iniciales del usuario para el avatar
   const initials = displayName
@@ -75,6 +81,7 @@ export function CleaningMemberItem({
     removeBtn: {
       padding: 6,
       borderRadius: 8,
+      opacity: disabled && !removing ? 0.5 : 1,
     },
     separator: {
       height: 1,
@@ -95,7 +102,7 @@ export function CleaningMemberItem({
             {displayName}
           </Text>
           {(department ?? email) && (
-            <Text style={styles.sub} numberOfLines={1}>
+            <Text style={styles.sub} numberOfLines={1} ellipsizeMode="middle">
               {department ?? email}
             </Text>
           )}
@@ -105,9 +112,10 @@ export function CleaningMemberItem({
           <TouchableOpacity
             style={styles.removeBtn}
             onPress={() => onRemove(uid)}
-            disabled={removing}
+            disabled={disabled}
             accessibilityRole="button"
-            accessibilityLabel={`Quitar a ${displayName} del grupo`}
+            accessibilityLabel={t('cleaning.removeMemberA11y', { name: displayName })}
+            accessibilityState={{ disabled }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             {removing ? (
@@ -118,7 +126,7 @@ export function CleaningMemberItem({
           </TouchableOpacity>
         )}
       </View>
-      <View style={styles.separator} />
+      {showSeparator ? <View style={styles.separator} /> : null}
     </>
   );
 }

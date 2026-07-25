@@ -442,7 +442,6 @@ export const canViewUsers = (
     | undefined
 ): boolean =>
   isAdmin(user) ||
-  isSupervisor(user) ||
   hasGlobalScreenAccess(user) ||
   user?.permissions?.departments?.manage === true ||
   hasPermission(user, 'usuarios', 'view') ||

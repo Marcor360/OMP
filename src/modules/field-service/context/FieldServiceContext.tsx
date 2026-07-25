@@ -1,7 +1,8 @@
 /**
  * Contexto del Módulo: Contador de Horas de Predicación.
  *
- * - Hidrata AsyncStorage al montarse (una sola lectura).
+ * - Hidrata AsyncStorage al montarse y cada vez que cambia el uid autenticado
+ *   (aislamiento por usuario en dispositivos compartidos, ver field-service-storage.ts).
  * - Ejecuta auto-purge semestral si corresponde.
  * - Mantiene el store en memoria como fuente de verdad en runtime.
  * - Expone acciones limpias: saveDay, removeDay.
@@ -22,6 +23,7 @@ import React, {
   useState,
 } from 'react';
 
+import { useUser } from '@/src/context/user-context';
 import {
   getCurrentMonthlyReportWindow,
   loadStore,
@@ -63,6 +65,9 @@ const FieldServiceContext = createContext<FieldServiceContextValue | undefined>(
 export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const { appUser } = useUser();
+  const uid = appUser?.uid ?? null;
+
   const [state, setState] = useState<FieldServiceState>({
     store: null,
     loading: true,
@@ -77,17 +82,26 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
    */
   const storeRef = useRef<FieldServiceStore | null>(null);
 
-  // Evita doble hidratación en React Strict Mode
-  const hydrated = useRef(false);
+  /**
+   * uid actualmente hidratado en storeRef/state. Se usa para que las
+   * acciones (saveDay, removeDay, submitMonthlyReport) siempre escriban
+   * bajo el namespace del usuario correcto, incluso si el uid cambia
+   * mientras el provider sigue montado.
+   */
+  const hydratedUidRef = useRef<string | null>(null);
+  const hydrationRequestRef = useRef(0);
 
-  /** Carga el store desde AsyncStorage y aplica auto-purge si corresponde */
-  const hydrate = useCallback(async () => {
+  /** Carga el store desde AsyncStorage (namespaced por uid) y aplica auto-purge si corresponde */
+  const hydrate = useCallback(async (targetUid: string) => {
+    const requestId = ++hydrationRequestRef.current;
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const { store, purgeExecuted } = await loadStore();
-      // Actualizar ref ANTES de setState para que cualquier acción
-      // disparada sincrónicamente vea el store correcto desde ya.
+      const { store, purgeExecuted } = await loadStore(targetUid);
+      if (requestId !== hydrationRequestRef.current) return;
+      // Actualizar refs ANTES de setState para que cualquier acción
+      // disparada sincrónicamente vea el store y el uid correctos desde ya.
       storeRef.current = store;
+      hydratedUidRef.current = targetUid;
       setState({
         store,
         loading: false,
@@ -95,6 +109,7 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
         purgeExecutedThisSession: purgeExecuted,
       });
     } catch (err) {
+      if (requestId !== hydrationRequestRef.current) return;
       log.error('[FieldServiceContext] Error hidratando:', err);
       setState({
         store: null,
@@ -105,45 +120,61 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
+  // Re-hidrata cada vez que cambia el uid autenticado (login/logout/switch de
+  // usuario en el mismo dispositivo), y evita re-hidratar el mismo uid dos
+  // veces (p. ej. doble efecto de React Strict Mode en desarrollo).
   useEffect(() => {
-    if (hydrated.current) return;
-    hydrated.current = true;
-    void hydrate();
-  }, [hydrate]);
+    if (uid === hydratedUidRef.current) return;
 
-  /** Guarda un día y actualiza el store en memoria (upsert) */
-  const handleSaveDay = useCallback(async (input: SaveDayInput) => {
-    const currentStore = storeRef.current;
-    if (!currentStore) {
-      log.warn('[FieldServiceContext] saveDay llamado antes de hidratación.');
+    if (!uid) {
+      hydrationRequestRef.current += 1;
+      hydratedUidRef.current = null;
+      storeRef.current = null;
+      setState({ store: null, loading: true, error: null, purgeExecutedThisSession: false });
       return;
     }
-    try {
-      const updated = await storageSaveDay(currentStore, input);
-      // Actualizar ref sincrónicamente PRIMERO
-      storeRef.current = updated;
-      setState((prev) => ({ ...prev, store: updated }));
-    } catch (err) {
-      log.error('[FieldServiceContext] Error guardando día:', err);
-    }
-  }, []);
+
+    void hydrate(uid);
+  }, [uid, hydrate]);
+
+  /** Guarda un día y actualiza el store en memoria (upsert) */
+  const handleSaveDay = useCallback(
+    async (input: SaveDayInput) => {
+      const currentStore = storeRef.current;
+      const currentUid = hydratedUidRef.current;
+      if (!currentStore || !currentUid || currentUid !== uid) {
+        log.warn('[FieldServiceContext] saveDay llamado antes de hidratación.');
+        return;
+      }
+      try {
+        const updated = await storageSaveDay(currentUid, currentStore, input);
+        // Actualizar ref sincrónicamente PRIMERO
+        storeRef.current = updated;
+        setState((prev) => ({ ...prev, store: updated }));
+      } catch (err) {
+        log.error('[FieldServiceContext] Error guardando día:', err);
+      }
+    },
+    [uid]
+  );
 
   /** Elimina la entrada de un día y actualiza el store en memoria */
   const handleRemoveDay = useCallback(async (date: string) => {
     const currentStore = storeRef.current;
-    if (!currentStore) {
+    const currentUid = hydratedUidRef.current;
+    if (!currentStore || !currentUid || currentUid !== uid) {
       log.warn('[FieldServiceContext] removeDay llamado antes de hidratación.');
       return;
     }
     try {
-      const updated = await storageRemoveDay(currentStore, date);
+      const updated = await storageRemoveDay(currentUid, currentStore, date);
       // Actualizar ref sincrónicamente PRIMERO
       storeRef.current = updated;
       setState((prev) => ({ ...prev, store: updated }));
     } catch (err) {
       log.error('[FieldServiceContext] Error eliminando día:', err);
     }
-  }, []);
+  }, [uid]);
 
   /** Envía informe mensual y persiste el estado */
   const handleSubmitMonthlyReport = useCallback(async (): Promise<SubmitMonthlyReportResult> => {
@@ -157,7 +188,8 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     const currentStore = storeRef.current;
-    if (!currentStore) {
+    const currentUid = hydratedUidRef.current;
+    if (!currentStore || !currentUid || currentUid !== uid) {
       return {
         ok: false,
         reason: 'OUTSIDE_WINDOW',
@@ -167,7 +199,10 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     try {
-      const { store: updated, result } = await storageSubmitMonthlyReport(currentStore);
+      const { store: updated, result } = await storageSubmitMonthlyReport(
+        currentUid,
+        currentStore
+      );
       if (result.ok) {
         storeRef.current = updated;
         setState((prev) => ({ ...prev, store: updated }));
@@ -182,14 +217,23 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
         status: fallbackStatus,
       };
     }
-  }, []);
+  }, [uid]);
+
+  const reload = useCallback(async () => {
+    if (!uid) return;
+    await hydrate(uid);
+  }, [uid, hydrate]);
+
+  const visibleState = hydratedUidRef.current === uid
+    ? state
+    : { store: null, loading: true, error: null, purgeExecutedThisSession: false };
 
   const value: FieldServiceContextValue = {
-    ...state,
+    ...visibleState,
     saveDay: handleSaveDay,
     removeDay: handleRemoveDay,
     submitMonthlyReport: handleSubmitMonthlyReport,
-    reload: hydrate,
+    reload,
   };
 
   return (

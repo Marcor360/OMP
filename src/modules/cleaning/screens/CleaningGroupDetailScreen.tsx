@@ -1,11 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -13,12 +12,13 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning-permission';
 import { useCleaningGroupDetail } from '@/src/modules/cleaning/hooks/use-cleaning-group-detail';
-import { useCleaningAssignableUsers } from '@/src/modules/cleaning/hooks/use-cleaning-assignable-users';
+import { usePaginatedCleaningGroupMembers } from '@/src/modules/cleaning/hooks/use-paginated-cleaning-group-members';
 import { useCleaningCache } from '@/src/modules/cleaning/context/CleaningCacheContext';
 import { CleaningMemberItem } from '@/src/modules/cleaning/components/CleaningMemberItem';
 import { AddMembersToCleaningGroupModal } from '@/src/modules/cleaning/screens/AddMembersToCleaningGroupModal';
@@ -31,21 +31,42 @@ import { CleaningServiceError } from '@/src/modules/cleaning/types/cleaning-grou
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
+import { ActionErrorBanner } from '@/src/components/common/ActionErrorBanner';
+import { useToast } from '@/src/context/toast-context';
 
 interface CleaningGroupDetailScreenProps {
   groupId: string;
+}
+
+type RetryAction =
+  | { type: 'add'; userIds: string[] }
+  | { type: 'remove'; uid: string; displayName: string }
+  | { type: 'deactivate' };
+
+interface ActionErrorState {
+  message: string;
+  retry?: RetryAction;
 }
 
 /** Pantalla de detalle y gestion de un grupo de limpieza. */
 export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreenProps) {
   const colors = useAppColors();
   const router = useRouter();
-  const { congregationId } = useCleaningPermission();
+  const { congregationId, canManage } = useCleaningPermission();
   const { refreshAll } = useCleaningCache();
   const { t } = useI18n();
+  const { showToast } = useToast();
 
   const { group, loading, error, refresh } = useCleaningGroupDetail(groupId, congregationId);
-  const { users: allUsers, refresh: refreshAssignableUsers } = useCleaningAssignableUsers(
+  const {
+    members,
+    loading: loadingMembers,
+    loadingMore: loadingMoreMembers,
+    error: membersError,
+    hasMore: hasMoreMembers,
+    refresh: refreshMembers,
+    loadMore: loadMoreMembers,
+  } = usePaginatedCleaningGroupMembers(
     congregationId,
     groupId
   );
@@ -54,15 +75,21 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
   const [showAddModal, setShowAddModal] = useState(false);
   const [addingMembers, setAddingMembers] = useState(false);
   const [deletingGroup, setDeletingGroup] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<ActionErrorState | null>(null);
+
+  useEffect(() => {
+    if (!actionError) return;
+    const timer = setTimeout(() => setActionError(null), 4000);
+    return () => clearTimeout(timer);
+  }, [actionError]);
 
   const syncCaches = useCallback(async () => {
-    await refreshAssignableUsers();
-    if (congregationId) {
-      await refreshAll(congregationId).catch(() => undefined);
-    }
+    await Promise.all([
+      congregationId ? refreshAll(congregationId).catch(() => undefined) : Promise.resolve(),
+      refreshMembers(),
+    ]);
     refresh();
-  }, [congregationId, refresh, refreshAll, refreshAssignableUsers]);
+  }, [congregationId, refresh, refreshAll, refreshMembers]);
 
   const goBackToCleaning = useCallback(() => {
     if (router.canGoBack?.()) {
@@ -73,67 +100,115 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
     router.replace('/(protected)/cleaning' as never);
   }, [router]);
 
-  const memberProfiles = group
-    ? group.memberIds.map((uid) => {
-        const found = allUsers.find((u) => u.uid === uid);
-        return {
-          uid,
-          displayName: found?.displayName ?? uid,
-          email: found?.email,
-        };
-      })
-    : [];
+  const performRemoveMember = async (uid: string, displayName: string) => {
+    if (!canManage) return;
+    setRemovingUid(uid);
+    setActionError(null);
+    try {
+      await removeUserFromCleaningGroup(groupId, uid, congregationId);
+      await syncCaches();
+      showToast(t('cleaning.memberRemovedSuccess', { name: displayName }), 'success');
+    } catch (err) {
+      setActionError({
+        message:
+          err instanceof CleaningServiceError
+            ? err.message
+            : t('cleaning.errorRemoveMember'),
+        retry: { type: 'remove', uid, displayName },
+      });
+    } finally {
+      setRemovingUid(null);
+    }
+  };
 
-  const handleRemoveMember = useCallback(
-    async (uid: string) => {
-      Alert.alert(
-        t('cleaning.removeMemberTitle'),
-        t('cleaning.removeMemberConfirm'),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          {
-            text: t('cleaning.removeBtn'),
-            style: 'destructive',
-            onPress: async () => {
-              setRemovingUid(uid);
-              setActionError(null);
-              try {
-                await removeUserFromCleaningGroup(groupId, uid, congregationId);
-                await syncCaches();
-              } catch (err) {
-                setActionError(
-                  err instanceof CleaningServiceError
-                    ? err.message
-                    : t('cleaning.errorRemoveMember')
-                );
-              } finally {
-                setRemovingUid(null);
-              }
-            },
-          },
-        ]
-      );
-    },
-    [congregationId, groupId, syncCaches, t]
-  );
+  const handleRemoveMember = (uid: string) => {
+    if (!canManage || removingUid) return;
+    const displayName = members.find((member) => member.uid === uid)?.displayName ?? uid;
+    Alert.alert(
+      t('cleaning.removeMemberTitle'),
+      t('cleaning.removeMemberConfirm', { name: displayName }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('cleaning.removeBtn'),
+          style: 'destructive',
+          onPress: () => void performRemoveMember(uid, displayName),
+        },
+      ]
+    );
+  };
 
-  const handleAddMembers = async (selectedIds: string[]) => {
+  const performAddMembers = async (selectedIds: string[]) => {
+    if (!canManage) return;
     setAddingMembers(true);
     setActionError(null);
     try {
-      await addUsersToCleaningGroup(groupId, selectedIds, congregationId);
+      const result = await addUsersToCleaningGroup(groupId, selectedIds, congregationId);
       setShowAddModal(false);
       await syncCaches();
+      if (result.added > 0) {
+        showToast(
+          t(
+            result.added === 1
+              ? 'cleaning.membersAddedSuccess'
+              : 'cleaning.membersAddedSuccess_plural',
+            { count: result.added }
+          ),
+          'success'
+        );
+      } else {
+        showToast(t('cleaning.noMembersAdded'), 'info');
+      }
     } catch (err) {
-      setActionError(
-        err instanceof CleaningServiceError ? err.message : t('cleaning.errorAddMembers')
-      );
+      setShowAddModal(false);
+      setActionError({
+        message:
+          err instanceof CleaningServiceError ? err.message : t('cleaning.errorAddMembers'),
+        retry: { type: 'add', userIds: selectedIds },
+      });
     } finally {
       setAddingMembers(false);
     }
   };
 
+  const handleRetryAction = () => {
+    const retry = actionError?.retry;
+    setActionError(null);
+    if (!retry) return;
+
+    if (retry.type === 'add') {
+      void performAddMembers(retry.userIds);
+      return;
+    }
+    if (retry.type === 'deactivate') {
+      void performDeactivateGroup();
+      return;
+    }
+    void performRemoveMember(retry.uid, retry.displayName);
+  };
+
+  const performDeactivateGroup = async () => {
+    if (!canManage) return;
+    setDeletingGroup(true);
+    setActionError(null);
+    try {
+      await deactivateCleaningGroup(groupId, congregationId);
+      if (congregationId) {
+        await refreshAll(congregationId).catch(() => undefined);
+      }
+      goBackToCleaning();
+    } catch (err) {
+      setActionError({
+        message:
+          err instanceof CleaningServiceError ? err.message : t('cleaning.errorDeactivate'),
+        retry: { type: 'deactivate' },
+      });
+      setDeletingGroup(false);
+    }
+  };
+
   const handleDeleteGroup = () => {
+    if (!canManage) return;
     Alert.alert(
       t('cleaning.deactivateGroup'),
       t('cleaning.deactivateGroupConfirm', { name: group?.name ?? '' }),
@@ -142,24 +217,7 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
         {
           text: t('cleaning.deactivateBtn'),
           style: 'destructive',
-          onPress: async () => {
-            setDeletingGroup(true);
-            setActionError(null);
-            try {
-              await deactivateCleaningGroup(groupId, congregationId);
-              if (congregationId) {
-                await refreshAll(congregationId).catch(() => undefined);
-              }
-              goBackToCleaning();
-            } catch (err) {
-              setActionError(
-                err instanceof CleaningServiceError
-                  ? err.message
-                  : t('cleaning.errorDeactivate')
-              );
-              setDeletingGroup(false);
-            }
-          },
+          onPress: () => void performDeactivateGroup(),
         },
       ]
     );
@@ -227,9 +285,6 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
       alignItems: 'center',
       gap: 4,
     },
-    metaWrap: {
-      gap: 6,
-    },
     metaText: {
       fontSize: 12,
       color: colors.textMuted,
@@ -260,34 +315,60 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
       fontWeight: '600',
       color: colors.primary,
     },
-    membersCard: {
+    memberRowCard: {
       marginHorizontal: 16,
+      marginBottom: 8,
       backgroundColor: colors.surface,
-      borderRadius: 16,
+      borderRadius: 12,
       paddingHorizontal: 16,
       borderWidth: 1,
       borderColor: colors.surfaceBorder,
     },
-    noMembers: {
+    membersStateCard: {
+      marginHorizontal: 16,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.surfaceBorder,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 20,
       paddingVertical: 24,
+    },
+    noMembers: {
       textAlign: 'center',
       color: colors.textMuted,
       fontSize: 14,
     },
-    errorBanner: {
+    membersRetry: {
+      minHeight: 44,
+      paddingHorizontal: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 10,
+      backgroundColor: `${colors.primary}18`,
+    },
+    membersRetryText: {
+      color: colors.primary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    membersFooter: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       gap: 8,
-      backgroundColor: colors.errorLight,
-      borderRadius: 12,
-      padding: 14,
-      margin: 16,
-      marginTop: 0,
+      paddingHorizontal: 20,
     },
-    errorText: {
-      flex: 1,
+    membersFooterText: {
+      color: colors.textMuted,
       fontSize: 13,
-      color: colors.error,
+      textAlign: 'center',
+    },
+    actionBannerWrap: {
+      marginHorizontal: 16,
+      marginBottom: 12,
     },
     deleteBtn: {
       flexDirection: 'row',
@@ -307,8 +388,8 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
       fontWeight: '600',
       color: colors.error,
     },
-    bottomSpace: {
-      height: 40,
+    scrollContent: {
+      paddingBottom: 16,
     },
     keyboardContainer: {
       flex: 1,
@@ -326,131 +407,191 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
   const statusColor = isActive ? colors.success : colors.textMuted;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-      <ScrollView
+      <FlatList
+        data={members}
+        keyExtractor={(member) => member.uid}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-      >
-        <PageHeader
-          title={group.name}
-          showBack
-          actions={
-            <TouchableOpacity
-              style={styles.editBtn}
-              onPress={() => router.push(`/(protected)/cleaning/edit/${groupId}`)}
-              accessibilityRole="button"
-              accessibilityLabel={t('cleaning.editGroup')}
-            >
-              <Ionicons name="create-outline" size={22} color={colors.primary} />
-            </TouchableOpacity>
-          }
-        />
-
-        <View style={styles.infoCard}>
-          <View style={styles.nameRow}>
-            <Text style={styles.groupName} numberOfLines={2}>
-              {group.name}
-            </Text>
-            <View style={[styles.badge, { backgroundColor: statusBg }]}>
-              <Text style={[styles.badgeText, { color: statusColor }]}>
-                {isActive ? t('cleaning.statusActive') : t('cleaning.statusInactive')}
-              </Text>
-            </View>
-          </View>
-
-          {group.description.length > 0 && <Text style={styles.description}>{group.description}</Text>}
-
-          <View style={styles.metaWrap}>
-            <View style={styles.metaRow}>
-              <Ionicons
-                name={isFamilyGroup ? 'home-outline' : 'sparkles-outline'}
-                size={14}
-                color={colors.textMuted}
-              />
-              <Text style={styles.metaText}>
-                {isFamilyGroup ? t('cleaning.typeFamily') : t('cleaning.typeStandard')}
-              </Text>
-            </View>
-            <View style={styles.metaRow}>
-              <Ionicons name="people-outline" size={14} color={colors.textMuted} />
-              <Text style={styles.metaText}>
-                {t(group.memberCount === 1 ? 'cleaning.membersCount' : 'cleaning.membersCount_plural', { count: group.memberCount })}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {actionError && (
-          <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle-outline" size={18} color={colors.error} />
-            <Text style={styles.errorText}>{actionError}</Text>
+        onEndReached={hasMoreMembers ? loadMoreMembers : undefined}
+        onEndReachedThreshold={0.4}
+        renderItem={({ item }) => (
+          <View style={styles.memberRowCard}>
+            <CleaningMemberItem
+              uid={item.uid}
+              displayName={item.displayName}
+              email={item.email}
+              onRemove={canManage ? handleRemoveMember : undefined}
+              removing={removingUid === item.uid}
+              disabled={removingUid !== null}
+              showSeparator={false}
+            />
           </View>
         )}
+        ListHeaderComponent={
+          <>
+            <PageHeader
+              title={group.name}
+              showBack
+              actions={
+                canManage ? (
+                  <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={() => router.push(`/(protected)/cleaning/edit/${groupId}`)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('cleaning.editGroup')}
+                  >
+                    <Ionicons name="create-outline" size={22} color={colors.primary} />
+                  </TouchableOpacity>
+                ) : undefined
+              }
+            />
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionLabel}>{t('cleaning.membersSection', { count: group.memberCount })}</Text>
-          <TouchableOpacity
-            style={styles.addMembersBtn}
-            onPress={() => setShowAddModal(true)}
-            accessibilityRole="button"
-            accessibilityLabel={t('cleaning.addMembersModalTitle')}
-          >
-            <Ionicons name="person-add-outline" size={16} color={colors.primary} />
-            <Text style={styles.addMembersText}>{t('cleaning.addMembers')}</Text>
-          </TouchableOpacity>
-        </View>
+            <View style={styles.infoCard}>
+              <View style={styles.nameRow}>
+                <Text style={styles.groupName} numberOfLines={2}>
+                  {group.name}
+                </Text>
+                <View style={[styles.badge, { backgroundColor: statusBg }]}>
+                  <Text style={[styles.badgeText, { color: statusColor }]}>
+                    {isActive ? t('cleaning.statusActive') : t('cleaning.statusInactive')}
+                  </Text>
+                </View>
+              </View>
 
-        <View style={styles.membersCard}>
-          {memberProfiles.length === 0 ? (
-            <Text style={styles.noMembers}>{t('cleaning.noMembersYet')}</Text>
-          ) : (
-            memberProfiles.map((m) => (
-              <CleaningMemberItem
-                key={m.uid}
-                uid={m.uid}
-                displayName={m.displayName}
-                email={m.email}
-                onRemove={handleRemoveMember}
-                removing={removingUid === m.uid}
-              />
-            ))
-          )}
-        </View>
+              {group.description.length > 0 ? (
+                <Text style={styles.description}>{group.description}</Text>
+              ) : null}
 
-        <TouchableOpacity
-          style={styles.deleteBtn}
-          onPress={handleDeleteGroup}
-          disabled={deletingGroup || !group.isActive}
-          accessibilityRole="button"
-          accessibilityLabel={t('cleaning.deactivateGroup')}
-        >
-          {deletingGroup ? (
-            <ActivityIndicator color={colors.error} size="small" />
-          ) : (
-            <>
-              <Ionicons name="trash-outline" size={18} color={colors.error} />
-              <Text style={styles.deleteBtnText}>{t('cleaning.deactivateGroup')}</Text>
-            </>
-          )}
-        </TouchableOpacity>
+              <View style={styles.metaRow}>
+                <Ionicons
+                  name={isFamilyGroup ? 'home-outline' : 'sparkles-outline'}
+                  size={14}
+                  color={colors.textMuted}
+                />
+                <Text style={styles.metaText}>
+                  {isFamilyGroup ? t('cleaning.typeFamily') : t('cleaning.typeStandard')}
+                </Text>
+              </View>
+            </View>
 
-        <View style={styles.bottomSpace} />
-      </ScrollView>
+            {actionError ? (
+              <View style={styles.actionBannerWrap}>
+                <ActionErrorBanner
+                  message={actionError.message}
+                  retryLabel={actionError.retry ? t('common.retry') : undefined}
+                  dismissLabel={t('cleaning.dismissError')}
+                  onRetry={actionError.retry ? handleRetryAction : undefined}
+                  onDismiss={() => setActionError(null)}
+                />
+              </View>
+            ) : null}
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>
+                {t('cleaning.membersSection', { count: group.memberCount })}
+              </Text>
+              {canManage ? (
+                <TouchableOpacity
+                  style={styles.addMembersBtn}
+                  onPress={() => setShowAddModal(true)}
+                  disabled={addingMembers || removingUid !== null}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('cleaning.addMembersModalTitle')}
+                  accessibilityState={{ disabled: addingMembers || removingUid !== null }}
+                >
+                  <Ionicons name="person-add-outline" size={16} color={colors.primary} />
+                  <Text style={styles.addMembersText}>{t('cleaning.addMembers')}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </>
+        }
+        ListEmptyComponent={
+          <View style={styles.membersStateCard}>
+            {loadingMembers ? (
+              <>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={styles.noMembers}>{t('cleaning.loadingMembers')}</Text>
+              </>
+            ) : membersError ? (
+              <>
+                <Text style={styles.noMembers}>{membersError}</Text>
+                <TouchableOpacity
+                  style={styles.membersRetry}
+                  onPress={() => void refreshMembers()}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.membersRetryText}>{t('common.retry')}</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Text style={styles.noMembers}>{t('cleaning.noMembersYet')}</Text>
+            )}
+          </View>
+        }
+        ListFooterComponent={
+          <>
+            {loadingMoreMembers ? (
+              <View style={styles.membersFooter}>
+                <ActivityIndicator color={colors.primary} size="small" />
+                <Text style={styles.membersFooterText}>{t('cleaning.loadingMoreMembers')}</Text>
+              </View>
+            ) : membersError && members.length > 0 ? (
+              <View style={styles.membersStateCard}>
+                <Text style={styles.noMembers}>{membersError}</Text>
+                <TouchableOpacity
+                  style={styles.membersRetry}
+                  onPress={loadMoreMembers}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.membersRetryText}>{t('common.retry')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            {canManage ? (
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={handleDeleteGroup}
+                disabled={deletingGroup || !group.isActive || removingUid !== null}
+                accessibilityRole="button"
+                accessibilityLabel={t('cleaning.deactivateGroup')}
+                accessibilityState={{
+                  disabled: deletingGroup || !group.isActive || removingUid !== null,
+                }}
+              >
+                {deletingGroup ? (
+                  <ActivityIndicator color={colors.error} size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="trash-outline" size={18} color={colors.error} />
+                    <Text style={styles.deleteBtnText}>{t('cleaning.deactivateGroup')}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : null}
+          </>
+        }
+      />
       </KeyboardAvoidingView>
 
-      <AddMembersToCleaningGroupModal
-        visible={showAddModal}
-        congregationId={congregationId}
-        currentGroupId={groupId}
-        preSelectedIds={group.memberIds}
-        onConfirm={handleAddMembers}
-        onClose={() => setShowAddModal(false)}
-        confirming={addingMembers}
-      />
+      {showAddModal ? (
+        <AddMembersToCleaningGroupModal
+          visible
+          congregationId={congregationId}
+          currentGroupId={groupId}
+          preSelectedIds={group.memberIds}
+          onConfirm={performAddMembers}
+          onClose={() => setShowAddModal(false)}
+          confirming={addingMembers}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

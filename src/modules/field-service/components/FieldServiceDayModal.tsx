@@ -22,6 +22,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
@@ -57,7 +58,8 @@ export function FieldServiceDayModal({
   onClose,
 }: FieldServiceDayModalProps) {
   const colors = useAppColors();
-  const styles = createStyles(colors);
+  const insets = useSafeAreaInsets();
+  const styles = createStyles(colors, insets.bottom);
   const { t } = useI18n();
 
   const [hoursText, setHoursText] = useState('');
@@ -411,7 +413,7 @@ export function FieldServiceDayModal({
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
-const createStyles = (colors: ReturnType<typeof useAppColors>) =>
+const createStyles = (colors: ReturnType<typeof useAppColors>, bottomInset: number) =>
   StyleSheet.create({
     overlay: {
       ...StyleSheet.absoluteFillObject,
@@ -426,7 +428,7 @@ const createStyles = (colors: ReturnType<typeof useAppColors>) =>
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       paddingHorizontal: 20,
-      paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+      paddingBottom: bottomInset + 12,
       paddingTop: 12,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: -4 },

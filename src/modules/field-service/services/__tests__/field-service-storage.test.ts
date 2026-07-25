@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { markMonthlyReportAsSent } from '../field-service-storage';
+import { loadStore, markMonthlyReportAsSent, saveDay } from '../field-service-storage';
 import type { FieldServiceStore } from '../../types/field-service.types';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -11,6 +11,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 const mockAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
 
 describe('markMonthlyReportAsSent', () => {
+  const uid = 'user-a';
   let storedValue: string;
 
   beforeEach(() => {
@@ -57,7 +58,7 @@ describe('markMonthlyReportAsSent', () => {
   });
 
   it('persiste el total del mes una sola vez', async () => {
-    await markMonthlyReportAsSent('2026-06');
+    await markMonthlyReportAsSent(uid, '2026-06');
 
     const firstStored = JSON.parse(storedValue) as FieldServiceStore;
     expect(firstStored.meta.monthlyReports['2026-06']).toMatchObject({
@@ -70,7 +71,7 @@ describe('markMonthlyReportAsSent', () => {
     });
 
     const firstSentAt = firstStored.meta.monthlyReports['2026-06'].sentAt;
-    await markMonthlyReportAsSent('2026-06');
+    await markMonthlyReportAsSent(uid, '2026-06');
 
     const secondStored = JSON.parse(storedValue) as FieldServiceStore;
     expect(secondStored.meta.monthlyReports['2026-06'].sentAt).toBe(firstSentAt);
@@ -79,7 +80,47 @@ describe('markMonthlyReportAsSent', () => {
   });
 
   it('rechaza un monthKey invalido sin escribir', async () => {
-    await expect(markMonthlyReportAsSent('2026-13')).rejects.toThrow('Mes de informe invalido');
+    await expect(markMonthlyReportAsSent(uid, '2026-13')).rejects.toThrow(
+      'Mes de informe invalido'
+    );
     expect(mockAsyncStorage.setItem).not.toHaveBeenCalled();
+  });
+
+  it('usa una clave de AsyncStorage namespaced por uid, no la clave global legada', async () => {
+    await markMonthlyReportAsSent(uid, '2026-06');
+
+    expect(mockAsyncStorage.getItem).toHaveBeenCalledWith(`@field_service_v1:${uid}`);
+    expect(mockAsyncStorage.setItem).toHaveBeenCalledWith(
+      `@field_service_v1:${uid}`,
+      expect.any(String)
+    );
+  });
+});
+
+describe('aislamiento por uid en un dispositivo compartido', () => {
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date(2026, 6, 14, 12));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.clearAllMocks();
+  });
+
+  it('los datos guardados por un usuario no son visibles para otro en el mismo dispositivo', async () => {
+    const backingStore = new Map<string, string>();
+    mockAsyncStorage.getItem.mockImplementation(async (key: string) => backingStore.get(key) ?? null);
+    mockAsyncStorage.setItem.mockImplementation(async (key: string, value: string) => {
+      backingStore.set(key, value);
+    });
+
+    const { store: storeA } = await loadStore('user-a');
+    await saveDay('user-a', storeA, { date: '2026-07-10', hours: 2, minutes: 0 });
+
+    const { store: storeB } = await loadStore('user-b');
+
+    expect(storeB.entries['2026-07-10']).toBeUndefined();
+    expect(backingStore.has('@field_service_v1:user-a')).toBe(true);
+    expect(backingStore.has('@field_service_v1:user-b')).toBe(true);
   });
 });

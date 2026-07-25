@@ -166,7 +166,6 @@ export const requesterHasGlobalScreenAccess = (profile: RequesterProfile): boole
 export function assertCanListUsers(profile: RequesterProfile) {
   const canList =
     profile.role === 'admin' ||
-    profile.role === 'supervisor' ||
     requesterHasGlobalScreenAccess(profile) ||
     profile.permissions?.departments?.manage === true ||
     requesterHasPermission(profile, 'usuarios', 'view') ||

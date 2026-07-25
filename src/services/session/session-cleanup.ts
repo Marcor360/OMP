@@ -7,21 +7,19 @@ import { createLogger } from '@/src/utils/logger';
 
 const log = createLogger('session-cleanup');
 
-const SESSION_ASYNC_STORAGE_KEYS = [
+// Solo claves globales legadas. Las caches nuevas con namespace de uid y
+// congregationId se conservan para rehidratar al mismo usuario en su proximo login.
+const LEGACY_SESSION_ASYNC_STORAGE_KEYS = [
   '@cleaning_groups',
   '@cleaning_assignable_users',
-] as const;
-
-const SESSION_ASYNC_STORAGE_PREFIXES = [
-  '@omp/my-cleaning-dashboard',
-] as const;
-
-const PRESERVED_ASYNC_STORAGE_KEYS = new Set([
+  // Clave legada (pre-namespacing por uid) del contador local de horas de
+  // predicación. Ya no se escribe (ver field-service-storage.ts), pero se
+  // purga una vez por logout para no dejar datos huérfanos de un usuario
+  // anterior visibles en dispositivos compartidos. Las claves nuevas
+  // (@field_service_v1:<uid>) NO están en esta lista a propósito: son
+  // caché en disco por usuario y deben sobrevivir al logout.
   '@field_service_v1',
-  '@omp/language',
-  '@omp/language-onboarding-complete',
-  '@omp/theme-mode',
-]);
+] as const;
 
 const warnSessionCleanupError = (operation: string, error: unknown): void => {
   if (__DEV__) {
@@ -30,18 +28,7 @@ const warnSessionCleanupError = (operation: string, error: unknown): void => {
 };
 
 const clearKnownSessionAsyncStorageCache = async (): Promise<void> => {
-  const keys = await AsyncStorage.getAllKeys();
-  const prefixMatches = keys.filter((key) =>
-    SESSION_ASYNC_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
-  );
-
-  const keysToRemove = Array.from(
-    new Set<string>([...SESSION_ASYNC_STORAGE_KEYS, ...prefixMatches])
-  ).filter((key) => !PRESERVED_ASYNC_STORAGE_KEYS.has(key));
-
-  if (keysToRemove.length > 0) {
-    await AsyncStorage.multiRemove(keysToRemove);
-  }
+  await AsyncStorage.multiRemove([...LEGACY_SESSION_ASYNC_STORAGE_KEYS]);
 };
 
 export const clearTemporaryCacheData = async (): Promise<void> => {

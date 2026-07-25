@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
 import { LogBox, Platform } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '@/src/context/auth-context';
 import { ThemeModeProvider, useAppTheme } from '@/src/context/theme-context';
@@ -265,8 +266,10 @@ function AppLayout() {
 
 export default function RootLayout() {
   return (
-    <ThemeModeProvider>
-      <AppLayout />
-    </ThemeModeProvider>
+    <SafeAreaProvider>
+      <ThemeModeProvider>
+        <AppLayout />
+      </ThemeModeProvider>
+    </SafeAreaProvider>
   );
 }

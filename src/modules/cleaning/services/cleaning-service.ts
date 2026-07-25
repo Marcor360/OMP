@@ -18,8 +18,10 @@ import {
   CleaningAssignableUser,
   CleaningGroup,
   CleaningGroupType,
+  CleaningMemberProfile,
   CleaningMemberStatus,
   CleaningServiceError,
+  CleaningUsersPage,
   CreateCleaningGroupDTO,
   UpdateCleaningGroupDTO,
 } from '@/src/modules/cleaning/types/cleaning-group.types';
@@ -388,8 +390,8 @@ export const addUsersToCleaningGroup = async (
   groupId: string,
   userIds: string[],
   congregationId: string
-): Promise<void> => {
-  if (userIds.length === 0) return;
+): Promise<{ added: number; skipped: number }> => {
+  if (userIds.length === 0) return { added: 0, skipped: 0 };
   if (!congregationId) {
     throw new CleaningServiceError('INVALID_DATA', 'congregationId es requerido.');
   }
@@ -403,11 +405,12 @@ export const addUsersToCleaningGroup = async (
   );
 
   try {
-    await callable({
+    const response = await callable({
       congregationId,
       groupId,
       userIds: Array.from(new Set(userIds)),
     });
+    return response.data;
   } catch (error) {
     throw mapCallableErrorToCleaningError(error);
   }
@@ -537,4 +540,80 @@ export const getCleaningAssignableUsers = async (
       memberStatus: resolveUserMemberStatus(data, currentGroupId),
     } satisfies CleaningAssignableUser;
   });
+};
+
+export const getCleaningAssignableUsersPage = async (
+  congregationId: string,
+  currentGroupId: string | null,
+  options?: { cursor?: string | null; pageSize?: number }
+): Promise<CleaningUsersPage<CleaningAssignableUser>> => {
+  if (!congregationId) return { users: [], cursor: null, hasMore: false };
+
+  const callable = httpsCallable<
+    {
+      congregationId: string;
+      currentGroupId: string | null;
+      cursor?: string;
+      pageSize?: number;
+    },
+    {
+      users: CleaningAssignableUser[];
+      cursor: string | null;
+      hasMore: boolean;
+    }
+  >(functions, 'listCleaningAssignableUsersPageByManager');
+
+  try {
+    const result = await callable({
+      congregationId,
+      currentGroupId,
+      ...(options?.cursor ? { cursor: options.cursor } : {}),
+      ...(options?.pageSize ? { pageSize: options.pageSize } : {}),
+    });
+    return {
+      users: Array.isArray(result.data.users) ? result.data.users : [],
+      cursor: typeof result.data.cursor === 'string' ? result.data.cursor : null,
+      hasMore: result.data.hasMore === true,
+    };
+  } catch (error) {
+    throw mapCallableErrorToCleaningError(error);
+  }
+};
+
+export const getCleaningGroupMembersPage = async (
+  congregationId: string,
+  groupId: string,
+  options?: { cursor?: string | null; pageSize?: number }
+): Promise<CleaningUsersPage<CleaningMemberProfile>> => {
+  if (!congregationId || !groupId) return { users: [], cursor: null, hasMore: false };
+
+  const callable = httpsCallable<
+    {
+      congregationId: string;
+      groupId: string;
+      cursor?: string;
+      pageSize?: number;
+    },
+    {
+      members: CleaningMemberProfile[];
+      cursor: string | null;
+      hasMore: boolean;
+    }
+  >(functions, 'listCleaningGroupMembersPageForCurrentUser');
+
+  try {
+    const result = await callable({
+      congregationId,
+      groupId,
+      ...(options?.cursor ? { cursor: options.cursor } : {}),
+      ...(options?.pageSize ? { pageSize: options.pageSize } : {}),
+    });
+    return {
+      users: Array.isArray(result.data.members) ? result.data.members : [],
+      cursor: typeof result.data.cursor === 'string' ? result.data.cursor : null,
+      hasMore: result.data.hasMore === true,
+    };
+  } catch (error) {
+    throw mapCallableErrorToCleaningError(error);
+  }
 };

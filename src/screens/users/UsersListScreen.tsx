@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -11,7 +11,7 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { getAllUsers, subscribeToUsers } from '@/src/services/users/users-service';
+import { getUsersPage } from '@/src/services/users/users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -20,6 +20,21 @@ import { canViewUsers, hasPermission } from '@/src/utils/permissions/permissions
 import { createLogger } from '@/src/utils/logger';
 
 const log = createLogger('users-list');
+const USERS_PAGE_SIZE = 20;
+
+const mergeUsers = (current: AppUser[], incoming: AppUser[]): AppUser[] => {
+  const byKey = new Map<string, AppUser>();
+  [...current, ...incoming].forEach((user) => {
+    const key = user.email.trim().toLowerCase() || `uid:${user.uid}`;
+    const existing = byKey.get(key);
+    if (!existing || (!existing.isActive && user.isActive)) byKey.set(key, user);
+  });
+  return Array.from(byKey.values()).sort((left, right) => {
+    const leftLabel = left.displayName || left.email || left.uid;
+    const rightLabel = right.displayName || right.email || right.uid;
+    return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: 'base' });
+  });
+};
 
 export function UsersListScreen() {
   const router = useRouter();
@@ -32,8 +47,15 @@ export function UsersListScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState<number | null>(null);
+  const requestInFlightRef = useRef(false);
+  const cursorRef = useRef<string | null>(null);
+  const totalRef = useRef<number | null>(null);
+  const requestIdRef = useRef(0);
 
-  const loadUsers = useCallback(async (forceServer = false) => {
+  const loadUsers = useCallback(async (reset = false, showInitialLoading = false) => {
     if (loadingProfile) return;
 
     if (!canViewUsers(appUser)) {
@@ -52,28 +74,49 @@ export function UsersListScreen() {
       return;
     }
 
-    if (!forceServer) {
+    if (!reset && requestInFlightRef.current) return;
+    const requestId = ++requestIdRef.current;
+    requestInFlightRef.current = true;
+
+    if (showInitialLoading) {
       setLoading(true);
+    } else {
+      setLoadingMore(!reset);
     }
     setError(null);
 
     try {
-      const data = await getAllUsers(congregationId, {
-        forceServer,
+      const page = await getUsersPage(congregationId, {
+        cursor: reset ? null : cursorRef.current,
+        pageSize: USERS_PAGE_SIZE,
+        includeTotal: reset || totalRef.current === null,
       });
-      setUsers(data);
+      if (requestId !== requestIdRef.current) return;
+      setUsers((current) => mergeUsers(reset ? [] : current, page.users));
+      cursorRef.current = page.cursor;
+      setHasMore(page.hasMore);
+      if (page.total !== null) {
+        setTotal(page.total);
+        totalRef.current = page.total;
+      }
       setError(null);
     } catch (requestError) {
+      if (requestId !== requestIdRef.current) return;
       log.error('UsersListScreen load error:', requestError);
-      setUsers([]);
+      if (reset && showInitialLoading) setUsers([]);
       setError(formatFirestoreError(requestError));
     } finally {
+      if (requestId !== requestIdRef.current) return;
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
+      requestInFlightRef.current = false;
     }
   }, [appUser, congregationId, loadingProfile, t]);
 
   useEffect(() => {
+    requestIdRef.current += 1;
+    requestInFlightRef.current = false;
     if (loadingProfile) return;
 
     if (!canViewUsers(appUser)) {
@@ -90,33 +133,36 @@ export function UsersListScreen() {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    setUsers([]);
+    cursorRef.current = null;
+    setHasMore(false);
+    setTotal(null);
+    totalRef.current = null;
+    void loadUsers(true, true);
 
-    return subscribeToUsers(
-      congregationId,
-      (data) => {
-        setUsers(data);
-        setError(null);
-        setLoading(false);
-        setRefreshing(false);
-      },
-      (requestError) => {
-        log.error('UsersListScreen subscription error:', requestError);
-        void loadUsers(true);
-      }
-    );
+    return () => {
+      requestIdRef.current += 1;
+      requestInFlightRef.current = false;
+    };
   }, [appUser, congregationId, loadUsers, loadingProfile, t]);
 
   const onRefresh = async () => {
-    if (!congregationId) return;
+    if (!congregationId || requestInFlightRef.current) return;
 
     setRefreshing(true);
-    await loadUsers(true);
+    await loadUsers(true, false);
+  };
+
+  const onEndReached = () => {
+    if (hasMore && !loadingMore && !refreshing && !requestInFlightRef.current) {
+      void loadUsers(false);
+    }
   };
 
   if (loading || loadingProfile) return <LoadingState message={t('users.loading')} />;
-  if (error) return <ErrorState message={error} onRetry={() => void loadUsers(true)} />;
+  if (error && users.length === 0) {
+    return <ErrorState message={error} onRetry={() => void loadUsers(true, true)} />;
+  }
 
   const canCreateUsers = hasPermission(appUser, 'usuarios', 'create') || hasPermission(appUser, 'usuarios', 'manage');
 
@@ -124,7 +170,7 @@ export function UsersListScreen() {
     <>
       <View style={styles.toolbar}>
         <ThemedText style={styles.count}>
-          {users.length} {users.length === 1 ? t('users.count.singular') : t('users.count.plural')}
+          {total ?? users.length} {(total ?? users.length) === 1 ? t('users.count.singular') : t('users.count.plural')}
         </ThemedText>
         {canCreateUsers ? (
           <TouchableOpacity
@@ -171,6 +217,21 @@ export function UsersListScreen() {
         }
         refreshing={refreshing}
         onRefresh={onRefresh}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.4}
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={styles.loadingMore}>
+              <ActivityIndicator color={colors.primary} />
+              <ThemedText style={styles.loadingMoreText}>{t('users.loadingMore')}</ThemedText>
+            </View>
+          ) : error ? (
+            <TouchableOpacity style={styles.loadMoreError} onPress={() => void loadUsers(false)}>
+              <ThemedText style={styles.loadMoreErrorText}>{error}</ThemedText>
+              <ThemedText style={styles.retryText}>{t('common.retry')}</ThemedText>
+            </TouchableOpacity>
+          ) : null
+        }
         showsVerticalScrollIndicator={false}
       />
     </ScreenContainer>
@@ -211,6 +272,33 @@ const createStyles = (colors: AppColorSet) =>
     },
     separator: {
       height: 10,
+    },
+    loadingMore: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 18,
+    },
+    loadingMoreText: {
+      color: colors.textMuted,
+      fontSize: 13,
+    },
+    loadMoreError: {
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 16,
+      paddingVertical: 18,
+    },
+    loadMoreErrorText: {
+      color: colors.error,
+      fontSize: 13,
+      textAlign: 'center',
+    },
+    retryText: {
+      color: colors.primary,
+      fontSize: 13,
+      fontWeight: '700',
     },
     emptyWrap: {
       paddingTop: 16,

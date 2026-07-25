@@ -97,6 +97,20 @@ export type ListUsersResult = {
   users: (Record<string, unknown> & { uid: string })[];
 };
 
+export type ListUsersPagePayload = {
+  activeOnly?: boolean;
+  cursor?: string;
+  pageSize?: number;
+  includeTotal?: boolean;
+};
+
+export type ListUsersPageResult = {
+  users: (Record<string, unknown> & { uid: string })[];
+  cursor: string | null;
+  hasMore: boolean;
+  total: number | null;
+};
+
 export type CreateUserPayload = {
   firstName: string;
   middleName?: string;

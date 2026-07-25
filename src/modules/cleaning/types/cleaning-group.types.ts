@@ -48,14 +48,6 @@ export type CleaningMemberStatus =
   | 'inactive'         // Usuario inactivo
   | 'not_eligible';    // cleaningEligible === false
 
-export const CLEANING_MEMBER_STATUS_LABELS: Record<CleaningMemberStatus, string> = {
-  available: 'Disponible',
-  assigned_here: 'Ya en este grupo',
-  assigned_other: 'Asignado a otro grupo',
-  inactive: 'Inactivo',
-  not_eligible: 'No elegible',
-};
-
 // ─── Usuario enriquecido con estado de asignabilidad ─────────────────────────
 
 export interface CleaningAssignableUser {
@@ -69,6 +61,18 @@ export interface CleaningAssignableUser {
   cleaningEligible: boolean;
   /** Estado calculado en relación con un grupo específico */
   memberStatus: CleaningMemberStatus;
+}
+
+export interface CleaningMemberProfile {
+  uid: string;
+  displayName: string;
+  email: string;
+}
+
+export interface CleaningUsersPage<T> {
+  users: T[];
+  cursor: string | null;
+  hasMore: boolean;
 }
 
 // ─── Estadísticas del módulo para la pantalla de resumen ─────────────────────

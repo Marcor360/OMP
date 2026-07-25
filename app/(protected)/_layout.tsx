@@ -10,6 +10,7 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { CongregationBlockedScreen } from '@/src/screens/errors/CongregationBlockedScreen';
 import { SystemAnnouncementGate } from '@/src/components/announcements/SystemAnnouncementGate';
 import { buildPathWithParams } from '@/src/utils/navigation/redirect';
+import { CleaningCacheProvider } from '@/src/modules/cleaning/context/CleaningCacheContext';
 
 function ProtectedNotificationSetup() {
   const { uid, congregationId, isSessionValid } = useUser();
@@ -53,7 +54,9 @@ export default function ProtectedLayout() {
 
   return (
     <UserProvider>
-      <ProtectedContent />
+      <CleaningCacheProvider>
+        <ProtectedContent />
+      </CleaningCacheProvider>
     </UserProvider>
   );
 }

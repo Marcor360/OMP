@@ -4,6 +4,13 @@ import type { AppUser } from '@/src/types/user';
 
 export type { Unsubscribe };
 
+export interface UsersPage {
+  users: AppUser[];
+  cursor: string | null;
+  hasMore: boolean;
+  total: number | null;
+}
+
 export interface UserRepository {
   getById(
     uid: string,
@@ -14,6 +21,10 @@ export interface UserRepository {
     options?: { forceServer?: boolean }
   ): Promise<AppUser[]>;
   getActiveByCongregation(congregationId: string): Promise<AppUser[]>;
+  getPageByCongregation(
+    congregationId: string,
+    options?: { cursor?: string | null; pageSize?: number; activeOnly?: boolean; includeTotal?: boolean }
+  ): Promise<UsersPage>;
   create(uid: string, payload: Record<string, unknown>): Promise<void>;
   update(uid: string, payload: Record<string, unknown>): Promise<void>;
   delete(uid: string): Promise<void>;

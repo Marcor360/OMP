@@ -12,7 +12,7 @@ export type {
   MyCleaningDay,
   MyCleaningDashboardSummary,
 } from './services/my-cleaning-dashboard-service';
-export { CleaningServiceError, CLEANING_MEMBER_STATUS_LABELS } from './types/cleaning-group.types';
+export { CleaningServiceError } from './types/cleaning-group.types';
 
 // ─── Servicios ────────────────────────────────────────────────────────────────
 export {

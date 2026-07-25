@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -11,7 +11,6 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
 import { useI18n } from '@/src/i18n/index';
-import { getMonthName } from '@/src/services/preaching-report.service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   PreachingReportFormValues,
@@ -22,7 +21,7 @@ import { AppUser, isPioneer } from '@/src/types/user';
 interface PreachingReportModalProps {
   visible: boolean;
   user: AppUser;
-  monthId: string;
+  monthName: string;
   congregationName: string;
   existingReport?: PreachingReportSubmission | null;
   suggestedMinutes?: number | null;
@@ -52,7 +51,7 @@ const formatMinutes = (total: number): string => {
 export function PreachingReportModal({
   visible,
   user,
-  monthId,
+  monthName,
   congregationName,
   existingReport,
   suggestedMinutes = null,
@@ -82,25 +81,23 @@ export function PreachingReportModal({
     setError(null);
   }, [existingReport, visible]);
 
-  const monthName = useMemo(() => getMonthName(monthId), [monthId]);
-
   const handleSubmit = async () => {
     const normalizedBibleStudies = parseIntegerField(bibleStudies);
     const normalizedReturnVisits = parseIntegerField(returnVisits);
     const normalizedHours = parseHoursField(hours);
 
     if (normalizedBibleStudies === null) {
-      setError('Estudios debe ser un numero entero mayor o igual a 0.');
+      setError(t('preachingReport.validationBibleStudies'));
       return;
     }
 
     if (normalizedReturnVisits === null) {
-      setError('Cursos debe ser un numero entero mayor o igual a 0.');
+      setError(t('preachingReport.validationReturnVisits'));
       return;
     }
 
     if (userIsPioneer && normalizedHours === null) {
-      setError('Total de horas debe ser un numero mayor o igual a 0.');
+      setError(t('preachingReport.validationHours'));
       return;
     }
 
@@ -121,10 +118,16 @@ export function PreachingReportModal({
         <View style={styles.modal}>
           <View style={styles.header}>
             <View>
-              <ThemedText style={styles.title}>Informe de predicacion</ThemedText>
+              <ThemedText style={styles.title}>{t('preachingReport.modalTitle')}</ThemedText>
               <ThemedText style={styles.subtitle}>{monthName}</ThemedText>
             </View>
-            <TouchableOpacity style={styles.iconButton} onPress={onClose} disabled={saving}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={onClose}
+              disabled={saving}
+              accessibilityRole="button"
+              accessibilityLabel={t('preachingReport.closeModal')}
+            >
               <Ionicons name="close" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
@@ -140,6 +143,9 @@ export function PreachingReportModal({
             style={styles.checkboxRow}
             onPress={() => setParticipated((value) => !value)}
             activeOpacity={0.8}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: participated }}
+            accessibilityLabel={t('preachingReport.participated')}
           >
             <View style={[styles.checkbox, participated && styles.checkboxChecked]}>
               {participated ? (
@@ -147,11 +153,11 @@ export function PreachingReportModal({
               ) : null}
             </View>
             <ThemedText style={styles.checkboxLabel}>
-              Participaste este mes en la predicacion
+              {t('preachingReport.participated')}
             </ThemedText>
           </TouchableOpacity>
 
-          <Field label="Numero de estudios">
+          <Field label={t('preachingReport.bibleStudies')}>
             <TextInput
               style={styles.input}
               value={bibleStudies}
@@ -162,7 +168,7 @@ export function PreachingReportModal({
             />
           </Field>
 
-          <Field label="Numero de cursos">
+          <Field label={t('preachingReport.returnVisits')}>
             <TextInput
               style={styles.input}
               value={returnVisits}
@@ -173,12 +179,12 @@ export function PreachingReportModal({
             />
           </Field>
 
-          <Field label="Comentarios">
+          <Field label={t('preachingReport.comments')}>
             <TextInput
               style={[styles.input, styles.commentsInput]}
               value={comments}
               onChangeText={setComments}
-              placeholder="Opcional"
+              placeholder={t('preachingReport.optional')}
               placeholderTextColor={colors.textDisabled}
               multiline
               maxLength={500}
@@ -186,7 +192,7 @@ export function PreachingReportModal({
           </Field>
 
           {userIsPioneer ? (
-            <Field label="Total de horas">
+            <Field label={t('preachingReport.totalHours')}>
               <TextInput
                 style={styles.input}
                 value={hours}
@@ -231,7 +237,9 @@ export function PreachingReportModal({
             ) : (
               <>
                 <Ionicons name="send-outline" size={16} color={colors.onPrimary} />
-                <ThemedText style={styles.submitButtonText}>Enviar informe</ThemedText>
+                <ThemedText style={styles.submitButtonText}>
+                  {t('preachingReport.submit')}
+                </ThemedText>
               </>
             )}
           </TouchableOpacity>

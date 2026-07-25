@@ -14,15 +14,23 @@ import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   getCurrentMonthId,
-  getMonthLabel,
   type Territory,
   type TerritoryAssignmentTarget,
 } from '@/src/types/territory';
 import { canManageTerritories } from '@/src/utils/permissions/permissions';
 
+const getLocalizedMonthLabel = (monthId: string, locale: string): string => {
+  const [year, month] = monthId.split('-').map(Number);
+  if (!year || !month) return monthId;
+
+  return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(
+    new Date(year, month - 1, 1)
+  );
+};
+
 export function TerritoriesScreen() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { appUser, uid, congregationId, loadingProfile, profileError } = useUser();
@@ -32,10 +40,12 @@ export function TerritoriesScreen() {
   const congregationCount = data?.congregationTargets.reduce((total, target) => total + target.territoryIds.length, 0) ?? 0;
   const groupCount = data?.groupTargets.reduce((total, target) => total + target.territoryIds.length, 0) ?? 0;
 
-  if (loadingProfile || loading) return <LoadingState message="Cargando territorios..." />;
+  if (loadingProfile || loading) return <LoadingState message={t('territories.loading')} />;
 
   if (!appUser || !appUser.isActive || !congregationId) {
-    return <ErrorState message={profileError ?? 'Necesitas una cuenta activa con congregacion.'} />;
+    return (
+      <ErrorState message={profileError ?? t('territories.activeAccountRequired')} />
+    );
   }
 
   if (error) return <ErrorState message={error} />;
@@ -43,8 +53,10 @@ export function TerritoriesScreen() {
   return (
     <ScreenContainer>
       <PageHeader
-        title="Territorios"
-        subtitle={`Predicacion · ${getMonthLabel(monthId)}`}
+        title={t('territories.title')}
+        subtitle={t('territories.monthSubtitle', {
+          month: getLocalizedMonthLabel(monthId, language),
+        })}
         showBack
         actions={
           canManage ? (
@@ -67,22 +79,26 @@ export function TerritoriesScreen() {
       {congregationCount + groupCount === 0 ? (
         <EmptyState
           icon="map-outline"
-          title="Sin territorios asignados"
-          description="Todavia no hay territorios de predicacion asignados para este mes."
+          title={t('territories.emptyDay')}
+          description={t('territories.monthlyEmptyDescription')}
         />
       ) : (
         <View style={styles.sectionList}>
           <TerritorySection
-            title="Para toda la congregacion"
-            subtitle={`${congregationCount} ${congregationCount === 1 ? 'territorio' : 'territorios'}`}
+            title={t('territories.wholeCongregation')}
+            subtitle={`${congregationCount} ${t(
+              congregationCount === 1 ? 'territories.countOne' : 'territories.countMany'
+            )}`}
             targets={data?.congregationTargets ?? []}
             territoriesById={data?.territoriesById ?? new Map()}
           />
 
           {data?.userGroup ? (
             <TerritorySection
-              title="Mi grupo de predicacion"
-              subtitle={`${data.userGroup.name} · ${groupCount} ${groupCount === 1 ? 'territorio' : 'territorios'}`}
+              title={t('territories.myPreachingGroup')}
+              subtitle={`${data.userGroup.name} · ${groupCount} ${t(
+                groupCount === 1 ? 'territories.countOne' : 'territories.countMany'
+              )}`}
               targets={data.groupTargets}
               territoriesById={data.territoriesById}
             />
@@ -104,6 +120,7 @@ function TerritorySection({
   targets: TerritoryAssignmentTarget[];
   territoriesById: Map<string, Territory>;
 }) {
+  const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const territories = targets.flatMap((target) =>
@@ -123,7 +140,7 @@ function TerritorySection({
       </View>
 
       {territories.length === 0 ? (
-        <ThemedText style={styles.emptyText}>Sin territorios para esta seccion.</ThemedText>
+        <ThemedText style={styles.emptyText}>{t('territories.emptySection')}</ThemedText>
       ) : (
         <View style={styles.territoryList}>
           {territories.map((territory) => (

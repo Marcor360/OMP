@@ -27,7 +27,6 @@ import {
 import { getCongregationDisplayName } from '@/src/services/congregations/congregations-service';
 import {
   getCurrentMonthId,
-  getMonthName,
   shiftMonthId,
 } from '@/src/services/preaching-report.service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
@@ -38,16 +37,27 @@ import { canManageTerritories } from '@/src/utils/permissions/permissions';
 
 const log = createLogger('preaching-screen');
 
+const getLocalizedMonthName = (monthId: string, locale: string): string => {
+  const [year, month] = monthId.split('-').map(Number);
+  if (!year || !month) return monthId;
+
+  return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(
+    new Date(year, month - 1, 1)
+  );
+};
+
 export function PreachingScreen() {
   const router = useRouter();
   const { reportMonth } = useLocalSearchParams<{ reportMonth?: string }>();
   const { width } = useWindowDimensions();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const useTwoColumns = width >= 768;
   const { appUser, congregationId, loadingProfile, profileError } = useUser();
-  const [congregationName, setCongregationName] = useState('Sin congregacion');
+  const [congregationName, setCongregationName] = useState(() =>
+    t('preachingReport.noCongregation')
+  );
   const [modalVisible, setModalVisible] = useState(false);
   const currentMonthId = getCurrentMonthId();
   const previousMonthId = shiftMonthId(currentMonthId, -1);
@@ -69,7 +79,7 @@ export function PreachingScreen() {
 
   useEffect(() => {
     if (!congregationId) {
-      setCongregationName('Sin congregacion');
+      setCongregationName(t('preachingReport.noCongregation'));
       return;
     }
 
@@ -86,7 +96,7 @@ export function PreachingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [congregationId]);
+  }, [congregationId, t]);
 
   useEffect(() => {
     if (reportMonth !== previousMonthId && reportMonth !== currentMonthId) return;
@@ -100,10 +110,15 @@ export function PreachingScreen() {
       return;
     }
 
+    if (!appUser?.uid) {
+      setSuggestedMinutes(null);
+      return;
+    }
+
     let cancelled = false;
     void (async () => {
       try {
-        const { store } = await loadStore();
+        const { store } = await loadStore(appUser.uid);
         const [year, month] = monthId.split('-').map(Number);
         const entries = getEntriesForMonth(store, year, month);
         const total = entries.reduce((sum, entry) => sum + entry.totalMinutes, 0);
@@ -122,28 +137,33 @@ export function PreachingScreen() {
     async (...args: Parameters<typeof submit>) => {
       try {
         await submit(...args);
-        if (Platform.OS !== 'web' && monthId === previousMonthId) {
+        if (Platform.OS !== 'web' && monthId === previousMonthId && appUser?.uid) {
           try {
-            await markMonthlyReportAsSent(monthId);
+            await markMonthlyReportAsSent(appUser.uid, monthId);
           } catch (markError) {
             log.warn('No se pudo marcar localmente el informe como enviado.', markError);
           }
         }
         setModalVisible(false);
-        Alert.alert('Informe enviado', 'Tu informe mensual fue guardado correctamente.');
+        Alert.alert(
+          t('preachingReport.sentAlertTitle'),
+          t('preachingReport.sentAlertMessage')
+        );
       } catch (requestError) {
-        Alert.alert('Error', formatFirestoreError(requestError));
+        Alert.alert(t('common.error'), formatFirestoreError(requestError));
       }
     },
-    [monthId, previousMonthId, submit]
+    [appUser, monthId, previousMonthId, submit, t]
   );
 
-  if (loadingProfile || loading) return <LoadingState message="Cargando predicacion..." />;
+  if (loadingProfile || loading) {
+    return <LoadingState message={t('preachingReport.loading')} />;
+  }
 
   if (!appUser || !appUser.isActive || !congregationId) {
     return (
       <ErrorState
-        message={profileError ?? 'Necesitas una cuenta activa con congregacion para enviar informes.'}
+        message={profileError ?? t('preachingReport.activeAccountRequired')}
       />
     );
   }
@@ -158,26 +178,28 @@ export function PreachingScreen() {
       onRefresh={refresh}
       contentStyle={styles.content}
     >
-      <PageHeader title="Predicacion" showBack />
+      <PageHeader title={t('tabs.preaching')} showBack />
 
       <View style={styles.hero}>
         <View style={styles.heroIcon}>
           <Ionicons name="document-text-outline" size={26} color={colors.primary} />
         </View>
         <View style={styles.heroText}>
-          <ThemedText style={styles.heroTitle}>Informe mensual</ThemedText>
-          <ThemedText style={styles.heroSubtitle}>{getMonthName(monthId)}</ThemedText>
+          <ThemedText style={styles.heroTitle}>{t('fieldService.monthlyReport')}</ThemedText>
+          <ThemedText style={styles.heroSubtitle}>
+            {getLocalizedMonthName(monthId, language)}
+          </ThemedText>
         </View>
       </View>
 
       <View style={styles.monthSelector}>
         <MonthButton
-          label={getMonthName(previousMonthId)}
+          label={getLocalizedMonthName(previousMonthId, language)}
           active={monthId === previousMonthId}
           onPress={() => setMonthId(previousMonthId)}
         />
         <MonthButton
-          label={getMonthName(currentMonthId)}
+          label={getLocalizedMonthName(currentMonthId, language)}
           active={monthId === currentMonthId}
           onPress={() => setMonthId(currentMonthId)}
         />
@@ -186,7 +208,9 @@ export function PreachingScreen() {
       <View style={styles.statusCard}>
         <View style={styles.statusHeader}>
           <ThemedText style={styles.statusTitle}>
-            {report ? 'Informe enviado' : 'Informe pendiente'}
+            {report
+              ? t('preachingReport.statusSent')
+              : t('preachingReport.statusPending')}
           </ThemedText>
           <Ionicons
             name={report ? 'checkmark-circle-outline' : 'time-outline'}
@@ -196,17 +220,25 @@ export function PreachingScreen() {
         </View>
         <ThemedText style={styles.statusText}>
           {report
-            ? 'Puedes editar y reemplazar tu informe del mes actual.'
-            : 'Todos los publicadores activos pueden enviar su informe mensual.'}
+            ? t('preachingReport.sentDescription')
+            : t('preachingReport.pendingDescription')}
         </ThemedText>
       </View>
 
       <View style={styles.infoGrid}>
-        <InfoPill icon="home-outline" label="Congregacion" value={congregationName} />
+        <InfoPill
+          icon="home-outline"
+          label={t('preachingReport.congregation')}
+          value={congregationName}
+        />
         <InfoPill
           icon="time-outline"
-          label="Horas"
-          value={userIsPioneer ? 'Habilitadas' : 'Solo precursores'}
+          label={t('preachingReport.hours')}
+          value={
+            userIsPioneer
+              ? t('preachingReport.hoursEnabled')
+              : t('preachingReport.hoursPioneersOnly')
+          }
         />
       </View>
 
@@ -223,7 +255,9 @@ export function PreachingScreen() {
       >
         <Ionicons name="send-outline" size={18} color={colors.onPrimary} />
         <ThemedText style={styles.primaryButtonText}>
-          {report ? 'Editar informe' : 'Enviar informe mensual'}
+          {report
+            ? t('preachingReport.editReport')
+            : t('preachingReport.sendMonthlyReport')}
         </ThemedText>
       </TouchableOpacity>
 
@@ -273,7 +307,7 @@ export function PreachingScreen() {
       <PreachingReportModal
         visible={modalVisible}
         user={appUser}
-        monthId={monthId}
+        monthName={getLocalizedMonthName(monthId, language)}
         congregationName={congregationName}
         existingReport={report}
         suggestedMinutes={suggestedMinutes}

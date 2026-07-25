@@ -2,6 +2,7 @@ import { firestoreUserRepository } from '@/src/services/repositories/firestore/f
 import type {
   Unsubscribe,
   UserRepository,
+  UsersPage,
 } from '@/src/services/repositories/ports/user-repository.port';
 import type {
   AppUser,
@@ -66,6 +67,17 @@ export const getActiveUsers = async (congregationId: string): Promise<AppUser[]>
   }
 
   return userRepository.getActiveByCongregation(congregationId);
+};
+
+export const getUsersPage = async (
+  congregationId: string,
+  options?: { cursor?: string | null; pageSize?: number; activeOnly?: boolean; includeTotal?: boolean }
+): Promise<UsersPage> => {
+  if (!congregationId || typeof congregationId !== 'string') {
+    return { users: [], cursor: null, hasMore: false, total: 0 };
+  }
+
+  return userRepository.getPageByCongregation(congregationId, options);
 };
 
 /** Crea o actualiza el perfil de usuario en Firestore */

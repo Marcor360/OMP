@@ -5,10 +5,12 @@ import {
   canManageCleaningFromProfile,
   exceedsCleaningMemberLimit,
   isCleaningGroupDeleteAdmin,
+  resolveCleaningMemberActive,
   resolveCleaningMemberOutcome,
   resolveExistingCleaningGroupIndex,
 } from './shared/cleaning-access.js';
 import { assertAdministrativeBillingAccess } from './users/authorization.js';
+import { isSystemPrincipalUser } from './user-protection.js';
 
 const CLEANING_COLLECTION_PATHS = [
   (congregationId: string) => `congregations/${congregationId}/cleaningGroups`,
@@ -613,6 +615,244 @@ const loadCleaningManagerContext = async (
 
   return { db, congregationId, requester };
 };
+
+const CLEANING_USERS_PAGE_SIZE = 20;
+const MAX_CLEANING_USERS_PAGE_SIZE = 50;
+
+type CleaningUsersPagePayload = {
+  congregationId: string;
+  currentGroupId: string | null;
+  groupId: string | null;
+  cursor: string | null;
+  pageSize: number;
+};
+
+const parseCleaningUsersPagePayload = (raw: unknown): CleaningUsersPagePayload => {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new HttpsError('invalid-argument', 'Payload invalido.');
+  }
+
+  const data = raw as Record<string, unknown>;
+  const congregationId = typeof data.congregationId === 'string'
+    ? data.congregationId.trim()
+    : '';
+  const pageSize = typeof data.pageSize === 'number' && Number.isInteger(data.pageSize)
+    ? data.pageSize
+    : CLEANING_USERS_PAGE_SIZE;
+  const cursor = typeof data.cursor === 'string' && data.cursor.trim().length > 0
+    ? data.cursor.trim()
+    : null;
+
+  if (
+    !congregationId ||
+    pageSize < 1 ||
+    pageSize > MAX_CLEANING_USERS_PAGE_SIZE ||
+    (cursor && cursor.length > 128)
+  ) {
+    throw new HttpsError('invalid-argument', 'Parametros de paginacion invalidos.');
+  }
+
+  return {
+    congregationId,
+    currentGroupId:
+      typeof data.currentGroupId === 'string' && data.currentGroupId.trim().length > 0
+        ? data.currentGroupId.trim()
+        : null,
+    groupId:
+      typeof data.groupId === 'string' && data.groupId.trim().length > 0
+        ? data.groupId.trim()
+        : null,
+    cursor,
+    pageSize,
+  };
+};
+
+const normalizeCleaningCandidate = (
+  uid: string,
+  data: Record<string, unknown>,
+  congregationId: string,
+  currentGroupId: string | null
+) => {
+  const isActive = resolveCleaningMemberActive(data);
+  const cleaningEligible = typeof data.cleaningEligible === 'boolean'
+    ? data.cleaningEligible
+    : true;
+  const cleaningGroupId =
+    typeof data.cleaningGroupId === 'string' && data.cleaningGroupId.length > 0
+      ? data.cleaningGroupId
+      : null;
+  const cleaningGroupName =
+    typeof data.cleaningGroupName === 'string' && data.cleaningGroupName.length > 0
+      ? data.cleaningGroupName
+      : null;
+  const memberStatus = !isActive
+    ? 'inactive'
+    : !cleaningEligible
+      ? 'not_eligible'
+      : !cleaningGroupId
+        ? 'available'
+        : currentGroupId && cleaningGroupId === currentGroupId
+          ? 'assigned_here'
+          : 'assigned_other';
+
+  return {
+    uid,
+    displayName:
+      typeof data.displayName === 'string' && data.displayName.trim().length > 0
+        ? data.displayName.trim()
+        : typeof data.email === 'string'
+          ? data.email
+          : uid,
+    email: typeof data.email === 'string' ? data.email : '',
+    congregationId,
+    isActive,
+    cleaningGroupId,
+    cleaningGroupName,
+    cleaningEligible,
+    memberStatus,
+  };
+};
+
+export const listCleaningAssignableUsersPageByManager = onCall(
+  { region: 'us-central1' },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const payload = parseCleaningUsersPagePayload(request.data);
+    const { db, congregationId } = await loadCleaningManagerContext(
+      uid,
+      payload.congregationId
+    );
+    let lastDoc: FirebaseFirestore.DocumentSnapshot | undefined;
+
+    if (payload.cursor) {
+      const cursorSnap = await db.collection('users').doc(payload.cursor).get();
+      if (!cursorSnap.exists || cursorSnap.data()?.congregationId !== congregationId) {
+        throw new HttpsError('invalid-argument', 'Cursor de paginacion invalido.');
+      }
+      lastDoc = cursorSnap;
+    }
+
+    let usersQuery = db
+      .collection('users')
+      .where('congregationId', '==', congregationId)
+      .orderBy('__name__')
+      .limit(payload.pageSize + 1);
+    if (lastDoc) usersQuery = usersQuery.startAfter(lastDoc);
+
+    const snap = await usersQuery.get();
+    const pageDocs = snap.docs.slice(0, payload.pageSize);
+    const users = pageDocs
+      .filter((docSnap) => !isSystemPrincipalUser(docSnap.data()))
+      .map((docSnap) =>
+        normalizeCleaningCandidate(
+          docSnap.id,
+          docSnap.data(),
+          congregationId,
+          payload.currentGroupId
+        )
+      );
+
+    return {
+      users,
+      cursor: pageDocs[pageDocs.length - 1]?.id ?? null,
+      hasMore: snap.size > payload.pageSize,
+    };
+  }
+);
+
+export const listCleaningGroupMembersPageForCurrentUser = onCall(
+  { region: 'us-central1' },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const payload = parseCleaningUsersPagePayload(request.data);
+    if (!payload.groupId) {
+      throw new HttpsError('invalid-argument', 'groupId es requerido.');
+    }
+
+    const db = getFirestore();
+    const requesterSnap = await db.collection('users').doc(uid).get();
+    const requester = requesterSnap.data() as Record<string, unknown> | undefined;
+    const congregationId =
+      typeof requester?.congregationId === 'string' ? requester.congregationId : '';
+    if (
+      !requesterSnap.exists ||
+      requester?.isActive !== true ||
+      !congregationId ||
+      congregationId !== payload.congregationId
+    ) {
+      throw new HttpsError('permission-denied', 'No tienes permisos para ver limpieza.');
+    }
+
+    const groupRefs = cleaningGroupRefs(db, congregationId, payload.groupId);
+    const groupSnaps = await Promise.all(groupRefs.map((ref) => ref.get()));
+    const groupIndex = resolveExistingCleaningGroupIndex(groupSnaps.map((snap) => snap.exists));
+    if (groupIndex < 0) {
+      throw new HttpsError('not-found', 'El grupo no existe.');
+    }
+
+    const groupData = groupSnaps[groupIndex]?.data() as Record<string, unknown> | undefined;
+    const storedCongregationId =
+      typeof groupData?.congregationId === 'string' ? groupData.congregationId : '';
+    if (
+      (storedCongregationId && storedCongregationId !== congregationId) ||
+      (groupIndex >= 2 && storedCongregationId !== congregationId)
+    ) {
+      throw new HttpsError('permission-denied', 'No puedes ver grupos de otra congregacion.');
+    }
+
+    const memberIds = Array.isArray(groupData?.memberIds)
+      ? Array.from(
+          new Set(
+            groupData.memberIds.filter(
+              (value): value is string => typeof value === 'string' && value.length > 0
+            )
+          )
+        )
+      : [];
+    const offset = payload.cursor ? Number(payload.cursor) : 0;
+    if (!Number.isInteger(offset) || offset < 0 || offset > memberIds.length) {
+      throw new HttpsError('invalid-argument', 'Cursor de paginacion invalido.');
+    }
+
+    const pageIds = memberIds.slice(offset, offset + payload.pageSize);
+    const memberSnaps = pageIds.length > 0
+      ? await db.getAll(...pageIds.map((memberId) => db.collection('users').doc(memberId)))
+      : [];
+    const members = memberSnaps
+      .filter((memberSnap) => memberSnap.exists)
+      .map((memberSnap) => {
+        const data = memberSnap.data() as Record<string, unknown>;
+        if (data.congregationId !== congregationId) {
+          throw new HttpsError('failed-precondition', 'El grupo contiene un usuario de otra congregacion.');
+        }
+        return {
+          uid: memberSnap.id,
+          displayName:
+            typeof data.displayName === 'string' && data.displayName.trim().length > 0
+              ? data.displayName.trim()
+              : typeof data.email === 'string'
+                ? data.email
+                : memberSnap.id,
+          email: typeof data.email === 'string' ? data.email : '',
+        };
+      });
+    const nextOffset = offset + pageIds.length;
+
+    return {
+      members,
+      cursor: nextOffset < memberIds.length ? String(nextOffset) : null,
+      hasMore: nextOffset < memberIds.length,
+    };
+  }
+);
 
 export const updateCleaningGroupByManager = onCall(
   { region: 'us-central1' },

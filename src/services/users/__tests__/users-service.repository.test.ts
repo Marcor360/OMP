@@ -17,6 +17,7 @@ jest.mock('@/src/services/repositories/firestore/firestore-user-repository', () 
     getById: async () => null,
     getAllByCongregation: async () => [],
     getActiveByCongregation: async () => [],
+    getPageByCongregation: async () => ({ users: [], cursor: null, hasMore: false, total: 0 }),
     create: async () => undefined,
     update: async () => undefined,
     delete: async () => undefined,
@@ -59,6 +60,10 @@ class FakeUserRepository implements UserRepository {
 
   async getActiveByCongregation(): Promise<AppUser[]> {
     return [];
+  }
+
+  async getPageByCongregation() {
+    return { users: [], cursor: null, hasMore: false, total: 0 };
   }
 
   async create(uid: string, payload: Record<string, unknown>): Promise<void> {

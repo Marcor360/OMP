@@ -2,6 +2,8 @@ import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions/v2";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { getVisibleListedUsers, isActiveUserListRecord, sanitizeUserForList } from "./users/list-sanitizers.js";
+import { listCongregationUserDocs } from "./users/assignment-uniqueness.js";
 
 const REGION = "us-central1";
 const TIME_ZONE = "America/Mexico_City";
@@ -49,10 +51,6 @@ const refreshDashboardSummary = async (congregationId: string): Promise<void> =>
   const now = Timestamp.now();
   const nowMillis = now.toMillis();
 
-  const usersQuery = db
-    .collection("users")
-    .where("congregationId", "==", congregationId);
-  const activeUsersQuery = usersQuery.where("isActive", "==", true);
   const meetingsRef = db
     .collection("congregations")
     .doc(congregationId)
@@ -63,14 +61,12 @@ const refreshDashboardSummary = async (congregationId: string): Promise<void> =>
     .collection("assignments");
 
   const [
-    usersSnap,
-    activeUsersSnap,
+    userDocs,
     meetingsSnap,
     upcomingMeetingsSnap,
     assignmentsSnap,
   ] = await Promise.all([
-    usersQuery.limit(250).get(),
-    activeUsersQuery.limit(250).get(),
+    listCongregationUserDocs({ congregationId }),
     meetingsRef.limit(250).get(),
     meetingsRef
       .where("startDate", ">=", now)
@@ -102,6 +98,10 @@ const refreshDashboardSummary = async (congregationId: string): Promise<void> =>
   );
 
   const assignments = [...standaloneAssignments, ...meetingAssignmentGroups.flat()];
+  const visibleUsers = getVisibleListedUsers(
+    userDocs.map((docSnap) => sanitizeUserForList(docSnap.id, docSnap.data()))
+  );
+  const visibleActiveUsers = visibleUsers.filter(isActiveUserListRecord);
   const pendingAssignments = assignments.filter((item) => isPendingStatus(item.data.status));
   const completedAssignments = assignments.filter((item) => isCompletedStatus(item.data.status));
   const overdueAssignments = pendingAssignments.filter((item) => {
@@ -113,8 +113,8 @@ const refreshDashboardSummary = async (congregationId: string): Promise<void> =>
     {
       congregationId,
       metrics: {
-        totalUsers: usersSnap.size,
-        activeUsers: activeUsersSnap.size,
+        totalUsers: visibleUsers.length,
+        activeUsers: visibleActiveUsers.length,
         totalMeetings: meetingsSnap.size,
         scheduledMeetings: meetingsSnap.docs.filter((docSnap) => docSnap.data().status === "scheduled").length,
         totalAssignments: assignments.length,

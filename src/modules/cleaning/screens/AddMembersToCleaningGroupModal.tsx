@@ -16,7 +16,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
-import { useCleaningAssignableUsers } from '@/src/modules/cleaning/hooks/use-cleaning-assignable-users';
+import { usePaginatedCleaningAssignableUsers } from '@/src/modules/cleaning/hooks/use-paginated-cleaning-assignable-users';
 import { CleaningAssignableUser } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { CleaningUserSelectItem } from '@/src/modules/cleaning/components/CleaningUserSelectItem';
 
@@ -53,7 +53,7 @@ export function AddMembersToCleaningGroupModal({
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(preSelectedIds);
 
-  const { users, loading, error, refresh } = useCleaningAssignableUsers(
+  const { users, loading, loadingMore, error, refresh, loadMore } = usePaginatedCleaningAssignableUsers(
     congregationId,
     currentGroupId
   );
@@ -83,16 +83,16 @@ export function AddMembersToCleaningGroupModal({
     );
   }, []);
 
-  const handleConfirm = () => {
-    onConfirm(selectedIds);
-  };
-
   const newSelections = selectedIds.filter((id) => !preSelectedIds.includes(id));
   const isCreateMode = currentGroupId === null;
   const hasSelectionChangedInCreateMode =
     selectedIds.length !== preSelectedIds.length ||
     selectedIds.some((id) => !preSelectedIds.includes(id));
   const canConfirm = isCreateMode ? hasSelectionChangedInCreateMode : newSelections.length > 0;
+
+  const handleConfirm = () => {
+    onConfirm(isCreateMode ? selectedIds : newSelections);
+  };
 
   const styles = StyleSheet.create({
     overlay: {
@@ -185,10 +185,23 @@ export function AddMembersToCleaningGroupModal({
       paddingVertical: 24,
       paddingHorizontal: 16,
     },
+    loadingMore: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 16,
+    },
+    loadMoreError: {
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+    },
     footer: {
       paddingHorizontal: 20,
       paddingTop: 16,
-      paddingBottom: Math.max(insets.bottom, 16),
+      paddingBottom: insets.bottom + 12,
       borderTopWidth: 1,
       borderTopColor: colors.divider,
       flexDirection: 'row',
@@ -241,7 +254,7 @@ export function AddMembersToCleaningGroupModal({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <SafeAreaView style={styles.overlay}>
+      <SafeAreaView style={styles.overlay} edges={['top']}>
         <KeyboardAvoidingView
           style={styles.keyboardWrap}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -254,8 +267,11 @@ export function AddMembersToCleaningGroupModal({
             <TouchableOpacity
               style={styles.closeBtn}
               onPress={onClose}
+              disabled={confirming}
               accessibilityRole="button"
-              accessibilityLabel="Cerrar modal"
+              accessibilityLabel={t('cleaning.closeAddMembersModal')}
+              accessibilityState={{ disabled: confirming }}
+              hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
             >
               <Ionicons name="close" size={22} color={colors.textMuted} />
             </TouchableOpacity>
@@ -282,7 +298,7 @@ export function AddMembersToCleaningGroupModal({
               <ActivityIndicator color={colors.primary} size="large" />
               <Text style={styles.centerText}>{t('cleaning.loadingUsers')}</Text>
             </View>
-          ) : error ? (
+          ) : error && users.length === 0 ? (
             <View style={styles.center}>
               <Ionicons name="alert-circle-outline" size={32} color={colors.error} />
               <Text style={styles.centerText}>{error}</Text>
@@ -304,6 +320,23 @@ export function AddMembersToCleaningGroupModal({
               }
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              onEndReached={loadMore}
+              onEndReachedThreshold={0.4}
+              ListFooterComponent={
+                loadingMore ? (
+                  <View style={styles.loadingMore}>
+                    <ActivityIndicator color={colors.primary} size="small" />
+                    <Text style={styles.centerText}>{t('cleaning.loadingMoreUsers')}</Text>
+                  </View>
+                ) : error ? (
+                  <View style={styles.loadMoreError}>
+                    <Text style={styles.centerText}>{error}</Text>
+                    <TouchableOpacity style={styles.retryBtn} onPress={loadMore}>
+                      <Text style={styles.retryText}>{t('common.retry')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null
+              }
             />
           )}
 

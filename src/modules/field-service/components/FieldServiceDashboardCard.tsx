@@ -39,6 +39,7 @@ export function FieldServiceDashboardCard() {
 
 /** Implementación de la tarjeta — solo se monta para precursores */
 function FieldServiceDashboardCardContent() {
+  const { appUser } = useUser();
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
@@ -54,9 +55,9 @@ function FieldServiceDashboardCardContent() {
   });
   const [loading, setLoading] = useState(true);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (uid: string) => {
     try {
-      const { store } = await loadStore();
+      const { store } = await loadStore(uid);
       const summary = getCurrentMonthSummary(store);
       setMonthSummary(summary);
     } catch {
@@ -66,20 +67,23 @@ function FieldServiceDashboardCardContent() {
     }
   }, []);
 
-  // Cargar al montar
+  // Cargar al montar y cada vez que cambia el usuario autenticado, para no
+  // mostrar el contador local de otro usuario en un dispositivo compartido.
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    const uid = appUser?.uid;
+    if (!uid) return;
+    void loadData(uid);
+  }, [appUser?.uid, loadData]);
 
   // Recargar cuando la app vuelve a primer plano (por si el usuario registró horas)
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'active') {
-        void loadData();
+      if (next === 'active' && appUser?.uid) {
+        void loadData(appUser.uid);
       }
     });
     return () => sub.remove();
-  }, [loadData]);
+  }, [appUser?.uid, loadData]);
 
   const monthLabel = formatMonthHeader(monthSummary.year, monthSummary.month);
 

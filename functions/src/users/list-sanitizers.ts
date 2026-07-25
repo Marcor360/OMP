@@ -92,6 +92,53 @@ export const isActiveUserListRecord = (data: Record<string, unknown>): boolean =
   return true;
 };
 
+const normalizedMarker = (value: unknown): string | null => {
+  const marker = normalizeText(value)?.toLowerCase();
+  return marker && marker.length > 0 ? marker : null;
+};
+
+export const isSystemPrincipalListRecord = (data: Record<string, unknown>): boolean => {
+  return (
+    data.protectedFromDeletion === true ||
+    data.isSystemUser === true ||
+    data.isPrimaryAdmin === true ||
+    data.isRootAdmin === true ||
+    data.systemProtected === true
+  );
+};
+
+const canonicalUserKey = (user: Record<string, unknown> & { uid: string }): string => {
+  const email = normalizedMarker(user.email);
+  return email ?? `uid:${user.uid}`;
+};
+
+const preferUserRecord = (
+  current: Record<string, unknown> & { uid: string },
+  candidate: Record<string, unknown> & { uid: string }
+): Record<string, unknown> & { uid: string } => {
+  const currentActive = isActiveUserListRecord(current);
+  const candidateActive = isActiveUserListRecord(candidate);
+  if (currentActive !== candidateActive) return candidateActive ? candidate : current;
+
+  const currentHasService = Array.isArray(current.serviceAssignments) && current.serviceAssignments.length > 0;
+  const candidateHasService = Array.isArray(candidate.serviceAssignments) && candidate.serviceAssignments.length > 0;
+  return candidateHasService && !currentHasService ? candidate : current;
+};
+
+export const getVisibleListedUsers = (
+  users: (Record<string, unknown> & { uid: string })[]
+): (Record<string, unknown> & { uid: string })[] => {
+  const byCanonicalKey = new Map<string, Record<string, unknown> & { uid: string }>();
+
+  users.filter((user) => !isSystemPrincipalListRecord(user)).forEach((user) => {
+    const key = canonicalUserKey(user);
+    const existing = byCanonicalKey.get(key);
+    byCanonicalKey.set(key, existing ? preferUserRecord(existing, user) : user);
+  });
+
+  return sortListedUsers(Array.from(byCanonicalKey.values()));
+};
+
 export const sortListedUsers = (
   users: (Record<string, unknown> & { uid: string })[]
 ): (Record<string, unknown> & { uid: string })[] =>

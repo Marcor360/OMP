@@ -1,6 +1,6 @@
 // ─── Tipos del Módulo: Contador de Horas de Predicación ──────────────────────
 // 100% local. Sin Firebase. Sin sincronización remota.
-// Almacenamiento: AsyncStorage clave @field_service_v1
+// Almacenamiento: AsyncStorage, clave namespaced por uid (@field_service_v1:<uid>)
 
 /**
  * Registro de horas para un día específico.
@@ -85,7 +85,7 @@ export type SubmitMonthlyReportResult =
 
 /**
  * Estructura raíz almacenada en AsyncStorage.
- * Clave: @field_service_v1
+ * Clave: @field_service_v1:<uid> (una por usuario)
  */
 export interface FieldServiceStore {
   /** Versión del esquema — permite migraciones futuras */

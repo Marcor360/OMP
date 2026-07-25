@@ -2,7 +2,8 @@
  * Servicio de almacenamiento local del módulo: Contador de Horas de Predicación.
  *
  * - 100% local. Sin Firebase. Sin sincronización remota.
- * - Almacena en AsyncStorage bajo la clave STORAGE_KEY.
+ * - Almacena en AsyncStorage bajo una clave namespaced por uid (ver getStorageKey),
+ *   para aislar los datos de cada usuario en dispositivos compartidos.
  * - Implementa limpieza automática SEMESTRAL (cada 6 meses).
  * - Maneja primera ejecución, archivo inexistente y datos corruptos.
  * - Todas las operaciones son seguras y no lanzan excepciones sin capturar.
@@ -22,8 +23,19 @@ import { createLogger } from '@/src/utils/logger';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-/** Clave única en AsyncStorage. No colisiona con @cleaning_groups ni @cleaning_assignable_users. */
-const STORAGE_KEY = '@field_service_v1';
+/**
+ * Prefijo de clave en AsyncStorage. No colisiona con @cleaning_groups ni
+ * @cleaning_assignable_users.
+ *
+ * Namespaced por uid (getStorageKey) para que cada usuario tenga su propio store
+ * en un mismo dispositivo compartido. La clave vieja sin uid (`@field_service_v1`
+ * a secas) queda deprecada; session-cleanup.ts la purga una vez por logout para
+ * no arrastrar datos huérfanos de antes de este cambio.
+ */
+const STORAGE_KEY_PREFIX = '@field_service_v1';
+
+/** Construye la clave de AsyncStorage aislada para un usuario específico. */
+const getStorageKey = (uid: string): string => `${STORAGE_KEY_PREFIX}:${uid}`;
 
 /** Cantidad de meses para la política de limpieza automática semestral */
 const AUTO_PURGE_MONTHS = 6;
@@ -140,24 +152,26 @@ export function getCurrentMonthlyReportWindow(
 // ─── API pública ──────────────────────────────────────────────────────────────
 
 /**
- * Lee el store desde AsyncStorage.
+ * Lee el store desde AsyncStorage, aislado para el usuario dado.
  * - Si no existe: crea y devuelve un store vacío (primera ejecución).
  * - Si está corrupto: devuelve un store vacío (recuperación segura).
  * - Si ya pasaron 6 meses desde lastAutoPurgeAt: ejecuta la purga antes de devolver.
  *
+ * @param uid - uid del usuario autenticado; aísla el store de otros usuarios
+ *   del mismo dispositivo.
  * @returns { store, purgeExecuted }
  */
-export async function loadStore(): Promise<{
+export async function loadStore(uid: string): Promise<{
   store: FieldServiceStore;
   purgeExecuted: boolean;
 }> {
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(getStorageKey(uid));
 
     if (!raw) {
       // Primera ejecución
       const fresh = createEmptyStore();
-      await saveStoreRaw(fresh);
+      await saveStoreRaw(uid, fresh);
       return { store: fresh, purgeExecuted: false };
     }
 
@@ -168,7 +182,7 @@ export async function loadStore(): Promise<{
       // Archivo corrupto → recuperación segura
       log.warn('[FieldService] Store corrupto detectado. Reiniciando...');
       const fresh = createEmptyStore();
-      await saveStoreRaw(fresh);
+      await saveStoreRaw(uid, fresh);
       return { store: fresh, purgeExecuted: false };
     }
 
@@ -176,7 +190,7 @@ export async function loadStore(): Promise<{
     if (parsed.version !== 1 || !parsed.entries || !parsed.meta) {
       log.warn('[FieldService] Versión o estructura inválida. Reiniciando...');
       const fresh = createEmptyStore();
-      await saveStoreRaw(fresh);
+      await saveStoreRaw(uid, fresh);
       return { store: fresh, purgeExecuted: false };
     }
 
@@ -199,12 +213,12 @@ export async function loadStore(): Promise<{
           monthlyReports: normalized.meta.monthlyReports ?? {},
         },
       };
-      await saveStoreRaw(purged);
+      await saveStoreRaw(uid, purged);
       return { store: purged, purgeExecuted: true };
     }
 
     if (requiresMigrationSave) {
-      await saveStoreRaw(normalized);
+      await saveStoreRaw(uid, normalized);
     }
 
     return { store: normalized, purgeExecuted: false };
@@ -215,10 +229,10 @@ export async function loadStore(): Promise<{
   }
 }
 
-/** Persiste el store completo en AsyncStorage */
-async function saveStoreRaw(store: FieldServiceStore): Promise<void> {
+/** Persiste el store completo en AsyncStorage, aislado para el usuario dado. */
+async function saveStoreRaw(uid: string, store: FieldServiceStore): Promise<void> {
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+    await AsyncStorage.setItem(getStorageKey(uid), JSON.stringify(store));
   } catch (err) {
     log.error('[FieldService] Error guardando store:', err);
   }
@@ -228,11 +242,13 @@ async function saveStoreRaw(store: FieldServiceStore): Promise<void> {
  * Guarda o actualiza la entrada de un día específico.
  * Garantiza upsert: si ya existe ese día, puede reemplazar o sumar sin duplicar registros.
  *
+ * @param uid - uid del usuario autenticado (aísla el store persistido)
  * @param store - Store actual en memoria
  * @param input - Fecha, tiempo y modo de guardado (replace/add)
  * @returns Nuevo store actualizado (inmutable)
  */
 export async function saveDay(
+  uid: string,
   store: FieldServiceStore,
   input: SaveDayInput
 ): Promise<FieldServiceStore> {
@@ -265,7 +281,7 @@ export async function saveDay(
     },
   };
 
-  await saveStoreRaw(updated);
+  await saveStoreRaw(uid, updated);
   return updated;
 }
 
@@ -334,11 +350,11 @@ function addMonthlyReport(
  * Refleja localmente un informe que ya fue enviado correctamente a la congregacion.
  * Es idempotente: un mes marcado previamente se conserva sin crear otro registro.
  */
-export async function markMonthlyReportAsSent(monthKey: string): Promise<void> {
+export async function markMonthlyReportAsSent(uid: string, monthKey: string): Promise<void> {
   const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(monthKey);
   if (!match) throw new Error(`Mes de informe invalido: ${monthKey}.`);
 
-  const { store } = await loadStore();
+  const { store } = await loadStore(uid);
   const normalizedStore = normalizeStore(store);
 
   if (normalizedStore.meta.monthlyReports[monthKey]) return;
@@ -348,7 +364,7 @@ export async function markMonthlyReportAsSent(monthKey: string): Promise<void> {
   const window = getCurrentMonthlyReportWindow(new Date(targetYear, targetMonth, 1));
 
   const report = buildMonthlyReportRecord(normalizedStore, window);
-  await saveStoreRaw(addMonthlyReport(normalizedStore, report));
+  await saveStoreRaw(uid, addMonthlyReport(normalizedStore, report));
 }
 
 /**
@@ -358,6 +374,7 @@ export async function markMonthlyReportAsSent(monthKey: string): Promise<void> {
  * - Solo un envío por mes (monthKey).
  */
 export async function submitMonthlyReport(
+  uid: string,
   store: FieldServiceStore,
   referenceDate: Date = new Date()
 ): Promise<{
@@ -395,7 +412,7 @@ export async function submitMonthlyReport(
   const report = buildMonthlyReportRecord(normalizedStore, status.window);
   const updated = addMonthlyReport(normalizedStore, report);
 
-  await saveStoreRaw(updated);
+  await saveStoreRaw(uid, updated);
 
   return {
     store: updated,
@@ -413,6 +430,7 @@ export async function submitMonthlyReport(
  * @returns Nuevo store sin la entrada del día
  */
 export async function removeDay(
+  uid: string,
   store: FieldServiceStore,
   date: string
 ): Promise<FieldServiceStore> {
@@ -422,7 +440,7 @@ export async function removeDay(
   delete entries[date];
 
   const updated: FieldServiceStore = { ...store, entries };
-  await saveStoreRaw(updated);
+  await saveStoreRaw(uid, updated);
   return updated;
 }
 

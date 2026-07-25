@@ -21,7 +21,6 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   buildTerritoryId,
   getCurrentMonthId,
-  getMonthLabel,
   TERRITORY_DESCRIPTION_MAX_LENGTH,
   type PreachingGroup,
   type Territory,
@@ -55,7 +54,17 @@ type GroupDraft = {
 const emptyTerritoryDraft = (): TerritoryDraft => ({ number: '', description: '' });
 const emptyGroupDraft = (): GroupDraft => ({ number: '', captainUserId: '', assistantUserId: '', memberIds: [] });
 
+const getLocalizedMonthLabel = (monthId: string, locale: string): string => {
+  const [year, month] = monthId.split('-').map(Number);
+  if (!year || !month) return monthId;
+
+  return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(
+    new Date(year, month - 1, 1)
+  );
+};
+
 export function TerritoriesManageScreen() {
+  const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const { appUser, uid, congregationId, loadingProfile } = useUser();
@@ -74,18 +83,32 @@ export function TerritoriesManageScreen() {
   const loading = loadingProfile || catalog.loading || groups.loading || monthly.loading || users.loading;
   const error = catalog.error ?? groups.error ?? monthly.error ?? users.error;
 
-  if (loading) return <LoadingState message="Cargando administracion de predicacion..." />;
-  if (!appUser || !canManageAny) return <ErrorState message="No tienes permisos para administrar predicacion." />;
+  if (loading) return <LoadingState message={t('territoriesManagement.loading')} />;
+  if (!appUser || !canManageAny) {
+    return <ErrorState message={t('territoriesManagement.noPermission')} />;
+  }
   if (error) return <ErrorState message={error} />;
 
   return (
     <ScreenContainer>
-      <PageHeader title="Administrar predicacion" showBack />
+      <PageHeader title={t('territories.manageTitle')} showBack />
 
       <View style={styles.tabs}>
-        <TabButton label="Territorios" active={tab === 'territories'} onPress={() => setTab('territories')} />
-        <TabButton label="Grupos" active={tab === 'groups'} onPress={() => setTab('groups')} />
-        <TabButton label="Asignacion mensual" active={tab === 'monthly'} onPress={() => setTab('monthly')} />
+        <TabButton
+          label={t('territoriesManagement.tabs.territories')}
+          active={tab === 'territories'}
+          onPress={() => setTab('territories')}
+        />
+        <TabButton
+          label={t('territoriesManagement.tabs.groups')}
+          active={tab === 'groups'}
+          onPress={() => setTab('groups')}
+        />
+        <TabButton
+          label={t('territoriesManagement.tabs.monthly')}
+          active={tab === 'monthly'}
+          onPress={() => setTab('monthly')}
+        />
       </View>
 
       {tab === 'territories' ? (
@@ -102,16 +125,19 @@ export function TerritoriesManageScreen() {
               };
               if (draft.id) await mutations.updateTerritory(draft.id, input);
               else await mutations.createTerritory(input);
-              Alert.alert('Territorios', 'Territorio guardado correctamente.');
+              Alert.alert(
+                t('territoriesManagement.tabs.territories'),
+                t('territoriesManagement.territorySaved')
+              );
             } catch (saveError) {
-              Alert.alert('Error', formatFirestoreError(saveError));
+              Alert.alert(t('common.error'), formatFirestoreError(saveError));
             }
           }}
           onDeactivate={async (territoryId) => {
             try {
               await mutations.deactivateTerritory(territoryId);
             } catch (saveError) {
-              Alert.alert('Error', formatFirestoreError(saveError));
+              Alert.alert(t('common.error'), formatFirestoreError(saveError));
             }
           }}
         />
@@ -140,10 +166,13 @@ export function TerritoriesManageScreen() {
               };
               if (draft.id) await mutations.updatePreachingGroup(draft.id, input);
               else await mutations.createPreachingGroup(input);
-              Alert.alert('Grupos', 'Grupo guardado correctamente.');
+              Alert.alert(
+                t('territoriesManagement.tabs.groups'),
+                t('territoriesManagement.groupSaved')
+              );
               return true;
             } catch (saveError) {
-              Alert.alert('Error', formatFirestoreError(saveError));
+              Alert.alert(t('common.error'), formatFirestoreError(saveError));
               return false;
             }
           }}
@@ -151,7 +180,7 @@ export function TerritoriesManageScreen() {
             try {
               await mutations.deactivatePreachingGroup(groupId);
             } catch (saveError) {
-              Alert.alert('Error', formatFirestoreError(saveError));
+              Alert.alert(t('common.error'), formatFirestoreError(saveError));
             }
           }}
         />
@@ -169,9 +198,12 @@ export function TerritoriesManageScreen() {
             try {
               await mutations.upsertMonthlyTerritoryAssignment(monthId, { assignments: targets });
               await monthly.refresh();
-              Alert.alert('Asignacion mensual', 'Asignacion mensual guardada.');
+              Alert.alert(
+                t('territoriesManagement.tabs.monthly'),
+                t('territoriesManagement.monthlySaved')
+              );
             } catch (saveError) {
-              Alert.alert('Error', formatFirestoreError(saveError));
+              Alert.alert(t('common.error'), formatFirestoreError(saveError));
             }
           }}
         />
@@ -203,23 +235,30 @@ function TerritoryCatalogSection({
   onSave: (draft: TerritoryDraft) => Promise<void>;
   onDeactivate: (territoryId: string) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const [draft, setDraft] = useState<TerritoryDraft>(emptyTerritoryDraft());
   const activeTerritories = territories.filter((territory) => territory.status === 'active');
   const descriptionTooLong = draft.description.length > TERRITORY_DESCRIPTION_MAX_LENGTH;
 
-  if (!canManage) return <ErrorState message="No tienes permisos para administrar el catalogo." />;
+  if (!canManage) {
+    return <ErrorState message={t('territoriesManagement.catalogNoPermission')} />;
+  }
 
   return (
     <View style={styles.stack}>
       <View style={styles.section}>
-        <ThemedText style={styles.sectionTitle}>{draft.id ? 'Editar territorio' : 'Nuevo territorio'}</ThemedText>
+        <ThemedText style={styles.sectionTitle}>
+          {draft.id
+            ? t('territoriesManagement.editTerritory')
+            : t('territoriesManagement.newTerritory')}
+        </ThemedText>
         <TextInput
           style={styles.input}
           value={draft.number}
           onChangeText={(number) => setDraft((current) => ({ ...current, number }))}
-          placeholder="Numero"
+          placeholder={t('territories.number')}
           placeholderTextColor={colors.textDisabled}
           keyboardType="number-pad"
           editable={!draft.id}
@@ -228,7 +267,7 @@ function TerritoryCatalogSection({
           style={[styles.input, styles.descriptionInput, descriptionTooLong && styles.inputError]}
           value={draft.description}
           onChangeText={(description) => setDraft((current) => ({ ...current, description }))}
-          placeholder="Descripcion corta"
+          placeholder={t('territories.description')}
           placeholderTextColor={colors.textDisabled}
           multiline
           maxLength={TERRITORY_DESCRIPTION_MAX_LENGTH + 20}
@@ -245,7 +284,9 @@ function TerritoryCatalogSection({
           }}
         >
           <Ionicons name="save-outline" size={18} color={colors.onPrimary} />
-          <ThemedText style={styles.primaryButtonText}>Guardar territorio</ThemedText>
+          <ThemedText style={styles.primaryButtonText}>
+            {t('territoriesManagement.saveTerritory')}
+          </ThemedText>
         </TouchableOpacity>
       </View>
 
@@ -253,7 +294,9 @@ function TerritoryCatalogSection({
         {activeTerritories.map((territory) => (
           <View key={territory.id} style={styles.card}>
             <View style={styles.cardText}>
-              <ThemedText style={styles.cardTitle}>Territorio {territory.number}</ThemedText>
+              <ThemedText style={styles.cardTitle}>
+                {t('territories.itemTitle', { number: territory.number })}
+              </ThemedText>
               <ThemedText style={styles.cardSubtitle}>{territory.description}</ThemedText>
             </View>
             <View style={styles.cardActions}>
@@ -286,16 +329,18 @@ function GroupsSection({
   onSave: (draft: GroupDraft) => Promise<boolean>;
   onDeactivate: (groupId: string) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const { t } = useI18n();
   const [draft, setDraft] = useState<GroupDraft>(emptyGroupDraft());
   const [picker, setPicker] = useState<GroupPicker | null>(null);
   const activeGroups = groups.filter((group) => group.isActive);
   const captain = users.find((user) => user.uid === draft.captainUserId);
   const assistant = users.find((user) => user.uid === draft.assistantUserId);
 
-  if (!canManage) return <ErrorState message="No tienes permisos para administrar grupos." />;
+  if (!canManage) {
+    return <ErrorState message={t('territoriesManagement.groupsNoPermission')} />;
+  }
 
   const selectedIds = picker === 'captain'
     ? draft.captainUserId ? [draft.captainUserId] : []
@@ -318,12 +363,16 @@ function GroupsSection({
   return (
     <View style={styles.stack}>
       <View style={styles.section}>
-        <ThemedText style={styles.sectionTitle}>{draft.id ? 'Editar grupo' : 'Nuevo grupo'}</ThemedText>
+        <ThemedText style={styles.sectionTitle}>
+          {draft.id
+            ? t('territoriesManagement.editGroup')
+            : t('territoriesManagement.newGroup')}
+        </ThemedText>
         <TextInput
           style={styles.input}
           value={draft.number}
           onChangeText={(number) => setDraft((current) => ({ ...current, number }))}
-          placeholder="Numero de grupo"
+          placeholder={t('territoriesManagement.groupNumber')}
           placeholderTextColor={colors.textDisabled}
           keyboardType="number-pad"
         />
@@ -365,7 +414,9 @@ function GroupsSection({
           }}
         >
           <Ionicons name="save-outline" size={18} color={colors.onPrimary} />
-          <ThemedText style={styles.primaryButtonText}>Guardar grupo</ThemedText>
+          <ThemedText style={styles.primaryButtonText}>
+            {t('territoriesManagement.saveGroup')}
+          </ThemedText>
         </TouchableOpacity>
       </View>
 
@@ -375,7 +426,10 @@ function GroupsSection({
             <View style={styles.cardText}>
               <ThemedText style={styles.cardTitle}>{group.name}</ThemedText>
               <ThemedText style={styles.cardSubtitle}>
-                Capitan: {group.captainName} · {group.memberCount} integrantes
+                {t('territoriesManagement.groupSummary', {
+                  captain: group.captainName,
+                  count: group.memberCount,
+                })}
               </ThemedText>
             </View>
             <View style={styles.cardActions}>
@@ -470,9 +524,9 @@ function SelectionField({
   onPress: () => void;
   onClear?: () => void;
 }) {
+  const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const { t } = useI18n();
 
   return (
     <View style={styles.selectionGroup}>
@@ -528,6 +582,7 @@ function MonthlyAssignmentSection({
   saving: boolean;
   onSave: (targets: TerritoryAssignmentTarget[]) => Promise<void>;
 }) {
+  const { language, t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const activeTerritories = territories.filter((territory) => territory.status === 'active');
@@ -542,7 +597,9 @@ function MonthlyAssignmentSection({
     )
   );
 
-  if (!canManage) return <ErrorState message="No tienes permisos para asignar territorios." />;
+  if (!canManage) {
+    return <ErrorState message={t('territoriesManagement.assignNoPermission')} />;
+  }
 
   const toggle = (items: string[], territoryId: string) =>
     items.includes(territoryId) ? items.filter((item) => item !== territoryId) : [...items, territoryId];
@@ -584,12 +641,16 @@ function MonthlyAssignmentSection({
   return (
     <View style={styles.stack}>
       <View style={styles.section}>
-        <ThemedText style={styles.sectionTitle}>Asignacion mensual</ThemedText>
-        <ThemedText style={styles.cardSubtitle}>{getMonthLabel(monthId)}</ThemedText>
+        <ThemedText style={styles.sectionTitle}>
+          {t('territoriesManagement.tabs.monthly')}
+        </ThemedText>
+        <ThemedText style={styles.cardSubtitle}>
+          {getLocalizedMonthLabel(monthId, language)}
+        </ThemedText>
       </View>
 
       <AssignmentPicker
-        title="Para toda la congregacion"
+        title={t('territories.wholeCongregation')}
         territories={activeTerritories}
         selectedIds={congregationIds}
         disabledIds={selectedGlobally}
@@ -613,7 +674,9 @@ function MonthlyAssignmentSection({
         onPress={() => void onSave(buildTargets())}
       >
         <Ionicons name="calendar-outline" size={18} color={colors.onPrimary} />
-        <ThemedText style={styles.primaryButtonText}>Guardar asignacion mensual</ThemedText>
+        <ThemedText style={styles.primaryButtonText}>
+          {t('territoriesManagement.saveMonthly')}
+        </ThemedText>
       </TouchableOpacity>
     </View>
   );
