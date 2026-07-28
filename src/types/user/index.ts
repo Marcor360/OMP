@@ -103,7 +103,6 @@ export type TerritoryPermissionAction = 'view' | 'create' | 'edit' | 'delete' | 
 
 export type DepartmentPermissions = Partial<Record<PermissionAction, boolean>> & {
   territories?: Partial<Record<TerritoryPermissionAction, boolean>>;
-  manageTerritories?: boolean;
 };
 export type UserPermissions = Partial<Record<PermissionDepartment, DepartmentPermissions>>;
 

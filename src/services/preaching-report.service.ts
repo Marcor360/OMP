@@ -11,6 +11,7 @@ import {
   SubmitPreachingReportInput,
 } from '@/src/types/preaching-report.types';
 import { AppUser, getPioneerType, isPioneer } from '@/src/types/user';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 
 const MONTH_ID_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -64,7 +65,7 @@ export const getMonthName = (monthId: string): string => {
   const [year, month] = monthId.split('-').map(Number);
   const date = new Date(year, month - 1, 1);
 
-  return date.toLocaleDateString('es-MX', {
+  return date.toLocaleDateString(getActiveLocale(), {
     month: 'long',
     year: 'numeric',
   });

@@ -7,6 +7,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useI18n } from '@/src/i18n/index';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 
 import { useAppColors } from '@/src/styles';
 import { formatMinutes, parseLocalDate } from '@/src/modules/field-service/utils/field-service-dates';
@@ -22,13 +23,13 @@ export function FieldServiceWeekSummary({ summary }: FieldServiceWeekSummaryProp
   const { t } = useI18n();
 
   const weekStartDate = summary.weekStart
-    ? parseLocalDate(summary.weekStart).toLocaleDateString('es-MX', {
+    ? parseLocalDate(summary.weekStart).toLocaleDateString(getActiveLocale(), {
         day: 'numeric',
         month: 'short',
       })
     : '';
   const weekEndDate = summary.weekEnd
-    ? parseLocalDate(summary.weekEnd).toLocaleDateString('es-MX', {
+    ? parseLocalDate(summary.weekEnd).toLocaleDateString(getActiveLocale(), {
         day: 'numeric',
         month: 'short',
       })

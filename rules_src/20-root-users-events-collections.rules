@@ -25,11 +25,13 @@
 
       // La creación administrativa pasa exclusivamente por Cloud Functions.
       allow create: if isSuperAdmin()
+        && isValidRole(request.resource.data.role)
         && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
         && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments));
 
       allow update: if (
           isSuperAdmin()
+          && isValidRole(request.resource.data.role)
           && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
           && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments))
         ) || (

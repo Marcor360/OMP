@@ -24,6 +24,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useI18n } from '@/src/i18n/index';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 
 import { useAppColors } from '@/src/styles';
 import {
@@ -154,7 +155,7 @@ export function FieldServiceDayModal({
   // Domingo no es operativo en esta versión
   const sunday = isSunday(date);
   const dateObj = parseLocalDate(date);
-  const dayLabel = dateObj.toLocaleDateString('es-MX', {
+  const dayLabel = dateObj.toLocaleDateString(getActiveLocale(), {
     weekday: 'long',
     day: 'numeric',
     month: 'long',

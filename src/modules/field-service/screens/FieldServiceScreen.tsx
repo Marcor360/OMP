@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useI18n } from '@/src/i18n/index';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 
 import { useAppColors } from '@/src/styles';
 import { useUser } from '@/src/context/user-context';
@@ -118,7 +119,7 @@ export function FieldServiceScreen() {
 
   const reportDeadlineLabel = useMemo(() => {
     if (!monthlyReportStatus) return '';
-    return parseLocalDate(monthlyReportStatus.window.windowEnd).toLocaleDateString('es-MX', {
+    return parseLocalDate(monthlyReportStatus.window.windowEnd).toLocaleDateString(getActiveLocale(), {
       day: 'numeric',
       month: 'long',
     });
@@ -193,7 +194,7 @@ export function FieldServiceScreen() {
   const isCurrentMonth =
     calYear === now.getFullYear() && calMonth === now.getMonth() + 1;
   const sentAtLabel = monthlyReportStatus?.sentReport?.sentAt
-    ? new Date(monthlyReportStatus.sentReport.sentAt).toLocaleDateString('es-MX', {
+    ? new Date(monthlyReportStatus.sentReport.sentAt).toLocaleDateString(getActiveLocale(), {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
@@ -284,7 +285,7 @@ export function FieldServiceScreen() {
               />
               <View style={styles.selectedDayText}>
                 <Text style={styles.selectedDayDate}>
-                  {parseLocalDate(selectedDate).toLocaleDateString('es-MX', {
+                  {parseLocalDate(selectedDate).toLocaleDateString(getActiveLocale(), {
                     weekday: 'long',
                     day: 'numeric',
                     month: 'long',

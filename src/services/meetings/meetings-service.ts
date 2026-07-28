@@ -1,4 +1,5 @@
 import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 import { applyPublishedPlanningToMeeting } from '@/src/services/meetings/meeting-autofill-service';
 import {
   convertProgramSectionsToLegacyMidweekSections,
@@ -76,7 +77,7 @@ const rangesOverlap = (
 ): boolean => leftStart <= rightEnd && rightStart <= leftEnd;
 
 const formatShortDate = (value: Date): string =>
-  value.toLocaleDateString('es-MX', {
+  value.toLocaleDateString(getActiveLocale(), {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

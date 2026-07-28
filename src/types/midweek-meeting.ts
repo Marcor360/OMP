@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
 import { MeetingColorToken, MeetingSpecialRoleKey } from '@/src/types/meeting/program';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 
 export type MidweekSectionId =
   | 'treasuresOfTheBible'
@@ -238,7 +239,7 @@ export const normalizeSectionOrder = (
 export const toMidweekDateLabel = (date: Timestamp | Date): string => {
   const parsed = date instanceof Timestamp ? date.toDate() : date;
 
-  return parsed.toLocaleDateString('es-MX', {
+  return parsed.toLocaleDateString(getActiveLocale(), {
     day: '2-digit',
     month: 'short',
     year: 'numeric',

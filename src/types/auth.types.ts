@@ -7,6 +7,9 @@ export interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   onUserActivity: () => void;
+  showInactivityWarning: boolean;
+  secondsLeft: number;
+  extendSession: () => void;
 }
 
 export interface LoginCredentials {

@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { EmptyState } from '@/src/components/common/EmptyState';
@@ -14,14 +14,15 @@ import { AppNotification } from '@/src/features/notifications/types/notification
 import { useNotifications } from '@/src/hooks/useNotifications';
 import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { getSafeNotificationHref } from '@/src/utils/navigation/redirect';
 
-const resolveAssignmentHref = (notification: AppNotification) => {
+const resolveAssignmentHref = (notification: AppNotification): Href => {
   if (notification.type === 'event' || notification.type === 'billing') {
-    return (notification.data?.url ?? '/(protected)/(tabs)') as never;
+    return getSafeNotificationHref(notification.data?.url) as Href;
   }
 
   if (!notification.assignmentId) {
-    return '/(protected)/(tabs)' as never;
+    return '/(protected)/(tabs)' as Href;
   }
 
   const [meetingIdFromAssignment, assignmentKey] = notification.assignmentId.split(':');
@@ -33,10 +34,10 @@ const resolveAssignmentHref = (notification: AppNotification) => {
   if (meetingId) {
     return `/(protected)/assignments/${assignmentId}?source=meeting&meetingId=${encodeURIComponent(
       meetingId
-    )}` as never;
+    )}` as Href;
   }
 
-  return `/(protected)/assignments/${notification.assignmentId}` as never;
+  return `/(protected)/assignments/${notification.assignmentId}` as Href;
 };
 
 export function NotificationsScreen() {

@@ -2,7 +2,7 @@
   "expo": {
     "name": "OMP",
     "slug": "omp",
-    "version": "1.13.4",
+    "version": "1.29.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ormeprassig",
@@ -12,7 +12,6 @@
       "buildNumber": "3",
       "infoPlist": {
         "UIBackgroundModes": [
-          "remote-notification",
           "remote-notification"
         ],
         "NSUserNotificationsUsageDescription": "Necesitamos enviarte notificaciones sobre asignaciones, reuniones y grupos de limpieza.",

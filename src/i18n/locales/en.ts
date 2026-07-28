@@ -115,6 +115,15 @@ export const en = {
   'settings.plan.remaining': '{{count}} available',
   'settings.plan.limit': 'Limit {{limit}}',
   'settings.permissions.expoGoUnavailable': 'Remote push notifications are not available in Expo Go. Use a development build to test them.',
+  'settings.permissions.webUnavailable': 'Remote push notifications are not available on web. Use the installed app on your phone to enable them.',
+
+  // Inactivity session warning
+  'session.inactivity.title': 'Your session is about to expire',
+  'session.inactivity.countdown': 'Closing in {{seconds}}s',
+  'session.inactivity.description':
+    "You've been inactive for a while. Stay connected or close your session now.",
+  'session.inactivity.keepConnected': 'Stay connected',
+  'session.inactivity.logout': 'Log out',
 
   // Billing
   'billing.title': 'Billing',

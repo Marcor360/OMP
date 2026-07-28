@@ -18,7 +18,7 @@ export function AboutScreen() {
   // Application.native* solo existe en iOS/Android; en web se usa el config de Expo
   // (app.json) directamente, así que ambos quedan siempre sincronizados con una sola fuente.
   const appVersion =
-    Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '1.5.0';
+    Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '—';
   const buildVersion =
     Application.nativeBuildVersion ??
     (Constants.expoConfig?.ios as { buildNumber?: string } | undefined)?.buildNumber ??

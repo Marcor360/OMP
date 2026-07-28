@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
 import { isHospitalityMicrophonesControlledReader } from '@/src/modules/assignments/utils/meeting-readers';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 import { ActiveCongregationUser } from '@/src/services/users/active-users-service';
 import {
   CreateMeetingDTO,
@@ -313,7 +314,7 @@ export const getDateFromMeetingValue = (value?: Timestamp | Date): Date | null =
 };
 
 export const formatHumanDate = (value: Date): string =>
-  value.toLocaleDateString('es-MX', {
+  value.toLocaleDateString(getActiveLocale(), {
     weekday: 'long',
     day: '2-digit',
     month: 'long',

@@ -17,6 +17,7 @@ import { es } from '@/src/i18n/locales/es';
 import { fr } from '@/src/i18n/locales/fr';
 import { hi } from '@/src/i18n/locales/hi';
 import { zh } from '@/src/i18n/locales/zh';
+import { setActiveLocale } from '@/src/i18n/active-locale';
 
 export type SupportedLanguage = 'es' | 'en' | 'fr' | 'ar' | 'hi' | 'zh';
 
@@ -64,6 +65,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<SupportedLanguage>(DEFAULT_LANGUAGE);
   const [hasCompletedLanguageOnboarding, setHasCompletedLanguageOnboarding] = useState(false);
   const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    setActiveLocale(language);
+  }, [language]);
 
   useEffect(() => {
     let isMounted = true;

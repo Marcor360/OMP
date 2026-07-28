@@ -11,6 +11,7 @@ import {
   ASSIGNMENT_SUBTYPE_LABELS,
 } from '@/src/modules/assignments/types/assignment.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 
 interface AssignmentCardProps {
   assignment: Assignment;
@@ -36,7 +37,7 @@ const formatDate = (value: string): string => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return 'Sin fecha';
 
-  return parsed.toLocaleDateString('es-MX', {
+  return parsed.toLocaleDateString(getActiveLocale(), {
     weekday: 'short',
     day: '2-digit',
     month: 'short',

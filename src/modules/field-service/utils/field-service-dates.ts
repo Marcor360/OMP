@@ -4,7 +4,7 @@
  * Reglas de este módulo:
  * - Semana: lunes a sábado (6 días activos). Domingo NO es activo.
  * - Todas las fechas usan hora local del dispositivo (no UTC).
- * - Locale 'es-MX' para formato de texto.
+ * - Locale activo de la aplicación para formato de texto.
  * - Funciones puras sin efectos secundarios.
  */
 
@@ -17,6 +17,7 @@ import type {
   WeekSummary,
 } from '@/src/modules/field-service/types/field-service.types';
 import { toLocalDateString } from '@/src/modules/field-service/services/field-service-storage';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 
 // ─── Fecha local ──────────────────────────────────────────────────────────────
 
@@ -259,7 +260,7 @@ export function formatMinutesCompact(totalMinutes: number): string {
  */
 export function formatMonthHeader(year: number, month: number): string {
   const d = new Date(year, month - 1, 1);
-  return d.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+  return d.toLocaleDateString(getActiveLocale(), { month: 'long', year: 'numeric' });
 }
 
 /**
@@ -294,7 +295,7 @@ export function navigateMonth(
  */
 export function getDayName(dateStr: string): string {
   const d = parseLocalDate(dateStr);
-  return d.toLocaleDateString('es-MX', { weekday: 'long' });
+  return d.toLocaleDateString(getActiveLocale(), { weekday: 'long' });
 }
 
 /**

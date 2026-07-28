@@ -23,7 +23,13 @@ import { Assignment } from '@/src/types/assignment';
 import { DashboardMetrics } from '@/src/types/dashboard';
 import { Meeting } from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { canManageAssignments, canManageCleaning, canManageUsers, canViewUsers } from '@/src/utils/permissions/permissions';
+import {
+  canManageAssignments,
+  canManageCleaning,
+  canManageEvents,
+  canManageUsers,
+  canViewUsers,
+} from '@/src/utils/permissions/permissions';
 // MÃ³dulo local: Contador de Horas de PredicaciÃ³n (sin Firebase)
 import { FieldServiceDashboardCard } from '@/src/modules/field-service/components/FieldServiceDashboardCard';
 import { useRefreshOnFocus } from '@/src/hooks/use-refresh-on-focus';
@@ -76,6 +82,7 @@ export function DashboardScreen() {
 
   const isAdmin = canManageUsers(appUser);
   const canManage = canManageAssignments(appUser);
+  const canManageEventsFlag = canManageEvents(appUser);
   const canManageCleaningGroups = canManageCleaning(appUser);
   const canOpenUsers = canViewUsers(appUser);
   const {
@@ -319,7 +326,7 @@ export function DashboardScreen() {
         events={events}
         loading={eventsLoading}
         error={eventsError}
-        canManage={canManage}
+        canManage={canManageEventsFlag}
         congregationId={congregationId}
         onRefresh={refreshEvents}
       />

@@ -2,6 +2,7 @@ import {
   formatDateKey,
   parseDateKey,
 } from '@/src/utils/dates/date-key';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 
 export {
   formatDateKey,
@@ -35,7 +36,7 @@ export const moveWeek = (baseStart: Date, offset: number): Date => {
 };
 
 export const formatWeekLabel = (weekStart: Date, weekEnd: Date): string =>
-  `${weekStart.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} - ${weekEnd.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}`;
+  `${weekStart.toLocaleDateString(getActiveLocale(), { day: '2-digit', month: 'short' })} - ${weekEnd.toLocaleDateString(getActiveLocale(), { day: '2-digit', month: 'short' })}`;
 
 export const getWeekRangeForDate = (
   value: Date | string

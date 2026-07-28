@@ -60,8 +60,8 @@ OMP Suite está diseñado para funcionar en:
 | ----------------------------------- | -------------------------------------------------- |
 | Nombre                              | OMP Suite                                          |
 | Repositorio                         | `Marcor360/OMP`                                    |
-| Versión declarada                   | `1.13.3`                                           |
-| Último mensaje de versión observado | `1.15.2`                                           |
+| Versión declarada                   | `1.28.0`                                           |
+| Fuente de versión                   | `app.json` (`expo.version`)                        |
 | Tiempo de desarrollo acumulado      | Aproximadamente cuatro meses                       |
 | Estado                              | Beta avanzada funcional                            |
 | Plataforma principal                | Expo / React Native                                |
@@ -74,18 +74,17 @@ OMP Suite está diseñado para funcionar en:
 
 ## Estado De Versión
 
-Actualmente existe una diferencia que debe resolverse antes del siguiente release:
+La versión visible está unificada en `1.28.0`. `app.json` (`expo.version`) es la fuente única que consumen las pantallas de la aplicación:
 
 ```text
-package.json:       1.13.3
-app.json:           1.13.3
-iOS buildNumber:    1.13.3
-Android versionCode: 11303
-README:             1.13.3
-Último commit:      mensaje 1.15.2
+package.json:        1.28.0
+app.json:            1.28.0
+README:              1.28.0
+iOS buildNumber:     gestionado por EAS
+Android versionCode: gestionado por EAS
 ```
 
-El mensaje del commit no debe considerarse automáticamente la versión oficial. Antes del siguiente build se debe decidir si la versión real es `1.13.3`, `1.15.2` u otra, y sincronizar todos los archivos.
+EAS usa `appVersionSource: "remote"` para los números de build. Esos números no sustituyen la versión visible declarada en `expo.version`.
 
 ---
 
@@ -1547,6 +1546,7 @@ Tests frontend
 Functions lint
 Functions build
 Functions tests
+Expo Doctor
 ```
 
 Las reglas se ejecutan por separado:
@@ -1568,6 +1568,8 @@ npm ci
 npm run lint
 npx tsc --noEmit
 npm test -- --runInBand
+npx expo-doctor
+npm run build:web
 ```
 
 ## Functions
@@ -1583,7 +1585,7 @@ npm --prefix functions test -- --runInBand
 
 ```text
 npm ci
-instalación Java 17
+instalación Java 21
 descarga del emulador
 npm run test:rules
 ```
@@ -1672,7 +1674,7 @@ Debe publicarse en el host externo configurado.
 | Web                       | Funcional                             |
 | Android                   | Funcional en desarrollo/build         |
 | iOS                       | Preparado; falta QA real              |
-| CI                        | Configurado                           |
+| CI                        | Configurado con Expo Doctor y build web |
 | Firestore Rules tests     | Configurados                          |
 
 ---
@@ -1709,16 +1711,7 @@ Agregar tests de Firestore Rules.
 
 ### Sincronización De Versión
 
-Definir una versión única y actualizar:
-
-```text
-package.json
-app.json
-ios.buildNumber
-android.versionCode
-README.md
-release notes
-```
+Completada en `1.28.0`: `app.json` (`expo.version`) es la fuente única para la versión visible y EAS administra los números de build remotos.
 
 ### Batch Del Organigrama
 
@@ -1784,14 +1777,7 @@ Debe bloquearse la creación de:
 
 ### Roles Legacy
 
-Las Rules todavía aceptan:
-
-```text
-administrador
-usuario
-```
-
-Después de migrar Firestore deben eliminarse.
+Las Rules y la autorización de limpieza solo aceptan roles canónicos (`admin`, `supervisor`, `user`). El parser de Functions conserva la normalización de entradas históricas para evitar reintroducir valores legacy.
 
 ### Placeholder Del Sistema
 
@@ -1986,7 +1972,7 @@ fix(rules): aceptar permiso acomodadores_microfonos
 refactor(org-chart): dividir reconciliacion en batches
 docs(readme): actualizar estado funcional
 test(rules): cubrir permisos de hospitalidad
-chore(version): sincronizar version 1.15.2
+chore(version): unificar version 1.28.0
 ```
 
 ---

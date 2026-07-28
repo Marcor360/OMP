@@ -43,7 +43,7 @@ export const canManageCleaningFromProfile = (
   user: Record<string, unknown>
 ): boolean => {
   if (user.isActive !== true) return false;
-  if (user.role === 'admin' || user.role === 'administrador') return true;
+  if (user.role === 'admin') return true;
   if (storedLimpiezaFlag(user, 'manage')) return true;
   if (storedLimpiezaFlag(user, 'create') && storedLimpiezaFlag(user, 'edit')) return true;
   return hasEncargadoLimpiezaAssignment(user);
@@ -53,7 +53,7 @@ export const isCleaningGroupDeleteAdmin = (
   user: Record<string, unknown>
 ): boolean =>
   user.isActive === true &&
-  (user.role === 'admin' || user.role === 'administrador');
+  user.role === 'admin';
 
 export const resolveCleaningMemberActive = (
   user: Record<string, unknown>

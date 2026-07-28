@@ -7,7 +7,7 @@
     }
 
     function isValidRole(role) {
-      return role is string && role in ['admin', 'administrador', 'supervisor', 'user', 'usuario'];
+      return role is string && role in ['admin', 'supervisor', 'user'];
     }
 
     function hasOnlyKeys(data, allowed) {

@@ -3,7 +3,6 @@
       return isActive()
         && (
           user.role == 'admin'
-          || user.role == 'administrador'
           || isSuperAdmin()
           || user.protectedFromDeletion == true
           || user.isSystemUser == true
@@ -39,4 +38,3 @@
           )
         );
     }
-

@@ -87,9 +87,9 @@ describe('addCleaningGroupMembersByManager business rules', () => {
   });
 
   describe('hard delete authorization', () => {
-    it('allows active admin roles used by Firestore rules', () => {
+    it('allows the canonical active admin role and rejects the legacy alias', () => {
       expect(isCleaningGroupDeleteAdmin({ isActive: true, role: 'admin' })).toBe(true);
-      expect(isCleaningGroupDeleteAdmin({ isActive: true, role: 'administrador' })).toBe(true);
+      expect(isCleaningGroupDeleteAdmin({ isActive: true, role: 'administrador' })).toBe(false);
     });
 
     it('denies a cleaning manager who is not an admin', () => {

@@ -16,7 +16,7 @@
 
     function isAdmin() {
       return isActive()
-        && (currentUserData().role == 'admin' || currentUserData().role == 'administrador');
+        && currentUserData().role == 'admin';
     }
 
     function isSupervisor() {

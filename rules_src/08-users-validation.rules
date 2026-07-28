@@ -219,7 +219,7 @@
 
     function validPermissionActions(actions) {
       return actions is map
-        && actions.keys().hasOnly(['view', 'create', 'edit', 'delete', 'manage', 'approve', 'export', 'territories', 'manageTerritories'])
+        && actions.keys().hasOnly(['view', 'create', 'edit', 'delete', 'manage', 'approve', 'export', 'territories'])
         && (!('view' in actions) || actions.view is bool)
         && (!('create' in actions) || actions.create is bool)
         && (!('edit' in actions) || actions.edit is bool)
@@ -227,7 +227,6 @@
         && (!('manage' in actions) || actions.manage is bool)
         && (!('approve' in actions) || actions.approve is bool)
         && (!('export' in actions) || actions.export is bool)
-        && (!('manageTerritories' in actions) || actions.manageTerritories is bool)
         && (!('territories' in actions) || validTerritoryPermissions(actions.territories));
     }
 

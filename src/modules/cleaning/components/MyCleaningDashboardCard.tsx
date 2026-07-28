@@ -8,6 +8,7 @@ import { useAppColors, type AppColors as AppColorSet } from '@/src/styles';
 import { MyCleaningDashboardSummary } from '@/src/modules/cleaning/services/my-cleaning-dashboard-service';
 import { ASSIGNMENT_STATUS_LABELS } from '@/src/modules/assignments/types/assignment.types';
 import { type I18nContextType, useI18n } from '@/src/i18n';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 
 interface MyCleaningDashboardCardProps {
   summary: MyCleaningDashboardSummary | null;
@@ -20,7 +21,7 @@ const formatCleaningDate = (value: string, t: I18nContextType['t']): string => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return t('cleaning.dashboardCard.noDate');
 
-  return parsed.toLocaleDateString('es-MX', {
+  return parsed.toLocaleDateString(getActiveLocale(), {
     weekday: 'long',
     day: '2-digit',
     month: 'short',

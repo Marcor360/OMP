@@ -1,7 +1,7 @@
 {
   "name": "omp",
   "main": "expo-router/entry",
-  "version": "1.13.4",
+  "version": "1.29.0",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -19,10 +19,11 @@
     "check:rules": "node build-rules.js --check",
     "test:rules": "npm run build:rules && firebase emulators:exec --only firestore --project demo-omp \"jest --config jest.rules.config.js --runInBand\"",
     "check:indexes": "node scripts/check-collection-group-indexes.mjs",
-    "validate": "npm run check:indexes && npm run lint && tsc --noEmit && npm test -- --runInBand && npm --prefix functions run lint && npm --prefix functions run build && npm --prefix functions test -- --runInBand",
+    "validate": "npm run check:indexes && npm run lint && tsc --noEmit && npm test -- --runInBand && npm --prefix functions run lint && npm --prefix functions run build && npm --prefix functions test -- --runInBand && npx expo-doctor",
     "deploy:rules": "npm run build:rules && node scripts/firebase-deploy-retry.js --only firestore:rules,firestore:indexes",
     "deploy:functions": "node scripts/firebase-deploy-retry.js --only functions",
-    "deploy:all": "npm run deploy:rules && npm run deploy:functions"
+    "deploy:all": "npm run deploy:rules && npm run deploy:functions",
+    "prepare": "husky"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -30,7 +31,8 @@
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
-    "expo": "~54.0.33",
+    "expo": "~54.0.36",
+    "expo-application": "~7.0.8",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
@@ -61,6 +63,8 @@
     "react-native-worklets": "0.5.1"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
     "@firebase/rules-unit-testing": "^5.0.1",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.1.0",
@@ -70,6 +74,7 @@
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "firebase-tools": "15.22.3",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
     "jest-expo": "~54.0.15",
     "postcss": "^8.5.9",

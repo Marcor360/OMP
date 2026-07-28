@@ -475,6 +475,10 @@ export const canViewCongregationModule = (
   user: Pick<AppUser, 'role' | 'isActive'> | null | undefined
 ): boolean => user?.isActive === true;
 
+// Alias honesto: cualquier usuario activo puede ver su propia limpieza asignada.
+// No usar para gatear pantallas de administración o gestión.
+export const canViewOwnCleaning = canViewCongregationModule;
+
 export const canViewOrgChart = (
   user: Pick<AppUser, 'isActive' | 'congregationId'> | null | undefined
 ): boolean =>
@@ -571,7 +575,6 @@ export const hasTerritoryPermission = (
   if (hasPreachingAssignment(user, 'encargado')) return true;
 
   const preachingPermissions = getEffectivePermissions(user).predicacion;
-  if (preachingPermissions?.manageTerritories === true) return true;
   if (preachingPermissions?.territories?.manage === true) return true;
   return preachingPermissions?.territories?.[action] === true;
 };
@@ -622,8 +625,7 @@ export const canManageTerritories = (
   canManageTerritoryCatalog(user) ||
   canManagePreachingGroups(user) ||
   canAssignMonthlyTerritories(user) ||
-  hasPermission(user, 'predicacion', 'manage') ||
-  getEffectivePermissions(user).predicacion?.manageTerritories === true;
+  hasPermission(user, 'predicacion', 'manage');
 
 export const getVisibleTabs = (
   user:
@@ -650,7 +652,7 @@ export const getVisibleTabs = (
 
   if (canViewUsers(user)) visible.add('users');
   if (canAccessSettings(user)) visible.add('settings');
-  if (canViewCongregationModule(user)) {
+  if (canViewOwnCleaning(user)) {
     visible.add('cleaning');
   }
 

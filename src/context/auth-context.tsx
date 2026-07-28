@@ -13,6 +13,8 @@ const authLogger = createLogger('AuthProvider');
 
 // Tiempo real de inactividad antes de cerrar sesión (única fuente de verdad).
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
+// Ventana de aviso previo al cierre por inactividad (vive dentro de INACTIVITY_TIMEOUT_MS).
+const INACTIVITY_WARNING_MS = 60 * 1000;
 // Clave de persistencia del último momento de actividad (wall clock, ms epoch).
 const LAST_ACTIVITY_STORAGE_KEY = 'omp:session:last-activity-at';
 // Throttle de escritura a AsyncStorage (no escribir en cada mousemove).
@@ -34,12 +36,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [showInactivityWarning, setShowInactivityWarning] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(0);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   // Referencia a usuario para poder accederla desde event listeners sin closures stale
   const userRef = useRef<User | null>(null);
   const lastActivityRef = useRef<number>(0);
   const lastPersistedRef = useRef<number>(0);
   const expiryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const warningTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Mantener userRef sincronizado con el state
   useEffect(() => {
@@ -51,6 +56,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearInterval(expiryIntervalRef.current);
       expiryIntervalRef.current = null;
     }
+  };
+
+  const clearWarningTick = () => {
+    if (warningTickRef.current) {
+      clearInterval(warningTickRef.current);
+      warningTickRef.current = null;
+    }
+  };
+
+  const dismissInactivityWarning = () => {
+    clearWarningTick();
+    setShowInactivityWarning(false);
+  };
+
+  // Arranca (si no está corriendo) un tick de 1s que recalcula el tiempo restante
+  // a partir de lastActivityRef (misma fuente de verdad que checkExpiry, sin
+  // temporizador aislado). El resync con AsyncStorage lo sigue haciendo el tick
+  // regular de 60s y los checkExpiry disparados por resume/visibilitychange.
+  const beginInactivityWarning = (remainingMs: number) => {
+    setShowInactivityWarning(true);
+    setSecondsLeft(Math.max(0, Math.ceil(remainingMs / 1000)));
+
+    if (warningTickRef.current) return;
+
+    warningTickRef.current = setInterval(() => {
+      const remaining = INACTIVITY_TIMEOUT_MS - (Date.now() - lastActivityRef.current);
+
+      if (remaining <= 0) {
+        clearWarningTick();
+        void checkExpiry('warning-tick');
+        return;
+      }
+
+      setSecondsLeft(Math.ceil(remaining / 1000));
+    }, 1000);
   };
 
   const persistLastActivity = async (at: number, force = false) => {
@@ -91,6 +131,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const forceLogoutByInactivity = async () => {
     authLogger.info('Sesión cerrada por inactividad (wall-clock)');
     clearExpiryInterval();
+    clearWarningTick();
+    setShowInactivityWarning(false);
     await clearPersistedLastActivity();
     await clearLocalSessionData();
     await logout();
@@ -107,11 +149,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
     const elapsed = Date.now() - last;
-    if (elapsed > INACTIVITY_TIMEOUT_MS) {
+    const remaining = INACTIVITY_TIMEOUT_MS - elapsed;
+
+    if (remaining <= 0) {
       authLogger.info(`Inactividad detectada (${source}): ${Math.round(elapsed / 1000)}s`);
       await forceLogoutByInactivity();
       return true;
     }
+
+    if (remaining <= INACTIVITY_WARNING_MS) {
+      beginInactivityWarning(remaining);
+    } else {
+      dismissInactivityWarning();
+    }
+
     return false;
   };
 
@@ -130,6 +181,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const expired = await checkExpiry('auth-restore');
         if (expired) return;
         touchActivity(true);
+        dismissInactivityWarning();
         clearExpiryInterval();
         expiryIntervalRef.current = setInterval(() => {
           void checkExpiry('tick');
@@ -137,6 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         authLogger.info('Sin sesion activa');
         clearExpiryInterval();
+        dismissInactivityWarning();
         lastActivityRef.current = 0;
         lastPersistedRef.current = 0;
         void clearPersistedLastActivity();
@@ -150,6 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       authLogger.debug('Limpiando onAuthStateChanged listener');
       clearExpiryInterval();
+      clearWarningTick();
       unsubscribe();
     };
   }, []);
@@ -170,7 +224,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const handleVisibilityChange = () => {
       if (!document.hidden && userRef.current) {
         void checkExpiry('web-visible').then((expired) => {
-          if (!expired) touchActivity();
+          if (!expired) {
+            touchActivity();
+            dismissInactivityWarning();
+          }
         });
       }
     };
@@ -196,7 +253,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ) {
         // Comprobar expiración antes de considerar el regreso como actividad.
         const expired = await checkExpiry('app-resume');
-        if (!expired) touchActivity();
+        if (!expired) {
+          touchActivity();
+          dismissInactivityWarning();
+        }
       } else if (nextAppState.match(/inactive|background/)) {
         // Forzar la marca en disco antes de que el runtime quede suspendido.
         void persistLastActivity(Date.now(), true);
@@ -213,6 +273,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     touchActivity();
   };
 
+  // "Seguir conectado": renueva la actividad y oculta el aviso de inactividad.
+  const extendSession = () => {
+    touchActivity(true);
+    dismissInactivityWarning();
+  };
+
   const login = async (email: string, password: string) => {
     await clearLocalSessionData();
     await loginWithEmail({ email, password });
@@ -221,13 +287,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleLogout = async () => {
     clearExpiryInterval();
+    clearWarningTick();
+    setShowInactivityWarning(false);
     void clearPersistedLastActivity();
     await clearLocalSessionData();
     await logout();
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, authError, login, logout: handleLogout, onUserActivity }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        authError,
+        login,
+        logout: handleLogout,
+        onUserActivity,
+        showInactivityWarning,
+        secondsLeft,
+        extendSession,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

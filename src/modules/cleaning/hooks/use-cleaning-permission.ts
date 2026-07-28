@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 
 import { useUser } from '@/src/context/user-context';
-import { canManageCleaning, canViewCongregationModule, hasPermission } from '@/src/utils/permissions/permissions';
+import { canManageCleaning, canViewOwnCleaning, hasPermission } from '@/src/utils/permissions/permissions';
 
 interface CleaningPermission {
   canManage: boolean;
@@ -21,7 +21,7 @@ export function useCleaningPermission(): CleaningPermission & { loading: boolean
   const redirectedRef = useRef(false);
 
   const canManage = canManageCleaning(appUser);
-  const canView = canViewCongregationModule(appUser) || canManage || hasPermission(appUser, 'limpieza', 'view') || isElder;
+  const canView = canViewOwnCleaning(appUser) || canManage || hasPermission(appUser, 'limpieza', 'view') || isElder;
 
   useEffect(() => {
     if (loadingProfile) return;

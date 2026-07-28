@@ -9,6 +9,7 @@ import { useI18n } from '@/src/i18n/index';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { CongregationBlockedScreen } from '@/src/screens/errors/CongregationBlockedScreen';
 import { SystemAnnouncementGate } from '@/src/components/announcements/SystemAnnouncementGate';
+import { InactivityWarningModal } from '@/src/components/session/InactivityWarningModal';
 import { buildPathWithParams } from '@/src/utils/navigation/redirect';
 import { CleaningCacheProvider } from '@/src/modules/cleaning/context/CleaningCacheContext';
 
@@ -64,6 +65,7 @@ export default function ProtectedLayout() {
 function ProtectedContent() {
   const { t } = useI18n();
   const { congregationAccess, loadingProfile } = useUser();
+  const { showInactivityWarning, secondsLeft, extendSession, logout } = useAuth();
 
   if (loadingProfile) {
     return <LoadingState message="Verificando acceso..." />;
@@ -77,6 +79,12 @@ function ProtectedContent() {
     <>
       <ProtectedNotificationSetup />
       <SystemAnnouncementGate />
+      <InactivityWarningModal
+        visible={showInactivityWarning}
+        secondsLeft={secondsLeft}
+        onExtendSession={extendSession}
+        onLogout={() => void logout()}
+      />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="users/[id]" options={{ headerShown: false }} />

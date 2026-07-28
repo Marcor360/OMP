@@ -185,7 +185,7 @@ const parsePermissions = (
     const invalidAction = Object.keys(rawActions).find(
       (action) =>
         !PERMISSION_ACTIONS.includes(action as PermissionAction) &&
-        !(department === 'predicacion' && (action === 'territories' || action === 'manageTerritories'))
+        !(department === 'predicacion' && action === 'territories')
     );
     if (invalidAction) {
       if (!strict) return;
@@ -209,13 +209,6 @@ const parsePermissions = (
       if (invalidTerritoryAction) {
         if (!strict) return;
         throw new HttpsError('invalid-argument', 'Permisos de territorios contienen acciones no permitidas.');
-      }
-    }
-
-    if (department === 'predicacion' && rawActions.manageTerritories !== undefined) {
-      if (typeof rawActions.manageTerritories !== 'boolean') {
-        if (!strict) return;
-        throw new HttpsError('invalid-argument', 'El permiso de administrar territorios debe ser booleano.');
       }
     }
   });
@@ -372,7 +365,6 @@ describe('parsePermissions', () => {
         departments: { view: true, manage: true },
         predicacion: {
           view: true,
-          manageTerritories: true,
           territories: {
             view: true,
             assign: true,

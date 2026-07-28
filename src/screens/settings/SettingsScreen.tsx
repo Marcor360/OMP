@@ -8,6 +8,8 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Application from 'expo-application';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
@@ -34,8 +36,10 @@ import {
   canAccessSettings,
   canManageAssignments,
   canManageCleaning,
+  canManageEvents,
   canManageMeetings,
-  canViewCongregationModule,
+  canManagePreachingGroups,
+  canViewOwnCleaning,
   canViewUsers,
 } from '@/src/utils/permissions/permissions';
 
@@ -96,7 +100,9 @@ export function SettingsScreen() {
     canViewUsers(appUser) ||
     canManageMeetings(appUser) ||
     canManageAssignments(appUser) ||
-    canViewCongregationModule(appUser);
+    canManageCleaning(appUser) ||
+    canManageEvents(appUser) ||
+    canManagePreachingGroups(appUser);
   const isWide = width >= 768;
   const contentWidth = Math.max(0, Math.min(width, CONTENT_MAX) - H_PADDING * 2);
   const tileWidth = (cols: number): number | '100%' =>
@@ -477,7 +483,7 @@ export function SettingsScreen() {
                     onPress={() => router.push('/(protected)/(tabs)/assignments')}
                   />
                 ) : null}
-                {canManageCleaning(appUser) || canViewCongregationModule(appUser) ? (
+                {canManageCleaning(appUser) || canViewOwnCleaning(appUser) ? (
                   <NavTile
                     icon="sparkles-outline"
                     title={t('settings.admin.cleaningGroups')}
@@ -531,26 +537,34 @@ export function SettingsScreen() {
             </View>
           </View>
 
-          {Platform.OS !== 'web' ? (
-            <Section title={t('settings.section.devicePermissions')}>
-              {isExpoGo ? (
-                <View style={styles.infoBox}>
-                  <ThemedText style={styles.infoText}>
-                    {t('settings.permissions.expoGoUnavailable')}
-                  </ThemedText>
-                </View>
-              ) : null}
-              <PermissionRow
-                icon="notifications-outline"
-                title={t('permission.notifications.title')}
-                description={t('permission.notifications.description')}
-                status={permissions.state.notifications}
-                onRequest={permissions.requestNotifications}
-                onOpenSettings={permissions.openSettings}
-                loading={permissions.loading}
-              />
-            </Section>
-          ) : null}
+          <Section title={t('settings.section.devicePermissions')}>
+            {Platform.OS === 'web' ? (
+              <View style={styles.infoBox}>
+                <ThemedText style={styles.infoText}>
+                  {t('settings.permissions.webUnavailable')}
+                </ThemedText>
+              </View>
+            ) : (
+              <>
+                {isExpoGo ? (
+                  <View style={styles.infoBox}>
+                    <ThemedText style={styles.infoText}>
+                      {t('settings.permissions.expoGoUnavailable')}
+                    </ThemedText>
+                  </View>
+                ) : null}
+                <PermissionRow
+                  icon="notifications-outline"
+                  title={t('permission.notifications.title')}
+                  description={t('permission.notifications.description')}
+                  status={permissions.state.notifications}
+                  onRequest={permissions.requestNotifications}
+                  onOpenSettings={permissions.openSettings}
+                  loading={permissions.loading}
+                />
+              </>
+            )}
+          </Section>
 
           <Section title={t('settings.section.application')}>
             <SettingRow
@@ -570,7 +584,7 @@ export function SettingsScreen() {
             <SettingRow
               icon="information-circle-outline"
               label={t('settings.app.version')}
-              value="1.0.1"
+              value={Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '—'}
               showArrow
               onPress={handleNavigateToAbout}
             />

@@ -1,5 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
+import { getActiveLocale } from '@/src/i18n/active-locale';
+
 type DateInput = Timestamp | Date | null | undefined;
 
 const toDate = (input: DateInput): Date | null => {
@@ -12,7 +14,7 @@ const toDate = (input: DateInput): Date | null => {
 export const formatDate = (input: DateInput): string => {
   const date = toDate(input);
   if (!date) return '—';
-  return date.toLocaleDateString('es-MX', {
+  return date.toLocaleDateString(getActiveLocale(), {
     day: '2-digit',
     month: 'short',
     year: 'numeric',

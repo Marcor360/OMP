@@ -297,6 +297,21 @@ describe('org chart department rules', () => {
 });
 
 describe('sensitive user writes', () => {
+  it('rejects legacy role aliases even for superadmin writes', async () => {
+    await assertFails(setDoc(doc(authedDb('root'), 'users/legacy-admin'), {
+      ...userDoc({ uid: 'legacy-admin', role: 'user', congregationId: 'c1' }),
+      role: 'administrador',
+    }));
+    await assertFails(setDoc(doc(authedDb('root'), 'users/legacy-user'), {
+      ...userDoc({ uid: 'legacy-user', role: 'user', congregationId: 'c1' }),
+      role: 'usuario',
+    }));
+    await assertFails(updateDoc(doc(authedDb('root'), 'users/member'), {
+      role: 'administrador',
+      updatedAt: Timestamp.now(),
+    }));
+  });
+
   it('blocks self role, permissions, congregation and protection escalation', async () => {
     const ref = doc(authedDb('member'), 'users/member');
     await assertFails(updateDoc(ref, {role: 'admin', updatedAt: Timestamp.now()}));
