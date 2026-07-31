@@ -1,6 +1,8 @@
 import { Stack, useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 
+import { AppLockProvider, useAppLock } from '@/src/context/app-lock-context';
 import { useAuth } from '@/src/context/auth-context';
 import { UserProvider, useUser } from '@/src/context/user-context';
 import { useNotificationDeepLink } from '@/src/hooks/use-notification-deep-link';
@@ -8,6 +10,7 @@ import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
 import { useStartupPermissionPrompt } from '@/src/hooks/use-startup-permission-prompt';
 import { useI18n } from '@/src/i18n/index';
 import { LoadingState } from '@/src/components/common/LoadingState';
+import { BiometricLockScreen } from '@/src/components/security/BiometricLockScreen';
 import { CongregationBlockedScreen } from '@/src/screens/errors/CongregationBlockedScreen';
 import { SystemAnnouncementGate } from '@/src/components/announcements/SystemAnnouncementGate';
 import { InactivityWarningModal } from '@/src/components/session/InactivityWarningModal';
@@ -57,11 +60,28 @@ export default function ProtectedLayout() {
 
   return (
     <UserProvider>
-      <CleaningCacheProvider>
-        <ProtectedContent />
-      </CleaningCacheProvider>
+      <AppLockProvider>
+        <CleaningCacheProvider>
+          <ProtectedGate />
+        </CleaningCacheProvider>
+      </AppLockProvider>
     </UserProvider>
   );
+}
+
+// En Android/iOS, mientras la app este bloqueada localmente (biometria) se
+// muestra unicamente BiometricLockScreen: ProtectedContent (y por lo tanto el
+// Stack con las rutas internas, los listeners de notificaciones y el deep
+// link) ni siquiera se monta, asi que no hay forma de navegar a contenido
+// protegido ni de procesar un deep link/notificacion hasta desbloquear.
+function ProtectedGate() {
+  const { isAppLocked } = useAppLock();
+
+  if (Platform.OS !== 'web' && isAppLocked) {
+    return <BiometricLockScreen />;
+  }
+
+  return <ProtectedContent />;
 }
 
 function ProtectedContent() {

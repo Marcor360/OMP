@@ -2,14 +2,20 @@
  * Consume el deep link de un push tocado (app en frio o en caliente) y navega
  * al destino de `data.url`, siempre a traves de getSafeNotificationHref.
  *
- * No navega hasta que haya sesion y el perfil termine de cargar: un arranque en
- * frio que empuje una ruta protegida antes de montar (protected)/_layout rebota
- * al login y pierde el destino. Por eso el destino pendiente se guarda en una ref
- * y se consume cuando isAuthenticated && !loadingProfile.
+ * No navega hasta que haya sesion, el perfil termine de cargar y la app este
+ * desbloqueada: un arranque en frio que empuje una ruta protegida antes de
+ * montar (protected)/_layout rebota al login y pierde el destino, y mostrar
+ * contenido detras de la pantalla biometrica filtraria datos privados. Por eso
+ * el destino pendiente se guarda en una ref y se consume cuando
+ * isAuthenticated && !loadingProfile && !isAppLocked. En la practica este hook
+ * solo se monta dentro de ProtectedContent, que el layout protegido ya deja de
+ * renderizar mientras isAppLocked es true, pero el chequeo se repite aqui como
+ * defensa en profundidad ante una carrera con el AppState al re-bloquear.
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 
+import { useAppLock } from '@/src/context/app-lock-context';
 import { useUser } from '@/src/context/user-context';
 import { getSafeNotificationHref } from '@/src/utils/navigation/redirect';
 import { canUseRemotePushNotifications } from '@/src/utils/runtime';
@@ -32,15 +38,16 @@ const loadNotificationsModule = async (): Promise<NotificationsModule | null> =>
 export function useNotificationDeepLink(): void {
   const router = useRouter();
   const { congregationId, isSessionValid, loadingProfile } = useUser();
+  const { isAppLocked } = useAppLock();
 
   const pendingHrefRef = useRef<string | null>(null);
   const processedIdsRef = useRef<Set<string>>(new Set());
-  const authStateRef = useRef({ isSessionValid, loadingProfile, congregationId });
-  authStateRef.current = { isSessionValid, loadingProfile, congregationId };
+  const authStateRef = useRef({ isSessionValid, loadingProfile, congregationId, isAppLocked });
+  authStateRef.current = { isSessionValid, loadingProfile, congregationId, isAppLocked };
 
   const consumePendingHref = useCallback((): void => {
-    const { isSessionValid: authed, loadingProfile: loading } = authStateRef.current;
-    if (!pendingHrefRef.current || !authed || loading) return;
+    const { isSessionValid: authed, loadingProfile: loading, isAppLocked: locked } = authStateRef.current;
+    if (!pendingHrefRef.current || !authed || loading || locked) return;
 
     const href = pendingHrefRef.current;
     pendingHrefRef.current = null;
@@ -49,7 +56,7 @@ export function useNotificationDeepLink(): void {
 
   useEffect(() => {
     consumePendingHref();
-  }, [isSessionValid, loadingProfile, consumePendingHref]);
+  }, [isSessionValid, loadingProfile, isAppLocked, consumePendingHref]);
 
   useEffect(() => {
     if (!canUseRemotePushNotifications) return;

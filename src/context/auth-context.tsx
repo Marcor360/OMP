@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { AppState, AppStateStatus, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { auth } from '@/src/config/firebase/firebase';
 import { loginWithEmail, logout } from '@/src/services/auth-service';
+import { markLocallyLocked, markLocallyUnlocked } from '@/src/services/security/app-lock-state';
 import { clearLocalSessionData } from '@/src/services/session/session-cleanup';
 import { AuthContextType } from '@/src/types/auth.types';
 import { createLogger } from '@/src/utils/logger';
@@ -11,6 +12,10 @@ import { createLogger } from '@/src/utils/logger';
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const authLogger = createLogger('AuthProvider');
 
+// Toda esta politica de expiracion por inactividad (wall-clock) aplica
+// UNICAMENTE a web. En Android/iOS la sesion de Firebase se conserva
+// indefinidamente (ver src/context/app-lock-context.tsx para el bloqueo
+// local por biometria, que es un concepto distinto: no cierra sesion).
 // Tiempo real de inactividad antes de cerrar sesión (única fuente de verdad).
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
 // Ventana de aviso previo al cierre por inactividad (vive dentro de INACTIVITY_TIMEOUT_MS).
@@ -38,7 +43,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const [showInactivityWarning, setShowInactivityWarning] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   // Referencia a usuario para poder accederla desde event listeners sin closures stale
   const userRef = useRef<User | null>(null);
   const lastActivityRef = useRef<number>(0);
@@ -104,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const touchActivity = (force = false) => {
+    if (Platform.OS !== 'web') return;
     if (!userRef.current) return;
     const now = Date.now();
     lastActivityRef.current = now;
@@ -129,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const forceLogoutByInactivity = async () => {
+    if (Platform.OS !== 'web') return;
     authLogger.info('Sesión cerrada por inactividad (wall-clock)');
     clearExpiryInterval();
     clearWarningTick();
@@ -141,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Verifica expiración leyendo la mayor marca conocida (memoria vs storage).
   // Leer storage cubre multi-pestaña en web: actividad en la pestaña A cuenta para la B.
   const checkExpiry = async (source: string): Promise<boolean> => {
+    if (Platform.OS !== 'web') return false;
     if (!userRef.current) return false;
     const persisted = await readPersistedLastActivity();
     const last = Math.max(lastActivityRef.current, persisted ?? 0);
@@ -178,14 +185,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (firebaseUser) {
         authLogger.info('Usuario autenticado', firebaseUser.uid);
-        const expired = await checkExpiry('auth-restore');
-        if (expired) return;
-        touchActivity(true);
-        dismissInactivityWarning();
-        clearExpiryInterval();
-        expiryIntervalRef.current = setInterval(() => {
-          void checkExpiry('tick');
-        }, EXPIRY_CHECK_INTERVAL_MS);
+        if (Platform.OS === 'web') {
+          const expired = await checkExpiry('auth-restore');
+          if (expired) return;
+          touchActivity(true);
+          dismissInactivityWarning();
+          clearExpiryInterval();
+          expiryIntervalRef.current = setInterval(() => {
+            void checkExpiry('tick');
+          }, EXPIRY_CHECK_INTERVAL_MS);
+        }
       } else {
         authLogger.info('Sin sesion activa');
         clearExpiryInterval();
@@ -242,33 +251,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []); // Solo se monta una vez; usa userRef para evitar closures stale
 
-  // Móvil: manejar cambios de estado con el tiempo wall-clock persistido.
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-
-    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
-      if (
-        appStateRef.current.match(/inactive|background/) &&
-        nextAppState === 'active'
-      ) {
-        // Comprobar expiración antes de considerar el regreso como actividad.
-        const expired = await checkExpiry('app-resume');
-        if (!expired) {
-          touchActivity();
-          dismissInactivityWarning();
-        }
-      } else if (nextAppState.match(/inactive|background/)) {
-        // Forzar la marca en disco antes de que el runtime quede suspendido.
-        void persistLastActivity(Date.now(), true);
-      }
-      appStateRef.current = nextAppState;
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription.remove();
-  }, []);
-
-  // Registrar actividad manualmente desde pantallas (útil para móvil).
+  // Registrar actividad manualmente desde pantallas (util solo en web; touchActivity
+  // es un no-op en movil, ver mas arriba).
   const onUserActivity = () => {
     touchActivity();
   };
@@ -283,6 +267,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clearLocalSessionData();
     await loginWithEmail({ email, password });
     touchActivity(true);
+    // Un login interactivo (el usuario ya escribio su contrasena) satisface la
+    // verificacion local: no hace falta pedir biometria de inmediato despues.
+    if (Platform.OS !== 'web') markLocallyUnlocked();
   };
 
   const handleLogout = async () => {
@@ -290,6 +277,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearWarningTick();
     setShowInactivityWarning(false);
     void clearPersistedLastActivity();
+    if (Platform.OS !== 'web') markLocallyLocked();
     await clearLocalSessionData();
     await logout();
   };

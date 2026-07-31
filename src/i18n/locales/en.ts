@@ -125,6 +125,21 @@ export const en = {
   'session.inactivity.keepConnected': 'Stay connected',
   'session.inactivity.logout': 'Log out',
 
+  // Local biometric lock (mobile only)
+  'session.lock.title': 'App locked',
+  'session.lock.description': 'Verify your identity to continue where you left off.',
+  'session.lock.promptMessage': 'Verify your identity to unlock OMP',
+  'session.lock.cancelLabel': 'Cancel',
+  'session.lock.unlockButton': 'Unlock',
+  'session.lock.retryButton': 'Retry',
+  'session.lock.logoutButton': 'Log out',
+  'session.lock.errorCanceled': 'Verification canceled. Tap "Unlock" to try again.',
+  'session.lock.errorLockout': 'Too many failed attempts. Wait a moment or use your device passcode.',
+  'session.lock.errorFailed': 'We could not verify your identity. Please try again.',
+  'session.lock.unsupportedTitle': 'No unlock method available',
+  'session.lock.unsupportedDescription':
+    'This device has no fingerprint, Face ID, or passcode set up. Log out and sign in again once one is available.',
+
   // Billing
   'billing.title': 'Billing',
   'billing.subtitle': 'Congregation plan and payments',

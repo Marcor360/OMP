@@ -2,14 +2,14 @@
   "expo": {
     "name": "OMP",
     "slug": "omp",
-    "version": "1.29.0",
+    "version": "1.31.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ormeprassig",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "3",
+      "buildNumber": "4",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
@@ -41,7 +41,7 @@
         "android.permission.SCHEDULE_EXACT_ALARM"
       ],
       "package": "com.marcor360.omp",
-      "versionCode": 11304
+      "versionCode": 11305
     },
     "web": {
       "bundler": "metro",
@@ -69,6 +69,12 @@
           "color": "#2563EB",
           "sounds": [],
           "mode": "production"
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Permite que OMP use Face ID para desbloquear tu sesión."
         }
       ]
     ],

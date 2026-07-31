@@ -138,19 +138,51 @@ type FirebaseAuthWithReactNativePersistence = typeof FirebaseAuth & {
 
 let authInstance: ReturnType<typeof getAuth>;
 
+// En movil, la sesion debe sobrevivir a cerrar/reabrir la app: eso solo pasa si
+// initializeAuth recibe getReactNativePersistence(AsyncStorage). getAuth(app) sin
+// persistencia explicita usa memoria y pierde la sesion al matar el proceso, por
+// eso cualquier caida a ese camino se reporta en voz alta durante desarrollo en
+// vez de fallar en silencio.
 if (Platform.OS === 'web') {
   authInstance = getAuth(app);
 } else {
   const persistenceFactory =
     (FirebaseAuth as FirebaseAuthWithReactNativePersistence).getReactNativePersistence;
-  const persistence = persistenceFactory?.(AsyncStorage);
 
-  try {
-    authInstance = persistence
-      ? initializeAuth(app, { persistence: persistence as never })
-      : getAuth(app);
-  } catch {
+  if (!persistenceFactory) {
+    if (isDevelopment) {
+      console.error(
+        '[firebase] getReactNativePersistence no esta disponible en este build de firebase/auth. ' +
+          'La sesion movil NO se conservara entre reinicios de la app (persistencia en memoria).'
+      );
+    }
     authInstance = getAuth(app);
+  } else {
+    try {
+      authInstance = initializeAuth(app, {
+        persistence: persistenceFactory(AsyncStorage) as never,
+      });
+    } catch (error) {
+      const errorCode =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? (error as { code?: unknown }).code
+          : undefined;
+
+      if (errorCode === 'auth/already-initialized') {
+        // Fast Refresh / doble evaluacion del modulo en desarrollo: la instancia
+        // ya existe (con la persistencia correcta), solo hace falta recuperarla.
+        authInstance = getAuth(app);
+      } else {
+        if (isDevelopment) {
+          console.error(
+            '[firebase] initializeAuth con getReactNativePersistence fallo. ' +
+              'La sesion movil NO se conservara entre reinicios de la app.',
+            error
+          );
+        }
+        authInstance = getAuth(app);
+      }
+    }
   }
 }
 

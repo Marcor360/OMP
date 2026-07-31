@@ -125,6 +125,21 @@ export const es = {
   'session.inactivity.keepConnected': 'Seguir conectado',
   'session.inactivity.logout': 'Cerrar sesión',
 
+  // Bloqueo local por biometria (solo movil)
+  'session.lock.title': 'Aplicación bloqueada',
+  'session.lock.description': 'Verifica tu identidad para continuar donde lo dejaste.',
+  'session.lock.promptMessage': 'Verifica tu identidad para desbloquear OMP',
+  'session.lock.cancelLabel': 'Cancelar',
+  'session.lock.unlockButton': 'Desbloquear',
+  'session.lock.retryButton': 'Reintentar',
+  'session.lock.logoutButton': 'Cerrar sesión',
+  'session.lock.errorCanceled': 'Verificación cancelada. Toca "Desbloquear" para intentar de nuevo.',
+  'session.lock.errorLockout': 'Demasiados intentos fallidos. Espera un momento o usa el código de tu dispositivo.',
+  'session.lock.errorFailed': 'No se pudo verificar tu identidad. Intenta de nuevo.',
+  'session.lock.unsupportedTitle': 'Sin método de desbloqueo',
+  'session.lock.unsupportedDescription':
+    'Este dispositivo no tiene huella, Face ID ni código configurado. Cierra sesión e ingresa de nuevo cuando tengas uno disponible.',
+
   // Billing
   'billing.title': 'Facturacion',
   'billing.subtitle': 'Plan y pagos de la congregacion',
