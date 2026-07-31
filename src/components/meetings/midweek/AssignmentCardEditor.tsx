@@ -196,40 +196,44 @@ export function AssignmentCardEditor({
           ) : null}
         </View>
 
-        {visibleParticipants.length === 0 ? (
-          <ThemedText style={styles.emptyText}>Sin participantes todavia.</ThemedText>
+        {isLocked && visibleParticipants.every((participant) => !participant.userId) ? (
+          <ThemedText style={styles.lockedText}>En espera de asignación</ThemedText>
         ) : (
-          <View style={styles.participantsList}>
-            {visibleParticipants.map((participant, participantIndex) => {
-              const participantError = errors?.participants?.[participant.id];
+          visibleParticipants.length === 0 ? (
+            <ThemedText style={styles.emptyText}>Sin participantes todavia.</ThemedText>
+          ) : (
+            <View style={styles.participantsList}>
+              {visibleParticipants.map((participant, participantIndex) => {
+                const participantError = errors?.participants?.[participant.id];
 
-              return (
-                <ParticipantSelectorField
-                  key={participant.id}
-                  participant={participant}
-                  users={users}
-                  disabled={isDisabled}
-                  error={participantError}
-                  allowManual
-                  title={participantLabel(participantIndex)}
-                  canRemove={visibleParticipants.length > 1}
-                  blockedUserIds={blockedUserIds}
-                  onChange={(nextParticipant) => {
-                    const nextParticipants = visibleParticipants.map((current, currentIndex) =>
-                      currentIndex === participantIndex ? nextParticipant : current
-                    );
-                    updateParticipants(nextParticipants);
-                  }}
-                  onRemove={() => {
-                    const nextParticipants = visibleParticipants.filter(
-                      (_, currentIndex) => currentIndex !== participantIndex
-                    );
-                    updateParticipants(nextParticipants);
-                  }}
-                />
-              );
-            })}
-          </View>
+                return (
+                  <ParticipantSelectorField
+                    key={participant.id}
+                    participant={participant}
+                    users={users}
+                    disabled={isDisabled}
+                    error={participantError}
+                    allowManual
+                    title={participantLabel(participantIndex)}
+                    canRemove={visibleParticipants.length > 1}
+                    blockedUserIds={blockedUserIds}
+                    onChange={(nextParticipant) => {
+                      const nextParticipants = visibleParticipants.map((current, currentIndex) =>
+                        currentIndex === participantIndex ? nextParticipant : current
+                      );
+                      updateParticipants(nextParticipants);
+                    }}
+                    onRemove={() => {
+                      const nextParticipants = visibleParticipants.filter(
+                        (_, currentIndex) => currentIndex !== participantIndex
+                      );
+                      updateParticipants(nextParticipants);
+                    }}
+                  />
+                );
+              })}
+            </View>
+          )
         )}
       </View>
       {isLocked ? (
