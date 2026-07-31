@@ -20,6 +20,7 @@ type HospitalityMeetingCardProps = {
   midweekLabel: string;
   weekendLabel: string;
   unassignedLabel: string;
+  awaitingLabel: string;
   substituteLabel: string;
   formatDate: (dateKey: string) => string;
   roleLabel: (roleKey: HospitalityRoleKey) => string;
@@ -38,6 +39,7 @@ export function HospitalityMeetingCard({
   midweekLabel,
   weekendLabel,
   unassignedLabel,
+  awaitingLabel,
   substituteLabel,
   formatDate,
   roleLabel,
@@ -99,7 +101,7 @@ export function HospitalityMeetingCard({
                 <View style={styles.roleText}>
                   <ThemedText style={styles.roleTitle}>{roleLabel(roleKey)}</ThemedText>
                   <ThemedText style={[styles.assignee, !selectedName && styles.unassigned]} numberOfLines={1}>
-                    {selectedName ?? unassignedLabel}
+                    {selectedName ?? (published ? awaitingLabel : unassignedLabel)}
                   </ThemedText>
                   {conflict ? <ThemedText style={styles.conflict}>{conflict}</ThemedText> : null}
                 </View>
