@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.marcor360.omp",
+      "sha256_cert_fingerprints": [
+        "73:74:0C:38:63:E6:29:F3:C1:5E:5A:05:BD:CD:44:7F:BE:52:40:36:94:09:DD:B0:26:ED:39:EC:4F:43:69:9B"
+      ]
+    }
+  }
+]
