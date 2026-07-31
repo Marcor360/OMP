@@ -21,6 +21,7 @@ type HospitalityRoleGridProps = {
   dateColumnLabel: string;
   readerLabel: string;
   unassignedLabel: string;
+  awaitingLabel: string;
   formatDate: (dateKey: string) => string;
   roleLabel: (roleKey: HospitalityRoleKey) => string;
   conflictFor: (row: HospitalityPlanningRow, roleKey: HospitalityRoleKey) => string | undefined;
@@ -41,6 +42,7 @@ export function HospitalityRoleGrid({
   dateColumnLabel,
   readerLabel,
   unassignedLabel,
+  awaitingLabel,
   formatDate,
   roleLabel,
   conflictFor,
@@ -94,7 +96,7 @@ export function HospitalityRoleGrid({
                         accessibilityLabel={`${roleLabel(roleKey)}, ${formatDate(row.meetingDate)}`}
                       >
                         <ThemedText style={[styles.userName, !selectedName && styles.unassigned]} numberOfLines={2}>
-                          {selectedName ?? unassignedLabel}
+                          {selectedName ?? (published ? awaitingLabel : unassignedLabel)}
                         </ThemedText>
                         {conflict ? <ThemedText style={styles.conflict} numberOfLines={2}>{conflict}</ThemedText> : null}
                         {published && selectedName ? <ThemedText style={styles.editHint}>↻</ThemedText> : null}
