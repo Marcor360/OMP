@@ -5,6 +5,7 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { adminDb } from './config/firebaseAdmin.js';
+import { buildNotificationUrl } from './modules/notifications/notification-routes.js';
 import { canManageEvents } from './shared/events-access.js';
 import type { EventsAvisosAction } from './shared/events-access.js';
 import { assertAdministrativeBillingAccess } from './users/authorization.js';
@@ -380,8 +381,6 @@ const formatDate = (timestamp: unknown): string => {
   }).format(timestamp.toDate());
 };
 
-const buildEventUrl = (): string => '/(protected)/(tabs)/';
-
 const buildNotificationMessage = (
   eventId: string,
   data: Record<string, unknown>,
@@ -392,12 +391,13 @@ const buildNotificationMessage = (
   const startLabel = formatDate(data.startDate);
   const endLabel = formatDate(data.endDate);
   const sameDay = startLabel === endLabel || endLabel.length === 0;
+  const url = buildNotificationUrl({ type: 'event', category: null, eventId });
 
   if (type === 'conmemoracion') {
     return {
       title: isUpdate ? 'Conmemoracion actualizada' : 'Conmemoracion',
       body: 'Ya esta disponible la informacion de la Conmemoracion.',
-      url: buildEventUrl(),
+      url,
     };
   }
 
@@ -409,7 +409,7 @@ const buildNotificationMessage = (
       body: sameDay
         ? `La visita sera el ${startLabel}.`
         : `La visita sera del ${startLabel} al ${endLabel}.`,
-      url: buildEventUrl(),
+      url,
     };
   }
 
@@ -417,7 +417,7 @@ const buildNotificationMessage = (
     return {
       title: isUpdate ? 'Asamblea actualizada' : 'Asamblea',
       body: 'Ya esta disponible la informacion del evento.',
-      url: buildEventUrl(),
+      url,
     };
   }
 
@@ -426,7 +426,7 @@ const buildNotificationMessage = (
     body: isUpdate
       ? `Se actualizo ${title ?? EVENT_TYPE_LABELS[type]}.`
       : 'Se ha agregado un nuevo evento para la congregacion.',
-    url: buildEventUrl(),
+    url,
   };
 };
 

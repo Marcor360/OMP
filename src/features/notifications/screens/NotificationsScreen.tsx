@@ -11,34 +11,16 @@ import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { NotificationItem } from '@/src/features/notifications/components/NotificationItem';
 import { AppNotification } from '@/src/features/notifications/types/notification.types';
+import { resolveNotificationHref } from '@/src/features/notifications/utils/notification-routes';
 import { useNotifications } from '@/src/hooks/useNotifications';
 import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { getSafeNotificationHref } from '@/src/utils/navigation/redirect';
 
-const resolveAssignmentHref = (notification: AppNotification): Href => {
-  if (notification.type === 'event' || notification.type === 'billing') {
-    return getSafeNotificationHref(notification.data?.url) as Href;
-  }
-
-  if (!notification.assignmentId) {
-    return '/(protected)/(tabs)' as Href;
-  }
-
-  const [meetingIdFromAssignment, assignmentKey] = notification.assignmentId.split(':');
-  const meetingId =
-    notification.metadata?.meetingId ??
-    (meetingIdFromAssignment && assignmentKey ? meetingIdFromAssignment : null);
-  const assignmentId = assignmentKey ?? notification.assignmentId;
-
-  if (meetingId) {
-    return `/(protected)/assignments/${assignmentId}?source=meeting&meetingId=${encodeURIComponent(
-      meetingId
-    )}` as Href;
-  }
-
-  return `/(protected)/assignments/${notification.assignmentId}` as Href;
-};
+const resolveAssignmentHref = (notification: AppNotification): Href =>
+  getSafeNotificationHref(
+    notification.data?.url ?? resolveNotificationHref(notification)
+  ) as Href;
 
 export function NotificationsScreen() {
   const router = useRouter();

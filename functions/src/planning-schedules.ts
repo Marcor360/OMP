@@ -701,6 +701,55 @@ const assertNoSingleHospitalitySubstitutionConflict = async (params: {
   );
 };
 
+// Espejo del backend de isEligibleForHospitalityRole
+// (src/modules/assignments/utils/hospitality-eligibility.ts). Todos los roles de
+// hospitalidad exigen anciano o siervo ministerial; si eso cambia, actualizar ambos.
+const isHospitalityEligible = (data: Record<string, unknown>): boolean => {
+  const privileges = asRecord(data.privileges);
+  const isElder = data.isElder === true || privileges?.isElder === true;
+  const isMinisterialServant =
+    data.isMinisterialServant === true || privileges?.isMinisterialServant === true;
+  return isElder || isMinisterialServant;
+};
+
+const assertHospitalityRoleEligibility = async (params: {
+  congregationId: string;
+  scheduleId: string;
+}): Promise<void> => {
+  const itemsSnap = await adminDb
+    .collection('congregations')
+    .doc(params.congregationId)
+    .collection('hospitalitySchedules')
+    .doc(params.scheduleId)
+    .collection('items')
+    .where('status', '==', 'scheduled')
+    .get();
+
+  const items = itemsSnap.docs
+    .map((itemDoc) => normalizeHospitalityItem(itemDoc.data() as FirestoreRecord))
+    .filter((item): item is HospitalityScheduleItem => item !== null);
+
+  const userIds = Array.from(new Set(items.map((item) => item.userId)));
+  const userSnaps = await Promise.all(
+    userIds.map((userId) => adminDb.collection('users').doc(userId).get())
+  );
+  const usersById = new Map(
+    userSnaps
+      .filter((snap) => snap.exists)
+      .map((snap) => [snap.id, snap.data() as FirestoreRecord])
+  );
+
+  for (const item of items) {
+    const userData = usersById.get(item.userId);
+    if (!userData || !isHospitalityEligible(userData)) {
+      throw new HttpsError(
+        'failed-precondition',
+        `${item.userNameSnapshot} no es anciano ni siervo ministerial: no puede cumplir ${item.roleLabel} (${item.meetingDate}).`
+      );
+    }
+  }
+};
+
 export const isReaderRole = (roleKey: HospitalityRoleKey): boolean =>
   roleKey === 'watchtowerReader' || roleKey === 'midweekBibleStudyReader';
 
@@ -958,12 +1007,28 @@ const syncSingleMeetingFromItems = async (params: {
     params.items,
     params.meetingType
   );
-  const updatePayload = {
+
+  // Las reuniones generadas por el planificador nacen como esqueleto en 'draft'
+  // y su unico contenido son las asignaciones de hospitalidad. Sin publicarlas,
+  // notifyMeetingPublicationAndChanges corta en `afterStatus !== 'published'`.
+  // Las reuniones creadas desde el modulo de Reuniones conservan su estado:
+  // su propio flujo decide cuando publicarlas.
+  const isPlanningSkeleton =
+    normalizeText(meetingData.origin) === 'hospitalityPlanning' ||
+    meetingDoc.id.startsWith('planning-');
+  const alreadyPublished = normalizeText(meetingData.publicationStatus) === 'published';
+
+  const updatePayload: FirestoreRecord = {
     sections,
     assignedUserIds: collectAssignedUserIdsFromSections(sections),
     updatedAt: FieldValue.serverTimestamp(),
     updatedBy: params.requesterUid,
   };
+
+  if (isPlanningSkeleton && !alreadyPublished) {
+    updatePayload.publicationStatus = 'published';
+    updatePayload.publishedAt = FieldValue.serverTimestamp();
+  }
 
   if (params.batch) {
     params.batch.update(meetingDoc.ref, updatePayload);
@@ -1078,6 +1143,7 @@ export const ensurePlanningMeetingsByManager = onCall(
         meetingCategory: candidate.meetingType,
         status: 'scheduled',
         publicationStatus: 'draft',
+        origin: 'hospitalityPlanning',
         startDate: meetingTimestamp,
         endDate: meetingTimestamp,
         meetingDate: meetingTimestamp,
@@ -1160,6 +1226,10 @@ export const publishHospitalityScheduleByManager = onCall(
       congregationId: payload.congregationId,
       scheduleId: payload.scheduleId,
       scheduleData,
+    });
+    await assertHospitalityRoleEligibility({
+      congregationId: payload.congregationId,
+      scheduleId: payload.scheduleId,
     });
     await publishSchedule({
       congregationId: payload.congregationId,
@@ -1248,6 +1318,12 @@ export const substituteHospitalityAssignmentByManager = onCall(
     }
     if (!resolveIsActive(newUserData)) {
       throw new HttpsError('failed-precondition', 'El usuario sustituto esta inactivo.');
+    }
+    if (!isHospitalityEligible(newUserData)) {
+      throw new HttpsError(
+        'failed-precondition',
+        'El usuario sustituto no es anciano ni siervo ministerial.'
+      );
     }
 
     const newUserName =

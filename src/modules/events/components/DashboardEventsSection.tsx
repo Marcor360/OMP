@@ -37,6 +37,11 @@ const eventEditHref = (eventId: string): Href => ({
   params: { id: eventId },
 });
 
+const eventDetailHref = (eventId: string): Href => ({
+  pathname: '/(protected)/events/[id]',
+  params: { id: eventId },
+});
+
 export function DashboardEventsSection({
   events,
   loading,
@@ -109,13 +114,18 @@ export function DashboardEventsSection({
       ) : (
         <View style={styles.list}>
           {events.map((event) => (
-            <EventCard
+            <TouchableOpacity
               key={event.id}
-              event={event}
-              canManage={canManage}
-              onEdit={() => router.push(eventEditHref(event.id))}
-              onDelete={handleDelete}
-            />
+              activeOpacity={0.85}
+              onPress={() => router.push(eventDetailHref(event.id))}
+            >
+              <EventCard
+                event={event}
+                canManage={canManage}
+                onEdit={() => router.push(eventEditHref(event.id))}
+                onDelete={handleDelete}
+              />
+            </TouchableOpacity>
           ))}
         </View>
       )}

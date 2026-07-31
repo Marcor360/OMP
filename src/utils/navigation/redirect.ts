@@ -12,6 +12,8 @@ const NOTIFICATION_HREF_ALLOWED_PREFIXES = [
   '/(protected)/cleaning',
   '/(protected)/notifications',
   '/(protected)/territories/',
+  '/(protected)/preaching',
+  '/(protected)/field-service',
 ];
 
 export function buildPathWithParams(

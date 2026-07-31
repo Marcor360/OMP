@@ -27,6 +27,7 @@ type UserPickerModalProps = {
   closeLabel: string;
   availableLabel: string;
   selectedLabel: string;
+  emptyLabel?: string;
   onClose: () => void;
   onSelect: (user?: ActiveCongregationUser) => void;
 };
@@ -54,6 +55,7 @@ export function UserPickerModal({
   closeLabel,
   availableLabel,
   selectedLabel,
+  emptyLabel,
   onClose,
   onSelect,
 }: UserPickerModalProps) {
@@ -122,6 +124,9 @@ export function UserPickerModal({
             keyExtractor={(user) => user.uid}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.listContent}
+            ListEmptyComponent={emptyLabel ? (
+              <ThemedText style={styles.emptyText}>{emptyLabel}</ThemedText>
+            ) : null}
             renderItem={({ item }) => {
               const selected = item.uid === selectedUserId;
               const disabledReason = disabledReasons[item.uid];
@@ -190,6 +195,7 @@ const createStyles = (colors: AppColorSet) => StyleSheet.create({
   clearOption: { minHeight: 44, marginHorizontal: 12, marginBottom: 6, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 10, backgroundColor: colors.backgroundLight },
   clearText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
   listContent: { paddingHorizontal: 12, paddingBottom: 20 },
+  emptyText: { color: colors.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: 24, paddingHorizontal: 16 },
   userRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 8, paddingHorizontal: 6 },
   userRowSelected: { backgroundColor: `${colors.primary}0D` },
   userRowDisabled: { opacity: 0.55 },

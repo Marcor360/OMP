@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert } from 'react-native';
 
 import { useUser } from '@/src/context/user-context';
 import { type I18nContextType, useI18n } from '@/src/i18n';
@@ -15,6 +14,7 @@ import {
   updateHospitalityScheduleOptionalRoles,
 } from '@/src/services/hospitality-microphones/hospitality-microphones-service';
 import { getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
+import { validatePlanningWindow } from '@/src/services/planning/operational-planning-service';
 import {
   type ActiveCongregationUser,
   getActiveCongregationUsers,
@@ -31,6 +31,7 @@ import { formatDateKey, parseDateKey } from '@/src/utils/dates/date-key';
 import { getWeekRangeForDate } from '@/src/utils/dates/week-range';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { canManageHospitalityMicrophones } from '@/src/utils/permissions/permissions';
+import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 
 export type HospitalityPlanningRow = {
   meetingId: string;
@@ -86,10 +87,14 @@ export const rolesForMeetingType = (
 
 const todayKey = (): string => formatDateKey(new Date());
 
-const addDaysKey = (dateKey: string, days: number): string => {
-  const date = parseDateKey(dateKey) ?? new Date();
-  date.setDate(date.getDate() + days);
-  return formatDateKey(date);
+/**
+ * La ventana operativa admite maximo 2 meses calendario y 62 dias.
+ * El ultimo dia del mes siguiente al de inicio cumple siempre ambas reglas
+ * (peor caso: 1-jul -> 31-ago = 62 dias exactos).
+ */
+const defaultEndDateKey = (startKey: string): string => {
+  const start = parseDateKey(startKey) ?? new Date();
+  return formatDateKey(new Date(start.getFullYear(), start.getMonth() + 2, 0));
 };
 
 const toDate = (value: unknown): Date => {
@@ -247,7 +252,7 @@ export function useHospitalityScheduleBuilder() {
   const [selectedSchedule, setSelectedSchedule] = useState<HospitalitySchedule | null>(null);
   const [title, setTitle] = useState(t('hospitality.scheduleTitle'));
   const [startDate, setStartDate] = useState(todayKey());
-  const [endDate, setEndDate] = useState(addDaysKey(todayKey(), 45));
+  const [endDate, setEndDate] = useState(defaultEndDateKey(todayKey()));
   const [midweekDay, setMidweekDay] = useState(3);
   const [weekendDay, setWeekendDay] = useState(0);
   const [optionalRoles, setOptionalRoles] = useState<HospitalityOptionalRoles>(DEFAULT_OPTIONAL_ROLES);
@@ -280,7 +285,7 @@ export function useHospitalityScheduleBuilder() {
     const parsedStart = parseDateKey(rangeStart);
     const parsedEnd = parseDateKey(rangeEnd);
     if (!parsedStart || !parsedEnd || parsedStart > parsedEnd) {
-      Alert.alert(t('hospitality.scheduleInvalidRangeTitle'), t('hospitality.scheduleInvalidRangeMsg'));
+      showAlert(t('hospitality.scheduleInvalidRangeTitle'), t('hospitality.scheduleInvalidRangeMsg'));
       return;
     }
     parsedStart.setHours(0, 0, 0, 0);
@@ -426,9 +431,9 @@ export function useHospitalityScheduleBuilder() {
     setSaving(true);
     try {
       await saveDraft();
-      Alert.alert(t('hospitality.scheduleDraftSavedTitle'), t('hospitality.scheduleDraftSavedMsg'));
+      showAlert(t('hospitality.scheduleDraftSavedTitle'), t('hospitality.scheduleDraftSavedMsg'));
     } catch (requestError) {
-      Alert.alert(t('hospitality.scheduleSaveFailed'), formatFirestoreError(requestError));
+      showAlert(t('hospitality.scheduleSaveFailed'), formatFirestoreError(requestError));
     } finally {
       setSaving(false);
     }
@@ -440,12 +445,12 @@ export function useHospitalityScheduleBuilder() {
     try {
       const result = await ensurePlanningMeetings({ congregationId, startDate, endDate, midweekDay, weekendDay });
       await loadRows();
-      Alert.alert(t('hospitality.scheduleGeneratedTitle'), t('hospitality.scheduleGeneratedMsg', {
+      showAlert(t('hospitality.scheduleGeneratedTitle'), t('hospitality.scheduleGeneratedMsg', {
         created: result.createdMidweek + result.createdWeekend,
         existing: result.existing,
       }));
     } catch (requestError) {
-      Alert.alert(t('hospitality.scheduleGenerateFailed'), formatFirestoreError(requestError));
+      showAlert(t('hospitality.scheduleGenerateFailed'), formatFirestoreError(requestError));
     } finally {
       setGeneratingMeetings(false);
     }
@@ -466,14 +471,14 @@ export function useHospitalityScheduleBuilder() {
       });
       setSelectedSchedule({ ...schedule, status: 'published' });
       await loadSchedules();
-      Alert.alert(t('hospitality.schedulePublishedTitle'), t(
+      showAlert(t('hospitality.schedulePublishedTitle'), t(
         result.missingMeetings > 0
           ? 'hospitality.schedulePublishedMissingMsg'
           : 'hospitality.schedulePublishedMsg',
         { synced: result.syncedMeetings, missing: result.missingMeetings }
       ));
     } catch (requestError) {
-      Alert.alert(t('hospitality.schedulePublishFailed'), formatFirestoreError(requestError));
+      showAlert(t('hospitality.schedulePublishFailed'), formatFirestoreError(requestError));
     } finally {
       setPublishing(false);
     }
@@ -492,18 +497,32 @@ export function useHospitalityScheduleBuilder() {
     () => rows.reduce((total, row) => { const progress = rowProgress(row); return total + progress.total - progress.assigned; }, 0),
     [rowProgress, rows]
   );
-  const canPublish = rows.length > 0 && missingAssignments === 0 && !isPublishedView;
+  const windowValidation = useMemo(() => {
+    const parsedStart = parseDateKey(startDate);
+    const parsedEnd = parseDateKey(endDate);
+    if (!parsedStart || !parsedEnd) {
+      return { ok: false, errors: [t('hospitality.scheduleInvalidRangeMsg')] };
+    }
+    const result = validatePlanningWindow({
+      startDate: parsedStart,
+      endDate: parsedEnd,
+      module: 'hospitalityMicrophones',
+    });
+    return { ok: result.ok, errors: result.errors };
+  }, [endDate, startDate, t]);
 
-  const requestPublish = useCallback(() => {
+  const canPublish = rows.length > 0 && missingAssignments === 0 && !isPublishedView && windowValidation.ok;
+
+  const requestPublish = useCallback(async () => {
     if (!canPublish) return;
-    Alert.alert(
-      t('hospitality.publishConfirmTitle'),
-      t('hospitality.publishConfirmMessage'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('hospitality.schedulePublish'), onPress: () => void publishNow() },
-      ]
-    );
+    const confirmed = await confirmAlert({
+      title: t('hospitality.publishConfirmTitle'),
+      message: t('hospitality.publishConfirmMessage'),
+      confirmLabel: t('hospitality.schedulePublish'),
+      cancelLabel: t('common.cancel'),
+    });
+    if (!confirmed) return;
+    await publishNow();
   }, [canPublish, publishNow, t]);
 
   const pickerRow = pickerTarget ? rows.find((row) => row.meetingId === pickerTarget.rowId) : undefined;
@@ -537,42 +556,41 @@ export function useHospitalityScheduleBuilder() {
     return undefined;
   }, [outgoingByDate, t]);
 
-  const confirmSubstitution = useCallback((row: HospitalityPlanningRow, roleKey: HospitalityRoleKey, nextUser: ActiveCongregationUser) => {
+  const confirmSubstitution = useCallback(async (row: HospitalityPlanningRow, roleKey: HospitalityRoleKey, nextUser: ActiveCongregationUser) => {
     if (!congregationId || !selectedSchedule) return;
     const currentUserId = row.assignments[roleKey];
-    Alert.alert(t('hospitality.substituteConfirmTitle'), t('hospitality.substituteConfirmMsg', {
-      current: currentUserId ? usersById.get(currentUserId)?.displayName ?? t('hospitality.scheduleUnassigned') : t('hospitality.scheduleUnassigned'),
-      next: nextUser.displayName,
-      role: t(`hospitality.roles.${roleKey}`),
-      date: row.meetingDate,
-    }), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('hospitality.substituteConfirmAction'),
-        onPress: () => void (async () => {
-          setSubstituting(true);
-          try {
-            await substituteHospitalityAssignment({
-              congregationId,
-              scheduleId: selectedSchedule.id,
-              itemId: `${row.meetingDate}-${row.meetingType}-${roleKey}`,
-              newUserId: nextUser.uid,
-            });
-            await loadRows({
-              rangeStart: selectedSchedule.startDate,
-              rangeEnd: selectedSchedule.endDate,
-              schedule: selectedSchedule,
-              optionalRoles,
-            });
-            Alert.alert(t('hospitality.substituteSuccessTitle'), t('hospitality.substituteSuccessMsg'));
-          } catch (requestError) {
-            Alert.alert(t('hospitality.substituteFailed'), formatFirestoreError(requestError));
-          } finally {
-            setSubstituting(false);
-          }
-        })(),
-      },
-    ]);
+    const confirmed = await confirmAlert({
+      title: t('hospitality.substituteConfirmTitle'),
+      message: t('hospitality.substituteConfirmMsg', {
+        current: currentUserId ? usersById.get(currentUserId)?.displayName ?? t('hospitality.scheduleUnassigned') : t('hospitality.scheduleUnassigned'),
+        next: nextUser.displayName,
+        role: t(`hospitality.roles.${roleKey}`),
+        date: row.meetingDate,
+      }),
+      confirmLabel: t('hospitality.substituteConfirmAction'),
+      cancelLabel: t('common.cancel'),
+    });
+    if (!confirmed) return;
+    setSubstituting(true);
+    try {
+      await substituteHospitalityAssignment({
+        congregationId,
+        scheduleId: selectedSchedule.id,
+        itemId: `${row.meetingDate}-${row.meetingType}-${roleKey}`,
+        newUserId: nextUser.uid,
+      });
+      await loadRows({
+        rangeStart: selectedSchedule.startDate,
+        rangeEnd: selectedSchedule.endDate,
+        schedule: selectedSchedule,
+        optionalRoles,
+      });
+      showAlert(t('hospitality.substituteSuccessTitle'), t('hospitality.substituteSuccessMsg'));
+    } catch (requestError) {
+      showAlert(t('hospitality.substituteFailed'), formatFirestoreError(requestError));
+    } finally {
+      setSubstituting(false);
+    }
   }, [congregationId, loadRows, optionalRoles, selectedSchedule, t, usersById]);
 
   const selectPickerUser = useCallback((user?: ActiveCongregationUser) => {
@@ -580,7 +598,7 @@ export function useHospitalityScheduleBuilder() {
     setPickerTarget(null);
     if (user?.uid === pickerSelectedUserId) return;
     if (isPublishedView) {
-      if (user) confirmSubstitution(pickerRow, pickerTarget.roleKey, user);
+      if (user) void confirmSubstitution(pickerRow, pickerTarget.roleKey, user);
       return;
     }
     setRoleUser(pickerRow.meetingId, pickerTarget.roleKey, user?.uid);
@@ -600,7 +618,7 @@ export function useHospitalityScheduleBuilder() {
     weekGroups: groupRowsByWeek(rows, language),
     users,
     usersById,
-    progress: { completeMeetings, totalMeetings: rows.length, missingAssignments, canPublish, rowProgress },
+    progress: { completeMeetings, totalMeetings: rows.length, missingAssignments, canPublish, windowErrors: windowValidation.errors, rowProgress },
     picker: {
       visible: Boolean(pickerTarget),
       roleKey: pickerTarget?.roleKey,
@@ -616,7 +634,7 @@ export function useHospitalityScheduleBuilder() {
       loadRows,
       openSchedule,
       save: handleSave,
-      publish: requestPublish,
+      publish: () => void requestPublish(),
       generateMeetings: handleGenerateMeetings,
     },
     helpers: { compactDate: (dateKey: string) => compactDate(dateKey, language), cellConflict },

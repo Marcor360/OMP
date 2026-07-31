@@ -105,7 +105,7 @@ export const remindNextMonthTerritoryAssignments = onSchedule(
             assignmentId: `territories:${nextMonthId}`,
             isRead: false,
             data: {
-              url: "/(protected)/territories/manage",
+              url: "/(protected)/territories/",
             },
             createdAt: FieldValue.serverTimestamp(),
             sentBy: null,

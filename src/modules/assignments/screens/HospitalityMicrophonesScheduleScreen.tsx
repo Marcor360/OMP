@@ -13,6 +13,7 @@ import { HospitalityScheduleFooter } from '@/src/modules/assignments/components/
 import { HospitalityScheduleSetup } from '@/src/modules/assignments/components/HospitalityScheduleSetup';
 import { UserPickerModal } from '@/src/modules/assignments/components/UserPickerModal';
 import { useHospitalityScheduleBuilder } from '@/src/modules/assignments/hooks/useHospitalityScheduleBuilder';
+import { filterEligibleUsers } from '@/src/modules/assignments/utils/hospitality-eligibility';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 
 export function HospitalityMicrophonesScheduleScreen() {
@@ -144,6 +145,7 @@ export function HospitalityMicrophonesScheduleScreen() {
         publishing={state.publishing}
         published={state.isPublishedView}
         canPublish={progress.canPublish}
+        windowErrors={progress.windowErrors}
         labels={{
           summary: t('hospitality.completeMeetingSummary', { complete: progress.completeMeetings, total: progress.totalMeetings }),
           missing: t('hospitality.publishMissingReason', { count: progress.missingAssignments }),
@@ -160,7 +162,7 @@ export function HospitalityMicrophonesScheduleScreen() {
         visible={picker.visible}
         title={picker.roleKey ? roleLabel(picker.roleKey) : t('hospitality.selectUser')}
         subtitle={picker.row ? helpers.compactDate(picker.row.meetingDate) : undefined}
-        users={builder.users}
+        users={filterEligibleUsers(builder.users, picker.roleKey)}
         selectedUserId={picker.selectedUserId}
         disabledReasons={picker.disabledReasons}
         allowClear={!state.isPublishedView}
@@ -169,6 +171,7 @@ export function HospitalityMicrophonesScheduleScreen() {
         closeLabel={t('common.close')}
         availableLabel={t('hospitality.userAvailable')}
         selectedLabel={t('hospitality.userSelected')}
+        emptyLabel={t('hospitality.noEligibleUsers')}
         onClose={picker.close}
         onSelect={picker.select}
       />

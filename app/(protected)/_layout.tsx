@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 
 import { useAuth } from '@/src/context/auth-context';
 import { UserProvider, useUser } from '@/src/context/user-context';
+import { useNotificationDeepLink } from '@/src/hooks/use-notification-deep-link';
 import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
 import { useStartupPermissionPrompt } from '@/src/hooks/use-startup-permission-prompt';
 import { useI18n } from '@/src/i18n/index';
@@ -26,6 +27,7 @@ function ProtectedNotificationSetup() {
     congregationId,
     isAuthenticated: isSessionValid,
   });
+  useNotificationDeepLink();
 
   return null;
 }

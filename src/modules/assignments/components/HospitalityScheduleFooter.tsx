@@ -13,6 +13,7 @@ type Props = {
   publishing: boolean;
   published: boolean;
   canPublish: boolean;
+  windowErrors: string[];
   labels: { summary: string; save: string; saving: string; publish: string; publishing: string; missing: string };
   onSave: () => void;
   onPublish: () => void;
@@ -28,11 +29,14 @@ export function HospitalityScheduleFooter(props: Props) {
         {!props.canPublish && !props.published && props.missing > 0 ? (
           <ThemedText style={styles.reason}>{props.labels.missing}</ThemedText>
         ) : null}
+        {props.windowErrors.map((message) => (
+          <ThemedText key={message} style={styles.reason}>{message}</ThemedText>
+        ))}
       </View>
       <View style={styles.actions}>
-        <TouchableOpacity style={styles.saveButton} onPress={props.onSave} disabled={props.busy || props.published} accessibilityRole="button">
-          <Ionicons name="save-outline" size={16} color={props.busy || props.published ? colors.textDisabled : colors.primary} />
-          <ThemedText style={[styles.saveText, (props.busy || props.published) && styles.disabledText]}>{props.saving ? props.labels.saving : props.labels.save}</ThemedText>
+        <TouchableOpacity style={styles.saveButton} onPress={props.onSave} disabled={props.busy || props.published || props.windowErrors.length > 0} accessibilityRole="button">
+          <Ionicons name="save-outline" size={16} color={props.busy || props.published || props.windowErrors.length > 0 ? colors.textDisabled : colors.primary} />
+          <ThemedText style={[styles.saveText, (props.busy || props.published || props.windowErrors.length > 0) && styles.disabledText]}>{props.saving ? props.labels.saving : props.labels.save}</ThemedText>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.publishButton, !props.canPublish && styles.publishDisabled]} onPress={props.onPublish} disabled={props.busy || !props.canPublish} accessibilityRole="button">
           <Ionicons name="cloud-upload-outline" size={16} color={props.canPublish ? colors.onPrimary : colors.textDisabled} />

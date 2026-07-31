@@ -1,5 +1,6 @@
 import {
   type HospitalityPlanningItem,
+  validateHospitalityRoleEligibility,
   validateHospitalityScheduleBeforePublish,
   validateMeetingBeforeSaveWithPlanning,
   validateNoDuplicateUsersPerMeeting,
@@ -17,6 +18,8 @@ const user = {
   displayName: 'Juan Perez',
   congregationId: 'cong-1',
   isActive: true,
+  isElder: true,
+  isMinisterialServant: false,
 };
 
 const outgoingTalk = {
@@ -73,6 +76,45 @@ describe('planning outgoing-talk conflicts', () => {
     expect(result.ok).toBe(false);
     expect(result.errors[0]).toContain(user.displayName);
     expect(result.errors[0]).not.toContain(user.uid);
+  });
+});
+
+describe('validateHospitalityRoleEligibility', () => {
+  const eligibleItem = (overrides: Partial<HospitalityPlanningItem> = {}): HospitalityPlanningItem => ({
+    meetingDate: '2026-08-05',
+    meetingType: 'midweek',
+    roleKey: 'microphoneOne',
+    roleLabel: 'Microfono 1',
+    userId: user.uid,
+    ...overrides,
+  });
+
+  it('rejects a user who is neither elder nor ministerial servant', () => {
+    const result = validateHospitalityRoleEligibility({
+      items: [eligibleItem()],
+      users: [{ ...user, isElder: false, isMinisterialServant: false }],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors[0]).toContain(user.displayName);
+  });
+
+  it('allows an elder', () => {
+    const result = validateHospitalityRoleEligibility({
+      items: [eligibleItem()],
+      users: [{ ...user, isElder: true, isMinisterialServant: false }],
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('allows a ministerial servant', () => {
+    const result = validateHospitalityRoleEligibility({
+      items: [eligibleItem()],
+      users: [{ ...user, isElder: false, isMinisterialServant: true }],
+    });
+
+    expect(result.ok).toBe(true);
   });
 });
 

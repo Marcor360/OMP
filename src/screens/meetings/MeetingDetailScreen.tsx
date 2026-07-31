@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, findNodeHandle, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -9,6 +9,7 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
+import { useI18n } from '@/src/i18n';
 import {
   buildMeetingProgramFromMeeting,
   getZoomFieldsFromSections,
@@ -21,11 +22,12 @@ import {
 import { deleteMeeting, getMeetingById } from '@/src/services/meetings/meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Meeting } from '@/src/types/meeting';
-import { MeetingColorToken } from '@/src/types/meeting/program';
+import { MeetingColorToken, MeetingProgramSection } from '@/src/types/meeting/program';
 import { copyToClipboard } from '@/src/utils/clipboard/clipboard';
 import { formatDate } from '@/src/utils/dates/dates';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { canManageMeetings } from '@/src/utils/permissions/permissions';
+import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 
 const SECTION_COLOR_MAP: Record<MeetingColorToken, string> = {
   blue: '#3E7FA3',
@@ -44,9 +46,10 @@ const normalizeText = (value: string | undefined): string | undefined => {
 };
 
 export function MeetingDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, assignmentKey } = useLocalSearchParams<{ id: string; assignmentKey?: string }>();
   const router = useRouter();
   const { appUser, congregationId, loadingProfile, profileError } = useUser();
+  const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
 
@@ -55,6 +58,8 @@ export function MeetingDetailScreen() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canManage = canManageMeetings(appUser);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const highlightedRef = useRef<View>(null);
 
   useEffect(() => {
     if (loadingProfile) return;
@@ -89,6 +94,22 @@ export function MeetingDetailScreen() {
     [sections]
   );
 
+  useEffect(() => {
+    if (!assignmentKey || !meeting) return;
+
+    const timer = setTimeout(() => {
+      const scrollNode = findNodeHandle(scrollViewRef.current);
+      if (!scrollNode || !highlightedRef.current) return;
+      highlightedRef.current.measureLayout(
+        scrollNode,
+        (_x, y) => scrollViewRef.current?.scrollTo({ y: Math.max(y - 16, 0), animated: true }),
+        () => undefined
+      );
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [assignmentKey, meeting]);
+
   const zoomFields = useMemo(() => getZoomFieldsFromSections(sections), [sections]);
 
   const zoomSummary = useMemo(() => {
@@ -103,35 +124,31 @@ export function MeetingDetailScreen() {
 
   const copyZoomData = async () => {
     if (!zoomSummary) {
-      Alert.alert('Zoom', 'No hay datos de Zoom para copiar.');
+      showAlert('Zoom', 'No hay datos de Zoom para copiar.');
       return;
     }
 
     try {
       await copyToClipboard(zoomSummary);
-      Alert.alert('Zoom', 'Datos de Zoom copiados al portapapeles.');
+      showAlert('Zoom', 'Datos de Zoom copiados al portapapeles.');
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      showAlert('Error', formatFirestoreError(requestError));
     }
   };
 
-  const requestDeleteMeeting = () => {
+  const requestDeleteMeeting = async () => {
     if (!meeting || !congregationId || deleting) return;
 
-    Alert.alert(
-      'Eliminar reunion',
-      'Esta accion eliminara la reunion de forma permanente. No se puede deshacer.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: () => {
-            void executeDeleteMeeting();
-          },
-        },
-      ]
-    );
+    const confirmed = await confirmAlert({
+      title: 'Eliminar reunion',
+      message: 'Esta accion eliminara la reunion de forma permanente. No se puede deshacer.',
+      confirmLabel: 'Eliminar',
+      cancelLabel: 'Cancelar',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    await executeDeleteMeeting();
   };
 
   const executeDeleteMeeting = async () => {
@@ -143,7 +160,7 @@ export function MeetingDetailScreen() {
       await deleteMeeting(congregationId, meeting.id);
       router.replace('/(protected)/meetings/manage' as never);
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      showAlert('Error', formatFirestoreError(requestError));
     } finally {
       setDeleting(false);
     }
@@ -179,90 +196,73 @@ export function MeetingDetailScreen() {
         }
       />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerWrap}>
           <ThemedText style={styles.headerDate}>{formatDate(meeting.meetingDate ?? meeting.startDate)}</ThemedText>
           <ThemedText style={styles.headerType}>{meeting.type === 'midweek' ? 'Entre semana' : 'Fin de semana'}</ThemedText>
         </View>
 
         {(meeting.type === 'midweek' || meeting.meetingCategory === 'midweek') ? (
-          sections.filter((section) => section.isEnabled !== false).map((section) => {
-            const sectionColor = section.colorToken ? SECTION_COLOR_MAP[section.colorToken] : colors.secondary;
-
-            return (
-              <View key={section.sectionKey} style={styles.sectionCard}>
-                <View style={[styles.sectionBanner, { backgroundColor: sectionColor }]}>
-                  <ThemedText style={styles.sectionBannerText}>{section.title}</ThemedText>
+          sections.filter((section) => section.isEnabled !== false).map((section) => (
+            <SectionCard
+              key={section.sectionKey}
+              section={section}
+              colors={colors}
+              styles={styles}
+              highlightedAssignmentKey={assignmentKey}
+              highlightedRef={highlightedRef}
+              yourAssignmentLabel={t('meetingDetail.yourAssignment')}
+            />
+          ))
+        ) : (
+          <>
+            {weekendSessions.map((session, index) => (
+              <View key={session.id} style={styles.sectionCard}>
+                <View style={[styles.sectionBanner, { backgroundColor: colors.primary }]}>
+                  <ThemedText style={styles.sectionBannerText}>Sesion {index + 1}</ThemedText>
                 </View>
 
                 <View style={styles.sectionBody}>
-                  {section.assignments.length === 0 ? (
-                    <ThemedText style={styles.emptyLine}>No disponible</ThemedText>
-                  ) : (
-                    section.assignments.map((assignment) => {
-                      const names = assignment.assignees
-                        .map((assignee) => normalizeText(assignee.assigneeNameSnapshot))
-                        .filter((name): name is string => Boolean(name));
+                  <View style={styles.assignmentWrap}>
+                    <ThemedText style={styles.assignmentTitle}>Discurso Publico</ThemedText>
+                    <ThemedText style={styles.assignmentName}>
+                      {normalizeText(session.publicTalk.discourseTitle) ?? 'Sin tema'}
+                    </ThemedText>
+                    <ThemedText style={styles.assignmentMeta}>
+                      Asignado: {getWeekendSpeakerDisplayName(session.publicTalk.speaker)}
+                    </ThemedText>
+                  </View>
 
-                      const themeLabel = normalizeText(assignment.roleLabel);
-                      const durationLabel =
-                        typeof assignment.durationMinutes === 'number' && Number.isFinite(assignment.durationMinutes)
-                          ? `${assignment.durationMinutes} min.`
-                          : undefined;
-
-                      return (
-                        <View key={assignment.assignmentKey} style={styles.assignmentWrap}>
-                          <ThemedText style={styles.assignmentTitle}>{assignment.title}</ThemedText>
-                          {themeLabel ? <ThemedText style={styles.assignmentMeta}>Tema: {themeLabel}</ThemedText> : null}
-                          {durationLabel ? <ThemedText style={styles.assignmentMeta}>Duracion: {durationLabel}</ThemedText> : null}
-                          <ThemedText style={styles.assignmentName}>
-                            {names.length > 0
-                              ? names.join(', ')
-                              : assignment.assignmentScope === 'internal'
-                                ? 'Ninguno'
-                                : 'No disponible'}
-                          </ThemedText>
-                        </View>
-                      );
-                    })
-                  )}
+                  <View style={styles.assignmentWrap}>
+                    <ThemedText style={styles.assignmentTitle}>Estudio de La Atalaya</ThemedText>
+                    <ThemedText style={styles.assignmentName}>
+                      {normalizeText(session.watchtowerStudy.theme) ?? 'Sin tema'}
+                    </ThemedText>
+                    <ThemedText style={styles.assignmentMeta}>
+                      Conductor: {getWeekendRegisteredDisplayName(session.watchtowerStudy.conductor)}
+                    </ThemedText>
+                    <ThemedText style={styles.assignmentMeta}>
+                      Lector: {getWeekendRegisteredDisplayName(session.watchtowerStudy.reader)}
+                    </ThemedText>
+                  </View>
                 </View>
               </View>
-            );
-          })
-        ) : (
-          weekendSessions.map((session, index) => (
-            <View key={session.id} style={styles.sectionCard}>
-              <View style={[styles.sectionBanner, { backgroundColor: colors.primary }]}>
-                <ThemedText style={styles.sectionBannerText}>Sesion {index + 1}</ThemedText>
-              </View>
+            ))}
 
-              <View style={styles.sectionBody}>
-                <View style={styles.assignmentWrap}>
-                  <ThemedText style={styles.assignmentTitle}>Discurso Publico</ThemedText>
-                  <ThemedText style={styles.assignmentName}>
-                    {normalizeText(session.publicTalk.discourseTitle) ?? 'Sin tema'}
-                  </ThemedText>
-                  <ThemedText style={styles.assignmentMeta}>
-                    Asignado: {getWeekendSpeakerDisplayName(session.publicTalk.speaker)}
-                  </ThemedText>
-                </View>
-
-                <View style={styles.assignmentWrap}>
-                  <ThemedText style={styles.assignmentTitle}>Estudio de La Atalaya</ThemedText>
-                  <ThemedText style={styles.assignmentName}>
-                    {normalizeText(session.watchtowerStudy.theme) ?? 'Sin tema'}
-                  </ThemedText>
-                  <ThemedText style={styles.assignmentMeta}>
-                    Conductor: {getWeekendRegisteredDisplayName(session.watchtowerStudy.conductor)}
-                  </ThemedText>
-                  <ThemedText style={styles.assignmentMeta}>
-                    Lector: {getWeekendRegisteredDisplayName(session.watchtowerStudy.reader)}
-                  </ThemedText>
-                </View>
-              </View>
-            </View>
-          ))
+            {sections
+              .filter((section) => section.sectionType === 'dynamic' && section.isEnabled !== false)
+              .map((section) => (
+                <SectionCard
+                  key={section.sectionKey}
+                  section={section}
+                  colors={colors}
+                  styles={styles}
+                  highlightedAssignmentKey={assignmentKey}
+                  highlightedRef={highlightedRef}
+                  yourAssignmentLabel={t('meetingDetail.yourAssignment')}
+                />
+              ))}
+          </>
         )}
 
         {(zoomFields.zoomLink || zoomFields.zoomMeetingId || zoomFields.zoomPasscode) ? (
@@ -273,6 +273,71 @@ export function MeetingDetailScreen() {
         ) : null}
       </ScrollView>
     </ScreenContainer>
+  );
+}
+
+function SectionCard({
+  section,
+  colors,
+  styles,
+  highlightedAssignmentKey,
+  highlightedRef,
+  yourAssignmentLabel,
+}: {
+  section: MeetingProgramSection;
+  colors: AppColorSet;
+  styles: ReturnType<typeof createStyles>;
+  highlightedAssignmentKey?: string;
+  highlightedRef: React.RefObject<View | null>;
+  yourAssignmentLabel: string;
+}) {
+  const sectionColor = section.colorToken ? SECTION_COLOR_MAP[section.colorToken] : colors.secondary;
+
+  return (
+    <View style={styles.sectionCard}>
+      <View style={[styles.sectionBanner, { backgroundColor: sectionColor }]}>
+        <ThemedText style={styles.sectionBannerText}>{section.title}</ThemedText>
+      </View>
+
+      <View style={styles.sectionBody}>
+        {section.assignments.length === 0 ? (
+          <ThemedText style={styles.emptyLine}>No disponible</ThemedText>
+        ) : (
+          section.assignments.map((assignment) => {
+            const names = assignment.assignees
+              .map((assignee) => normalizeText(assignee.assigneeNameSnapshot))
+              .filter((name): name is string => Boolean(name));
+
+            const themeLabel = normalizeText(assignment.roleLabel);
+            const durationLabel =
+              typeof assignment.durationMinutes === 'number' && Number.isFinite(assignment.durationMinutes)
+                ? `${assignment.durationMinutes} min.`
+                : undefined;
+            const isHighlighted = Boolean(highlightedAssignmentKey) && assignment.assignmentKey === highlightedAssignmentKey;
+
+            return (
+              <View
+                key={assignment.assignmentKey}
+                ref={isHighlighted ? highlightedRef : undefined}
+                style={[styles.assignmentWrap, isHighlighted && styles.assignmentWrapHighlighted]}
+              >
+                {isHighlighted ? <ThemedText style={styles.yourAssignmentTag}>{yourAssignmentLabel}</ThemedText> : null}
+                <ThemedText style={styles.assignmentTitle}>{assignment.title}</ThemedText>
+                {themeLabel ? <ThemedText style={styles.assignmentMeta}>Tema: {themeLabel}</ThemedText> : null}
+                {durationLabel ? <ThemedText style={styles.assignmentMeta}>Duracion: {durationLabel}</ThemedText> : null}
+                <ThemedText style={styles.assignmentName}>
+                  {names.length > 0
+                    ? names.join(', ')
+                    : assignment.assignmentScope === 'internal'
+                      ? 'Ninguno'
+                      : 'No disponible'}
+                </ThemedText>
+              </View>
+            );
+          })
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -287,6 +352,15 @@ const createStyles = (colors: AppColorSet) =>
     sectionBannerText: { color: colors.onPrimary, fontSize: 13, fontWeight: '800', textTransform: 'uppercase' },
     sectionBody: { padding: 12, gap: 10 },
     assignmentWrap: { gap: 2 },
+    assignmentWrapHighlighted: {
+      borderWidth: 1,
+      borderColor: colors.primary,
+      backgroundColor: colors.primary + '12',
+      borderRadius: 8,
+      padding: 8,
+      marginHorizontal: -8,
+    },
+    yourAssignmentTag: { color: colors.primary, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
     assignmentTitle: { fontSize: 15, fontWeight: '800', color: colors.textPrimary },
     assignmentMeta: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
     assignmentName: { fontSize: 14, color: colors.textPrimary },

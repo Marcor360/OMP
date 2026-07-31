@@ -3,6 +3,8 @@ import {
   PlanningWindow,
 } from '@/src/services/planning/operational-planning-service';
 import { resolveOutgoingTalkWeekRange } from '@/src/modules/assignments/utils/outgoing-talks';
+import { isEligibleForHospitalityRole } from '@/src/modules/assignments/utils/hospitality-eligibility';
+import type { HospitalityRoleKey } from '@/src/types/hospitality-microphones';
 
 type MeetingType = 'midweek' | 'weekend';
 
@@ -18,6 +20,8 @@ export type PlanningUserCandidate = {
   displayName?: string;
   congregationId: string;
   isActive: boolean;
+  isElder?: boolean;
+  isMinisterialServant?: boolean;
 };
 
 export type HospitalityPlanningItem = {
@@ -76,6 +80,32 @@ const validateHospitalityOutgoingTalkConflicts = (params: {
     errors.push(
       `${name} no puede tener asignaciones el fin de semana: sale a discursar esa semana (${date}).`
     );
+  });
+
+  return errorResult(errors);
+};
+
+export const validateHospitalityRoleEligibility = (params: {
+  items: HospitalityPlanningItem[];
+  users: PlanningUserCandidate[];
+}): PlanningValidationResult => {
+  const usersById = new Map(params.users.map((user) => [user.uid, user]));
+  const errors: string[] = [];
+
+  params.items.forEach((item) => {
+    if (!item.userId) return;
+    const user = usersById.get(item.userId);
+    if (!user) return;
+
+    const eligible = isEligibleForHospitalityRole(
+      { isElder: user.isElder ?? false, isMinisterialServant: user.isMinisterialServant ?? false },
+      item.roleKey as HospitalityRoleKey
+    );
+    if (!eligible) {
+      errors.push(
+        `${user.displayName ?? item.userId} no es anciano ni siervo ministerial: no puede cumplir ${item.roleLabel ?? item.roleKey} (${item.meetingDate}).`
+      );
+    }
   });
 
   return errorResult(errors);
@@ -227,6 +257,10 @@ export const validateHospitalityScheduleBeforePublish = (params: {
     validateHospitalityOutgoingTalkConflicts({
       items: params.items,
       outgoingTalks: params.outgoingTalks,
+      users: params.users,
+    }),
+    validateHospitalityRoleEligibility({
+      items: params.items,
       users: params.users,
     }),
     errorResult([
