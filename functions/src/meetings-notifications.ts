@@ -96,17 +96,10 @@ const buildNotificationMessage = (params: {
       ? 'reunion Vida y Ministerio Cristianos'
       : 'reunion del fin de semana';
 
-  if (params.kind === 'publish') {
+  if (params.kind === 'publish' || params.kind === 'update') {
     return {
-      title: 'Reunion publicada',
-      body: `Se publico la ${meetingLabel} del ${params.meetingDateLabel}. Asignacion: ${params.assignmentTitle}.`,
-    };
-  }
-
-  if (params.kind === 'update') {
-    return {
-      title: 'Nueva asignacion en reunion publicada',
-      body: `Tienes una nueva asignacion (${params.assignmentTitle}) para la ${meetingLabel} del ${params.meetingDateLabel}.`,
+      title: 'Tienes una nueva asignacion',
+      body: `${params.assignmentTitle} en la ${meetingLabel} del ${params.meetingDateLabel}.`,
     };
   }
 
