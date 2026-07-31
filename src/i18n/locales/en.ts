@@ -908,6 +908,9 @@ export const en = {
     searchUser: 'Search by name...',
     userAvailable: 'Available',
     userSelected: 'Selected',
+    noEligibleUsers: 'No active elders or ministerial servants are available for this role.',
+    ineligibleUser: 'Elders or ministerial servants only',
+    awaitingAssignment: 'Awaiting assignment',
     scheduleUseMicrophoneThree: 'Use Microphone 3',
     scheduleUseAttendantExtra: 'Use extra attendant',
     substitute: 'Substitute',
@@ -946,6 +949,19 @@ export const en = {
       midweekBibleStudyReader: 'Congregation Bible Study reader',
       audioVideo: 'Audio and video',
     }
+  },
+  eventDetail: {
+    title: 'Event details',
+    loading: 'Loading event...',
+    notFound: 'This event is no longer available.',
+    date: 'Date',
+    location: 'Location',
+    superintendent: 'Superintendent',
+    superintendentWife: 'Wife',
+    noLocation: 'No location set',
+  },
+  meetingDetail: {
+    yourAssignment: 'Your assignment',
   },
   // Errors
   errors: {

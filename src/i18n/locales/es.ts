@@ -901,6 +901,9 @@ export const es = {
     searchUser: 'Buscar por nombre...',
     userAvailable: 'Disponible',
     userSelected: 'Seleccionado',
+    noEligibleUsers: 'No hay ancianos ni siervos ministeriales activos disponibles para este rol.',
+    ineligibleUser: 'Solo ancianos o siervos ministeriales',
+    awaitingAssignment: 'En espera de asignación',
     scheduleUseMicrophoneThree: 'Usar Micrófono 3',
     scheduleUseAttendantExtra: 'Usar Acomodador extra',
     substitute: 'Sustituir',
@@ -939,6 +942,19 @@ export const es = {
       midweekBibleStudyReader: 'Lector estudio bíblico',
       audioVideo: 'Audio y video',
     }
+  },
+  eventDetail: {
+    title: 'Detalle del evento',
+    loading: 'Cargando evento...',
+    notFound: 'Este evento ya no está disponible.',
+    date: 'Fecha',
+    location: 'Lugar',
+    superintendent: 'Superintendente',
+    superintendentWife: 'Esposa',
+    noLocation: 'Sin lugar definido',
+  },
+  meetingDetail: {
+    yourAssignment: 'Tu asignación',
   },
   // Errors
   errors: {
