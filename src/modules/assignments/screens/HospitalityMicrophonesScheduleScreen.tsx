@@ -94,6 +94,7 @@ export function HospitalityMicrophonesScheduleScreen() {
               dateColumnLabel={t('hospitality.gridMeeting')}
               readerLabel={t('hospitality.gridReader')}
               unassignedLabel={t('hospitality.scheduleUnassigned')}
+              awaitingLabel={t('hospitality.awaitingAssignment')}
               formatDate={helpers.compactDate}
               roleLabel={roleLabel}
               conflictFor={helpers.cellConflict}
@@ -118,6 +119,7 @@ export function HospitalityMicrophonesScheduleScreen() {
                       midweekLabel={t('hospitality.scheduleMidweek')}
                       weekendLabel={t('hospitality.scheduleWeekend')}
                       unassignedLabel={t('hospitality.scheduleUnassigned')}
+                      awaitingLabel={t('hospitality.awaitingAssignment')}
                       substituteLabel={t('hospitality.substitute')}
                       formatDate={helpers.compactDate}
                       roleLabel={roleLabel}
