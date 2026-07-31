@@ -367,7 +367,9 @@ export function WeekendSessionsEditor({
               valueLabel={session.watchtowerStudy.reader.assigneeNameSnapshot}
               users={users}
               disabled={disabled || lockWatchtowerReader}
-              placeholder="Seleccionar lector"
+              placeholder={
+                lockWatchtowerReader ? 'En espera de asignación' : 'Seleccionar lector'
+              }
               blockedUserIds={blockedUserIds}
               onSelect={(user) =>
                 updateSession(session.id, (current) => ({
