@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
-import { LogBox, Platform } from 'react-native';
+import { LogBox, Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '@/src/context/auth-context';
@@ -32,6 +32,44 @@ LogBox.ignoreLogs([
 export const unstable_settings = {
   initialRouteName: 'index',
 };
+
+// Expo Router monta este componente si falla el render o la evaluacion de una
+// ruta. Sustituye el cierre silencioso de la app por un mensaje accionable.
+export function ErrorBoundary({
+  error,
+  retry,
+}: {
+  error: Error;
+  retry: () => void;
+}) {
+  return (
+    <SafeAreaProvider>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          padding: 24,
+          gap: 16,
+          backgroundColor: '#FFFFFF',
+        }}
+      >
+        <Text style={{ fontSize: 18, fontWeight: '600', color: '#111827' }}>
+          No se pudo iniciar OMP
+        </Text>
+        <Text style={{ fontSize: 13, color: '#6B7280' }}>{error.message}</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={retry}
+          style={{ backgroundColor: '#2563EB', padding: 12, borderRadius: 8 }}
+        >
+          <Text style={{ color: '#FFFFFF', textAlign: 'center', fontWeight: '600' }}>
+            Reintentar
+          </Text>
+        </Pressable>
+      </View>
+    </SafeAreaProvider>
+  );
+}
 
 function RootLayoutNav() {
   const { user, loading } = useAuth();

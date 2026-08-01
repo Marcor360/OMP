@@ -50,7 +50,14 @@ const resolveFirebaseValue = (
   return devFallback;
 };
 
-const resolveFirebaseConfig = (): Record<keyof typeof DEV_FALLBACK_FIREBASE_CONFIG, string> => {
+type FirebaseConfigValues = Record<keyof typeof DEV_FALLBACK_FIREBASE_CONFIG, string>;
+
+type ResolvedFirebaseConfig = {
+  config: FirebaseConfigValues;
+  missingEnvKeys: string[];
+};
+
+const resolveFirebaseConfig = (): ResolvedFirebaseConfig => {
   const missingEnvKeys: string[] = [];
 
   const config = {
@@ -92,16 +99,23 @@ const resolveFirebaseConfig = (): Record<keyof typeof DEV_FALLBACK_FIREBASE_CONF
     ),
   };
 
-  if (missingEnvKeys.length > 0) {
-    throw new Error(
-      `Configuracion de Firebase incompleta en produccion. Faltan variables de entorno: ${missingEnvKeys.join(', ')}`
-    );
-  }
-
-  return config;
+  return { config, missingEnvKeys };
 };
 
-const firebaseConfig = resolveFirebaseConfig();
+const { config: firebaseConfig, missingEnvKeys } = resolveFirebaseConfig();
+
+// Nunca lanzar durante la evaluacion del modulo: un throw aqui rompe el bundle
+// antes de montar React y la app nativa se cierra sin renderizar pantalla.
+// Se degrada al proyecto por defecto (que es el de produccion) y se expone el
+// fallo para que la UI pueda avisarlo.
+export const firebaseConfigWarning: string | null =
+  missingEnvKeys.length > 0
+    ? `Configuracion de Firebase incompleta. Faltan variables de entorno: ${missingEnvKeys.join(', ')}`
+    : null;
+
+if (firebaseConfigWarning) {
+  console.warn(`[firebase] ${firebaseConfigWarning}`);
+}
 
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
