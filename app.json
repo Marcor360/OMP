@@ -41,7 +41,7 @@
         "android.permission.SCHEDULE_EXACT_ALARM"
       ],
       "package": "com.marcor360.omp",
-      "versionCode": 11307
+      "versionCode": 11308
     },
     "web": {
       "bundler": "metro",
