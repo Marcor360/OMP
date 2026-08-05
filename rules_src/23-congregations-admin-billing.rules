@@ -37,35 +37,27 @@
       match /notifications/{notificationId} {
         allow get: if canAccessCongregationData(congregationId)
           && (
-            !('userId' in resource.data)
-            || resource.data.userId == currentUid()
+            ('userId' in resource.data && resource.data.userId == currentUid())
             || (
               'userIds' in resource.data
               && resource.data.userIds is list
               && currentUid() in resource.data.userIds
             )
-            || isAdminOrSupervisor()
-            || isGlobalScreenAccess()
           );
 
         allow list: if canAccessCongregationData(congregationId)
           && (
-            (
-              'userId' in resource.data
-              && resource.data.userId == currentUid()
-            )
+            ('userId' in resource.data && resource.data.userId == currentUid())
             || (
               'userIds' in resource.data
               && resource.data.userIds is list
               && currentUid() in resource.data.userIds
             )
-            || isAdminOrSupervisor()
-            || isGlobalScreenAccess()
           );
 
-        allow create: if (isAdmin() || isGlobalScreenAccess() || hasPermission('avisos', 'create') || hasPermission('avisos', 'manage'))
-          && canAccessCongregationData(congregationId)
-          && validNotificationData(request.resource.data, congregationId);
+        // Creacion exclusiva de Cloud Functions (Admin SDK). Ningun cliente
+        // escribe notificaciones; ver functions/src/modules/notifications/.
+        allow create: if false;
 
         allow update: if validOwnNotificationReadUpdate(congregationId) || (
             (isAdmin() || isGlobalScreenAccess() || hasPermission('avisos', 'edit') || hasPermission('avisos', 'manage'))
@@ -73,7 +65,7 @@
             && validNotificationData(request.resource.data, congregationId)
           );
 
-        allow delete: if isAdmin();
+        allow delete: if isAdmin() && sameCongregation(congregationId);
       }
 
       // -----------------------------------------------------------------------

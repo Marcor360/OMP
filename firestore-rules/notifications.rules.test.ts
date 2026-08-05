@@ -7,7 +7,18 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  deleteDoc,
+} from 'firebase/firestore';
 
 let testEnv: RulesTestEnvironment;
 const projectId = `omp-notification-rules-${Date.now()}`;
@@ -15,12 +26,16 @@ const rules = readFileSync(resolve(__dirname, '../firestore.rules'), 'utf8');
 
 jest.setTimeout(30_000);
 
-const userDoc = (uid: string, congregationId: string) => ({
+const userDoc = (
+  uid: string,
+  congregationId: string,
+  role: 'admin' | 'supervisor' | 'user' = 'user'
+) => ({
   uid,
   email: `${uid}@example.com`,
   firstName: uid,
   lastName: 'User',
-  role: 'user',
+  role,
   isActive: true,
   congregationId,
 });
@@ -46,10 +61,27 @@ beforeEach(async () => {
       setDoc(doc(db, 'congregations/c1'), {
         name: 'Congregation 1',
         isActive: true,
+        active: true,
+        enabled: true,
+        disabled: false,
+        deactivated: false,
+        accessDisabled: false,
+        status: 'active',
+      }),
+      setDoc(doc(db, 'congregations/c2'), {
+        name: 'Congregation 2',
+        isActive: true,
+        active: true,
+        enabled: true,
+        disabled: false,
+        deactivated: false,
+        accessDisabled: false,
         status: 'active',
       }),
       setDoc(doc(db, 'users/member'), userDoc('member', 'c1')),
       setDoc(doc(db, 'users/other'), userDoc('other', 'c1')),
+      setDoc(doc(db, 'users/admin'), userDoc('admin', 'c1', 'admin')),
+      setDoc(doc(db, 'users/otherAdmin'), userDoc('otherAdmin', 'c2', 'admin')),
       setDoc(doc(db, 'congregations/c1/notifications/event-member'), {
         notificationId: 'event-member',
         congregationId: 'c1',
@@ -80,6 +112,30 @@ beforeEach(async () => {
 });
 
 describe('notification read rules', () => {
+  it('allows admin deletion only inside the admin congregation', async () => {
+    const notificationPath = 'congregations/c1/notifications/event-member';
+
+    await assertFails(deleteDoc(doc(authedDb('otherAdmin'), notificationPath)));
+    await assertSucceeds(deleteDoc(doc(authedDb('admin'), notificationPath)));
+  });
+
+  it('allows a recipient to get and list only their own notifications', async () => {
+    await assertSucceeds(getDoc(
+      doc(authedDb('member'), 'congregations/c1/notifications/event-member')
+    ));
+    await assertSucceeds(getDocs(query(
+      collection(authedDb('member'), 'congregations/c1/notifications'),
+      where('userId', '==', 'member')
+    )));
+  });
+
+  it('blocks admins from listing notifications addressed to another user', async () => {
+    await assertFails(getDocs(query(
+      collection(authedDb('admin'), 'congregations/c1/notifications'),
+      where('userId', '==', 'member')
+    )));
+  });
+
   it('allows the recipient to mark an event notification as read', async () => {
     await assertSucceeds(updateDoc(
       doc(authedDb('member'), 'congregations/c1/notifications/event-member'),

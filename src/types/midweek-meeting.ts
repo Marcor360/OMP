@@ -92,7 +92,6 @@ export interface MidweekMeetingFields extends MidweekMeetingMetadata {
 export interface MidweekMeetingDraft extends MidweekMeetingFields {
   title: string;
   description?: string;
-  status: 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   startDate: Timestamp;
   endDate: Timestamp;
   location?: string;
@@ -287,7 +286,6 @@ export const createMidweekMeetingTemplate = (
     bibleReading: '',
     startDate,
     endDate,
-    status: 'scheduled',
     location: '',
     meetingUrl: '',
     openingSong: '',

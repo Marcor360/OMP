@@ -152,7 +152,6 @@ const fallbackMeeting = (id: string): Meeting => {
     title: 'Reunion',
     type: 'weekend',
     meetingCategory: 'general',
-    status: 'scheduled',
     startDate: now,
     endDate: now,
     organizerUid: 'system',
@@ -182,7 +181,7 @@ const mapSummaryMeetingsToCards = (summary: DashboardSummary): Meeting[] =>
     ...fallbackMeeting(item.id || `summary-meeting-${index + 1}`),
     id: item.id || `summary-meeting-${index + 1}`,
     title: item.title,
-    status: item.status ?? 'scheduled',
+    publicationStatus: item.publicationStatus,
     type: item.type ?? 'weekend',
     meetingCategory:
       item.meetingCategory ??
@@ -321,7 +320,7 @@ export const getDashboardData = async (params: {
   const metrics: Partial<DashboardMetrics> = {
     ...getEmptyDashboardMetrics(),
     totalMeetings: meetings.length,
-    scheduledMeetings: meetings.filter((meeting) => meeting.status === 'scheduled').length,
+    scheduledMeetings: meetings.filter((meeting) => meeting.publicationStatus === 'published').length,
     totalAssignments: visibleAssignments.length,
     pendingAssignments: pending.length,
     completedAssignments: completed.length,

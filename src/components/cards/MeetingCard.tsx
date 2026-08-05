@@ -7,7 +7,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { StatusBadge, useStatusColors } from '@/src/components/common/StatusBadge';
 import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { Meeting } from '@/src/types/meeting';
+import { Meeting, resolveMeetingDisplayState } from '@/src/types/meeting';
 import { formatDate } from '@/src/utils/dates/dates';
 
 interface MeetingCardProps {
@@ -46,13 +46,7 @@ export function MeetingCard({ meeting, onPress, muted = false }: MeetingCardProp
     weekend: t('meeting.type.weekend'),
   };
 
-  const meetingStatusLabelByStatus: Record<Meeting['status'], string> = {
-    pending: t('meeting.status.pending'),
-    scheduled: t('meeting.status.scheduled'),
-    in_progress: t('meeting.status.in_progress'),
-    completed: t('meeting.status.completed'),
-    cancelled: t('meeting.status.cancelled'),
-  };
+  const displayState = resolveMeetingDisplayState(meeting.publicationStatus);
 
   return (
     <TouchableOpacity
@@ -77,8 +71,8 @@ export function MeetingCard({ meeting, onPress, muted = false }: MeetingCardProp
           </ThemedText>
         </View>
         <StatusBadge
-          label={meetingStatusLabelByStatus[meeting.status]}
-          color={muted ? colors.textMuted : meetingStatusColor[meeting.status]}
+          label={t(`meeting.state.${displayState}`)}
+          color={muted ? colors.textMuted : meetingStatusColor[displayState]}
           size="sm"
         />
       </View>

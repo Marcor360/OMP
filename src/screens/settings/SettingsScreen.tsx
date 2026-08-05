@@ -5,8 +5,10 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
+  Switch,
   useWindowDimensions,
 } from 'react-native';
+import { serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
@@ -17,11 +19,12 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ThemedText } from '@/src/components/themed-text';
 import { PermissionRow } from '@/src/components/common/PermissionRow';
 import { useAppTheme } from '@/src/context/theme-context';
+import { useToast } from '@/src/context/toast-context';
 import { useUser } from '@/src/context/user-context';
 import { useI18n } from '@/src/i18n/index';
 import { LANGUAGE_DISPLAY_NAME } from '@/src/i18n/language-options';
 import { usePermissions } from '@/src/hooks/use-permissions';
-import { ROLE_LABELS } from '@/src/types/user';
+import { AppUser, ROLE_LABELS } from '@/src/types/user';
 import { CongregationPlanUsage } from '@/src/types/congregation-plan';
 import { getCongregationPlanUsage } from '@/src/services/congregations/congregations-service';
 import {
@@ -30,6 +33,7 @@ import {
 } from '@/src/services/billing/billing-service';
 import { type AppColors, useAppColors } from '@/src/styles';
 import { type CongregationBillingState } from '@/src/types/billing';
+import { userDocRef } from '@/src/lib/firebase/refs';
 import { isExpoGo } from '@/src/utils/runtime';
 import { canViewBilling } from '@/src/utils/users/billing-permissions';
 import {
@@ -46,6 +50,24 @@ import {
 const CONTENT_MAX = 1040;
 const H_PADDING = 16;
 const GAP = 12;
+
+type NotificationPreferenceKey =
+  | 'notificationsEnabled'
+  | 'platformNotifications'
+  | 'cleaningNotifications'
+  | 'hospitalityNotifications'
+  | 'eventsNotifications';
+
+type NotificationPreferenceState = Record<NotificationPreferenceKey, boolean>;
+type NotificationPreferencePayload = Partial<Pick<AppUser, NotificationPreferenceKey>>;
+
+const notificationPreferencesFromUser = (user: AppUser | null): NotificationPreferenceState => ({
+  notificationsEnabled: user?.notificationsEnabled !== false,
+  platformNotifications: user?.platformNotifications !== false,
+  cleaningNotifications: user?.cleaningNotifications !== false,
+  hospitalityNotifications: user?.hospitalityNotifications !== false,
+  eventsNotifications: user?.eventsNotifications !== false,
+});
 
 type ChipTone = 'success' | 'warning' | 'error' | 'info' | 'muted';
 
@@ -84,7 +106,8 @@ const formatBillingDate = (value: unknown): string | null => {
 export function SettingsScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { appUser, congregationId } = useUser();
+  const { appUser, congregationId, uid, refreshProfile } = useUser();
+  const { showToast } = useToast();
   const { isDarkMode } = useAppTheme();
   const { t, language } = useI18n();
   const colors = useAppColors();
@@ -93,6 +116,10 @@ export function SettingsScreen() {
   const [planUsage, setPlanUsage] = useState<CongregationPlanUsage | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [billingSummary, setBillingSummary] = useState<CongregationBillingSummary | null>(null);
+  const [notificationPreferences, setNotificationPreferences] =
+    useState<NotificationPreferenceState>(() => notificationPreferencesFromUser(appUser));
+  const [savingNotificationPreference, setSavingNotificationPreference] =
+    useState<NotificationPreferenceKey | null>(null);
   const canViewCongregationPlan = canAccessSettings(appUser);
   const canViewCongregationBilling = canViewBilling(appUser);
   const canViewAdministration =
@@ -107,6 +134,10 @@ export function SettingsScreen() {
   const contentWidth = Math.max(0, Math.min(width, CONTENT_MAX) - H_PADDING * 2);
   const tileWidth = (cols: number): number | '100%' =>
     isWide ? Math.floor((contentWidth - GAP * (cols - 1)) / cols) : '100%';
+
+  useEffect(() => {
+    setNotificationPreferences(notificationPreferencesFromUser(appUser));
+  }, [appUser]);
 
   useEffect(() => {
     if (!congregationId || !canViewCongregationPlan) {
@@ -162,6 +193,31 @@ export function SettingsScreen() {
 
   const handleNavigateToAbout = () => {
     router.push('/(protected)/settings/about');
+  };
+
+  const handleNotificationPreferenceChange = async (
+    field: NotificationPreferenceKey,
+    nextValue: boolean
+  ): Promise<void> => {
+    if (!uid || savingNotificationPreference) return;
+
+    const previousValue = notificationPreferences[field];
+    const payload: NotificationPreferencePayload = { [field]: nextValue };
+    setNotificationPreferences((current) => ({ ...current, [field]: nextValue }));
+    setSavingNotificationPreference(field);
+
+    try {
+      await updateDoc(userDocRef(uid), {
+        ...payload,
+        updatedAt: serverTimestamp(),
+      });
+      refreshProfile();
+    } catch {
+      setNotificationPreferences((current) => ({ ...current, [field]: previousValue }));
+      showToast(t('settings.notifications.saveError'), 'error');
+    } finally {
+      setSavingNotificationPreference(null);
+    }
   };
 
   const toneToColors = (tone: ChipTone): { fg: string; bg: string } => {
@@ -439,6 +495,45 @@ export function SettingsScreen() {
     );
   }
 
+  function NotificationPreferenceRow({
+    field,
+    label,
+    disabled = false,
+  }: {
+    field: NotificationPreferenceKey;
+    label: string;
+    disabled?: boolean;
+  }) {
+    const isDisabled = disabled || savingNotificationPreference !== null || !uid;
+    const value = notificationPreferences[field];
+
+    return (
+      <View
+        style={[styles.preferenceRow, isDisabled && styles.preferenceRowDisabled]}
+      >
+        <TouchableOpacity
+          style={styles.preferenceLabelButton}
+          onPress={() => void handleNotificationPreferenceChange(field, !value)}
+          disabled={isDisabled}
+          activeOpacity={0.7}
+          accessibilityRole="switch"
+          accessibilityLabel={label}
+          accessibilityState={{ checked: value, disabled: isDisabled }}
+        >
+          <ThemedText style={styles.preferenceLabel}>{label}</ThemedText>
+        </TouchableOpacity>
+        <Switch
+          value={value}
+          disabled={isDisabled}
+          onValueChange={(nextValue) => void handleNotificationPreferenceChange(field, nextValue)}
+          accessibilityLabel={label}
+          trackColor={{ false: colors.border, true: colors.primary + '88' }}
+          thumbColor={value ? colors.primary : colors.textDisabled}
+        />
+      </View>
+    );
+  }
+
   return (
     <ScreenContainer scrollable={false} padded={false}>
       <PageHeader title={t('tabs.settings')} showBack />
@@ -564,6 +659,33 @@ export function SettingsScreen() {
                 />
               </>
             )}
+          </Section>
+
+          <Section title={t('settings.notifications.title')}>
+            <NotificationPreferenceRow
+              field="notificationsEnabled"
+              label={t('settings.notifications.master')}
+            />
+            <NotificationPreferenceRow
+              field="platformNotifications"
+              label={t('settings.notifications.platform')}
+              disabled={!notificationPreferences.notificationsEnabled}
+            />
+            <NotificationPreferenceRow
+              field="cleaningNotifications"
+              label={t('settings.notifications.cleaning')}
+              disabled={!notificationPreferences.notificationsEnabled}
+            />
+            <NotificationPreferenceRow
+              field="hospitalityNotifications"
+              label={t('settings.notifications.hospitality')}
+              disabled={!notificationPreferences.notificationsEnabled}
+            />
+            <NotificationPreferenceRow
+              field="eventsNotifications"
+              label={t('settings.notifications.events')}
+              disabled={!notificationPreferences.notificationsEnabled}
+            />
           </Section>
 
           <Section title={t('settings.section.application')}>
@@ -921,6 +1043,29 @@ const createStyles = (colors: AppColors) =>
       fontSize: 13,
       color: colors.textMuted,
       textAlign: 'right',
+    },
+    preferenceRow: {
+      minHeight: 52,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    preferenceRowDisabled: {
+      opacity: 0.55,
+    },
+    preferenceLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: colors.textPrimary,
+    },
+    preferenceLabelButton: {
+      minHeight: 44,
+      flex: 1,
+      justifyContent: 'center',
     },
     infoBox: {
       marginHorizontal: 14,

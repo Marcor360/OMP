@@ -10,7 +10,6 @@ import {
   type MidweekMeetingSection,
   type ParticipantAssignment,
 } from '@/src/types/midweek-meeting';
-import type { MeetingStatus } from '@/src/types/meeting';
 import type {
   MeetingProgramSection,
   MeetingPublicationStatus,
@@ -34,7 +33,6 @@ export interface MidweekMeeting {
   startDate: Timestamp;
   endDate: Timestamp;
   meetingDate?: Timestamp;
-  status: MeetingStatus;
   publicationStatus?: MeetingPublicationStatus;
   publishedAt?: Timestamp;
   location?: string;
@@ -61,13 +59,6 @@ export interface MidweekMeeting {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
-
-const isMeetingStatus = (value: unknown): value is MeetingStatus =>
-  value === 'pending' ||
-  value === 'scheduled' ||
-  value === 'in_progress' ||
-  value === 'completed' ||
-  value === 'cancelled';
 
 export const normalizeMidweekText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -260,7 +251,6 @@ export const toMidweekMeeting = (
     startDate: normalizeTimestamp(data.startDate, now),
     endDate: normalizeTimestamp(data.endDate, now),
     meetingDate: normalizedProgram.meetingDate,
-    status: isMeetingStatus(data.status) ? data.status : 'scheduled',
     publicationStatus: normalizedProgram.publicationStatus,
     publishedAt:
       data.publishedAt instanceof Timestamp

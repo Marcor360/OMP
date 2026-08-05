@@ -7,7 +7,7 @@ import { StatusBadge, useStatusColors } from '@/src/components/common/StatusBadg
 import { ThemedText } from '@/src/components/themed-text';
 import { MidweekMeeting } from '@/src/services/meetings/midweek-meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { MEETING_STATUS_LABELS } from '@/src/types/meeting';
+import { MEETING_DISPLAY_STATE_LABELS, resolveMeetingDisplayState } from '@/src/types/meeting';
 import { formatDate, formatTime } from '@/src/utils/dates/dates';
 import { useOptionalI18n } from '@/src/i18n/index';
 
@@ -27,6 +27,7 @@ export function MidweekMeetingCard({ meeting, onPress }: MidweekMeetingCardProps
     (total, section) => total + section.items.length,
     0
   );
+  const displayState = resolveMeetingDisplayState(meeting.publicationStatus);
 
   const handlePress = () => {
     if (onPress) {
@@ -53,8 +54,8 @@ export function MidweekMeetingCard({ meeting, onPress }: MidweekMeetingCardProps
 
         <StatusBadge
           size="sm"
-          label={MEETING_STATUS_LABELS[meeting.status]}
-          color={meetingStatusColor[meeting.status]}
+          label={i18n?.t(`meeting.state.${displayState}`) ?? MEETING_DISPLAY_STATE_LABELS[displayState]}
+          color={meetingStatusColor[displayState]}
         />
       </View>
 

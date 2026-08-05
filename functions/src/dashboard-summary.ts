@@ -116,7 +116,9 @@ const refreshDashboardSummary = async (congregationId: string): Promise<void> =>
         totalUsers: visibleUsers.length,
         activeUsers: visibleActiveUsers.length,
         totalMeetings: meetingsSnap.size,
-        scheduledMeetings: meetingsSnap.docs.filter((docSnap) => docSnap.data().status === "scheduled").length,
+        scheduledMeetings: meetingsSnap.docs.filter(
+          (docSnap) => docSnap.data().publicationStatus === "published"
+        ).length,
         totalAssignments: assignments.length,
         pendingAssignments: pendingAssignments.length,
         completedAssignments: completedAssignments.length,
@@ -128,7 +130,7 @@ const refreshDashboardSummary = async (congregationId: string): Promise<void> =>
         return {
           id: docSnap.id,
           title: asNonEmptyString(data.title) ?? "Reunion",
-          status: asNonEmptyString(data.status) ?? "scheduled",
+          publicationStatus: asNonEmptyString(data.publicationStatus) ?? "draft",
           type: asNonEmptyString(data.type) ?? "weekend",
           meetingCategory: asNonEmptyString(data.meetingCategory) ?? null,
           startDate,

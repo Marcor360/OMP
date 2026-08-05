@@ -18,7 +18,6 @@ import {
   CreateMeetingDTO,
   Meeting,
   MeetingCategory,
-  MeetingStatus,
   MeetingType,
   UpdateMeetingDTO,
 } from '@/src/types/meeting';
@@ -186,12 +185,6 @@ export const getMeetingsByWeek = async (
   );
 };
 
-/** Obtiene reuniones por estado */
-export const getMeetingsByStatus = async (
-  congregationId: string,
-  status: MeetingStatus
-): Promise<Meeting[]> => meetingRepository.getByStatus(congregationId, status);
-
 /** Obtiene reuniones donde el usuario es organizador o asistente */
 export const getMeetingsByUser = async (
   congregationId: string,
@@ -324,7 +317,6 @@ export const createMeeting = async (
     midweekSections: legacyMidweekSections ?? data.midweekSections ?? null,
     organizerUid,
     organizerName,
-    status: data.status ?? ('scheduled' as MeetingStatus),
     createdBy: data.createdBy ?? organizerUid,
     updatedBy: data.updatedBy ?? organizerUid,
   };
@@ -378,7 +370,6 @@ export const updateMeeting = async (
     description: data.description,
     type: data.type,
     meetingCategory: data.meetingCategory,
-    status: data.status,
     weekLabel: data.weekLabel,
     bibleReading: data.bibleReading,
     startDate: data.startDate,
@@ -468,12 +459,6 @@ export const deleteMeeting = async (
 ): Promise<void> => {
   await meetingRepository.delete(congregationId, id);
 };
-
-/** Cuenta reuniones por estado */
-export const getMeetingsCount = async (
-  congregationId: string,
-  status?: MeetingStatus
-): Promise<number> => meetingRepository.count(congregationId, status);
 
 /** Suscripcion en tiempo real a todas las reuniones */
 export const subscribeToMeetings = (

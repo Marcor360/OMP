@@ -9,13 +9,11 @@ import {
   __setMeetingRepositoryForTests,
   createMeeting,
   getMeetingsByWeek,
-  getMeetingsCount,
   subscribeToMeetings,
 } from '@/src/services/meetings/meetings-service';
 import type {
   CreateMeetingDTO,
   Meeting,
-  MeetingStatus,
 } from '@/src/types/meeting';
 import { createDefaultSectionsForMeetingType } from '@/src/types/meeting/program';
 import { AppError } from '@/src/utils/errors/errors';
@@ -56,12 +54,10 @@ jest.mock('@/src/services/repositories/firestore/firestore-meeting-repository', 
     getAllByCongregation: async () => [],
     getByRange: async () => [],
     getByDateRangeMerged: async () => [],
-    getByStatus: async () => [],
     getByUser: async () => [],
     create: async () => 'meeting-id',
     update: async () => undefined,
     delete: async () => undefined,
-    count: async () => 0,
     subscribeToMeetings: () => () => undefined,
   },
 }));
@@ -88,7 +84,6 @@ const makeMeeting = (overrides: Partial<Meeting> = {}): Meeting => {
     title: 'Meeting',
     type: 'weekend',
     meetingCategory: 'weekend',
-    status: 'scheduled',
     publicationStatus: 'published',
     startDate,
     endDate,
@@ -129,7 +124,6 @@ class FakeMeetingRepository implements MeetingRepository {
     payload: Record<string, unknown>;
     options?: { requiresManager?: boolean };
   }[] = [];
-  public countCalls: { congregationId: string; status?: MeetingStatus }[] = [];
   public subscribeCalls: { congregationId: string }[] = [];
 
   async getById(): Promise<Meeting | null> {
@@ -152,10 +146,6 @@ class FakeMeetingRepository implements MeetingRepository {
     return this.mergedMeetings;
   }
 
-  async getByStatus(): Promise<Meeting[]> {
-    return [];
-  }
-
   async getByUser(): Promise<Meeting[]> {
     return [];
   }
@@ -175,11 +165,6 @@ class FakeMeetingRepository implements MeetingRepository {
 
   async delete(): Promise<void> {
     return undefined;
-  }
-
-  async count(congregationId: string, status?: MeetingStatus): Promise<number> {
-    this.countCalls.push({ congregationId, status });
-    return 42;
   }
 
   subscribeToMeetings(
@@ -300,15 +285,13 @@ describe('meetings-service repository port', () => {
     expect(repo.createCalls).toHaveLength(0);
   });
 
-  it('delegates meeting count with status and guards empty subscribe congregation ids', async () => {
+  it('guards empty subscribe congregation ids', async () => {
     const callback = jest.fn<void, [Meeting[]]>();
     const onError = jest.fn<void, [unknown]>();
 
-    await expect(getMeetingsCount('cong-1', 'scheduled')).resolves.toBe(42);
     subscribeToMeetings('cong-1', callback);
     subscribeToMeetings('', callback, onError);
 
-    expect(repo.countCalls).toEqual([{ congregationId: 'cong-1', status: 'scheduled' }]);
     expect(repo.subscribeCalls).toEqual([{ congregationId: 'cong-1' }]);
     expect(callback).toHaveBeenCalledWith([]);
     expect(onError).toHaveBeenCalledWith(expect.any(Error));

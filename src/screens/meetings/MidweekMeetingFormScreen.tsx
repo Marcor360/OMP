@@ -43,7 +43,11 @@ import {
   createMidweekMeetingTemplate,
   normalizeSectionOrder,
 } from '@/src/types/midweek-meeting';
-import { MeetingStatus, MEETING_STATUS_LABELS } from '@/src/types/meeting';
+import {
+  MEETING_DISPLAY_STATE_LABELS,
+  resolveMeetingDisplayState,
+} from '@/src/types/meeting';
+import { MeetingPublicationStatus } from '@/src/types/meeting/publication-flow';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { getOperationalDateBounds } from '@/src/utils/dates/operational-window';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
@@ -58,7 +62,6 @@ interface MidweekMeetingFormState {
   bibleReading: string;
   startDateInput: string;
   endDateInput: string;
-  status: MeetingStatus;
   location: string;
   meetingUrl: string;
   notes: string;
@@ -84,14 +87,6 @@ interface MidweekMeetingFormErrors {
   chairmanUserId?: string;
   assignments: Record<string, AssignmentCardEditorErrors>;
 }
-
-const statusOptions: MeetingStatus[] = [
-  'pending',
-  'scheduled',
-  'in_progress',
-  'completed',
-  'cancelled',
-];
 
 const pad = (value: number): string => String(value).padStart(2, '0');
 
@@ -153,7 +148,6 @@ const initialFormState = (): MidweekMeetingFormState => {
     bibleReading: template.bibleReading,
     startDateInput: toInputDateTime(template.startDate),
     endDateInput: toInputDateTime(template.endDate),
-    status: template.status,
     location: template.location ?? '',
     meetingUrl: template.meetingUrl ?? '',
     notes: '',
@@ -177,7 +171,6 @@ const mapMeetingToFormState = (meeting: MidweekMeeting): MidweekMeetingFormState
   bibleReading: meeting.bibleReading,
   startDateInput: toInputDateTime(meeting.startDate),
   endDateInput: toInputDateTime(meeting.endDate),
-  status: meeting.status,
   location: meeting.location ?? '',
   meetingUrl: meeting.meetingUrl ?? '',
   notes: meeting.notes ?? '',
@@ -210,6 +203,7 @@ export function MidweekMeetingFormScreen() {
   const operationalBounds = React.useMemo(() => getOperationalDateBounds(), []);
 
   const [form, setForm] = useState<MidweekMeetingFormState>(initialFormState);
+  const [publicationStatus, setPublicationStatus] = useState<MeetingPublicationStatus | undefined>(undefined);
   const [availableUsers, setAvailableUsers] = useState<ActiveCongregationUser[]>([]);
   const [errors, setErrors] = useState<MidweekMeetingFormErrors>({ assignments: {} });
   const [loading, setLoading] = useState(mode === 'edit');
@@ -247,6 +241,7 @@ export function MidweekMeetingFormScreen() {
           }
 
           setForm(mapMeetingToFormState(meeting));
+          setPublicationStatus(meeting.publicationStatus);
         } else {
           setForm(initialFormState());
         }
@@ -451,7 +446,6 @@ export function MidweekMeetingFormScreen() {
         bibleReading: form.bibleReading,
         startDate: Timestamp.fromDate(validation.startDate),
         endDate: Timestamp.fromDate(validation.endDate),
-        status: form.status,
         location: form.location,
         meetingUrl: form.meetingUrl,
         notes: form.notes,
@@ -651,20 +645,10 @@ export function MidweekMeetingFormScreen() {
           </View>
 
           <Field label="Estado">
-            <View style={styles.chipsRow}>
-              {statusOptions.map((statusOption) => (
-                <TouchableOpacity
-                  key={statusOption}
-                  style={[styles.chip, form.status === statusOption && styles.chipActive]}
-                  onPress={() => setForm((current) => ({ ...current, status: statusOption }))}
-                  disabled={!canEdit}
-                  activeOpacity={0.8}
-                >
-                  <ThemedText style={[styles.chipText, form.status === statusOption && styles.chipTextActive]}>
-                    {MEETING_STATUS_LABELS[statusOption]}
-                  </ThemedText>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.chip}>
+              <ThemedText style={styles.chipText}>
+                {MEETING_DISPLAY_STATE_LABELS[resolveMeetingDisplayState(publicationStatus)]}
+              </ThemedText>
             </View>
           </Field>
         </View>
@@ -1027,11 +1011,6 @@ const createStyles = (colors: AppColorSet) =>
     timeInput: {
       textAlign: 'center',
     },
-    chipsRow: {
-      flexDirection: 'row',
-      gap: 8,
-      flexWrap: 'wrap',
-    },
     chip: {
       borderWidth: 1,
       borderColor: colors.border,
@@ -1040,17 +1019,10 @@ const createStyles = (colors: AppColorSet) =>
       paddingVertical: 6,
       backgroundColor: colors.backgroundLight,
     },
-    chipActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
     chipText: {
       fontSize: 12,
       color: colors.textMuted,
       fontWeight: '600',
-    },
-    chipTextActive: {
-      color: colors.onPrimary,
     },
     errorText: {
       color: colors.error,

@@ -4,7 +4,6 @@ import type {
   Meeting,
   MeetingCategory,
   MeetingCleaningAssignmentMode,
-  MeetingStatus,
   MeetingType,
 } from '@/src/types/meeting';
 import {
@@ -17,13 +16,6 @@ import {
 import {
   convertLegacyMidweekSectionsToProgramSections,
 } from '@/src/services/meetings/meeting-program-utils';
-
-const isMeetingStatus = (value: unknown): value is MeetingStatus =>
-  value === 'pending' ||
-  value === 'scheduled' ||
-  value === 'in_progress' ||
-  value === 'completed' ||
-  value === 'cancelled';
 
 const isMeetingType = (value: unknown): value is MeetingType =>
   value === 'internal' ||
@@ -76,7 +68,6 @@ export const normalizeMeeting = (id: string, data: Record<string, unknown>): Mee
     description,
     type: meetingCategory === 'midweek' ? 'midweek' : rawType,
     meetingCategory,
-    status: isMeetingStatus(data.status) ? data.status : 'scheduled',
     publicationStatus: isPublicationStatus(data.publicationStatus)
       ? data.publicationStatus
       : 'published',

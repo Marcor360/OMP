@@ -1,13 +1,21 @@
 import {
+  documentId,
   getDocs,
   limit,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  startAfter,
   updateDoc,
   where,
   writeBatch,
+} from 'firebase/firestore';
+import type {
+  DocumentData,
+  Query,
+  QueryDocumentSnapshot,
+  QuerySnapshot,
 } from 'firebase/firestore';
 
 import {
@@ -20,6 +28,7 @@ import type {
 } from '@/src/services/repositories/ports/notification-repository.port';
 
 const PAGE_LIMIT = 100;
+const MARK_ALL_BATCH_LIMIT = 400;
 
 export const firestoreNotificationRepository: NotificationRepository = {
   list: async (
@@ -108,29 +117,46 @@ export const firestoreNotificationRepository: NotificationRepository = {
   markAllAsRead: async (
     congregationId: string,
     userId: string
-  ): Promise<void> => {
-    const unreadQuery = query(
-      congregationNotificationsCollectionRef(congregationId),
-      where('userId', '==', userId),
-      where('isRead', '==', false),
-      limit(PAGE_LIMIT)
-    );
+  ): Promise<number> => {
+    let totalUpdated = 0;
+    let cursor: QueryDocumentSnapshot<DocumentData> | null = null;
 
-    const snap = await getDocs(unreadQuery);
+    while (true) {
+      const unreadQuery: Query<DocumentData> = cursor
+        ? query(
+            congregationNotificationsCollectionRef(congregationId),
+            where('userId', '==', userId),
+            where('isRead', '==', false),
+            orderBy(documentId()),
+            startAfter(cursor),
+            limit(MARK_ALL_BATCH_LIMIT)
+          )
+        : query(
+            congregationNotificationsCollectionRef(congregationId),
+            where('userId', '==', userId),
+            where('isRead', '==', false),
+            orderBy(documentId()),
+            limit(MARK_ALL_BATCH_LIMIT)
+          );
+      const snap: QuerySnapshot<DocumentData> = await getDocs(unreadQuery);
 
-    if (snap.empty) {
-      return;
+      if (snap.empty) break;
+
+      const batch = writeBatch(snap.docs[0].ref.firestore);
+      snap.docs.forEach((docSnap) => {
+        batch.update(docSnap.ref, {
+          isRead: true,
+          readAt: serverTimestamp(),
+        });
+      });
+      await batch.commit();
+
+      totalUpdated += snap.size;
+      cursor = snap.docs[snap.docs.length - 1];
+
+      if (snap.size < MARK_ALL_BATCH_LIMIT) break;
     }
 
-    const batch = writeBatch(snap.docs[0].ref.firestore);
-
-    snap.docs.forEach((docSnap) => {
-      batch.update(docSnap.ref, {
-        isRead: true,
-        readAt: serverTimestamp(),
-      });
-    });
-
-    await batch.commit();
+    return totalUpdated;
   },
 };

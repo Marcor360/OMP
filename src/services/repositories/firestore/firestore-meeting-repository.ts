@@ -32,7 +32,7 @@ import {
 } from '@/src/services/repositories/firestore-cache-first';
 import type { MeetingRepository } from '@/src/services/repositories/ports/meeting-repository.port';
 import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
-import type { Meeting, MeetingStatus } from '@/src/types/meeting';
+import type { Meeting } from '@/src/types/meeting';
 import { createLogger } from '@/src/utils/logger';
 
 const log = createLogger('meetings-service');
@@ -130,19 +130,6 @@ export const firestoreMeetingRepository: MeetingRepository = {
     return Array.from(byId.values());
   },
 
-  getByStatus: async (
-    congregationId: string,
-    status: MeetingStatus
-  ): Promise<Meeting[]> => {
-    const q = query(
-      congregationMeetingsCollectionRef(congregationId),
-      where('status', '==', status),
-      orderBy('meetingDate', 'asc')
-    );
-    const snap = await getDocs(q);
-    return sortMeetings(snap.docs.map((docSnap) => normalizeMeeting(docSnap.id, docSnap.data())));
-  },
-
   getByUser: async (congregationId: string, userId: string): Promise<Meeting[]> => {
     const meetingsRef = congregationMeetingsCollectionRef(congregationId);
 
@@ -218,13 +205,6 @@ export const firestoreMeetingRepository: MeetingRepository = {
     });
 
     invalidateMeetingCache(congregationId, id);
-  },
-
-  count: async (congregationId: string, status?: MeetingStatus): Promise<number> => {
-    const meetingsRef = congregationMeetingsCollectionRef(congregationId);
-    const q = status ? query(meetingsRef, where('status', '==', status)) : meetingsRef;
-    const snap = await getDocs(q);
-    return snap.size;
   },
 
   subscribeToMeetings: (

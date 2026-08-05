@@ -1,7 +1,8 @@
 import { Timestamp } from 'firebase/firestore';
 
 import { AssignmentPriority, AssignmentStatus } from '@/src/types/assignment';
-import { MeetingCategory, MeetingStatus, MeetingType } from '@/src/types/meeting';
+import { MeetingCategory, MeetingType } from '@/src/types/meeting';
+import { MeetingPublicationStatus } from '@/src/types/meeting/publication-flow';
 
 export interface DashboardMetrics {
   totalUsers: number;
@@ -17,7 +18,7 @@ export interface DashboardMetrics {
 export interface DashboardSummaryMeetingPreview {
   id: string;
   title: string;
-  status?: MeetingStatus;
+  publicationStatus?: MeetingPublicationStatus;
   type?: MeetingType;
   meetingCategory?: MeetingCategory;
   startDate: Timestamp;

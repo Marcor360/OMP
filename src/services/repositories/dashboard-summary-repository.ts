@@ -68,7 +68,10 @@ const normalizeMeetingPreview = (
   return {
     id: typeof raw.id === 'string' && raw.id.trim().length > 0 ? raw.id : `meeting-${index + 1}`,
     title: typeof raw.title === 'string' && raw.title.trim().length > 0 ? raw.title : 'Reunion',
-    status: typeof raw.status === 'string' ? (raw.status as DashboardSummaryMeetingPreview['status']) : undefined,
+    publicationStatus:
+      typeof raw.publicationStatus === 'string'
+        ? (raw.publicationStatus as DashboardSummaryMeetingPreview['publicationStatus'])
+        : undefined,
     type: typeof raw.type === 'string' ? (raw.type as DashboardSummaryMeetingPreview['type']) : undefined,
     meetingCategory:
       typeof raw.meetingCategory === 'string'

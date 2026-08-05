@@ -3,6 +3,4 @@ import { markAllNotificationsAsRead as markAllInService } from '@/src/services/n
 export const markAllNotificationsAsRead = async (
   uid: string,
   congregationId?: string | null
-): Promise<void> => {
-  await markAllInService(uid, congregationId);
-};
+): Promise<number> => markAllInService(uid, congregationId);

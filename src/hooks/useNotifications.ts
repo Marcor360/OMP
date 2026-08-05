@@ -67,8 +67,8 @@ export const useNotifications = () => {
   }, [congregationId]);
 
   const markAllRead = useCallback(async () => {
-    if (!uid) return;
-    await markAllNotificationsAsRead(uid, congregationId);
+    if (!uid) return 0;
+    return markAllNotificationsAsRead(uid, congregationId);
   }, [congregationId, uid]);
 
   return {

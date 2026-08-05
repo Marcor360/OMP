@@ -20,8 +20,8 @@ jest.mock('@/src/services/repositories/firestore/firestore-notification-reposito
 }));
 
 class FakeNotificationRepository implements NotificationRepository {
-  readonly markAllAsReadMock = jest.fn<Promise<void>, [string, string]>(() =>
-    Promise.resolve()
+  readonly markAllAsReadMock = jest.fn<Promise<number>, [string, string]>(() =>
+    Promise.resolve(250)
   );
 
   list(): Promise<NotificationRecord[]> {
@@ -40,7 +40,7 @@ class FakeNotificationRepository implements NotificationRepository {
     return Promise.resolve();
   }
 
-  markAllAsRead(congregationId: string, userId: string): Promise<void> {
+  markAllAsRead(congregationId: string, userId: string): Promise<number> {
     return this.markAllAsReadMock(congregationId, userId);
   }
 }
@@ -55,7 +55,7 @@ describe('notificationService repository seam', () => {
     const repo = new FakeNotificationRepository();
     __setNotificationRepositoryForTests(repo);
 
-    await markAllNotificationsAsRead('user-1', 'cong-1');
+    await expect(markAllNotificationsAsRead('user-1', 'cong-1')).resolves.toBe(250);
 
     expect(repo.markAllAsReadMock).toHaveBeenCalledTimes(1);
     expect(repo.markAllAsReadMock).toHaveBeenCalledWith('cong-1', 'user-1');

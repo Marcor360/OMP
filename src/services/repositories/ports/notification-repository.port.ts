@@ -22,5 +22,5 @@ export interface NotificationRepository {
     onError?: (error: unknown) => void
   ): Unsubscribe;
   markAsRead(congregationId: string, notificationId: string): Promise<void>;
-  markAllAsRead(congregationId: string, userId: string): Promise<void>;
+  markAllAsRead(congregationId: string, userId: string): Promise<number>;
 }

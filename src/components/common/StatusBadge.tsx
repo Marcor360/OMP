@@ -57,11 +57,8 @@ export function useStatusColors(): StatusColorMaps {
   return useMemo(
     () => ({
       meetingStatusColor: {
-        pending: colors.textMuted,
-        scheduled: colors.info,
         in_progress: colors.warning,
-        completed: colors.success,
-        cancelled: colors.error,
+        scheduled: colors.info,
       },
       assignmentStatusColor: {
         pending: colors.warning,

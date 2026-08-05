@@ -46,6 +46,7 @@
         'platformNotifications',
         'cleaningNotifications',
         'hospitalityNotifications',
+        'eventsNotifications',
         // Campos de modulo de limpieza
         'cleaningEligible',
         'cleaningGroupId',
@@ -296,6 +297,30 @@
           'photoURL',
           'updatedAt'
         ]);
+    }
+
+    // Camino deliberadamente pequeno para no superar el limite de 1,000
+    // expresiones al guardar preferencias desde el propio perfil.
+    function validSelfNotificationPreferencesUpdate(userId) {
+      return isSameUser(userId)
+        && sameKeysOnUpdate([
+          'updatedAt',
+          'notificationsEnabled',
+          'platformNotifications',
+          'cleaningNotifications',
+          'hospitalityNotifications',
+          'eventsNotifications'
+        ])
+        && (!('notificationsEnabled' in request.resource.data)
+            || request.resource.data.notificationsEnabled is bool)
+        && (!('platformNotifications' in request.resource.data)
+            || request.resource.data.platformNotifications is bool)
+        && (!('cleaningNotifications' in request.resource.data)
+            || request.resource.data.cleaningNotifications is bool)
+        && (!('hospitalityNotifications' in request.resource.data)
+            || request.resource.data.hospitalityNotifications is bool)
+        && (!('eventsNotifications' in request.resource.data)
+            || request.resource.data.eventsNotifications is bool);
     }
 
     // Permite al propio usuario actualizar SOLO su token de notificacion push.

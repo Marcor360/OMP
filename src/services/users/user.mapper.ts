@@ -303,6 +303,7 @@ export const normalizeUser = (uid: string, data: Record<string, unknown>): AppUs
     platformNotifications: data.platformNotifications !== false,
     cleaningNotifications: data.cleaningNotifications !== false,
     hospitalityNotifications: data.hospitalityNotifications !== false,
+    eventsNotifications: data.eventsNotifications !== false,
     createdBy: normalizeActorLabel(data.createdBy),
     createdByName: normalizeActorLabel(data.createdByName),
     createdByEmail: normalizeActorLabel(data.createdByEmail),

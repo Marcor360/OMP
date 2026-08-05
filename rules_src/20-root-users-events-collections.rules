@@ -35,6 +35,8 @@
           && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
           && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments))
         ) || (
+          validSelfNotificationPreferencesUpdate(userId)
+        ) || (
           validSelfUserUpdate(userId)
         ) || (
           // Registro de token push: el propio usuario actualiza SOLO su token.

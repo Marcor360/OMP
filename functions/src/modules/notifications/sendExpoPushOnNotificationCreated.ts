@@ -48,11 +48,19 @@ const getActivePushTokenDocs = async (
   return snap.docs;
 };
 
-const getProfileExpoTokens = async (userId: string): Promise<string[]> => {
+const getProfileExpoTokens = async (
+  userId: string,
+  congregationId: string
+): Promise<string[]> => {
   const snap = await adminDb.collection('users').doc(userId).get();
   if (!snap.exists) return [];
 
   const data = snap.data() as Record<string, unknown>;
+
+  if (asNonEmptyString(data.congregationId) !== congregationId) {
+    return [];
+  }
+
   return [
     ...asStringArray(data.notificationTokens),
     ...asStringArray(data.expoPushTokens),
@@ -164,7 +172,7 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
             });
           });
 
-          const profileTokens = await getProfileExpoTokens(userId);
+          const profileTokens = await getProfileExpoTokens(userId, congregationId);
           profileTokens.forEach((token) => {
             if (!tokenDocsByToken.has(token)) {
               tokenDocsByToken.set(token, {

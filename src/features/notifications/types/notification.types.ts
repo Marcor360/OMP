@@ -24,6 +24,8 @@ export interface AppNotification {
   sentBy?: string | null;
   metadata?: {
     date?: string | null;
+    meetingDate?: Timestamp | null;
+    meetingDateLabel?: string | null;
     meetingId?: string | null;
     meetingType?: NotificationMeetingType;
     role?: string | null;
@@ -42,4 +44,13 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<Exclude<NotificationCategory, 
   platform: 'notifications.category.platform',
   cleaning: 'notifications.category.cleaning',
   hospitality: 'notifications.category.hospitality',
+};
+
+export const resolveNotificationBadgeKey = (notification: AppNotification): string => {
+  if (notification.type === 'event') return 'notifications.category.event';
+  if (notification.type === 'billing') return 'notifications.category.billing';
+
+  return notification.category
+    ? NOTIFICATION_CATEGORY_LABELS[notification.category]
+    : 'notifications.category.assignment';
 };

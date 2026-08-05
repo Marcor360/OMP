@@ -748,6 +748,7 @@ service cloud.firestore {
         'platformNotifications',
         'cleaningNotifications',
         'hospitalityNotifications',
+        'eventsNotifications',
         // Campos de modulo de limpieza
         'cleaningEligible',
         'cleaningGroupId',
@@ -998,6 +999,30 @@ service cloud.firestore {
           'photoURL',
           'updatedAt'
         ]);
+    }
+
+    // Camino deliberadamente pequeno para no superar el limite de 1,000
+    // expresiones al guardar preferencias desde el propio perfil.
+    function validSelfNotificationPreferencesUpdate(userId) {
+      return isSameUser(userId)
+        && sameKeysOnUpdate([
+          'updatedAt',
+          'notificationsEnabled',
+          'platformNotifications',
+          'cleaningNotifications',
+          'hospitalityNotifications',
+          'eventsNotifications'
+        ])
+        && (!('notificationsEnabled' in request.resource.data)
+            || request.resource.data.notificationsEnabled is bool)
+        && (!('platformNotifications' in request.resource.data)
+            || request.resource.data.platformNotifications is bool)
+        && (!('cleaningNotifications' in request.resource.data)
+            || request.resource.data.cleaningNotifications is bool)
+        && (!('hospitalityNotifications' in request.resource.data)
+            || request.resource.data.hospitalityNotifications is bool)
+        && (!('eventsNotifications' in request.resource.data)
+            || request.resource.data.eventsNotifications is bool);
     }
 
     // Permite al propio usuario actualizar SOLO su token de notificacion push.
@@ -2345,6 +2370,8 @@ service cloud.firestore {
           && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
           && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments))
         ) || (
+          validSelfNotificationPreferencesUpdate(userId)
+        ) || (
           validSelfUserUpdate(userId)
         ) || (
           // Registro de token push: el propio usuario actualiza SOLO su token.
@@ -2714,35 +2741,27 @@ service cloud.firestore {
       match /notifications/{notificationId} {
         allow get: if canAccessCongregationData(congregationId)
           && (
-            !('userId' in resource.data)
-            || resource.data.userId == currentUid()
+            ('userId' in resource.data && resource.data.userId == currentUid())
             || (
               'userIds' in resource.data
               && resource.data.userIds is list
               && currentUid() in resource.data.userIds
             )
-            || isAdminOrSupervisor()
-            || isGlobalScreenAccess()
           );
 
         allow list: if canAccessCongregationData(congregationId)
           && (
-            (
-              'userId' in resource.data
-              && resource.data.userId == currentUid()
-            )
+            ('userId' in resource.data && resource.data.userId == currentUid())
             || (
               'userIds' in resource.data
               && resource.data.userIds is list
               && currentUid() in resource.data.userIds
             )
-            || isAdminOrSupervisor()
-            || isGlobalScreenAccess()
           );
 
-        allow create: if (isAdmin() || isGlobalScreenAccess() || hasPermission('avisos', 'create') || hasPermission('avisos', 'manage'))
-          && canAccessCongregationData(congregationId)
-          && validNotificationData(request.resource.data, congregationId);
+        // Creacion exclusiva de Cloud Functions (Admin SDK). Ningun cliente
+        // escribe notificaciones; ver functions/src/modules/notifications/.
+        allow create: if false;
 
         allow update: if validOwnNotificationReadUpdate(congregationId) || (
             (isAdmin() || isGlobalScreenAccess() || hasPermission('avisos', 'edit') || hasPermission('avisos', 'manage'))
@@ -2750,7 +2769,7 @@ service cloud.firestore {
             && validNotificationData(request.resource.data, congregationId)
           );
 
-        allow delete: if isAdmin();
+        allow delete: if isAdmin() && sameCongregation(congregationId);
       }
 
       // -----------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import type { Unsubscribe } from 'firebase/firestore';
 
-import type { Meeting, MeetingStatus } from '@/src/types/meeting';
+import type { Meeting } from '@/src/types/meeting';
 
 export type { Unsubscribe };
 
@@ -18,7 +18,6 @@ export interface MeetingRepository {
     rangeStart: Date,
     rangeEnd: Date
   ): Promise<Meeting[]>;
-  getByStatus(congregationId: string, status: MeetingStatus): Promise<Meeting[]>;
   getByUser(congregationId: string, userId: string): Promise<Meeting[]>;
   create(
     congregationId: string,
@@ -32,7 +31,6 @@ export interface MeetingRepository {
     options?: { requiresManager?: boolean }
   ): Promise<void>;
   delete(congregationId: string, id: string): Promise<void>;
-  count(congregationId: string, status?: MeetingStatus): Promise<number>;
   subscribeToMeetings(
     congregationId: string,
     callback: (meetings: Meeting[]) => void,

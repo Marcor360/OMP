@@ -5,7 +5,7 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { ThemedText } from '@/src/components/themed-text';
 import {
   AppNotification,
-  NOTIFICATION_CATEGORY_LABELS,
+  resolveNotificationBadgeKey,
 } from '@/src/features/notifications/types/notification.types';
 import { useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
@@ -17,12 +17,23 @@ interface NotificationItemProps {
 
 const categoryAccent = (
   colors: AppColorSet,
-  category: AppNotification['category']
+  notification: AppNotification
 ): string => {
+  if (notification.type === 'event') return colors.info;
+  if (notification.type === 'billing') return colors.warning;
+  const category = notification.category;
   if (category === 'platform') return colors.primary;
   if (category === 'cleaning') return colors.warning;
   if (category === 'hospitality') return colors.success;
   return colors.info;
+};
+
+const notificationIcon = (
+  notification: AppNotification
+): keyof typeof Ionicons.glyphMap => {
+  if (notification.type === 'event') return 'calendar-outline';
+  if (notification.type === 'billing') return 'card-outline';
+  return notification.read ? 'notifications-outline' : 'notifications';
 };
 
 const formatTimestamp = (seconds: number, language: string): string => {
@@ -41,14 +52,11 @@ function NotificationItemBase({ notification, onPress }: NotificationItemProps) 
   const { language, t } = useI18n();
 
   const accent = useMemo(
-    () => categoryAccent(colors, notification.category),
-    [colors, notification.category]
+    () => categoryAccent(colors, notification),
+    [colors, notification]
   );
 
-  const categoryLabel =
-    notification.category && NOTIFICATION_CATEGORY_LABELS[notification.category]
-      ? t(NOTIFICATION_CATEGORY_LABELS[notification.category])
-      : t('notifications.category.assignment');
+  const categoryLabel = t(resolveNotificationBadgeKey(notification));
 
   const createdAtLabel = formatTimestamp(notification.createdAt.seconds, language);
 
@@ -64,7 +72,7 @@ function NotificationItemBase({ notification, onPress }: NotificationItemProps) 
     >
       <View style={[styles.iconWrap, { backgroundColor: accent + '16' }]}>
         <Ionicons
-          name={notification.read ? 'notifications-outline' : 'notifications'}
+          name={notificationIcon(notification)}
           size={16}
           color={accent}
         />

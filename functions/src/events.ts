@@ -430,14 +430,54 @@ const buildNotificationMessage = (
   };
 };
 
-const getCongregationUserIds = async (congregationId: string): Promise<string[]> => {
+export const MATERIAL_EVENT_FIELDS = [
+  'type',
+  'title',
+  'location',
+  'superintendentName',
+  'superintendentWifeName',
+  'startDate',
+  'endDate',
+] as const;
+
+export const hasMaterialChange = (
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown>
+): boolean => {
+  if (!before) return true;
+
+  return MATERIAL_EVENT_FIELDS.some((field) => {
+    const previous = before[field];
+    const next = after[field];
+
+    if (previous instanceof Timestamp && next instanceof Timestamp) {
+      return !previous.isEqual(next);
+    }
+
+    return previous !== next;
+  });
+};
+
+const chunk = <T>(items: readonly T[], size: number): T[][] =>
+  items.reduce<T[][]>((groups, item, index) => {
+    if (index % size === 0) groups.push([]);
+    groups[groups.length - 1].push(item);
+    return groups;
+  }, []);
+
+const getEventNotificationTargets = async (congregationId: string): Promise<string[]> => {
   const snap = await adminDb
     .collection('users')
     .where('congregationId', '==', congregationId)
     .where('isActive', '==', true)
     .get();
 
-  return snap.docs.map((docSnap) => docSnap.id);
+  return snap.docs
+    .filter((docSnap) => {
+      const data = docSnap.data() as Record<string, unknown>;
+      return data.notificationsEnabled !== false && data.eventsNotifications !== false;
+    })
+    .map((docSnap) => docSnap.id);
 };
 
 const createNotificationDocs = async (params: {
@@ -454,42 +494,47 @@ const createNotificationDocs = async (params: {
     return;
   }
 
-  const eventNotificationId = `event_${params.eventId}_${Date.now()}`;
-  const batch = adminDb.batch();
+  // El ID determinista hace que una edicion material actualice el aviso previo.
+  // Al no crear otro documento, onDocumentCreated no vuelve a enviar push.
+  const eventNotificationId = `event_${params.eventId}`;
 
-  params.userIds.forEach((userId) => {
-    const notificationId = `${eventNotificationId}_${userId}`;
-    const payload = {
-      userId,
-      congregationId: params.congregationId,
-      type: 'event',
-      eventId: params.eventId,
-      eventType: params.eventType,
-      title: params.title,
-      body: params.body,
-      isRead: false,
-      createdAt: FieldValue.serverTimestamp(),
-      sentBy: params.actorId,
-      data: {
-        url: params.url,
-      },
-    };
+  for (const userIdGroup of chunk(params.userIds, PAGE_SIZE)) {
+    const batch = adminDb.batch();
 
-    batch.set(
-      adminDb
-        .collection('congregations')
-        .doc(params.congregationId)
-        .collection(NOTIFICATIONS_COLLECTION)
-        .doc(notificationId),
-      {
-        ...payload,
-        notificationId,
-        userIds: [userId],
-      }
-    );
-  });
+    userIdGroup.forEach((userId) => {
+      const notificationId = `${eventNotificationId}_${userId}`;
+      const payload = {
+        userId,
+        congregationId: params.congregationId,
+        type: 'event',
+        eventId: params.eventId,
+        eventType: params.eventType,
+        title: params.title,
+        body: params.body,
+        isRead: false,
+        createdAt: FieldValue.serverTimestamp(),
+        sentBy: params.actorId,
+        data: {
+          url: params.url,
+        },
+      };
 
-  await batch.commit();
+      batch.set(
+        adminDb
+          .collection('congregations')
+          .doc(params.congregationId)
+          .collection(NOTIFICATIONS_COLLECTION)
+          .doc(notificationId),
+        {
+          ...payload,
+          notificationId,
+          userIds: [userId],
+        }
+      );
+    });
+
+    await batch.commit();
+  }
 };
 
 export const notifyEventChanges = onDocumentWritten(
@@ -532,8 +577,23 @@ export const notifyEventChanges = onDocumentWritten(
     }
 
     const isUpdate = event.data.before.exists;
+
+    if (
+      isUpdate &&
+      !hasMaterialChange(
+        event.data.before.data() as Record<string, unknown>,
+        after
+      )
+    ) {
+      logger.debug('Event write skipped: no material change', {
+        eventId,
+        congregationId,
+      });
+      return;
+    }
+
     const message = buildNotificationMessage(eventId, after, isUpdate);
-    const userIds = await getCongregationUserIds(congregationId);
+    const userIds = await getEventNotificationTargets(congregationId);
     const actorId =
       asNonEmptyString(after.updatedBy) ?? asNonEmptyString(after.createdBy);
 

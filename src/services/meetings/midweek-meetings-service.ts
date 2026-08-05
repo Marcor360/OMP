@@ -14,7 +14,6 @@ import type {
 import type {
   MidweekMeetingSection,
 } from '@/src/types/midweek-meeting';
-import type { MeetingStatus } from '@/src/types/meeting';
 import {
   MeetingProgramSection,
   MeetingPublicationStatus,
@@ -35,7 +34,6 @@ export interface MidweekMeetingPayload {
   startDate: MidweekMeeting['startDate'];
   endDate: MidweekMeeting['endDate'];
   meetingDate?: MidweekMeeting['meetingDate'];
-  status?: MeetingStatus;
   publicationStatus?: MeetingPublicationStatus;
   publishedAt?: MidweekMeeting['publishedAt'];
   location?: string;
@@ -194,7 +192,6 @@ export const updateMidweekMeeting = async (
     startDate: payload.startDate,
     endDate: payload.endDate,
     meetingDate: normalizedProgram.meetingDate,
-    status: payload.status ?? ('scheduled' as MeetingStatus),
     publicationStatus: normalizedProgram.publicationStatus,
     publishedAt: payload.publishedAt ?? null,
     location: payload.location?.trim() || null,

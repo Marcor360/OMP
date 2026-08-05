@@ -8,17 +8,13 @@ import { parseDateKey } from '@/src/utils/dates/date-key';
 export const isWeekendMeeting = (meeting: {
   type?: string;
   meetingCategory?: string;
-  status?: string;
 }): boolean =>
-  meeting.status !== 'cancelled' &&
-  (
-    meeting.meetingCategory === 'weekend' ||
-    meeting.type === 'weekend' ||
-    meeting.type === 'internal' ||
-    meeting.type === 'external' ||
-    meeting.type === 'review' ||
-    meeting.type === 'training'
-  );
+  meeting.meetingCategory === 'weekend' ||
+  meeting.type === 'weekend' ||
+  meeting.type === 'internal' ||
+  meeting.type === 'external' ||
+  meeting.type === 'review' ||
+  meeting.type === 'training';
 
 const getWeekDates = (dateKey: string): { startDate: Date; endDate: Date } => {
   const range = resolveOutgoingTalkWeekRange(dateKey);

@@ -6,8 +6,6 @@ import {
   MeetingPublicationStatus,
 } from '@/src/types/meeting/program';
 
-/** @deprecated Campo legado. El ciclo operativo usa publicationStatus. */
-export type MeetingStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type MeetingCategory = 'general' | 'midweek' | 'weekend';
 export type MeetingCleaningAssignmentMode = 'none' | 'selected' | 'all';
 export type MeetingType =
@@ -25,7 +23,6 @@ export interface Meeting {
   title: string;
   description?: string;
   type: MeetingType;
-  status: MeetingStatus;
   publicationStatus?: MeetingPublicationStatus;
   weekLabel?: string;
   bibleReading?: string;
@@ -65,7 +62,6 @@ export interface CreateMeetingDTO {
   description?: string;
   type: MeetingType;
   meetingCategory?: MeetingCategory;
-  status?: MeetingStatus;
   publicationStatus?: MeetingPublicationStatus;
   weekLabel?: string;
   bibleReading?: string;
@@ -101,7 +97,6 @@ export interface UpdateMeetingDTO {
   description?: string;
   type?: MeetingType;
   meetingCategory?: MeetingCategory;
-  status?: MeetingStatus;
   publicationStatus?: MeetingPublicationStatus;
   weekLabel?: string;
   bibleReading?: string;
@@ -142,14 +137,6 @@ export const resolveMeetingCategory = (meeting: Pick<Meeting, 'meetingCategory' 
 export const isMidweekMeeting = (meeting: Pick<Meeting, 'meetingCategory' | 'type'>): boolean =>
   resolveMeetingCategory(meeting) === 'midweek';
 
-export const MEETING_STATUS_LABELS: Record<MeetingStatus, string> = {
-  pending: 'Pendiente',
-  scheduled: 'Programada',
-  in_progress: 'En progreso',
-  completed: 'Completada',
-  cancelled: 'Cancelada',
-};
-
 export const MEETING_TYPE_LABELS: Record<MeetingType, string> = {
   internal: 'Fin de semana',
   external: 'Fin de semana',
@@ -164,3 +151,5 @@ export const MEETING_PUBLICATION_STATUS_LABELS: Record<MeetingPublicationStatus,
   awaiting_assignments: 'En espera de asignaciones',
   published: 'Publicada',
 };
+
+export * from '@/src/types/meeting/display-state';

@@ -21,17 +21,18 @@ import {
   getMidweekMeetingsByWeek,
 } from '@/src/services/meetings/midweek-meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { MeetingStatus, MEETING_STATUS_LABELS } from '@/src/types/meeting';
+import {
+  MEETING_DISPLAY_STATE_LABELS,
+  MeetingDisplayState,
+  resolveMeetingDisplayState,
+} from '@/src/types/meeting';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { formatWeekLabel, getWeekEnd, getWeekStart, moveWeek } from '@/src/utils/dates/week-range';
 
-const STATUS_FILTERS: { label: string; value: MeetingStatus | 'all' }[] = [
+const STATE_FILTERS: { label: string; value: MeetingDisplayState | 'all' }[] = [
   { label: 'Todas', value: 'all' },
-  { label: 'Pendientes', value: 'pending' },
-  { label: 'Programadas', value: 'scheduled' },
   { label: 'En progreso', value: 'in_progress' },
-  { label: 'Completadas', value: 'completed' },
-  { label: 'Canceladas', value: 'cancelled' },
+  { label: 'Programadas', value: 'scheduled' },
 ];
 
 export function MidweekMeetingsListScreen() {
@@ -41,7 +42,7 @@ export function MidweekMeetingsListScreen() {
   const styles = createStyles(colors);
 
   const [meetings, setMeetings] = useState<MidweekMeeting[]>([]);
-  const [filter, setFilter] = useState<MeetingStatus | 'all'>('all');
+  const [filter, setFilter] = useState<MeetingDisplayState | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +85,10 @@ export function MidweekMeetingsListScreen() {
   }, [loadMeetings]);
 
   const filteredMeetings = useMemo(
-    () => (filter === 'all' ? meetings : meetings.filter((meeting) => meeting.status === filter)),
+    () =>
+      filter === 'all'
+        ? meetings
+        : meetings.filter((meeting) => resolveMeetingDisplayState(meeting.publicationStatus) === filter),
     [filter, meetings]
   );
 
@@ -155,7 +159,7 @@ export function MidweekMeetingsListScreen() {
       </View>
 
       <View style={styles.filterRow}>
-        {STATUS_FILTERS.map((item) => (
+        {STATE_FILTERS.map((item) => (
           <TouchableOpacity
             key={item.value}
             style={[styles.filterChip, filter === item.value && styles.filterChipActive]}
@@ -191,7 +195,7 @@ export function MidweekMeetingsListScreen() {
               description={
                 filter === 'all'
                   ? 'Aun no hay reuniones VyMC registradas.'
-                  : `No hay reuniones ${MEETING_STATUS_LABELS[filter as MeetingStatus].toLowerCase()}.`
+                  : `No hay reuniones ${MEETING_DISPLAY_STATE_LABELS[filter as MeetingDisplayState].toLowerCase()}.`
               }
               actionLabel={canManage ? 'Crear reunion VyMC' : undefined}
               onAction={

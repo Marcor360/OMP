@@ -40,8 +40,34 @@ const toDateMillis = (value: string | null | undefined): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const isFirestoreTimestamp = (value: unknown): value is AppNotification['createdAt'] => {
+  if (!value || typeof value !== 'object') return false;
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.seconds === 'number' &&
+    typeof candidate.nanoseconds === 'number' &&
+    typeof candidate.toDate === 'function'
+  );
+};
+
+export const resolveNotificationDateMillis = (
+  notification: AppNotification
+): number | null => {
+  const meetingDate = notification.metadata?.meetingDate;
+
+  if (meetingDate && isFirestoreTimestamp(meetingDate)) {
+    return meetingDate.seconds * 1000;
+  }
+
+  return (
+    toDateMillis(notification.metadata?.meetingDateLabel) ??
+    toDateMillis(notification.metadata?.date)
+  );
+};
+
 const isNotificationCurrent = (notification: AppNotification): boolean => {
-  const notificationDate = toDateMillis(notification.metadata?.date);
+  const notificationDate = resolveNotificationDateMillis(notification);
 
   if (notificationDate === null) {
     return true;
@@ -80,7 +106,7 @@ const normalizeNotification = (
 
   const createdAt = raw.createdAt;
 
-  if (!createdAt || typeof createdAt !== 'object' || !('seconds' in (createdAt as object))) {
+  if (!isFirestoreTimestamp(createdAt)) {
     return null;
   }
 
@@ -107,11 +133,20 @@ const normalizeNotification = (
     eventType: typeof raw.eventType === 'string' ? raw.eventType : undefined,
     isRead,
     read: isRead,
-    createdAt: createdAt as AppNotification['createdAt'],
+    createdAt,
     sentBy: typeof raw.sentBy === 'string' ? raw.sentBy : null,
     metadata:
       raw.metadata && typeof raw.metadata === 'object'
         ? {
+            meetingDate: isFirestoreTimestamp(
+              (raw.metadata as Record<string, unknown>).meetingDate
+            )
+              ? (raw.metadata as Record<string, unknown>).meetingDate as AppNotification['createdAt']
+              : null,
+            meetingDateLabel:
+              typeof (raw.metadata as Record<string, unknown>).meetingDateLabel === 'string'
+                ? ((raw.metadata as Record<string, unknown>).meetingDateLabel as string)
+                : null,
             date:
               typeof (raw.metadata as Record<string, unknown>).date === 'string'
                 ? ((raw.metadata as Record<string, unknown>).date as string)
@@ -267,14 +302,14 @@ export const markNotificationAsRead = async (
 export const markAllNotificationsAsRead = async (
   uid: string,
   congregationId?: string | null
-): Promise<void> => {
+): Promise<number> => {
   if (!uid || uid.trim().length === 0) {
-    return;
+    return 0;
   }
 
   if (!congregationId || congregationId.trim().length === 0) {
-    return;
+    return 0;
   }
 
-  await notificationRepository.markAllAsRead(congregationId, uid);
+  return notificationRepository.markAllAsRead(congregationId, uid);
 };

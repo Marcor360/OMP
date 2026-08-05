@@ -143,6 +143,7 @@ export interface AppUser {
   platformNotifications?: boolean;
   cleaningNotifications?: boolean;
   hospitalityNotifications?: boolean;
+  eventsNotifications?: boolean;
   createdBy?: string;
   createdByName?: string;
   createdByEmail?: string;
@@ -212,6 +213,7 @@ export interface UpdateUserDTO {
   platformNotifications?: boolean;
   cleaningNotifications?: boolean;
   hospitalityNotifications?: boolean;
+  eventsNotifications?: boolean;
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {

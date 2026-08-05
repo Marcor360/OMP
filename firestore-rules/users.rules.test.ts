@@ -297,6 +297,27 @@ describe('org chart department rules', () => {
 });
 
 describe('sensitive user writes', () => {
+  it('allows users to update only their own boolean notification preferences', async () => {
+    const ownRef = doc(authedDb('member'), 'users/member');
+
+    await assertSucceeds(updateDoc(ownRef, {
+      platformNotifications: false,
+      updatedAt: Timestamp.now(),
+    }));
+    await assertSucceeds(updateDoc(ownRef, {
+      eventsNotifications: false,
+      updatedAt: Timestamp.now(),
+    }));
+    await assertFails(updateDoc(ownRef, {
+      platformNotifications: 'no',
+      updatedAt: Timestamp.now(),
+    }));
+    await assertFails(updateDoc(doc(authedDb('member'), 'users/admin'), {
+      platformNotifications: false,
+      updatedAt: Timestamp.now(),
+    }));
+  });
+
   it('rejects legacy role aliases even for superadmin writes', async () => {
     await assertFails(setDoc(doc(authedDb('root'), 'users/legacy-admin'), {
       ...userDoc({ uid: 'legacy-admin', role: 'user', congregationId: 'c1' }),
