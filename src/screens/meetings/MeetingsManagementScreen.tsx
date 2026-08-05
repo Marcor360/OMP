@@ -23,6 +23,7 @@ import { formatFirestoreError } from '@/src/utils/errors/errors';
 const PUBLICATION_FILTERS: (MeetingPublicationStatus | 'all')[] = [
   'all',
   'draft',
+  'awaiting_assignments',
   'published',
 ];
 
@@ -146,7 +147,9 @@ export function MeetingsManagementScreen() {
     if (!congregationId) return;
 
     const nextStatus: MeetingPublicationStatus =
-      meeting.publicationStatus === 'published' ? 'draft' : 'published';
+      meeting.publicationStatus === 'awaiting_assignments'
+        ? 'published'
+        : 'awaiting_assignments';
 
     try {
       const result = await setMeetingPublicationStatus({
@@ -164,7 +167,7 @@ export function MeetingsManagementScreen() {
         t('meetings.management.alert.success'),
         nextStatus === 'published'
           ? t('meetings.management.alert.published')
-          : t('meetings.management.alert.sentToDraft')
+          : t('meetings.management.alert.sentToAssignments')
       );
       await onRefresh();
     } catch (requestError) {
@@ -254,7 +257,9 @@ export function MeetingsManagementScreen() {
                       ? t('meetings.management.filter.all')
                       : filterOption === 'draft'
                         ? t('meetings.management.filter.draft')
-                        : t('meetings.management.filter.published')}
+                        : filterOption === 'awaiting_assignments'
+                          ? t('meetings.management.filter.awaitingAssignments')
+                          : t('meetings.management.filter.published')}
                   </ThemedText>
                 </TouchableOpacity>
               ))}
@@ -291,12 +296,23 @@ export function MeetingsManagementScreen() {
                   {t('meetings.management.row.edit')}
                 </ThemedText>
               </TouchableOpacity>
+              {meeting.publicationStatus !== 'draft' ? (
+                <TouchableOpacity
+                  style={styles.smallAction}
+                  onPress={() => router.push(`/(protected)/meetings/edit/${meeting.id}?source=assignments` as never)}
+                >
+                  <Ionicons name="people-outline" size={15} color={colors.textPrimary} />
+                  <ThemedText style={styles.smallActionText}>
+                    {t('meetings.management.row.assignments')}
+                  </ThemedText>
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity style={styles.publishAction} onPress={() => void togglePublication(meeting)}>
                 <Ionicons name={meeting.publicationStatus === 'published' ? 'close-circle-outline' : 'send-outline'} size={15} color={meeting.publicationStatus === 'published' ? colors.error : colors.successDark} />
                 <ThemedText style={[styles.publishActionText, { color: meeting.publicationStatus === 'published' ? colors.error : colors.successDark }]}>
-                  {meeting.publicationStatus === 'published'
-                    ? t('meetings.management.row.unpublish')
-                    : t('meetings.management.row.publish')}
+                  {meeting.publicationStatus === 'awaiting_assignments'
+                    ? t('meetings.management.row.publish')
+                    : t('meetings.management.row.sendToAssignments')}
                 </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity

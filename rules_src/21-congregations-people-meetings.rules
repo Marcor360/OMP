@@ -48,16 +48,11 @@
       match /meetings/{meetingId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if isMeetingsManager()
-          && canAccessCongregationData(congregationId)
-          && validMeetingData(request.resource.data, congregationId);
+        // Las mutaciones pasan por Cloud Functions para aplicar idempotencia,
+        // ventana operativa, propiedad de campos y transiciones de estado.
+        allow create, update: if false;
 
-        allow update: if isMeetingsManager()
-          && canAccessCongregationData(congregationId)
-          && validMeetingData(request.resource.data, congregationId)
-          && preservesCreatedAt();
-
-        allow delete: if isAdmin();
+        allow delete: if false;
 
         // ---------------------------------------------------------------------
         // ASSIGNMENTS
@@ -67,8 +62,15 @@
 
           allow create, update: if false;
 
-          allow delete: if isAdmin();
+          allow delete: if false;
         }
+      }
+
+      // Autoriza la consulta collectionGroup acotada por congregationId usada por
+      // el panel de asignaciones. Las escrituras siguen cerradas en cada ruta.
+      match /{parentPath=**}/assignments/{assignmentId} {
+        allow get, list: if isActive()
+          && resource.data.congregationId == myCongregationId();
       }
 
       // -----------------------------------------------------------------------

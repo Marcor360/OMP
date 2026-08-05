@@ -26,7 +26,7 @@ import {
   getAssignmentById,
   updateAssignment,
 } from '@/src/services/assignments/assignments-service';
-import { getAllMeetings } from '@/src/services/meetings/meetings-service';
+import { getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
 import { getAllUsers } from '@/src/services/users/users-service';
 import { getCleaningGroups } from '@/src/modules/cleaning/services/cleaning-service';
 import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
@@ -38,11 +38,14 @@ import { OutgoingTalk } from '@/src/modules/assignments/types/outgoing-talks.typ
 import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AssignmentPriority, UpdateAssignmentDTO } from '@/src/types/assignment';
-import { Meeting } from '@/src/types/meeting';
+import { Meeting, MEETING_PUBLICATION_STATUS_LABELS } from '@/src/types/meeting';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { formatDateKey, parseDateKey } from '@/src/utils/dates/date-key';
-import { getOperationalDateBounds } from '@/src/utils/dates/operational-window';
+import {
+  getOperationalDateBounds,
+  getOperationalWindow,
+} from '@/src/utils/dates/operational-window';
 import { canManageAssignments } from '@/src/utils/permissions/permissions';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
@@ -148,7 +151,11 @@ export function AssignmentFormScreen() {
 
     const loadData = async () => {
       try {
-        const meetingsPromise = getAllMeetings(congregationId);
+        const { start, end } = getOperationalWindow();
+        const meetingsPromise = getMeetingsByWeek(congregationId, start, end, {
+          includeMidweek: true,
+          publicationStatus: 'all',
+        });
         const cleaningGroupsPromise =
           canManage
             ? getCleaningGroups(congregationId)
@@ -173,14 +180,19 @@ export function AssignmentFormScreen() {
           assignmentPromise,
         ]);
 
-        setMeetings(meetingDocs);
+        const assignableMeetings = meetingDocs.filter(
+          (meeting) =>
+            meeting.publicationStatus === 'awaiting_assignments' ||
+            meeting.publicationStatus === 'published'
+        );
+        setMeetings(assignableMeetings);
         setCleaningGroups(cleaningGroupDocs.filter((group) => group.isActive));
         const activeUsers = usersDocs.filter((item) => item.isActive);
         setUsers(activeUsers);
 
         if (mode === 'create') {
-          if (meetingDocs[0]) {
-            setMeetingId(meetingDocs[0].id);
+          if (assignableMeetings[0]) {
+            setMeetingId(assignableMeetings[0].id);
           }
           if (cleaningGroupDocs[0]) {
             setCleaningGroupId(cleaningGroupDocs[0].id);
@@ -277,10 +289,7 @@ export function AssignmentFormScreen() {
           : formatDateKey(selectedDueDate) > operationalBounds.maxDate
             ? t('assignments.errorDateOutOfWindow')
           : undefined,
-      meetingId:
-        targetMode === 'person'
-          ? validateRequired(meetingId, 'La reunion')
-          : undefined,
+      meetingId: validateRequired(meetingId, 'La reunion'),
       assignedTo:
         targetMode === 'person' && personAssignmentMode === 'user'
           ? validateRequired(assignedToUid, 'La persona asignada') ??
@@ -338,6 +347,7 @@ export function AssignmentFormScreen() {
 
           await createCleaningGroupAssignment(
             congregationId,
+            meetingId,
             {
               title,
               description,
@@ -466,6 +476,7 @@ export function AssignmentFormScreen() {
   const hasCleaningGroups = mode !== 'create' || cleaningGroups.length > 0;
   const canSave =
     canManage &&
+    meetings.length > 0 &&
     (targetMode === 'cleaningGroup'
       ? hasCleaningGroups
       : meetings.length > 0 && (personAssignmentMode === 'manual' || hasAssignableUsers));
@@ -488,11 +499,16 @@ export function AssignmentFormScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {targetMode === 'person' && noMeetings ? (
+        {noMeetings ? (
           <View style={styles.permissionNotice}>
-            <ThemedText style={styles.permissionText}>
-              Debes tener al menos una reunion en tu congregacion para crear asignaciones.
-            </ThemedText>
+            <ThemedText style={styles.permissionText}>{t('assignments.noReadyMeetingsTitle')}</ThemedText>
+            <ThemedText style={styles.hintText}>{t('assignments.noReadyMeetingsDescription')}</ThemedText>
+            <TouchableOpacity
+              style={styles.chip}
+              onPress={() => router.push('/(protected)/meetings/manage' as never)}
+            >
+              <ThemedText style={styles.chipText}>{t('assignments.goToMeetings')}</ThemedText>
+            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -593,8 +609,7 @@ export function AssignmentFormScreen() {
           <ThemedText style={styles.hintText}>Seleccionado: {formatDateLabel(selectedDueDate)}</ThemedText>
         </Field>
 
-        {targetMode === 'person' || mode === 'edit' ? (
-          <Field label="Reunion *" error={errors.meetingId}>
+        <Field label="Reunion *" error={errors.meetingId}>
             <View style={styles.chipRow}>
               {sortedMeetings.map((meeting) => (
                 <TouchableOpacity
@@ -605,14 +620,15 @@ export function AssignmentFormScreen() {
                   disabled={!canEditForm || mode === 'edit'}
                 >
                   <ThemedText style={[styles.chipText, meetingId === meeting.id && styles.chipTextActive]}>
-                    {meeting.title}
+                    {meeting.title} · {MEETING_PUBLICATION_STATUS_LABELS[meeting.publicationStatus ?? 'draft']}
                   </ThemedText>
                 </TouchableOpacity>
               ))}
             </View>
             {mode === 'edit' ? <ThemedText style={styles.hintText}>La reunion vinculada no se puede cambiar.</ThemedText> : null}
-          </Field>
-        ) : (
+        </Field>
+
+        {targetMode === 'cleaningGroup' && mode === 'create' ? (
           <Field label="Grupo o familia de aseo *" error={errors.cleaningGroupId}>
             <View style={styles.chipRow}>
               {cleaningGroups.map((group) => (
@@ -639,7 +655,7 @@ export function AssignmentFormScreen() {
               Se notificara a todos los integrantes del grupo seleccionado.
             </ThemedText>
           </Field>
-        )}
+        ) : null}
 
         {mode === 'create' && canManage && targetMode === 'person' && (
           <Field label="Asignar a (usuarios de la congregacion)" error={errors.assignedTo}>

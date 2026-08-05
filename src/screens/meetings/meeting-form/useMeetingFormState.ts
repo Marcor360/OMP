@@ -9,8 +9,8 @@ import {
   extractWeekendSessionsFromSections,
 } from '@/src/services/meetings/weekend-meeting-adapter';
 import { ActiveCongregationUser } from '@/src/services/users/active-users-service';
-import { MeetingStatus } from '@/src/types/meeting';
 import {
+  MeetingPublicationStatus,
   MeetingProgramSection,
   MeetingProgramType,
   createDefaultSectionsForMeetingType,
@@ -46,7 +46,8 @@ export const useMeetingFormState = ({
   const [midweekMeetingDay, setMidweekMeetingDay] = useState<MidweekMeetingDay>(
     'monday'
   );
-  const [status, setStatus] = useState<MeetingStatus>('scheduled');
+  const [publicationStatus, setPublicationStatus] =
+    useState<MeetingPublicationStatus>('draft');
   const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(initialWeekStart);
   const [location, setLocation] = useState('');
   const [meetingUrl, setMeetingUrl] = useState('');
@@ -87,8 +88,8 @@ export const useMeetingFormState = ({
     setWeekendMeetingDay,
     midweekMeetingDay,
     setMidweekMeetingDay,
-    status,
-    setStatus,
+    publicationStatus,
+    setPublicationStatus,
     selectedWeekStart,
     setSelectedWeekStart,
     location,

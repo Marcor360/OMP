@@ -1008,15 +1008,11 @@ const syncSingleMeetingFromItems = async (params: {
     params.meetingType
   );
 
-  // Las reuniones generadas por el planificador nacen como esqueleto en 'draft'
-  // y su unico contenido son las asignaciones de hospitalidad. Sin publicarlas,
-  // notifyMeetingPublicationAndChanges corta en `afterStatus !== 'published'`.
-  // Las reuniones creadas desde el modulo de Reuniones conservan su estado:
-  // su propio flujo decide cuando publicarlas.
+  // Compatibilidad con esqueletos creados por versiones anteriores. El planificador
+  // ya no publica reuniones: solo actualiza sus asignaciones y las devuelve a revision.
   const isPlanningSkeleton =
     normalizeText(meetingData.origin) === 'hospitalityPlanning' ||
     meetingDoc.id.startsWith('planning-');
-  const alreadyPublished = normalizeText(meetingData.publicationStatus) === 'published';
 
   const updatePayload: FirestoreRecord = {
     sections,
@@ -1025,9 +1021,8 @@ const syncSingleMeetingFromItems = async (params: {
     updatedBy: params.requesterUid,
   };
 
-  if (isPlanningSkeleton && !alreadyPublished) {
-    updatePayload.publicationStatus = 'published';
-    updatePayload.publishedAt = FieldValue.serverTimestamp();
+  if (isPlanningSkeleton) {
+    updatePayload.publicationStatus = 'awaiting_assignments';
   }
 
   if (params.batch) {
@@ -1093,13 +1088,8 @@ export const ensurePlanningMeetingsByManager = onCall(
     const requester = await getRequesterProfile(request.auth.uid);
     assertHospitalityManager(requester, congregationId);
     const payload = parseEnsurePlanningMeetingsPayload(request.data);
-    const meetingsRef = adminDb
-      .collection('congregations')
-      .doc(payload.congregationId)
-      .collection('meetings');
-    const batch = adminDb.batch();
-    let createdMidweek = 0;
-    let createdWeekend = 0;
+    const createdMidweek = 0;
+    const createdWeekend = 0;
     let existing = 0;
 
     const candidates: { dateKey: string; meetingType: HospitalityMeetingType }[] = [];
@@ -1126,49 +1116,6 @@ export const ensurePlanningMeetingsByManager = onCall(
         continue;
       }
 
-      const meetingDate = parseDateKey(candidate.dateKey);
-      if (!meetingDate) continue;
-      const meetingTimestamp = Timestamp.fromDate(meetingDate);
-      const title = candidate.meetingType === 'midweek'
-        ? 'Reunion Vida y Ministerio Cristianos'
-        : 'Reunion del fin de semana';
-      const meetingRef = meetingsRef.doc(
-        `planning-${candidate.meetingType}-${candidate.dateKey}`
-      );
-
-      batch.set(meetingRef, {
-        congregationId: payload.congregationId,
-        title,
-        type: candidate.meetingType,
-        meetingCategory: candidate.meetingType,
-        status: 'scheduled',
-        publicationStatus: 'draft',
-        origin: 'hospitalityPlanning',
-        startDate: meetingTimestamp,
-        endDate: meetingTimestamp,
-        meetingDate: meetingTimestamp,
-        attendees: [request.auth.uid],
-        attendeeNames: requester.displayName ? [requester.displayName] : [],
-        sections: [],
-        assignedUserIds: [],
-        cleaningAssignmentMode: 'none',
-        cleaningGroupIds: [],
-        cleaningGroupNames: [],
-        searchableText: title.toLowerCase(),
-        organizerUid: request.auth.uid,
-        organizerName: requester.displayName ?? requester.email ?? 'Usuario',
-        createdBy: request.auth.uid,
-        updatedBy: request.auth.uid,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-
-      if (candidate.meetingType === 'midweek') createdMidweek += 1;
-      else createdWeekend += 1;
-    }
-
-    if (createdMidweek + createdWeekend > 0) {
-      await batch.commit();
     }
 
     return { ok: true, createdMidweek, createdWeekend, existing };

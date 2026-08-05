@@ -17,6 +17,7 @@ import {
 import { createBaseMidweekSections } from '@/src/types/midweek-meeting';
 
 const mockApplyPublishedPlanningToMeeting = jest.fn();
+const mockCreateMeeting = jest.fn();
 
 jest.mock('firebase/firestore', () => {
   class MockTimestamp {
@@ -66,6 +67,10 @@ jest.mock('@/src/services/repositories/firestore/firestore-midweek-meeting-repos
 jest.mock('@/src/services/meetings/meeting-autofill-service', () => ({
   applyPublishedPlanningToMeeting: (...args: unknown[]) =>
     mockApplyPublishedPlanningToMeeting(...args),
+}));
+
+jest.mock('@/src/services/meetings/meetings-service', () => ({
+  createMeeting: (...args: unknown[]) => mockCreateMeeting(...args),
 }));
 
 jest.mock('@/src/utils/logger', () => ({
@@ -173,26 +178,28 @@ describe('midweek-meetings-service repository port', () => {
     repo = new FakeMidweekMeetingRepository();
     __setMidweekMeetingRepositoryForTests(repo);
     mockApplyPublishedPlanningToMeeting.mockResolvedValue(null);
+    mockCreateMeeting.mockResolvedValue('created-midweek');
   });
 
   afterEach(() => {
     __resetMidweekMeetingRepositoryForTests();
     mockApplyPublishedPlanningToMeeting.mockReset();
+    mockCreateMeeting.mockReset();
   });
 
-  it('passes requiresManager true to create when planning lookup is permission denied', async () => {
-    mockApplyPublishedPlanningToMeeting.mockRejectedValueOnce({ code: 'permission-denied' });
-
+  it('routes creation through the guarded meeting service', async () => {
     await createMidweekMeeting('cong-1', makePayload(), {
       uid: 'user-1',
       displayName: 'User One',
     });
 
-    expect(repo.createCalls).toHaveLength(1);
-    expect(repo.createCalls[0]).toMatchObject({
-      congregationId: 'cong-1',
-      options: { requiresManager: true },
-    });
+    expect(repo.createCalls).toHaveLength(0);
+    expect(mockCreateMeeting).toHaveBeenCalledWith(
+      'cong-1',
+      expect.objectContaining({ type: 'midweek', meetingCategory: 'midweek' }),
+      'user-1',
+      'User One'
+    );
   });
 
   it('delegates weekly range reads with forceServer and maxItems options', async () => {
@@ -233,7 +240,7 @@ describe('midweek-meetings-service repository port', () => {
     expect(repo.updateCalls[0]).toMatchObject({
       congregationId: 'cong-1',
       id: 'meeting-1',
-      options: { requiresManager: false },
+      options: { requiresManager: true },
     });
     expect(repo.updateCalls[0]?.payload).toMatchObject({
       meetingCategory: 'midweek',

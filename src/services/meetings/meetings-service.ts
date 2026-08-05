@@ -226,7 +226,7 @@ export const createMeeting = async (
     throw new AppError('No se pueden crear reuniones con fechas que ya pasaron.');
   }
 
-  let shouldUseManagerFunction = inferredType === 'weekend';
+  let shouldUseManagerFunction = true;
   let duplicatedMeeting: Meeting | null = null;
 
   try {
@@ -279,14 +279,8 @@ export const createMeeting = async (
     : null;
   const plannedSections = planning?.sections ?? normalizedProgram.sections;
   const plannedAssignedUserIds = collectAssignedUserIds(plannedSections);
-  const plannedCleaningGroupIds =
-    planning && planning.cleaningGroupIds.length > 0
-      ? planning.cleaningGroupIds
-      : data.cleaningGroupIds ?? [];
-  const plannedCleaningGroupNames =
-    planning && planning.cleaningGroupNames.length > 0
-      ? planning.cleaningGroupNames
-      : data.cleaningGroupNames ?? [];
+  const plannedCleaningGroupIds = data.cleaningGroupIds ?? [];
+  const plannedCleaningGroupNames = data.cleaningGroupNames ?? [];
 
   const legacyMidweekSections =
     inferredType === 'midweek'
@@ -376,14 +370,8 @@ export const updateMeeting = async (
     : null;
   const plannedSections = planning?.sections ?? normalizedProgram.sections;
   const plannedAssignedUserIds = collectAssignedUserIds(plannedSections);
-  const plannedCleaningGroupIds =
-    planning && planning.cleaningGroupIds.length > 0
-      ? planning.cleaningGroupIds
-      : data.cleaningGroupIds;
-  const plannedCleaningGroupNames =
-    planning && planning.cleaningGroupNames.length > 0
-      ? planning.cleaningGroupNames
-      : data.cleaningGroupNames;
+  const plannedCleaningGroupIds = data.cleaningGroupIds;
+  const plannedCleaningGroupNames = data.cleaningGroupNames;
 
   const rawPayload: Record<string, unknown> = {
     title: data.title,
@@ -437,7 +425,7 @@ export const updateMeeting = async (
     timestampToDate(normalizedProgram.meetingDate);
   const updateRangeEnd = timestampToDate(data.endDate) ?? updateRangeStart;
 
-  let shouldUseManagerFunction = inferredType === 'weekend';
+  let shouldUseManagerFunction = true;
 
   if (updateRangeStart && updateRangeEnd) {
     try {

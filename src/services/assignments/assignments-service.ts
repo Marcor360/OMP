@@ -16,6 +16,7 @@ import type {
   AssignmentRepository,
   Unsubscribe,
 } from '@/src/services/repositories/ports/assignment-repository.port';
+import { AppError } from '@/src/utils/errors/errors';
 
 export type { SubscribeToAssignmentsOptions };
 
@@ -196,14 +197,19 @@ export const createAssignment = async (
 /** Crea una asignacion de limpieza para un grupo/familia completa. */
 export const createCleaningGroupAssignment = async (
   congregationId: string,
+  meetingId: string,
   data: CreateCleaningAssignmentDTO,
   assignedByUid: string,
   assignedByName: string
 ): Promise<string> => {
   assertCleaningAssignmentInput(congregationId, data);
+  if (isBlank(meetingId)) {
+    throw new AppError('La asignacion de limpieza requiere una reunion vinculada.');
+  }
 
   return assignmentRepository.createCleaningGroup(
     congregationId,
+    meetingId,
     data,
     assignedByUid,
     assignedByName

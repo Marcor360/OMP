@@ -17,8 +17,7 @@ type ServiceAssignment = {
   department?: string;
 };
 type UserPermissions = Record<string, Record<string, boolean> | undefined>;
-type MeetingStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
-type MeetingPublicationStatus = 'draft' | 'published';
+type MeetingPublicationStatus = 'draft' | 'awaiting_assignments' | 'published';
 type MeetingProgramKind = 'midweek' | 'weekend';
 
 type RequesterProfile = {
@@ -42,6 +41,7 @@ type UpdateMeetingByManagerPayload = {
   congregationId?: unknown;
   meetingId?: unknown;
   meetingData?: unknown;
+  scope?: unknown;
 };
 
 type DeleteMeetingByManagerPayload = {
@@ -189,13 +189,22 @@ const hasServiceAssignment = (
 
 const isMeetingsManager = (requester: RequesterProfile): boolean =>
   requester.role === 'admin' ||
-  requester.role === 'supervisor' ||
   requester.permissions?.reuniones?.manage === true ||
   (
     requester.permissions?.reuniones?.create === true &&
     requester.permissions?.reuniones?.edit === true
   ) ||
   hasServiceAssignment(requester, 'encargado', 'reuniones');
+
+const isAssignmentsManager = (requester: RequesterProfile): boolean =>
+  requester.role === 'admin' ||
+  requester.permissions?.asignaciones?.manage === true ||
+  (
+    requester.permissions?.asignaciones?.create === true &&
+    requester.permissions?.asignaciones?.edit === true
+  ) ||
+  hasServiceAssignment(requester, 'encargado', 'discursos') ||
+  hasServiceAssignment(requester, 'encargado', 'acomodadores_microfonos');
 
 const toCleaningMode = (value: unknown): 'none' | 'selected' | 'all' => {
   if (value === 'selected' || value === 'all') return value;
@@ -298,21 +307,48 @@ const sanitizeForFirestore = (value: unknown): unknown => {
   return value;
 };
 
-const isMeetingStatus = (value: unknown): value is MeetingStatus =>
-  value === 'pending' ||
-  value === 'scheduled' ||
-  value === 'in_progress' ||
-  value === 'completed' ||
-  value === 'cancelled';
-
-const normalizeMeetingStatus = (value: unknown): MeetingStatus =>
-  isMeetingStatus(value) ? value : 'scheduled';
-
 const isPublicationStatus = (value: unknown): value is MeetingPublicationStatus =>
-  value === 'draft' || value === 'published';
+  value === 'draft' || value === 'awaiting_assignments' || value === 'published';
 
 const normalizePublicationStatus = (value: unknown): MeetingPublicationStatus =>
   isPublicationStatus(value) ? value : 'draft';
+
+const toOperationalMaxTimestamp = (): Timestamp => {
+  const date = new Date();
+  date.setMonth(date.getMonth() + 2);
+  date.setHours(23, 59, 59, 999);
+  return Timestamp.fromDate(date);
+};
+
+export const buildMeetingDocId = (
+  meetingType: MeetingProgramKind,
+  meetingDate: Timestamp
+): string => {
+  const date = meetingDate.toDate();
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${meetingType}_${year}-${month}-${day}`;
+};
+
+const assertWithinOperationalWindow = (range: {
+  startDate: Timestamp;
+  endDate: Timestamp;
+}): void => {
+  if (range.endDate.toMillis() < toStartOfTodayTimestamp().toMillis()) {
+    throw new HttpsError(
+      'failed-precondition',
+      'No se pueden guardar reuniones con fechas que ya pasaron.'
+    );
+  }
+
+  if (range.startDate.toMillis() > toOperationalMaxTimestamp().toMillis()) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Solo se pueden programar reuniones dentro de los proximos 2 meses.'
+    );
+  }
+};
 
 const buildMeetingSearchableText = (params: {
   title: string;
@@ -416,6 +452,36 @@ const assertMeetingManager = (params: {
 
   if (params.requester.congregationId !== params.congregationId) {
     throw new HttpsError('permission-denied', 'No puedes gestionar reuniones de otra congregacion.');
+  }
+};
+
+const assertAssignmentsManager = (params: {
+  requester: RequesterProfile;
+  congregationId: string;
+}) => {
+  if (!params.requester.isActive) {
+    throw new HttpsError('permission-denied', 'Tu usuario esta inactivo.');
+  }
+  if (!isAssignmentsManager(params.requester)) {
+    throw new HttpsError(
+      'permission-denied',
+      'No tienes permisos para gestionar asignaciones.'
+    );
+  }
+  if (params.requester.congregationId !== params.congregationId) {
+    throw new HttpsError('permission-denied', 'No puedes gestionar asignaciones de otra congregacion.');
+  }
+};
+
+const assertMeetingReadyForAssignments = (
+  meetingData: Record<string, unknown>
+): void => {
+  const status = normalizePublicationStatus(meetingData.publicationStatus);
+  if (status !== 'awaiting_assignments' && status !== 'published') {
+    throw new HttpsError(
+      'failed-precondition',
+      'La reunion aun no esta lista para asignaciones.'
+    );
   }
 };
 
@@ -647,7 +713,16 @@ const buildMeetingWritePayload = (params: {
 }): Record<string, unknown> => {
   const meetingType = resolveMeetingType(params.meetingData);
   const meetingCategory = meetingType === 'midweek' ? 'midweek' : 'weekend';
-  const sections = normalizeMeetingSectionsFromDoc(params.meetingData);
+  const normalizedSections = normalizeMeetingSectionsFromDoc(params.meetingData);
+  const sections = params.isCreate
+    ? normalizedSections.map((section) => ({
+        ...section,
+        assignments: section.assignments.map((assignment) => ({
+          ...assignment,
+          assignees: [],
+        })),
+      }))
+    : normalizedSections;
   const assignedUserIds = buildAssignedUserIdsFromSections(sections);
   const startDate = toTimestamp(params.meetingData.startDate);
   const endDate = toTimestamp(params.meetingData.endDate);
@@ -672,7 +747,6 @@ const buildMeetingWritePayload = (params: {
     description,
     type: meetingType,
     meetingCategory,
-    status: normalizeMeetingStatus(params.meetingData.status),
     publicationStatus: normalizePublicationStatus(params.meetingData.publicationStatus),
     weekLabel: normalizeText(params.meetingData.weekLabel),
     bibleReading: normalizeText(params.meetingData.bibleReading),
@@ -731,6 +805,39 @@ const buildMeetingWritePayload = (params: {
   };
 };
 
+const preserveAssignmentNotificationMarkers = (
+  currentSections: ReturnType<typeof normalizeMeetingSectionsFromDoc>,
+  nextSections: ReturnType<typeof normalizeMeetingSectionsFromDoc>
+): ReturnType<typeof normalizeMeetingSectionsFromDoc> => {
+  const currentByTarget = new Map<string, typeof currentSections[number]['assignments'][number]['assignees'][number]>();
+  currentSections.forEach((section) => {
+    section.assignments.forEach((assignment) => {
+      assignment.assignees.forEach((assignee) => {
+        const identity = assignee.assigneeUserId ?? assignee.specialRoleKey ?? assignee.id;
+        currentByTarget.set(`${assignment.assignmentKey}:${identity}`, assignee);
+      });
+    });
+  });
+
+  return nextSections.map((section) => ({
+    ...section,
+    assignments: section.assignments.map((assignment) => ({
+      ...assignment,
+      assignees: assignment.assignees.map((assignee) => {
+        const identity = assignee.assigneeUserId ?? assignee.specialRoleKey ?? assignee.id;
+        const current = currentByTarget.get(`${assignment.assignmentKey}:${identity}`);
+        return {
+          ...assignee,
+          ...(current?.publishNotificationSentAt
+            ? { publishNotificationSentAt: current.publishNotificationSentAt }
+            : {}),
+          ...(current?.reminderSentAt ? { reminderSentAt: current.reminderSentAt } : {}),
+        };
+      }),
+    })),
+  }));
+};
+
 export const createMeetingByManager = onCall(
   { region: 'us-central1' },
   async (request): Promise<{ meetingId: string }> => {
@@ -747,12 +854,7 @@ export const createMeetingByManager = onCall(
     assertMeetingManager({ requester, congregationId });
     const meetingRange = toMeetingRangeFromData(meetingData);
 
-    if (meetingRange.endDate.toMillis() < toStartOfTodayTimestamp().toMillis()) {
-      throw new HttpsError(
-        'failed-precondition',
-        'No se pueden crear reuniones con fechas que ya pasaron.'
-      );
-    }
+    assertWithinOperationalWindow(meetingRange);
 
     await assertNoMeetingConflict({
       congregationId,
@@ -772,11 +874,25 @@ export const createMeetingByManager = onCall(
       isCreate: true,
     });
 
-    const ref = await adminDb
+    const docId = buildMeetingDocId(meetingRange.meetingType, meetingRange.startDate);
+    const ref = adminDb
       .collection('congregations')
       .doc(congregationId)
       .collection('meetings')
-      .add(meetingPayload);
+      .doc(docId);
+
+    await adminDb.runTransaction(async (transaction) => {
+      const existing = await transaction.get(ref);
+      if (existing.exists) {
+        throw new HttpsError(
+          'already-exists',
+          `Ya existe una reunion de ${
+            meetingRange.meetingType === 'midweek' ? 'entre semana' : 'fin de semana'
+          } para esa fecha.`
+        );
+      }
+      transaction.create(ref, meetingPayload);
+    });
 
     return { meetingId: ref.id };
   }
@@ -794,8 +910,13 @@ export const updateMeetingByManager = onCall(
     const meetingId = parseMeetingId(payload.meetingId);
     const meetingData = parseMeetingData(payload.meetingData);
     const requester = await getRequesterProfile(request.auth.uid);
+    const scope = payload.scope === 'assignments' ? 'assignments' : 'meeting';
 
-    assertMeetingManager({ requester, congregationId });
+    if (scope === 'assignments') {
+      assertAssignmentsManager({ requester, congregationId });
+    } else {
+      assertMeetingManager({ requester, congregationId });
+    }
 
     const meetingRef = adminDb
       .collection('congregations')
@@ -808,11 +929,74 @@ export const updateMeetingByManager = onCall(
       throw new HttpsError('not-found', 'Reunion no encontrada.');
     }
 
+    const currentMeetingData = meetingSnap.data() as Record<string, unknown>;
+
+    if (scope === 'assignments') {
+      assertMeetingReadyForAssignments(currentMeetingData);
+      if (!Array.isArray(meetingData.sections)) {
+        throw new HttpsError('invalid-argument', 'sections es obligatorio para asignaciones.');
+      }
+
+      const currentSections = normalizeMeetingSectionsFromDoc(currentMeetingData);
+      const requestedSections = normalizeMeetingSectionsFromDoc({
+        ...currentMeetingData,
+        sections: meetingData.sections,
+      });
+      const sections = preserveAssignmentNotificationMarkers(
+        currentSections,
+        requestedSections
+      );
+      const assignmentMeetingData = {
+        ...currentMeetingData,
+        sections: toFirestoreSectionsPayload(sections),
+      };
+
+      await assertNoOutgoingTalkAssignmentConflict({
+        congregationId,
+        meetingData: assignmentMeetingData,
+      });
+
+      await meetingRef.update({
+        sections: toFirestoreSectionsPayload(sections),
+        assignedUserIds: buildAssignedUserIdsFromSections(sections),
+        searchableText: buildMeetingSearchableText({
+          title: normalizeText(currentMeetingData.title) ?? 'Reunion',
+          description: normalizeText(currentMeetingData.description),
+          sections,
+        }),
+        publicationStatus:
+          normalizePublicationStatus(currentMeetingData.publicationStatus) === 'published'
+            ? 'awaiting_assignments'
+            : normalizePublicationStatus(currentMeetingData.publicationStatus),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: request.auth.uid,
+      });
+      return { ok: true };
+    }
+
+    const currentPublicationStatus = normalizePublicationStatus(
+      currentMeetingData.publicationStatus
+    );
+    const requestedPublicationStatus = isPublicationStatus(meetingData.publicationStatus)
+      ? meetingData.publicationStatus
+      : currentPublicationStatus;
+    const nextPublicationStatus =
+      currentPublicationStatus === 'published' ||
+      (currentPublicationStatus === 'draft' && requestedPublicationStatus === 'awaiting_assignments')
+        ? 'awaiting_assignments'
+        : currentPublicationStatus;
     const mergedMeetingData = {
-      ...(meetingSnap.data() as Record<string, unknown>),
+      ...currentMeetingData,
       ...meetingData,
+      // El editor de reuniones no es propietario de personas ni de la publicacion final.
+      sections: currentMeetingData.sections,
+      assignedUserIds: currentMeetingData.assignedUserIds,
+      publishedAt: currentMeetingData.publishedAt,
+      publicationStatus: nextPublicationStatus,
     };
     const mergedRange = toMeetingRangeFromData(mergedMeetingData);
+
+    assertWithinOperationalWindow(mergedRange);
 
     await assertNoMeetingConflict({
       congregationId,
@@ -956,13 +1140,15 @@ export const createMeetingAssignmentByManager = onCall(
     const meetingId = parseMeetingId(payload.meetingId);
     const assignmentData = sanitizeAssignmentInput(parseAssignmentData(payload.assignmentData));
     const requester = await getRequesterProfile(request.auth.uid);
-    assertMeetingManager({ requester, congregationId });
+    assertAssignmentsManager({ requester, congregationId });
 
     const meetingRef = adminDb.collection('congregations').doc(congregationId)
       .collection('meetings').doc(meetingId);
-    if (!(await meetingRef.get()).exists) {
+    const meetingSnap = await meetingRef.get();
+    if (!meetingSnap.exists) {
       throw new HttpsError('not-found', 'Reunion no encontrada.');
     }
+    assertMeetingReadyForAssignments(meetingSnap.data() as Record<string, unknown>);
 
     const dueDate = toTimestamp(assignmentData.dueDate) ?? toTimestamp(assignmentData.date);
     await assertNoOutgoingTalkConflictForUser({
@@ -1008,13 +1194,15 @@ export const updateMeetingAssignmentByManager = onCall(
     const assignmentId = parseMeetingId(payload.assignmentId);
     const assignmentData = sanitizeAssignmentInput(parseAssignmentData(payload.assignmentData));
     const requester = await getRequesterProfile(request.auth.uid);
-    assertMeetingManager({ requester, congregationId });
+    assertAssignmentsManager({ requester, congregationId });
 
     const meetingRef = adminDb.collection('congregations').doc(congregationId)
       .collection('meetings').doc(meetingId);
-    if (!(await meetingRef.get()).exists) {
+    const meetingSnap = await meetingRef.get();
+    if (!meetingSnap.exists) {
       throw new HttpsError('not-found', 'Reunion no encontrada.');
     }
+    assertMeetingReadyForAssignments(meetingSnap.data() as Record<string, unknown>);
 
     const ref = adminDb
       .collection('congregations')
@@ -1065,7 +1253,7 @@ export const deleteMeetingAssignmentByManager = onCall(
     const meetingId = parseMeetingId(payload.meetingId);
     const assignmentId = parseMeetingId(payload.assignmentId);
     const requester = await getRequesterProfile(request.auth.uid);
-    assertMeetingManager({requester, congregationId});
+    assertAssignmentsManager({requester, congregationId});
 
     const congregationRef = adminDb.collection('congregations').doc(congregationId);
     const meetingRef = congregationRef.collection('meetings').doc(meetingId);

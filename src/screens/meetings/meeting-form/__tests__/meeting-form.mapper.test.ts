@@ -61,6 +61,8 @@ describe('meeting-form.mapper', () => {
 
   it('builds the same draft payload shape used by the form', () => {
     const payload = buildMeetingPayload({
+      mode: 'create',
+      intent: 'draft',
       startDate: new Date(2026, 5, 20),
       endDate: new Date(2026, 5, 21),
       actorUid: 'user-1',
@@ -69,7 +71,6 @@ describe('meeting-form.mapper', () => {
       description: 'Descripcion',
       meetingType: 'weekend',
       selectedWeekLabel: '20/06/2026 - 26/06/2026',
-      status: 'scheduled',
       location: 'Salon',
       meetingUrl: 'https://example.com',
       notes: '',

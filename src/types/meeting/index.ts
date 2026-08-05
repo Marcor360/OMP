@@ -6,6 +6,7 @@ import {
   MeetingPublicationStatus,
 } from '@/src/types/meeting/program';
 
+/** @deprecated Campo legado. El ciclo operativo usa publicationStatus. */
 export type MeetingStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type MeetingCategory = 'general' | 'midweek' | 'weekend';
 export type MeetingCleaningAssignmentMode = 'none' | 'selected' | 'all';
@@ -160,5 +161,6 @@ export const MEETING_TYPE_LABELS: Record<MeetingType, string> = {
 
 export const MEETING_PUBLICATION_STATUS_LABELS: Record<MeetingPublicationStatus, string> = {
   draft: 'Borrador',
+  awaiting_assignments: 'En espera de asignaciones',
   published: 'Publicada',
 };

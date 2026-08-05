@@ -22,6 +22,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
 import { useMeetingsManagementPermission } from '@/src/hooks/use-meetings-management-permission';
+import { useI18n } from '@/src/i18n/index';
 import { buildMeetingProgramFromMeeting } from '@/src/services/meetings/meeting-program-utils';
 import { getCleaningGroups } from '@/src/modules/cleaning/services/cleaning-service';
 import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types';
@@ -31,26 +32,27 @@ import {
   createEmptyWeekendMeetingSession,
   extractWeekendSessionsFromSections,
 } from '@/src/services/meetings/weekend-meeting-adapter';
-import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
 import {
   OUTGOING_TALK_BLOCK_MESSAGE,
   getBlockedOutgoingTalkUserIds,
 } from '@/src/modules/assignments/utils/outgoing-talks';
+import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
 import { resolveMeetingTemplate } from '@/src/services/meetings/meeting-template';
 import { getMeetingById, getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
+import { updateMeetingAssignmentsByManager } from '@/src/services/meetings/manager-meetings-service';
 import {
   ActiveCongregationUser,
   getActiveCongregationUsers,
 } from '@/src/services/users/active-users-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
-  MeetingStatus,
-  MEETING_STATUS_LABELS,
+  MEETING_PUBLICATION_STATUS_LABELS,
   MEETING_TYPE_LABELS,
 } from '@/src/types/meeting';
 import {
   MeetingProgramSection,
   MeetingProgramType,
+  MeetingPublicationStatus,
   createDefaultSectionsForMeetingType,
   moveMeetingSection,
 } from '@/src/types/meeting/program';
@@ -58,6 +60,7 @@ import { formatWeekLabel, getWeekStart, moveWeek } from '@/src/utils/dates/week-
 import { formatDateKey, parseDateKey } from '@/src/utils/dates/date-key';
 import { getOperationalDateBounds } from '@/src/utils/dates/operational-window';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { canManageAssignments } from '@/src/utils/permissions/permissions';
 import {
   CleaningSelectionMode,
   DEFAULT_TITLE_BY_TYPE,
@@ -67,7 +70,6 @@ import {
   MIDWEEK_MEETING_DAY_OPTIONS,
   MeetingConflictNotice,
   Mode,
-  STATUS_OPTIONS,
   TYPE_OPTIONS,
   WEEKEND_MEETING_DAY_LABELS,
   WeekendMeetingDay,
@@ -96,16 +98,30 @@ import { useMeetingPublishFlow } from '@/src/screens/meetings/meeting-form/useMe
 import { useMeetingValidation } from '@/src/screens/meetings/meeting-form/useMeetingValidation';
 
 export function MeetingFormScreen() {
-  const { id, type: typeParam } = useLocalSearchParams<{ id?: string; type?: string }>();
+  const { id, type: typeParam, source } = useLocalSearchParams<{
+    id?: string;
+    type?: string;
+    source?: string;
+  }>();
   const router = useRouter();
+  const { t } = useI18n();
   const { user } = useAuth();
   const { appUser } = useUser();
-  const { canManage, congregationId, uid, loading: loadingPermissions } = useMeetingsManagementPermission();
+  const {
+    canManage: canManageMeetings,
+    congregationId,
+    uid,
+    loading: loadingPermissions,
+  } = useMeetingsManagementPermission();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const scrollRef = useRef<ScrollView | null>(null);
 
   const mode: Mode = id ? 'edit' : 'create';
+  const isAssignmentEditor = source === 'assignments' && mode === 'edit';
+  const canManage = isAssignmentEditor
+    ? canManageAssignments(appUser)
+    : canManageMeetings;
   const initialType: MeetingProgramType = typeParam === 'midweek' ? 'midweek' : 'weekend';
   const initialWeekStart = getWeekStart(new Date());
   const operationalBounds = useMemo(() => getOperationalDateBounds(), []);
@@ -122,8 +138,8 @@ export function MeetingFormScreen() {
     setWeekendMeetingDay,
     midweekMeetingDay,
     setMidweekMeetingDay,
-    status,
-    setStatus,
+    publicationStatus,
+    setPublicationStatus,
     selectedWeekStart,
     setSelectedWeekStart,
     location,
@@ -179,8 +195,12 @@ export function MeetingFormScreen() {
       try {
         setLoading(mode === 'edit');
 
-        const usersPromise = getActiveCongregationUsers(congregationId);
-        const cleaningGroupsPromise = getCleaningGroups(congregationId);
+        const usersPromise = isAssignmentEditor
+          ? getActiveCongregationUsers(congregationId)
+          : Promise.resolve<ActiveCongregationUser[]>([]);
+        const cleaningGroupsPromise = isAssignmentEditor
+          ? Promise.resolve<CleaningGroup[]>([])
+          : getCleaningGroups(congregationId);
         const meetingPromise = mode === 'edit' && id ? getMeetingById(congregationId, id) : Promise.resolve(null);
         const [users, loadedCleaningGroups, meeting] = await Promise.all([
           usersPromise,
@@ -197,7 +217,7 @@ export function MeetingFormScreen() {
           setDescription(meeting.description ?? '');
           const inferredMeetingType = inferProgramTypeFromMeeting(meeting);
           setMeetingType(inferredMeetingType);
-          setStatus(meeting.status);
+          setPublicationStatus(meeting.publicationStatus ?? 'draft');
           const parsedStart = toDateFromDateLike(meeting.startDate);
           const parsedWeekStart = getWeekStart(parsedStart);
           setSelectedWeekStart(parsedWeekStart);
@@ -242,6 +262,7 @@ export function MeetingFormScreen() {
     canManage,
     congregationId,
     id,
+    isAssignmentEditor,
     loadingPermissions,
     mode,
     router,
@@ -258,7 +279,7 @@ export function MeetingFormScreen() {
     setSections,
     setSelectedCleaningGroupIds,
     setSelectedWeekStart,
-    setStatus,
+    setPublicationStatus,
     setTitle,
     setWeekendMeetingDay,
     setWeekendSessions,
@@ -287,17 +308,16 @@ export function MeetingFormScreen() {
   };
 
   const effectiveSections = useMemo<MeetingProgramSection[]>(() => {
-    if (meetingType === 'weekend') {
+    if (isAssignmentEditor && meetingType === 'weekend') {
       return buildWeekendSectionsFromSessions({
         sessions: weekendSessions,
         activeUsers: availableUsers,
       });
     }
-
     return sections
       .map((section, sectionIndex) => ({ ...section, order: sectionIndex }))
       .sort((left, right) => left.order - right.order);
-  }, [availableUsers, meetingType, sections, weekendSessions]);
+  }, [availableUsers, isAssignmentEditor, meetingType, sections, weekendSessions]);
 
   const selectedWeekEnd = useMemo(() => {
     const next = new Date(selectedWeekStart);
@@ -361,10 +381,7 @@ export function MeetingFormScreen() {
   }, [meetingType, selectedMidweekMeetingDate, selectedWeekendMeetingDate]);
 
   useEffect(() => {
-    if (!congregationId || meetingType !== 'weekend') {
-      setOutgoingTalks([]);
-      return;
-    }
+    if (!isAssignmentEditor || !congregationId || meetingType !== 'weekend') return;
 
     let cancelled = false;
     void getScheduledOutgoingTalksForWeek(congregationId, resolvedMeetingDate)
@@ -378,7 +395,7 @@ export function MeetingFormScreen() {
     return () => {
       cancelled = true;
     };
-  }, [congregationId, meetingType, resolvedMeetingDate, setOutgoingTalks]);
+  }, [congregationId, isAssignmentEditor, meetingType, resolvedMeetingDate, setOutgoingTalks]);
 
   const blockedOutgoingTalkUserIds = useMemo(
     () => meetingType === 'weekend'
@@ -451,10 +468,25 @@ export function MeetingFormScreen() {
     setDuplicateMeetingHint,
   ]);
 
-  const currentStepIndex = FORM_STEPS.findIndex((step) => step.key === currentStep);
-  const isReviewStep = currentStep === 'review';
+  const visibleSteps = useMemo(
+    () =>
+      isAssignmentEditor
+        ? [{
+            key: 'program' as const,
+            title: t('meetings.form.programTitle'),
+            subtitle: t('meetings.form.assignmentsSubtitle'),
+          }]
+        : FORM_STEPS,
+    [isAssignmentEditor, t]
+  );
+
+  useEffect(() => {
+    if (isAssignmentEditor) setCurrentStep('program');
+  }, [isAssignmentEditor, setCurrentStep]);
+
+  const currentStepIndex = visibleSteps.findIndex((step) => step.key === currentStep);
   const canGoBackStep = currentStepIndex > 0;
-  const canGoNextStep = currentStepIndex < FORM_STEPS.length - 1;
+  const canGoNextStep = currentStepIndex >= 0 && currentStepIndex < visibleSteps.length - 1;
 
   const {
     missingAssignmentLabels,
@@ -542,20 +574,14 @@ export function MeetingFormScreen() {
     authUid: user?.uid,
     authEmail: user?.email,
     appUserDisplayName: appUser?.displayName,
-    isReviewStep,
     meetingType,
     title,
     description,
     selectedWeekLabel,
-    status,
     location,
     meetingUrl,
     notes,
     effectiveSections,
-    sections,
-    weekendSessions,
-    availableUsers,
-    blockedOutgoingTalkUserIds,
     cleaningSelectionMode,
     selectedCleaningGroups,
     resolvedMeetingDate,
@@ -564,7 +590,7 @@ export function MeetingFormScreen() {
       setErrors(validation.errors);
       return validation;
     },
-    setMidweekAssignmentErrors,
+    savingIntent,
     setCurrentStep,
     setSavingIntent,
     setSaveError,
@@ -577,6 +603,27 @@ export function MeetingFormScreen() {
       router.replace(href as never);
     },
   });
+
+  const handleAssignmentSave = async () => {
+    if (savingIntent !== null || !congregationId || !id) return;
+    setSavingIntent('published');
+    setSaveError(null);
+    try {
+      await updateMeetingAssignmentsByManager({
+        congregationId,
+        meetingId: id,
+        sections: effectiveSections,
+      });
+      router.replace('/(protected)/(tabs)/assignments' as never);
+    } catch (requestError) {
+      const message = formatFirestoreError(requestError);
+      setSaveError(message);
+      showPanelErrors([message]);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    } finally {
+      setSavingIntent(null);
+    }
+  };
 
   if (loading || loadingPermissions) {
     return <LoadingState message="Cargando formulario de reuniones..." />;
@@ -592,20 +639,29 @@ export function MeetingFormScreen() {
 
   const goToPreviousStep = () => {
     if (!canGoBackStep) return;
-    goToStep(FORM_STEPS[currentStepIndex - 1].key);
+    goToStep(visibleSteps[currentStepIndex - 1].key);
   };
 
   const goToNextStep = () => {
     if (!canGoNextStep) return;
-    goToStep(FORM_STEPS[currentStepIndex + 1].key);
+    goToStep(visibleSteps[currentStepIndex + 1].key);
   };
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
-      <PageHeader title={mode === 'create' ? 'Nueva reunion' : 'Editar reunion'} showBack />
+      <PageHeader
+        title={
+          isAssignmentEditor
+            ? t('meetings.form.assignmentEditorTitle')
+            : mode === 'create'
+              ? 'Nueva reunion'
+              : 'Editar reunion'
+        }
+        showBack
+      />
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
-        <MeetingStepIndicator currentStep={currentStep} />
+        <MeetingStepIndicator currentStep={currentStep} steps={visibleSteps} />
 
         <MeetingPublishErrorsPanel errors={publishErrors} saveError={saveError} />
 
@@ -638,7 +694,7 @@ export function MeetingFormScreen() {
             description={description}
             location={location}
             meetingUrl={meetingUrl}
-            status={status}
+            publicationStatus={publicationStatus}
             notes={notes}
             errors={errors}
             canManage={canManage}
@@ -646,7 +702,6 @@ export function MeetingFormScreen() {
             onDescriptionChange={setDescription}
             onLocationChange={setLocation}
             onMeetingUrlChange={setMeetingUrl}
-            onStatusChange={setStatus}
             onNotesChange={setNotes}
           />
         ) : null}
@@ -715,15 +770,23 @@ export function MeetingFormScreen() {
         </View>
 
         <View style={styles.row}>
-          <TouchableOpacity style={[styles.secondaryAction, Boolean(savingIntent) && styles.dim]} onPress={() => handleSave('draft')} disabled={Boolean(savingIntent) || !canManage}>
-            {savingIntent === 'draft' ? <ActivityIndicator size="small" color={colors.primary} /> : <ThemedText style={styles.secondaryText}>Guardar borrador</ThemedText>}
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.primaryAction, Boolean(savingIntent) && styles.dim]} onPress={() => handleSave('published')} disabled={Boolean(savingIntent) || !canManage}>
+          {!isAssignmentEditor ? (
+            <TouchableOpacity style={[styles.secondaryAction, Boolean(savingIntent) && styles.dim]} onPress={() => handleSave('draft')} disabled={Boolean(savingIntent) || !canManage}>
+              {savingIntent === 'draft' ? <ActivityIndicator size="small" color={colors.primary} /> : <ThemedText style={styles.secondaryText}>Guardar borrador</ThemedText>}
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            style={[styles.primaryAction, Boolean(savingIntent) && styles.dim]}
+            onPress={() => isAssignmentEditor ? void handleAssignmentSave() : handleSave('published')}
+            disabled={Boolean(savingIntent) || !canManage}
+          >
             {savingIntent === 'published' ? (
               <ActivityIndicator size="small" color={colors.onPrimary} />
             ) : (
               <ThemedText style={styles.primaryText}>
-                {isReviewStep ? 'Confirmar publicacion' : 'Revisar y publicar'}
+                {isAssignmentEditor
+                  ? t('meetings.form.saveAssignments')
+                  : t('meetings.form.saveAndContinue')}
               </ThemedText>
             )}
           </TouchableOpacity>
@@ -744,14 +807,20 @@ export function MeetingFormScreen() {
   );
 }
 
-function MeetingStepIndicator({ currentStep }: { currentStep: FormStepKey }) {
+function MeetingStepIndicator({
+  currentStep,
+  steps,
+}: {
+  currentStep: FormStepKey;
+  steps: { key: FormStepKey; title: string; subtitle: string }[];
+}) {
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const currentIndex = FORM_STEPS.findIndex((step) => step.key === currentStep);
+  const currentIndex = steps.findIndex((step) => step.key === currentStep);
 
   return (
     <View style={styles.stepper}>
-      {FORM_STEPS.map((step, index) => {
+      {steps.map((step, index) => {
         const isActive = step.key === currentStep;
         const isDone = index < currentIndex;
 
@@ -990,7 +1059,7 @@ function MeetingBasicInfoStep({
   description,
   location,
   meetingUrl,
-  status,
+  publicationStatus,
   notes,
   errors,
   canManage,
@@ -998,14 +1067,13 @@ function MeetingBasicInfoStep({
   onDescriptionChange,
   onLocationChange,
   onMeetingUrlChange,
-  onStatusChange,
   onNotesChange,
 }: {
   title: string;
   description: string;
   location: string;
   meetingUrl: string;
-  status: MeetingStatus;
+  publicationStatus: MeetingPublicationStatus;
   notes: string;
   errors: MeetingFormErrors;
   canManage: boolean;
@@ -1013,7 +1081,6 @@ function MeetingBasicInfoStep({
   onDescriptionChange: (value: string) => void;
   onLocationChange: (value: string) => void;
   onMeetingUrlChange: (value: string) => void;
-  onStatusChange: (value: MeetingStatus) => void;
   onNotesChange: (value: string) => void;
 }) {
   const colors = useAppColors();
@@ -1060,15 +1127,11 @@ function MeetingBasicInfoStep({
         </View>
       </View>
 
-      <Field label="Estado operativo">
-        <View style={styles.chips}>
-          {STATUS_OPTIONS.map((option) => (
-            <TouchableOpacity key={option} style={[styles.chip, status === option && styles.chipActive]} onPress={() => onStatusChange(option)} disabled={!canManage}>
-              <ThemedText style={[styles.chipText, status === option && styles.chipTextActive]}>
-                {MEETING_STATUS_LABELS[option]}
-              </ThemedText>
-            </TouchableOpacity>
-          ))}
+      <Field label="Estado de publicacion">
+        <View style={styles.autoRangeBox}>
+          <ThemedText style={styles.autoRangeText}>
+            {MEETING_PUBLICATION_STATUS_LABELS[publicationStatus]}
+          </ThemedText>
         </View>
       </Field>
 

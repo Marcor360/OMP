@@ -1,5 +1,6 @@
 import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import { applyPublishedPlanningToMeeting } from '@/src/services/meetings/meeting-autofill-service';
+import { createMeeting } from '@/src/services/meetings/meetings-service';
 import {
   convertProgramSectionsToLegacyMidweekSections,
   normalizeMeetingProgramPayload,
@@ -116,85 +117,34 @@ export const createMidweekMeeting = async (
   payload: MidweekMeetingPayload,
   actor: MidweekMeetingActor
 ): Promise<string> => {
-  const normalizedProgram = normalizeMeetingProgramPayload({
-    meetingType: 'midweek',
-    title: payload.title,
-    description: payload.description,
-    startDate: payload.startDate,
-    meetingDate: payload.meetingDate,
-    sections: payload.sections,
-    publicationStatus: payload.publicationStatus,
-    legacyMidweekSections: payload.midweekSections,
-  });
-  let shouldUseManagerFunction = false;
-  const planning = await applyPublishedPlanningToMeeting({
-    congregationId,
-    meetingType: 'midweek',
-    meetingDate: normalizedProgram.meetingDate.toDate(),
-    sections: normalizedProgram.sections,
-  }).catch((error) => {
-    if (isFirebaseErrorCode(error, 'permission-denied')) {
-      shouldUseManagerFunction = true;
-    }
-
-    log.warn('Midweek meeting planning autofill skipped:', error);
-    return null;
-  });
-  const plannedSections = planning?.sections ?? normalizedProgram.sections;
-  const normalizedSections = convertProgramSectionsToLegacyMidweekSections(
-    plannedSections
-  );
-  const plannedAssignedUserIds = collectAssignedUserIds(plannedSections);
-
-  const rawPayload: Record<string, unknown> = {
+  return createMeeting(congregationId, {
     meetingCategory: 'midweek',
     type: 'midweek',
     title: payload.title.trim(),
-    description: payload.description?.trim() || null,
+    description: payload.description?.trim() || undefined,
     weekLabel: payload.weekLabel.trim(),
     bibleReading: payload.bibleReading.trim(),
     startDate: payload.startDate,
     endDate: payload.endDate,
-    meetingDate: normalizedProgram.meetingDate,
-    status: payload.status ?? ('scheduled' as MeetingStatus),
-    publicationStatus: normalizedProgram.publicationStatus,
-    publishedAt: payload.publishedAt ?? null,
-    location: payload.location?.trim() || null,
-    meetingUrl: payload.meetingUrl?.trim() || null,
-    zoomMeetingId: payload.zoomMeetingId?.trim() || null,
-    zoomPasscode: payload.zoomPasscode?.trim() || null,
-    notes: payload.notes?.trim() || null,
-    openingSong: payload.openingSong?.trim() || null,
-    openingPrayer: payload.openingPrayer?.trim() || null,
-    middleSong: payload.middleSong?.trim() || null,
-    closingSong: payload.closingSong?.trim() || null,
-    closingPrayer: payload.closingPrayer?.trim() || null,
-    chairman: payload.chairman?.trim() || null,
-    sections: plannedSections,
-    midweekSections: normalizedSections,
-    assignedUserIds: plannedAssignedUserIds,
-    searchableText: buildMeetingSearchableText({
-      title: payload.title,
-      description: payload.description,
-      sections: plannedSections,
-    }),
-    cleaningAssignmentMode:
-      planning && planning.cleaningGroupIds.length > 0 ? 'selected' : undefined,
-    cleaningGroupIds:
-      planning && planning.cleaningGroupIds.length > 0 ? planning.cleaningGroupIds : undefined,
-    cleaningGroupNames:
-      planning && planning.cleaningGroupNames.length > 0 ? planning.cleaningGroupNames : undefined,
-    organizerUid: actor.uid,
-    organizerName: actor.displayName,
+    meetingDate: payload.meetingDate ?? payload.startDate,
+    publicationStatus: payload.publicationStatus ?? 'draft',
+    location: payload.location?.trim() || undefined,
+    meetingUrl: payload.meetingUrl?.trim() || undefined,
+    zoomMeetingId: payload.zoomMeetingId?.trim() || undefined,
+    zoomPasscode: payload.zoomPasscode?.trim() || undefined,
+    notes: payload.notes?.trim() || undefined,
+    openingSong: payload.openingSong?.trim() || undefined,
+    openingPrayer: payload.openingPrayer?.trim() || undefined,
+    closingSong: payload.closingSong?.trim() || undefined,
+    closingPrayer: payload.closingPrayer?.trim() || undefined,
+    chairman: payload.chairman?.trim() || undefined,
+    sections: payload.sections,
+    midweekSections: payload.midweekSections,
     attendees: actor.uid ? [actor.uid] : [],
     attendeeNames: payload.attendeeNames?.filter((name) => name.trim().length > 0) ?? [],
     createdBy: actor.uid,
     updatedBy: actor.uid,
-  };
-
-  return midweekMeetingRepository.create(congregationId, rawPayload, {
-    requiresManager: shouldUseManagerFunction,
-  });
+  }, actor.uid, actor.displayName);
 };
 
 export const updateMidweekMeeting = async (
@@ -213,7 +163,7 @@ export const updateMidweekMeeting = async (
     publicationStatus: payload.publicationStatus,
     legacyMidweekSections: payload.midweekSections,
   });
-  let shouldUseManagerFunction = false;
+  let shouldUseManagerFunction = true;
   const planning = await applyPublishedPlanningToMeeting({
     congregationId,
     meetingId,

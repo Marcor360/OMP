@@ -37,7 +37,7 @@ const isMeetingCategory = (value: unknown): value is MeetingCategory =>
   value === 'general' || value === 'midweek' || value === 'weekend';
 
 const isPublicationStatus = (value: unknown): value is MeetingPublicationStatus =>
-  value === 'draft' || value === 'published';
+  value === 'draft' || value === 'awaiting_assignments' || value === 'published';
 
 const isCleaningAssignmentMode = (value: unknown): value is MeetingCleaningAssignmentMode =>
   value === 'none' || value === 'selected' || value === 'all';

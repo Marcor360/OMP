@@ -5,11 +5,12 @@ import { adminDb } from './config/firebaseAdmin.js';
 import {
   SPECIAL_CIRCUIT_OVERSEER_KEY,
   buildAssignedUserIdsFromSections,
-  clearMeetingNotificationMarkers,
+  canTransitionPublicationStatus,
   normalizeMeetingSectionsFromDoc,
   resolveMeetingDate,
   resolveMeetingType,
   toFirestoreSectionsPayload,
+  type MeetingPublicationStatus,
 } from './modules/meetings/meeting-sections.js';
 
 type UserRole = 'admin' | 'supervisor' | 'user';
@@ -37,7 +38,7 @@ type SetMeetingPublicationStatusPayload = {
 
 type SetMeetingPublicationStatusResult = {
   ok: boolean;
-  publicationStatus: 'draft' | 'published';
+  publicationStatus: MeetingPublicationStatus;
   assignedUserIds: string[];
   errors: string[];
 };
@@ -137,7 +138,6 @@ const hasServiceAssignment = (
 
 const isMeetingsManager = (requester: RequesterProfile): boolean =>
   requester.role === 'admin' ||
-  requester.role === 'supervisor' ||
   requester.permissions?.reuniones?.manage === true ||
   (
     requester.permissions?.reuniones?.create === true &&
@@ -226,7 +226,7 @@ const parsePayload = (
 ): {
   congregationId: string;
   meetingId: string;
-  publicationStatus: 'draft' | 'published';
+  publicationStatus: MeetingPublicationStatus;
 } => {
   const congregationId = normalizeText(payload.congregationId);
   const meetingId = normalizeText(payload.meetingId);
@@ -239,7 +239,11 @@ const parsePayload = (
     );
   }
 
-  if (publicationStatus !== 'draft' && publicationStatus !== 'published') {
+  if (
+    publicationStatus !== 'draft' &&
+    publicationStatus !== 'awaiting_assignments' &&
+    publicationStatus !== 'published'
+  ) {
     throw new HttpsError(
       'invalid-argument',
       'publicationStatus invalido.'
@@ -562,24 +566,41 @@ export const setMeetingPublicationStatus = onCall(
     }
 
     const meetingData = meetingSnap.data() as Record<string, unknown>;
+    const currentStatus: MeetingPublicationStatus =
+      meetingData.publicationStatus === 'awaiting_assignments' ||
+      meetingData.publicationStatus === 'published'
+        ? meetingData.publicationStatus
+        : 'draft';
 
-    if (parsed.publicationStatus === 'draft') {
+    if (!canTransitionPublicationStatus(currentStatus, parsed.publicationStatus)) {
+      throw new HttpsError(
+        'failed-precondition',
+        `Transicion no permitida: ${currentStatus} -> ${parsed.publicationStatus}.`
+      );
+    }
+
+    if (parsed.publicationStatus !== 'published') {
       const sections = normalizeMeetingSectionsFromDoc(meetingData);
-      const cleanedSections = clearMeetingNotificationMarkers(sections);
+
+      if (parsed.publicationStatus === 'awaiting_assignments' && sections.length === 0) {
+        throw new HttpsError(
+          'failed-precondition',
+          'La reunion debe tener al menos una seccion antes de pasar a asignaciones.'
+        );
+      }
 
       await meetingRef.update({
-        publicationStatus: 'draft',
-        publishedAt: null,
-        sections: toFirestoreSectionsPayload(cleanedSections),
-        assignedUserIds: buildAssignedUserIdsFromSections(cleanedSections),
+        publicationStatus: parsed.publicationStatus,
+        sections: toFirestoreSectionsPayload(sections),
+        assignedUserIds: buildAssignedUserIdsFromSections(sections),
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: request.auth.uid,
       });
 
       return {
         ok: true,
-        publicationStatus: 'draft',
-        assignedUserIds: buildAssignedUserIdsFromSections(cleanedSections),
+        publicationStatus: parsed.publicationStatus,
+        assignedUserIds: buildAssignedUserIdsFromSections(sections),
         errors: [],
       };
     }

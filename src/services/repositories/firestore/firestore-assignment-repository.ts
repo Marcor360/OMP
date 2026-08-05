@@ -1,13 +1,11 @@
 import {
   Timestamp,
-  addDoc,
-  collection,
+  collectionGroup,
   type DocumentData,
   limit,
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
   where,
   type Query,
   type QueryConstraint,
@@ -40,7 +38,6 @@ import type {
   AssignmentRepository,
 } from '@/src/services/repositories/ports/assignment-repository.port';
 import { clearSessionCacheByPrefix } from '@/src/services/repositories/session-cache';
-import { sanitizeForFirestore } from '@/src/services/meetings/firestore-payload';
 import type {
   Assignment,
   AssignmentStatus,
@@ -452,38 +449,24 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
 
   createCleaningGroup: async (
     congregationId: string,
+    meetingId: string,
     data: CreateCleaningAssignmentDTO,
     assignedByUid: string,
     assignedByName: string
   ): Promise<string> => {
-    const ref = await addDoc(
-      collection(db, 'congregations', congregationId, 'assignments'),
-      sanitizeForFirestore({
-        congregationId,
+    return createAssignmentViaFunction(
+      congregationId,
+      meetingId,
+      {
+        ...data,
         category: 'cleaning',
-        type: 'cleaning',
-        title: data.title,
-        description: data.description ?? '',
-        notes: data.description ?? '',
-        priority: data.priority,
-        cleaningGroupId: data.cleaningGroupId,
-        cleaningGroupName: data.cleaningGroupName,
         assignedToUid: data.cleaningGroupId,
         assignedToName: data.cleaningGroupName,
-        assignedByUid,
-        assignedByName,
-        createdBy: assignedByUid,
-        updatedBy: assignedByUid,
-        dueDate: data.dueDate,
-        date: data.dueDate,
-        status: 'pending' as AssignmentStatus,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      })
+        meetingId,
+      },
+      assignedByUid,
+      assignedByName
     );
-
-    invalidateAssignmentCache(congregationId);
-    return ref.id;
   },
 
   update: async (
@@ -528,84 +511,33 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     onError?: (error: unknown) => void,
     options?: SubscribeToAssignmentsOptions
   ) => {
-    const assignmentsByMeeting = new Map<string, Assignment[]>();
-    const assignmentsUnsubs = new Map<string, () => void>();
     const listenerKey = `assignments:congregation:${congregationId}`;
     logFirestoreListenerCreated(listenerKey);
-
-    const emit = () => {
-      const merged = sortAssignmentsByDueDate(
-        dedupeAssignments(Array.from(assignmentsByMeeting.values()).flat())
-      );
-      callback(applyAssignmentFilters(merged, filters));
-    };
-
-    const releaseMeetingListener = (meetingId: string) => {
-      const unsubscribe = assignmentsUnsubs.get(meetingId);
-      if (unsubscribe) {
-        logFirestoreListenerDestroyed(`assignments:meeting:${congregationId}:${meetingId}`);
-        unsubscribe();
-        assignmentsUnsubs.delete(meetingId);
-      }
-
-      assignmentsByMeeting.delete(meetingId);
-    };
 
     const windowStart = new Date();
     windowStart.setMonth(
       windowStart.getMonth() -
         (options?.windowMonthsBack ?? SUBSCRIBE_WINDOW_MONTHS_BACK)
     );
+    const windowEnd = new Date();
+    windowEnd.setMonth(windowEnd.getMonth() + 2);
+    windowEnd.setHours(23, 59, 59, 999);
 
-    const meetingsUnsub = onSnapshot(
+    const unsubscribe = onSnapshot(
       query(
-        congregationMeetingsCollectionRef(congregationId),
-        where('startDate', '>=', Timestamp.fromDate(windowStart)),
-        orderBy('startDate', 'desc'),
-        limit(options?.maxMeetings ?? SUBSCRIBE_MAX_MEETINGS)
+        collectionGroup(db, 'assignments'),
+        where('congregationId', '==', congregationId),
+        where('dueDate', '>=', Timestamp.fromDate(windowStart)),
+        where('dueDate', '<=', Timestamp.fromDate(windowEnd)),
+        orderBy('dueDate', 'asc'),
+        limit((options?.maxMeetings ?? SUBSCRIBE_MAX_MEETINGS) * 20)
       ),
-      (meetingsSnap) => {
-        const nextMeetingIds = new Set(meetingsSnap.docs.map((meetingDoc) => meetingDoc.id));
-
-        Array.from(assignmentsUnsubs.keys()).forEach((meetingId) => {
-          if (!nextMeetingIds.has(meetingId)) {
-            releaseMeetingListener(meetingId);
-          }
+      (snapshot) => {
+        const assignments = snapshot.docs.map((docSnap) => {
+          const meetingId = docSnap.ref.parent.parent?.id ?? '';
+          return normalizeAssignment(meetingId, docSnap.id, docSnap.data());
         });
-
-        meetingsSnap.docs.forEach((meetingDoc) => {
-          const meetingId = meetingDoc.id;
-
-          if (assignmentsUnsubs.has(meetingId)) {
-            return;
-          }
-
-          const assignmentsQuery = query(
-            meetingAssignmentsCollectionRef(congregationId, meetingId),
-            orderBy('dueDate', 'asc')
-          );
-
-          const assignmentUnsub = onSnapshot(
-            assignmentsQuery,
-            (assignmentsSnap) => {
-              assignmentsByMeeting.set(
-                meetingId,
-                assignmentsSnap.docs.map((docSnap) =>
-                  normalizeAssignment(meetingId, docSnap.id, docSnap.data())
-                )
-              );
-              emit();
-            },
-            (error) => {
-              onError?.(error);
-            }
-          );
-
-          logFirestoreListenerCreated(`assignments:meeting:${congregationId}:${meetingId}`);
-          assignmentsUnsubs.set(meetingId, assignmentUnsub);
-        });
-
-        emit();
+        callback(applyAssignmentFilters(sortAssignmentsByDueDate(assignments), filters));
       },
       (error) => {
         onError?.(error);
@@ -614,10 +546,7 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
 
     return () => {
       logFirestoreListenerDestroyed(listenerKey);
-      meetingsUnsub();
-      assignmentsUnsubs.forEach((unsubscribe) => unsubscribe());
-      assignmentsUnsubs.clear();
-      assignmentsByMeeting.clear();
+      unsubscribe();
     };
   },
 };

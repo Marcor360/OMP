@@ -22,7 +22,7 @@ import {
   toFirestoreSectionsPayload,
 } from './modules/meetings/meeting-sections.js';
 
-type PublicationStatus = 'draft' | 'published';
+type PublicationStatus = 'draft' | 'awaiting_assignments' | 'published';
 
 const NOTIFICATION_REGION = 'us-central1';
 const NOTIFICATION_TIME_ZONE = 'America/Mexico_City';
@@ -49,7 +49,10 @@ const sanitizeIdChunk = (value: string): string =>
 
 const resolvePublicationStatus = (
   value: unknown
-): PublicationStatus => (value === 'draft' ? 'draft' : 'published');
+): PublicationStatus => {
+  if (value === 'awaiting_assignments' || value === 'published') return value;
+  return 'draft';
+};
 
 const isPlatformNotificationEnabled = (settings: {
   notificationsEnabled: boolean;
@@ -206,7 +209,9 @@ const processPublishedMeetingNotifications = async (params: {
   const sentBy = normalizeText(params.afterData.updatedBy) ?? normalizeText(params.afterData.createdBy) ?? null;
 
   const notificationKind =
-    beforeStatus !== 'published' ? 'publish' : 'update';
+    beforeStatus === 'published' || params.beforeData?.publishedAt
+      ? 'update'
+      : 'publish';
 
   const deliveredTargetKeys = new Set<string>();
 

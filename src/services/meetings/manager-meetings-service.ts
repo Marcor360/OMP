@@ -26,6 +26,7 @@ type UpdateMeetingByManagerRequest = {
   congregationId: string;
   meetingId: string;
   meetingData: Record<string, unknown>;
+  scope?: 'meeting' | 'assignments';
 };
 
 type DeleteMeetingByManagerRequest = {
@@ -204,7 +205,9 @@ export const createMeetingByManager = async (
 export const updateMeetingByManager = async (
   params: UpdateMeetingByManagerRequest
 ): Promise<void> => {
-  await assertNoWeekendOutgoingTalkConflict(params);
+  if (params.scope !== 'assignments') {
+    await assertNoWeekendOutgoingTalkConflict(params);
+  }
   const callable = httpsCallable<
     UpdateMeetingByManagerRequest,
     { ok: true }
@@ -215,6 +218,7 @@ export const updateMeetingByManager = async (
       congregationId: params.congregationId,
       meetingId: params.meetingId,
       meetingData: toCallableSafe(params.meetingData) as Record<string, unknown>,
+      scope: params.scope,
     });
   } catch (error) {
     if (isFunctionUnavailable(error)) {
@@ -226,6 +230,18 @@ export const updateMeetingByManager = async (
     throw error;
   }
 };
+
+export const updateMeetingAssignmentsByManager = async (params: {
+  congregationId: string;
+  meetingId: string;
+  sections: MeetingProgramSection[];
+}): Promise<void> =>
+  updateMeetingByManager({
+    congregationId: params.congregationId,
+    meetingId: params.meetingId,
+    meetingData: { sections: params.sections },
+    scope: 'assignments',
+  });
 
 export const deleteMeetingByManager = async (
   params: DeleteMeetingByManagerRequest

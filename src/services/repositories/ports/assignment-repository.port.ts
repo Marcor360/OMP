@@ -47,6 +47,7 @@ export interface AssignmentRepository {
   ): Promise<string>;
   createCleaningGroup(
     congregationId: string,
+    meetingId: string,
     data: CreateCleaningAssignmentDTO,
     assignedByUid: string,
     assignedByName: string

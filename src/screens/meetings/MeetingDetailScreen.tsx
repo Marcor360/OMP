@@ -77,7 +77,7 @@ export function MeetingDetailScreen() {
           return;
         }
 
-        if (!canManage && doc.publicationStatus === 'draft') {
+        if (!canManage && doc.publicationStatus !== 'published') {
           setError('No tienes acceso a esta reunion.');
           return;
         }

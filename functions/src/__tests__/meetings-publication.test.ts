@@ -10,7 +10,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 // ─── Helpers replicados ───────────────────────────────────────────────────────
 
 type UserRole = 'admin' | 'supervisor' | 'user';
-type PublicationStatus = 'draft' | 'published';
+type PublicationStatus = 'draft' | 'awaiting_assignments' | 'published';
 
 const normalizeText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -52,7 +52,11 @@ function parsePayload(payload: SetMeetingPublicationStatusPayload): {
     throw new HttpsError('invalid-argument', 'Se requiere congregationId y meetingId.');
   }
 
-  if (publicationStatus !== 'draft' && publicationStatus !== 'published') {
+  if (
+    publicationStatus !== 'draft' &&
+    publicationStatus !== 'awaiting_assignments' &&
+    publicationStatus !== 'published'
+  ) {
     throw new HttpsError('invalid-argument', 'publicationStatus invalido.');
   }
 
@@ -100,6 +104,11 @@ describe('parsePayload (setMeetingPublicationStatus)', () => {
   it('parsea un payload válido con status draft', () => {
     const result = parsePayload({ ...valid, publicationStatus: 'draft' });
     expect(result.publicationStatus).toBe('draft');
+  });
+
+  it('parsea un payload valido en espera de asignaciones', () => {
+    const result = parsePayload({ ...valid, publicationStatus: 'awaiting_assignments' });
+    expect(result.publicationStatus).toBe('awaiting_assignments');
   });
 
   it('lanza error si congregationId está vacío', () => {

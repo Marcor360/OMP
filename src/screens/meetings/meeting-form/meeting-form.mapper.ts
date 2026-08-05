@@ -7,7 +7,6 @@ import {
   CreateMeetingDTO,
   Meeting,
   MeetingCleaningAssignmentMode,
-  MeetingStatus,
 } from '@/src/types/meeting';
 import {
   MeetingProgramAssignment,
@@ -38,15 +37,12 @@ interface MarkerState {
   reminderSentAt?: Timestamp;
 }
 
-export const STATUS_OPTIONS: MeetingStatus[] = ['pending', 'scheduled', 'in_progress', 'completed', 'cancelled'];
 export const TYPE_OPTIONS: MeetingProgramType[] = ['midweek', 'weekend'];
 
 export const FORM_STEPS: { key: FormStepKey; title: string; subtitle: string }[] = [
   { key: 'date', title: 'Semana', subtitle: 'Tipo y dia' },
   { key: 'basic', title: 'Datos', subtitle: 'Lugar y enlace' },
-  { key: 'program', title: 'Programa', subtitle: 'Asignaciones' },
   { key: 'cleaning', title: 'Limpieza', subtitle: 'Modulos' },
-  { key: 'review', title: 'Revision', subtitle: 'Publicacion' },
 ];
 
 export const DEFAULT_TITLE_BY_TYPE: Record<MeetingProgramType, string> = {
@@ -325,6 +321,8 @@ export const meetingMatchesProgramType = (meeting: Meeting, meetingType: Meeting
   inferProgramTypeFromMeeting(meeting) === meetingType;
 
 export const buildMeetingPayload = (params: {
+  mode: Mode;
+  intent: SaveIntent;
   startDate: Date;
   endDate: Date;
   actorUid: string;
@@ -333,7 +331,6 @@ export const buildMeetingPayload = (params: {
   description: string;
   meetingType: MeetingProgramType;
   selectedWeekLabel: string;
-  status: MeetingStatus;
   location: string;
   meetingUrl: string;
   notes: string;
@@ -345,21 +342,29 @@ export const buildMeetingPayload = (params: {
   const endTimestamp = Timestamp.fromDate(params.endDate);
   const meetingDateTimestamp = Timestamp.fromDate(params.resolvedMeetingDate);
 
+  const sections = params.effectiveSections.map((section) => ({
+    ...section,
+    assignments: section.assignments.map((assignment) => ({
+      ...assignment,
+      assignees: [],
+    })),
+  }));
+
   return {
     title: normalizeText(params.title) ?? DEFAULT_TITLE_BY_TYPE[params.meetingType],
     description: normalizeText(params.description),
     type: params.meetingType,
     meetingCategory: params.meetingType,
     weekLabel: params.meetingType === 'midweek' ? params.selectedWeekLabel : undefined,
-    status: params.status,
-    publicationStatus: 'draft',
+    publicationStatus:
+      params.intent === 'published' ? 'awaiting_assignments' : 'draft',
     startDate: startTimestamp,
     endDate: endTimestamp,
     meetingDate: meetingDateTimestamp,
     location: normalizeText(params.location),
     meetingUrl: normalizeUrl(params.meetingUrl),
     notes: normalizeText(params.notes),
-    sections: params.effectiveSections,
+    ...(params.mode === 'create' ? { sections } : {}),
     cleaningAssignmentMode: params.cleaningSelectionMode,
     cleaningGroupIds: params.selectedCleaningGroups.map((group) => group.id),
     cleaningGroupNames: params.selectedCleaningGroups.map((group) => group.name),

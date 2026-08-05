@@ -54,7 +54,7 @@
 
     function validMeetingData(data, congregationId) {
       return hasOnlyKeys(data, allowedMeetingKeys())
-        && hasAllKeys(data, ['type', 'title', 'startDate', 'endDate', 'meetingDate', 'status'])
+        && hasAllKeys(data, ['type', 'title', 'startDate', 'endDate', 'meetingDate'])
         && (!('congregationId' in data) || data.congregationId == congregationId)
         && validMeetingType(data.type)
         && isNonEmptyString(data.title)
@@ -62,9 +62,9 @@
         && data.endDate is timestamp
         && data.meetingDate is timestamp
         && data.startDate <= data.endDate
-        && data.status in ['pending', 'scheduled', 'in_progress', 'completed', 'cancelled']
+        && (!('status' in data) || data.status in ['pending', 'scheduled', 'in_progress', 'completed', 'cancelled'])
         && (!('meetingCategory' in data) || data.meetingCategory in ['general', 'midweek', 'weekend'])
-        && (!('publicationStatus' in data) || data.publicationStatus in ['draft', 'published'])
+        && (!('publicationStatus' in data) || data.publicationStatus in ['draft', 'awaiting_assignments', 'published'])
         && (!('publishedAt' in data) || data.publishedAt is timestamp)
         && (!('date' in data) || data.date is string)
         && (!('description' in data) || data.description is string)

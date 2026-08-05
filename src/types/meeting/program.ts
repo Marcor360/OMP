@@ -1,7 +1,12 @@
 import { Timestamp } from 'firebase/firestore';
 
+export {
+  MEETING_PUBLICATION_FLOW,
+  canTransitionPublicationStatus,
+  type MeetingPublicationStatus,
+} from '@/src/types/meeting/publication-flow';
+
 export type MeetingProgramType = 'midweek' | 'weekend';
-export type MeetingPublicationStatus = 'draft' | 'published';
 
 export type MeetingSectionType = 'predefined' | 'dynamic' | 'special';
 export type MeetingAssignmentScope = 'internal' | 'informational';

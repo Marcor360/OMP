@@ -240,7 +240,9 @@ export const toMidweekMeeting = (
     meetingDate: normalizeTimestamp(data.meetingDate, normalizeTimestamp(data.startDate, now)),
     sections: data.sections,
     publicationStatus:
-      data.publicationStatus === 'draft' || data.publicationStatus === 'published'
+      data.publicationStatus === 'draft' ||
+      data.publicationStatus === 'awaiting_assignments' ||
+      data.publicationStatus === 'published'
         ? data.publicationStatus
         : undefined,
     legacyMidweekSections: midweekSections,

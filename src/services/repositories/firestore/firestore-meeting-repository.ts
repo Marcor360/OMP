@@ -1,18 +1,13 @@
 import {
   Timestamp,
-  addDoc,
-  deleteDoc,
   getDocs,
   limit,
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
-  updateDoc,
   where,
 } from 'firebase/firestore';
 
-import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import {
   congregationMeetingsCollectionRef,
   meetingDocRef,
@@ -21,7 +16,6 @@ import {
   logFirestoreListenerCreated,
   logFirestoreListenerDestroyed,
 } from '@/src/services/firebase/firestore-debug';
-import { sanitizeForFirestore } from '@/src/services/meetings/firestore-payload';
 import {
   createMeetingByManager,
   deleteMeetingByManager,
@@ -176,7 +170,7 @@ export const firestoreMeetingRepository: MeetingRepository = {
   create: async (
     congregationId: string,
     payload: Record<string, unknown>,
-    options?: { requiresManager?: boolean }
+    _options?: { requiresManager?: boolean }
   ): Promise<string> => {
     const createViaFunction = async (): Promise<string> => {
       const managerPayload = { ...payload };
@@ -192,36 +186,14 @@ export const firestoreMeetingRepository: MeetingRepository = {
       return meetingId;
     };
 
-    if (options?.requiresManager) {
-      return createViaFunction();
-    }
-
-    try {
-      const ref = await addDoc(
-        congregationMeetingsCollectionRef(congregationId),
-        sanitizeForFirestore({
-          ...payload,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        })
-      );
-
-      invalidateMeetingCache(congregationId);
-      return ref.id;
-    } catch (error) {
-      if (!isFirebaseErrorCode(error, 'permission-denied')) {
-        throw error;
-      }
-
-      return createViaFunction();
-    }
+    return createViaFunction();
   },
 
   update: async (
     congregationId: string,
     id: string,
     payload: Record<string, unknown>,
-    options?: { requiresManager?: boolean }
+    _options?: { requiresManager?: boolean }
   ): Promise<void> => {
     const updateViaFunction = async (): Promise<void> => {
       const managerPayload = { ...payload };
@@ -234,44 +206,16 @@ export const firestoreMeetingRepository: MeetingRepository = {
       });
     };
 
-    if (options?.requiresManager) {
-      await updateViaFunction();
-      invalidateMeetingCache(congregationId, id);
-      return;
-    }
-
-    try {
-      await updateDoc(
-        meetingDocRef(congregationId, id),
-        sanitizeForFirestore({
-          ...payload,
-          updatedAt: serverTimestamp(),
-        })
-      );
-    } catch (error) {
-      if (!isFirebaseErrorCode(error, 'permission-denied')) {
-        throw error;
-      }
-
-      await updateViaFunction();
-    }
+    await updateViaFunction();
 
     invalidateMeetingCache(congregationId, id);
   },
 
   delete: async (congregationId: string, id: string): Promise<void> => {
-    try {
-      await deleteDoc(meetingDocRef(congregationId, id));
-    } catch (error) {
-      if (!isFirebaseErrorCode(error, 'permission-denied')) {
-        throw error;
-      }
-
-      await deleteMeetingByManager({
-        congregationId,
-        meetingId: id,
-      });
-    }
+    await deleteMeetingByManager({
+      congregationId,
+      meetingId: id,
+    });
 
     invalidateMeetingCache(congregationId, id);
   },
