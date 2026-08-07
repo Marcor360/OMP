@@ -346,6 +346,29 @@ Allowed Android permissions currently include:
 
 Blocked sensitive permissions include external storage, audio recording, overlay, boot completed, and exact alarm.
 
+## Dependency Audit — Accepted Risk (2026-08)
+
+`npm audit` reports residual vulnerabilities that are intentionally not closed. Do not attempt to close them with `npm audit fix --force` or forced overrides; they are toolchain/transitive issues with no compatible fix upstream yet.
+
+App (root), 19 moderate:
+
+- All inside `@expo/cli`, `@expo/config`, `@expo/config-plugins`, `@expo/metro-config`, `@expo/prebuild-config`, `xcode`, `expo-asset`, and `firebase-tools` (via `@google-cloud/pubsub`, `@opentelemetry/core`, `gaxios`, `uuid`).
+- These are build toolchain dependencies; they do not ship in the bundle that reaches end users. The real exposure is CI supply chain, not the shipped app.
+- `npm audit`'s suggested fix (`firebase-tools@14.23.0`) is a downgrade — do not apply it.
+- The only real closure path is the Expo SDK 57 migration (multi-step, not part of routine dependency maintenance).
+
+`functions/`, 7 moderate:
+
+- All inside `@google-cloud/storage@7.21.0` (latest published), via `gaxios@6.7.1 -> teeny-request@9 -> uuid@9` and `retry-request@7.0.2`.
+- The `gaxios` 6.x line closed at 6.7.1, which is vulnerable; the fix only exists in `gaxios@7.x`, which requires a `@google-cloud/storage` major Google has not published yet. Forcing an override would break Cloud Storage.
+- `npm audit`'s suggested fix (`firebase-admin@10.3.0`) is a downgrade — do not apply it.
+
+Review monthly whether Google has published `@google-cloud/storage@8`; if so, re-run the audit and re-evaluate.
+
+`expo-doctor`, 1 accepted mismatch:
+
+- `@react-navigation/native` is pinned to `^7.3.15`, one minor ahead of the `^7.1.8` Expo SDK 54 expects. This is intentional (routine minor bump, same major, no breaking API changes) and causes `expo-doctor`'s "Check that packages match versions required by installed Expo SDK" to report 17/18 instead of 18/18. All tests, `tsc --noEmit`, and lint pass clean. Do not "fix" this by running `npx expo install --check` unless re-evaluating on a real SDK migration (see below).
+
 ## Never Do These Things
 
 - Do not present OMP as an official religious app.

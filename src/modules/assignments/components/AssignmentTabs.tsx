@@ -2,10 +2,7 @@ import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/src/components/themed-text';
-import {
-  AssignmentTab,
-  ASSIGNMENT_CATEGORY_LABELS,
-} from '@/src/modules/assignments/types/assignment.types';
+import { AssignmentTab } from '@/src/modules/assignments/types/assignment.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { useI18n } from '@/src/i18n';
 
