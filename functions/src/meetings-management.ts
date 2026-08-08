@@ -1,4 +1,4 @@
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { DocumentReference, FieldValue, GeoPoint, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
@@ -267,6 +267,16 @@ const toTimestamp = (value: unknown): Timestamp | undefined => {
   return undefined;
 };
 
+// Recorrerlos con Object.entries() los destruye: los centinelas de FieldValue
+// no exponen propiedades enumerables propias y se convierten en {}.
+const isFirestoreNativeValue = (value: object): boolean =>
+  value instanceof Timestamp ||
+  value instanceof FieldValue ||
+  value instanceof DocumentReference ||
+  value instanceof GeoPoint ||
+  value instanceof Buffer ||
+  value instanceof Date;
+
 const sanitizeForFirestore = (value: unknown): unknown => {
   if (value === undefined) {
     return undefined;
@@ -276,7 +286,7 @@ const sanitizeForFirestore = (value: unknown): unknown => {
     return null;
   }
 
-  if (value instanceof Timestamp) {
+  if (typeof value === 'object' && isFirestoreNativeValue(value)) {
     return value;
   }
 
@@ -306,6 +316,8 @@ const sanitizeForFirestore = (value: unknown): unknown => {
 
   return value;
 };
+
+export const __sanitizeForFirestoreForTests = sanitizeForFirestore;
 
 const isPublicationStatus = (value: unknown): value is MeetingPublicationStatus =>
   value === 'draft' || value === 'awaiting_assignments' || value === 'published';
