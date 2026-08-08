@@ -10,7 +10,7 @@
 
 ---
 
-**Versión actual:** `1.31.3`
+**Versión actual:** `1.34.3`
 **Estado:** Beta avanzada en estabilización para producción
 **Última actualización del documento:** 31 de julio de 2026
 **Repositorio principal:** `Marcor360/OMP`
@@ -106,7 +106,7 @@ OMP combina una aplicación cliente desarrollada con Expo y React Native con un 
 | Nombre               | OMP Suite                                         |
 | Significado          | Organization, Ministry & Programs                 |
 | Repositorio          | `Marcor360/OMP`                                   |
-| Versión visible      | `1.31.3`                                          |
+| Versión visible      | `1.34.3`                                          |
 | Fuente de versión    | `app.json` → `expo.version`                       |
 | Estado               | Beta avanzada                                     |
 | Fase actual          | Estabilización y QA para producción               |
@@ -135,9 +135,11 @@ app.json → expo.version
 Estado actual:
 
 ```text
-package.json:        1.31.3
-app.json:            1.31.3
-versión visible:     1.31.3
+package.json:        1.34.3
+app.json:            1.34.3
+versión visible:     1.34.3
+buildNumber (iOS):   1.34.3
+versionCode (Android): 13403
 EAS build numbers:   gestionados remotamente
 ```
 
