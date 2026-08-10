@@ -7,12 +7,16 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import type { ColorSchemeName } from 'react-native';
 import { useColorScheme as useSystemColorScheme } from 'react-native';
 
 const STORAGE_KEY = '@omp/theme-mode';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type ResolvedTheme = 'light' | 'dark';
+
+export const resolveColorScheme = (value: ColorSchemeName | null | undefined): ResolvedTheme =>
+  value === 'dark' ? 'dark' : 'light';
 
 interface ThemeModeContextValue {
   themeMode: ThemeMode;
@@ -61,7 +65,7 @@ export function ThemeModeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const colorScheme: ResolvedTheme =
-    themeMode === 'system' ? (systemColorScheme ?? 'light') : themeMode;
+    themeMode === 'system' ? resolveColorScheme(systemColorScheme) : themeMode;
 
   const setThemeMode = useCallback(async (mode: ThemeMode) => {
     setThemeModeState(mode);

@@ -295,8 +295,6 @@ function AppLayout() {
       </AuthProvider>
       <StatusBar
         style={colorScheme === 'dark' ? 'light' : 'dark'}
-        translucent={false}
-        backgroundColor={colors.backgroundDark}
       />
     </ThemeProvider>
   );
