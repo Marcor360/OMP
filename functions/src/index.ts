@@ -36,6 +36,7 @@ export {
   updateMeetingAssignmentByManager,
   deleteMeetingAssignmentByManager,
 } from './meetings-management.js';
+export { cleanupMeetingSubcollectionsOnDelete } from './meetings-cleanup.js';
 
 export {
   createOutgoingTalkByManager,
