@@ -641,6 +641,11 @@ export const en = {
     scheduleMidweek: 'Midweek',
     scheduleWeekend: 'Weekend',
     scheduleAssignedGroup: 'Assigned group',
+    scheduleMeetingsInRange: '{{count}} meeting in range',
+    scheduleMeetingsInRange_plural: '{{count}} meetings in range',
+    scheduleUnassigned: 'Unassigned',
+    scheduleEmptyTitle: 'No meetings in range',
+    scheduleEmptyDesc: 'Adjust the dates and load meetings to generate the schedule.',
   },
   // Dashboard
   dashboard: {

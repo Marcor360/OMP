@@ -641,6 +641,11 @@ export const es = {
     scheduleMidweek: 'Entre semana',
     scheduleWeekend: 'Fin de semana',
     scheduleAssignedGroup: 'Grupo asignado',
+    scheduleMeetingsInRange: '{{count}} reunión en el rango',
+    scheduleMeetingsInRange_plural: '{{count}} reuniones en el rango',
+    scheduleUnassigned: 'Sin asignar',
+    scheduleEmptyTitle: 'Sin reuniones en el rango',
+    scheduleEmptyDesc: 'Ajusta las fechas y carga las reuniones para generar el programa.',
   },
   // Dashboard
   dashboard: {
