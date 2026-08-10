@@ -26,6 +26,7 @@ export const en = {
     permissionA11yLabel: '{{action}} {{title}} permission',
     datePickerDefaultTitle: 'Select date',
     datePickerNoSelection: 'Select a date',
+    removePersonA11y: 'Remove {{name}}',
   },
   components: {
     cards: {
