@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,6 +7,7 @@ import {
   Platform,
   Switch,
   useWindowDimensions,
+  type DimensionValue,
 } from 'react-native';
 import { serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,7 +22,7 @@ import { PermissionRow } from '@/src/components/common/PermissionRow';
 import { useAppTheme } from '@/src/context/theme-context';
 import { useToast } from '@/src/context/toast-context';
 import { useUser } from '@/src/context/user-context';
-import { useI18n } from '@/src/i18n/index';
+import { type I18nContextType, useI18n } from '@/src/i18n/index';
 import { LANGUAGE_DISPLAY_NAME } from '@/src/i18n/language-options';
 import { usePermissions } from '@/src/hooks/use-permissions';
 import { AppUser, ROLE_LABELS } from '@/src/types/user';
@@ -70,6 +71,7 @@ const notificationPreferencesFromUser = (user: AppUser | null): NotificationPref
 });
 
 type ChipTone = 'success' | 'warning' | 'error' | 'info' | 'muted';
+type IoniconName = keyof typeof Ionicons.glyphMap;
 
 const getInitials = (name?: string | null): string => {
   const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
@@ -110,8 +112,7 @@ export function SettingsScreen() {
   const { showToast } = useToast();
   const { isDarkMode } = useAppTheme();
   const { t, language } = useI18n();
-  const colors = useAppColors();
-  const styles = createStyles(colors);
+  const { styles } = useSettingsStyles();
   const permissions = usePermissions();
   const [planUsage, setPlanUsage] = useState<CongregationPlanUsage | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
@@ -195,6 +196,10 @@ export function SettingsScreen() {
     router.push('/(protected)/settings/about');
   };
 
+  const handleNavigateToBilling = () => {
+    router.push('/(protected)/billing');
+  };
+
   const handleNotificationPreferenceChange = async (
     field: NotificationPreferenceKey,
     nextValue: boolean
@@ -220,328 +225,23 @@ export function SettingsScreen() {
     }
   };
 
-  const toneToColors = (tone: ChipTone): { fg: string; bg: string } => {
-    switch (tone) {
-      case 'success':
-        return { fg: colors.success, bg: colors.successLight };
-      case 'warning':
-        return { fg: colors.warning, bg: colors.warningLight };
-      case 'error':
-        return { fg: colors.error, bg: colors.errorLight };
-      case 'info':
-        return { fg: colors.primary, bg: colors.infoLight };
-      default:
-        return { fg: colors.textMuted, bg: colors.surfaceRaised };
-    }
-  };
-
-  const resolveBillingChip = (
-    billing: CongregationBillingState | undefined,
-    exempt: boolean
-  ): { label: string; tone: ChipTone } => {
-    if (exempt || billing?.status === 'exempt') return { label: t('billing.exempt'), tone: 'info' };
-    if (!billing || !billing.enabled) return { label: t('billing.noActivePlan'), tone: 'muted' };
-    const status = billing.status;
-    if (status === 'active' || status === 'trialing') {
-      return { label: t('billing.status.active'), tone: 'success' };
-    }
-    if (
-      status === 'past_due' ||
-      status === 'payment_action_required' ||
-      status === 'unpaid' ||
-      status === 'incomplete' ||
-      status === 'incomplete_expired'
-    ) {
-      return { label: t('billing.status.pending'), tone: 'warning' };
-    }
-    if (status === 'canceled') return { label: t('billing.status.canceled'), tone: 'error' };
-    return { label: t('billing.noStatus'), tone: 'muted' };
-  };
-
-  function IconBadge({ icon }: { icon: keyof typeof Ionicons.glyphMap }) {
-    return (
-      <View style={styles.iconBadge}>
-        <Ionicons name={icon} size={20} color={colors.primary} />
-      </View>
-    );
-  }
-
-  function StatusChip({
-    label,
-    tone = 'info',
-    showDot = false,
-  }: {
-    label: string;
-    tone?: ChipTone;
-    showDot?: boolean;
-  }) {
-    const toneColors = toneToColors(tone);
-    return (
-      <View style={[styles.statusChip, { backgroundColor: toneColors.bg }]}>
-        {showDot ? <View style={[styles.statusDot, { backgroundColor: toneColors.fg }]} /> : null}
-        <ThemedText style={[styles.statusChipText, { color: toneColors.fg }]} numberOfLines={1}>
-          {label}
-        </ThemedText>
-      </View>
-    );
-  }
-
-  function SectionHeader({ title, hint }: { title: string; hint?: string }) {
-    return (
-      <View style={styles.sectionHeader}>
-        <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
-        {hint ? (
-          <View style={styles.sectionHint}>
-            <Ionicons name="lock-closed-outline" size={14} color={colors.textDisabled} />
-            <ThemedText style={styles.sectionHintText} numberOfLines={2}>
-              {hint}
-            </ThemedText>
-          </View>
-        ) : null}
-      </View>
-    );
-  }
-
-  function AccountCard() {
-    return (
-      <View style={[styles.heroCard, styles.accountCard, isWide && styles.accountCardWide]}>
-        <View style={styles.accountTop}>
-          <View style={styles.avatar}>
-            <ThemedText style={styles.avatarText}>{getInitials(appUser?.displayName)}</ThemedText>
-          </View>
-          <View style={styles.accountIdentity}>
-            <ThemedText style={styles.accountName} numberOfLines={1}>
-              {appUser?.displayName ?? '--'}
-            </ThemedText>
-            <ThemedText style={styles.accountEmail} numberOfLines={1}>
-              {appUser?.email ?? '--'}
-            </ThemedText>
-          </View>
-        </View>
-        <View style={styles.accountDivider} />
-        <View style={styles.roleRow}>
-          <View style={styles.roleLabelWrap}>
-            <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
-            <ThemedText style={styles.roleLabel}>{t('settings.account.role')}</ThemedText>
-          </View>
-          <StatusChip label={appUser ? ROLE_LABELS[appUser.role] : '--'} tone="info" />
-        </View>
-      </View>
-    );
-  }
-
-  function PlanCard() {
-    const count = planUsage?.activeUsersCount ?? 0;
-    const limit = planUsage?.activeUsersLimit ?? 0;
-    const pct =
-      planUsage && planUsage.activeUsersLimit > 0
-        ? Math.min(100, Math.round((planUsage.activeUsersCount / planUsage.activeUsersLimit) * 100))
-        : 0;
-    const billing = billingSummary?.billing;
-    const isExempt = billingSummary?.billingExemption?.exempt === true;
-    const billingChip = resolveBillingChip(billing, isExempt);
-    const nextPayment = formatBillingDate(billing?.nextPaymentDate ?? billing?.currentPeriodEnd);
-
-    return (
-      <View style={[styles.heroCard, styles.planCard, isWide && styles.planCardWide]}>
-        <View style={styles.planHeader}>
-          <View>
-            <ThemedText style={styles.cardEyebrow}>{t('settings.plan.current')}</ThemedText>
-            <ThemedText style={styles.planTitle} numberOfLines={1}>
-              {loadingPlan ? t('settings.plan.loading') : planUsage?.planLabel ?? '--'}
-            </ThemedText>
-          </View>
-          <StatusChip label={planUsage?.planLabel ?? '--'} tone="info" />
-        </View>
-
-        <View style={styles.planMeterBlock}>
-          <View style={styles.planMeterHeader}>
-            <ThemedText style={styles.planMeterLabel}>{t('settings.plan.activeUsers')}</ThemedText>
-            <ThemedText style={styles.planMeterValue}>
-              <ThemedText style={styles.planMeterCount}>
-                {loadingPlan ? t('settings.plan.loading') : String(count)}
-              </ThemedText>
-              {loadingPlan ? '' : ` / ${limit}`}
-            </ThemedText>
-          </View>
-          <View style={styles.planTrack}>
-            <View style={[styles.planFill, { width: `${pct}%` }]} />
-          </View>
-          <ThemedText style={styles.planSubline} numberOfLines={2}>
-            {planUsage
-              ? `${t('settings.plan.remaining', { count: planUsage.remainingActiveUsers })} - ${t(
-                  'settings.plan.limit',
-                  { limit: planUsage.activeUsersLimit }
-                )}`
-              : '--'}
-          </ThemedText>
-        </View>
-
-        {canViewCongregationBilling ? (
-          <TouchableOpacity
-            style={styles.billingCard}
-            onPress={() => router.push('/(protected)/billing')}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel={t('billing.title')}
-          >
-            <IconBadge icon="card-outline" />
-            <View style={styles.billingMain}>
-              <View style={styles.billingHeader}>
-                <View style={styles.billingTitleBlock}>
-                  <ThemedText style={styles.billingTitle}>{t('billing.title')}</ThemedText>
-                  <ThemedText style={styles.billingSubtitle}>Stripe</ThemedText>
-                </View>
-                <StatusChip label={billingChip.label} tone={billingChip.tone} showDot />
-              </View>
-              {nextPayment ? (
-                <ThemedText style={styles.billingDate} numberOfLines={1}>
-                  {t('billing.nextPayment')}: {nextPayment}
-                </ThemedText>
-              ) : null}
-              <View style={styles.manageButton}>
-                <ThemedText style={styles.manageButtonText}>{t('billing.manage')}</ThemedText>
-                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-              </View>
-            </View>
-          </TouchableOpacity>
-        ) : null}
-      </View>
-    );
-  }
-
-  function NavTile({
-    icon,
-    title,
-    description,
-    cols,
-    onPress,
-  }: {
-    icon: keyof typeof Ionicons.glyphMap;
-    title: string;
-    description: string;
-    cols: number;
-    onPress: () => void;
-  }) {
-    return (
-      <TouchableOpacity
-        style={[styles.navTile, { width: tileWidth(cols) }]}
-        onPress={onPress}
-        activeOpacity={0.7}
-        accessibilityRole="button"
-        accessibilityLabel={title}
-      >
-        <IconBadge icon={icon} />
-        <View style={styles.navTileText}>
-          <ThemedText style={styles.navTileTitle} numberOfLines={1}>
-            {title}
-          </ThemedText>
-          <ThemedText style={styles.navTileDescription} numberOfLines={2}>
-            {description}
-          </ThemedText>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
-      </TouchableOpacity>
-    );
-  }
-
-  function Section({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-      <View style={styles.section}>
-        <ThemedText style={styles.legacySectionTitle}>{title}</ThemedText>
-        <View style={styles.sectionCard}>{children}</View>
-      </View>
-    );
-  }
-
-  function SettingRow({
-    icon,
-    label,
-    value,
-    showArrow = false,
-    onPress,
-    rightElement,
-  }: {
-    icon: keyof typeof Ionicons.glyphMap;
-    label: string;
-    value?: string;
-    showArrow?: boolean;
-    onPress?: () => void;
-    rightElement?: React.ReactNode;
-  }) {
-    return (
-      <TouchableOpacity
-        style={styles.row}
-        onPress={onPress}
-        disabled={!onPress && !showArrow}
-        activeOpacity={0.7}
-        accessibilityRole={onPress || showArrow ? 'button' : undefined}
-        accessibilityLabel={label}
-      >
-        <Ionicons name={icon} size={18} color={colors.primary} />
-        <ThemedText style={styles.rowLabel}>{label}</ThemedText>
-        <View style={styles.rowRight}>
-          {value ? (
-            <ThemedText style={styles.rowValue} numberOfLines={1}>
-              {value}
-            </ThemedText>
-          ) : null}
-          {rightElement}
-          {showArrow ? (
-            <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
-          ) : null}
-        </View>
-      </TouchableOpacity>
-    );
-  }
-
-  function NotificationPreferenceRow({
-    field,
-    label,
-    disabled = false,
-  }: {
-    field: NotificationPreferenceKey;
-    label: string;
-    disabled?: boolean;
-  }) {
-    const isDisabled = disabled || savingNotificationPreference !== null || !uid;
-    const value = notificationPreferences[field];
-
-    return (
-      <View
-        style={[styles.preferenceRow, isDisabled && styles.preferenceRowDisabled]}
-      >
-        <TouchableOpacity
-          style={styles.preferenceLabelButton}
-          onPress={() => void handleNotificationPreferenceChange(field, !value)}
-          disabled={isDisabled}
-          activeOpacity={0.7}
-          accessibilityRole="switch"
-          accessibilityLabel={label}
-          accessibilityState={{ checked: value, disabled: isDisabled }}
-        >
-          <ThemedText style={styles.preferenceLabel}>{label}</ThemedText>
-        </TouchableOpacity>
-        <Switch
-          value={value}
-          disabled={isDisabled}
-          onValueChange={(nextValue) => void handleNotificationPreferenceChange(field, nextValue)}
-          accessibilityLabel={label}
-          trackColor={{ false: colors.border, true: colors.primary + '88' }}
-          thumbColor={value ? colors.primary : colors.textDisabled}
-        />
-      </View>
-    );
-  }
-
   return (
     <ScreenContainer scrollable={false} padded={false}>
       <PageHeader title={t('tabs.settings')} showBack />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.wrap}>
           <View style={[styles.hero, { flexDirection: isWide ? 'row' : 'column' }]}>
-            <AccountCard />
-            {canViewCongregationPlan ? <PlanCard /> : null}
+            <AccountCard appUser={appUser} isWide={isWide} />
+            {canViewCongregationPlan ? (
+              <PlanCard
+                planUsage={planUsage}
+                loadingPlan={loadingPlan}
+                billingSummary={billingSummary}
+                showBilling={canViewCongregationBilling}
+                isWide={isWide}
+                onOpenBilling={handleNavigateToBilling}
+              />
+            ) : null}
           </View>
 
           {canViewAdministration ? (
@@ -556,7 +256,7 @@ export function SettingsScreen() {
                     icon="people-outline"
                     title={t('settings.admin.userManagement')}
                     description={t('settings.admin.userManagement.desc')}
-                    cols={3}
+                    width={tileWidth(3)}
                     onPress={() => router.push('/(protected)/(tabs)/users')}
                   />
                 ) : null}
@@ -565,7 +265,7 @@ export function SettingsScreen() {
                     icon="calendar-outline"
                     title={t('settings.admin.meetingManagement')}
                     description={t('settings.admin.meetingManagement.desc')}
-                    cols={3}
+                    width={tileWidth(3)}
                     onPress={() => router.push('/(protected)/(tabs)/meetings')}
                   />
                 ) : null}
@@ -574,7 +274,7 @@ export function SettingsScreen() {
                     icon="checkmark-done-outline"
                     title={t('settings.admin.assignmentManagement')}
                     description={t('settings.admin.assignmentManagement.desc')}
-                    cols={3}
+                    width={tileWidth(3)}
                     onPress={() => router.push('/(protected)/(tabs)/assignments')}
                   />
                 ) : null}
@@ -583,7 +283,7 @@ export function SettingsScreen() {
                     icon="sparkles-outline"
                     title={t('settings.admin.cleaningGroups')}
                     description={t('settings.admin.cleaningGroups.desc')}
-                    cols={3}
+                    width={tileWidth(3)}
                     onPress={() => router.push('/(protected)/(tabs)/cleaning')}
                   />
                 ) : null}
@@ -591,7 +291,7 @@ export function SettingsScreen() {
                   icon="notifications-outline"
                   title={t('settings.admin.notifications')}
                   description={t('settings.admin.notifications.desc')}
-                  cols={3}
+                  width={tileWidth(3)}
                   onPress={() => router.push('/(protected)/notifications')}
                 />
               </View>
@@ -605,28 +305,28 @@ export function SettingsScreen() {
                 icon="calendar-outline"
                 title={t('settings.organization.meetingCalendar')}
                 description={t('settings.organization.meetingCalendar.desc')}
-                cols={2}
+                width={tileWidth(2)}
                 onPress={() => router.push('/(protected)/(tabs)/meetings')}
               />
               <NavTile
                 icon="person-outline"
                 title={t('settings.organization.myAssignments')}
                 description={t('settings.organization.myAssignments.desc')}
-                cols={2}
+                width={tileWidth(2)}
                 onPress={() => router.push('/(protected)/(tabs)/assignments')}
               />
               <NavTile
                 icon="time-outline"
                 title={t('settings.organization.upcomingResponsibilities')}
                 description={t('settings.organization.upcomingResponsibilities.desc')}
-                cols={2}
+                width={tileWidth(2)}
                 onPress={() => router.push('/(protected)/(tabs)')}
               />
               <NavTile
                 icon="archive-outline"
                 title={t('settings.organization.assignmentHistory')}
                 description={t('settings.organization.assignmentHistory.desc')}
-                cols={2}
+                width={tileWidth(2)}
                 onPress={() => router.push('/(protected)/(tabs)/assignments')}
               />
             </View>
@@ -663,28 +363,48 @@ export function SettingsScreen() {
 
           <Section title={t('settings.notifications.title')}>
             <NotificationPreferenceRow
-              field="notificationsEnabled"
               label={t('settings.notifications.master')}
+              value={notificationPreferences.notificationsEnabled}
+              disabled={savingNotificationPreference !== null || !uid}
+              onValueChange={(next) =>
+                void handleNotificationPreferenceChange('notificationsEnabled', next)
+              }
             />
             <NotificationPreferenceRow
-              field="platformNotifications"
               label={t('settings.notifications.platform')}
-              disabled={!notificationPreferences.notificationsEnabled}
+              value={notificationPreferences.platformNotifications}
+              disabled={
+                !notificationPreferences.notificationsEnabled ||
+                savingNotificationPreference !== null || !uid
+              }
+              onValueChange={(next) => void handleNotificationPreferenceChange('platformNotifications', next)}
             />
             <NotificationPreferenceRow
-              field="cleaningNotifications"
               label={t('settings.notifications.cleaning')}
-              disabled={!notificationPreferences.notificationsEnabled}
+              value={notificationPreferences.cleaningNotifications}
+              disabled={
+                !notificationPreferences.notificationsEnabled ||
+                savingNotificationPreference !== null || !uid
+              }
+              onValueChange={(next) => void handleNotificationPreferenceChange('cleaningNotifications', next)}
             />
             <NotificationPreferenceRow
-              field="hospitalityNotifications"
               label={t('settings.notifications.hospitality')}
-              disabled={!notificationPreferences.notificationsEnabled}
+              value={notificationPreferences.hospitalityNotifications}
+              disabled={
+                !notificationPreferences.notificationsEnabled ||
+                savingNotificationPreference !== null || !uid
+              }
+              onValueChange={(next) => void handleNotificationPreferenceChange('hospitalityNotifications', next)}
             />
             <NotificationPreferenceRow
-              field="eventsNotifications"
               label={t('settings.notifications.events')}
-              disabled={!notificationPreferences.notificationsEnabled}
+              value={notificationPreferences.eventsNotifications}
+              disabled={
+                !notificationPreferences.notificationsEnabled ||
+                savingNotificationPreference !== null || !uid
+              }
+              onValueChange={(next) => void handleNotificationPreferenceChange('eventsNotifications', next)}
             />
           </Section>
 
@@ -723,6 +443,361 @@ export function SettingsScreen() {
         </View>
       </ScrollView>
     </ScreenContainer>
+  );
+}
+
+const toneToColors = (colors: AppColors, tone: ChipTone): { fg: string; bg: string } => {
+  switch (tone) {
+    case 'success':
+      return { fg: colors.success, bg: colors.successLight };
+    case 'warning':
+      return { fg: colors.warning, bg: colors.warningLight };
+    case 'error':
+      return { fg: colors.error, bg: colors.errorLight };
+    case 'info':
+      return { fg: colors.primary, bg: colors.infoLight };
+    default:
+      return { fg: colors.textMuted, bg: colors.surfaceRaised };
+  }
+};
+
+const resolveBillingChip = (
+  t: I18nContextType['t'],
+  billing: CongregationBillingState | undefined,
+  exempt: boolean
+): { label: string; tone: ChipTone } => {
+  if (exempt || billing?.status === 'exempt') return { label: t('billing.exempt'), tone: 'info' };
+  if (!billing || !billing.enabled) return { label: t('billing.noActivePlan'), tone: 'muted' };
+  const status = billing.status;
+  if (status === 'active' || status === 'trialing') {
+    return { label: t('billing.status.active'), tone: 'success' };
+  }
+  if (
+    status === 'past_due' ||
+    status === 'payment_action_required' ||
+    status === 'unpaid' ||
+    status === 'incomplete' ||
+    status === 'incomplete_expired'
+  ) {
+    return { label: t('billing.status.pending'), tone: 'warning' };
+  }
+  if (status === 'canceled') return { label: t('billing.status.canceled'), tone: 'error' };
+  return { label: t('billing.noStatus'), tone: 'muted' };
+};
+
+/** Paleta + hoja de estilos memoizada. `colors` es una constante de modulo, asi que la referencia es estable. */
+function useSettingsStyles() {
+  const colors = useAppColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  return { colors, styles };
+}
+
+function IconBadge({ icon }: { icon: IoniconName }) {
+  const { colors, styles } = useSettingsStyles();
+
+  return (
+    <View style={styles.iconBadge}>
+      <Ionicons name={icon} size={20} color={colors.primary} />
+    </View>
+  );
+}
+
+function StatusChip({
+  label,
+  tone = 'info',
+  showDot = false,
+}: {
+  label: string;
+  tone?: ChipTone;
+  showDot?: boolean;
+}) {
+  const { colors, styles } = useSettingsStyles();
+  const toneColors = toneToColors(colors, tone);
+
+  return (
+    <View style={[styles.statusChip, { backgroundColor: toneColors.bg }]}>
+      {showDot ? <View style={[styles.statusDot, { backgroundColor: toneColors.fg }]} /> : null}
+      <ThemedText style={[styles.statusChipText, { color: toneColors.fg }]} numberOfLines={1}>
+        {label}
+      </ThemedText>
+    </View>
+  );
+}
+
+function SectionHeader({ title, hint }: { title: string; hint?: string }) {
+  const { colors, styles } = useSettingsStyles();
+
+  return (
+    <View style={styles.sectionHeader}>
+      <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+      {hint ? (
+        <View style={styles.sectionHint}>
+          <Ionicons name="lock-closed-outline" size={14} color={colors.textDisabled} />
+          <ThemedText style={styles.sectionHintText} numberOfLines={2}>
+            {hint}
+          </ThemedText>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function AccountCard({ appUser, isWide }: { appUser: AppUser | null; isWide: boolean }) {
+  const { colors, styles } = useSettingsStyles();
+  const { t } = useI18n();
+
+  return (
+    <View style={[styles.heroCard, styles.accountCard, isWide && styles.accountCardWide]}>
+      <View style={styles.accountTop}>
+        <View style={styles.avatar}>
+          <ThemedText style={styles.avatarText}>{getInitials(appUser?.displayName)}</ThemedText>
+        </View>
+        <View style={styles.accountIdentity}>
+          <ThemedText style={styles.accountName} numberOfLines={1}>
+            {appUser?.displayName ?? '--'}
+          </ThemedText>
+          <ThemedText style={styles.accountEmail} numberOfLines={1}>
+            {appUser?.email ?? '--'}
+          </ThemedText>
+        </View>
+      </View>
+      <View style={styles.accountDivider} />
+      <View style={styles.roleRow}>
+        <View style={styles.roleLabelWrap}>
+          <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
+          <ThemedText style={styles.roleLabel}>{t('settings.account.role')}</ThemedText>
+        </View>
+        <StatusChip label={appUser ? ROLE_LABELS[appUser.role] : '--'} tone="info" />
+      </View>
+    </View>
+  );
+}
+
+interface PlanCardProps {
+  planUsage: CongregationPlanUsage | null;
+  loadingPlan: boolean;
+  billingSummary: CongregationBillingSummary | null;
+  showBilling: boolean;
+  isWide: boolean;
+  onOpenBilling: () => void;
+}
+
+function PlanCard({
+  planUsage,
+  loadingPlan,
+  billingSummary,
+  showBilling,
+  isWide,
+  onOpenBilling,
+}: PlanCardProps) {
+  const { colors, styles } = useSettingsStyles();
+  const { t } = useI18n();
+
+  const count = planUsage?.activeUsersCount ?? 0;
+  const limit = planUsage?.activeUsersLimit ?? 0;
+  const pct =
+    planUsage && planUsage.activeUsersLimit > 0
+      ? Math.min(100, Math.round((planUsage.activeUsersCount / planUsage.activeUsersLimit) * 100))
+      : 0;
+  const billing = billingSummary?.billing;
+  const isExempt = billingSummary?.billingExemption?.exempt === true;
+  const billingChip = resolveBillingChip(t, billing, isExempt);
+  const nextPayment = formatBillingDate(billing?.nextPaymentDate ?? billing?.currentPeriodEnd);
+
+  return (
+    <View style={[styles.heroCard, styles.planCard, isWide && styles.planCardWide]}>
+      <View style={styles.planHeader}>
+        <View>
+          <ThemedText style={styles.cardEyebrow}>{t('settings.plan.current')}</ThemedText>
+          <ThemedText style={styles.planTitle} numberOfLines={1}>
+            {loadingPlan ? t('settings.plan.loading') : planUsage?.planLabel ?? '--'}
+          </ThemedText>
+        </View>
+        <StatusChip label={planUsage?.planLabel ?? '--'} tone="info" />
+      </View>
+
+      <View style={styles.planMeterBlock}>
+        <View style={styles.planMeterHeader}>
+          <ThemedText style={styles.planMeterLabel}>{t('settings.plan.activeUsers')}</ThemedText>
+          <ThemedText style={styles.planMeterValue}>
+            <ThemedText style={styles.planMeterCount}>
+              {loadingPlan ? t('settings.plan.loading') : String(count)}
+            </ThemedText>
+            {loadingPlan ? '' : ` / ${limit}`}
+          </ThemedText>
+        </View>
+        <View style={styles.planTrack}>
+          <View style={[styles.planFill, { width: `${pct}%` }]} />
+        </View>
+        <ThemedText style={styles.planSubline} numberOfLines={2}>
+          {planUsage
+            ? `${t('settings.plan.remaining', { count: planUsage.remainingActiveUsers })} - ${t(
+                'settings.plan.limit',
+                { limit: planUsage.activeUsersLimit }
+              )}`
+            : '--'}
+        </ThemedText>
+      </View>
+
+      {showBilling ? (
+        <TouchableOpacity
+          style={styles.billingCard}
+          onPress={onOpenBilling}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={t('billing.title')}
+        >
+          <IconBadge icon="card-outline" />
+          <View style={styles.billingMain}>
+            <View style={styles.billingHeader}>
+              <View style={styles.billingTitleBlock}>
+                <ThemedText style={styles.billingTitle}>{t('billing.title')}</ThemedText>
+                <ThemedText style={styles.billingSubtitle}>Stripe</ThemedText>
+              </View>
+              <StatusChip label={billingChip.label} tone={billingChip.tone} showDot />
+            </View>
+            {nextPayment ? (
+              <ThemedText style={styles.billingDate} numberOfLines={1}>
+                {t('billing.nextPayment')}: {nextPayment}
+              </ThemedText>
+            ) : null}
+            <View style={styles.manageButton}>
+              <ThemedText style={styles.manageButtonText}>{t('billing.manage')}</ThemedText>
+              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+            </View>
+          </View>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+function NavTile({
+  icon,
+  title,
+  description,
+  width,
+  onPress,
+}: {
+  icon: IoniconName;
+  title: string;
+  description: string;
+  width: DimensionValue;
+  onPress: () => void;
+}) {
+  const { colors, styles } = useSettingsStyles();
+
+  return (
+    <TouchableOpacity
+      style={[styles.navTile, { width }]}
+      onPress={onPress}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+    >
+      <IconBadge icon={icon} />
+      <View style={styles.navTileText}>
+        <ThemedText style={styles.navTileTitle} numberOfLines={1}>
+          {title}
+        </ThemedText>
+        <ThemedText style={styles.navTileDescription} numberOfLines={2}>
+          {description}
+        </ThemedText>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
+    </TouchableOpacity>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const { styles } = useSettingsStyles();
+
+  return (
+    <View style={styles.section}>
+      <ThemedText style={styles.legacySectionTitle}>{title}</ThemedText>
+      <View style={styles.sectionCard}>{children}</View>
+    </View>
+  );
+}
+
+function SettingRow({
+  icon,
+  label,
+  value,
+  showArrow = false,
+  onPress,
+  rightElement,
+}: {
+  icon: IoniconName;
+  label: string;
+  value?: string;
+  showArrow?: boolean;
+  onPress?: () => void;
+  rightElement?: React.ReactNode;
+}) {
+  const { colors, styles } = useSettingsStyles();
+
+  return (
+    <TouchableOpacity
+      style={styles.row}
+      onPress={onPress}
+      disabled={!onPress && !showArrow}
+      activeOpacity={0.7}
+      accessibilityRole={onPress || showArrow ? 'button' : undefined}
+      accessibilityLabel={label}
+    >
+      <Ionicons name={icon} size={18} color={colors.primary} />
+      <ThemedText style={styles.rowLabel}>{label}</ThemedText>
+      <View style={styles.rowRight}>
+        {value ? (
+          <ThemedText style={styles.rowValue} numberOfLines={1}>
+            {value}
+          </ThemedText>
+        ) : null}
+        {rightElement}
+        {showArrow ? (
+          <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function NotificationPreferenceRow({
+  label,
+  value,
+  disabled,
+  onValueChange,
+}: {
+  label: string;
+  value: boolean;
+  disabled: boolean;
+  onValueChange: (nextValue: boolean) => void;
+}) {
+  const { colors, styles } = useSettingsStyles();
+
+  return (
+    <View style={[styles.preferenceRow, disabled && styles.preferenceRowDisabled]}>
+      <TouchableOpacity
+        style={styles.preferenceLabelButton}
+        onPress={() => onValueChange(!value)}
+        disabled={disabled}
+        activeOpacity={0.7}
+        accessibilityRole="switch"
+        accessibilityLabel={label}
+        accessibilityState={{ checked: value, disabled }}
+      >
+        <ThemedText style={styles.preferenceLabel}>{label}</ThemedText>
+      </TouchableOpacity>
+      <Switch
+        value={value}
+        disabled={disabled}
+        onValueChange={onValueChange}
+        accessibilityLabel={label}
+        trackColor={{ false: colors.border, true: colors.primary + '88' }}
+        thumbColor={value ? colors.primary : colors.textDisabled}
+      />
+    </View>
   );
 }
 

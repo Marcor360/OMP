@@ -330,7 +330,7 @@ Rules:
 
 ## Versioning, Builds, And Android Permissions
 
-Current detected app version is `1.34.3` in `package.json` and `app.json`. Verify the intended release version before release changes.
+Current detected app version is `1.36.1` in `package.json` and `app.json`. Verify the intended release version before release changes.
 
 Rules:
 

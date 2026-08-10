@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { authenticateLocally, getBiometricAvailability } from '@/src/services/security/biometric-service';
 
 const mockHasHardwareAsync = jest.fn();
 const mockIsEnrolledAsync = jest.fn();
@@ -9,8 +10,6 @@ jest.mock('expo-local-authentication', () => ({
   isEnrolledAsync: () => mockIsEnrolledAsync(),
   authenticateAsync: (...args: unknown[]) => mockAuthenticateAsync(...args),
 }));
-
-import { authenticateLocally, getBiometricAvailability } from '@/src/services/security/biometric-service';
 
 describe('biometric-service', () => {
   const originalPlatformOS = Platform.OS;
