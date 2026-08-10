@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useI18n } from '@/src/i18n/index';
+import { type AppTranslationKey, useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import { CleaningGroupType } from '@/src/modules/cleaning/types/cleaning-group.types';
@@ -22,7 +22,7 @@ export interface CleaningGroupFormValues {
 interface CleaningGroupFormProps {
   values: CleaningGroupFormValues;
   onChange: (values: CleaningGroupFormValues) => void;
-  errors?: Partial<Record<keyof CleaningGroupFormValues, string>>;
+  errors?: Partial<Record<keyof CleaningGroupFormValues, AppTranslationKey>>;
   disabled?: boolean;
 }
 
@@ -228,8 +228,8 @@ export function CleaningGroupForm({
 
 export const validateCleaningGroupForm = (
   values: CleaningGroupFormValues
-): Partial<Record<keyof CleaningGroupFormValues, string>> => {
-  const errors: Partial<Record<keyof CleaningGroupFormValues, string>> = {};
+): Partial<Record<keyof CleaningGroupFormValues, AppTranslationKey>> => {
+  const errors: Partial<Record<keyof CleaningGroupFormValues, AppTranslationKey>> = {};
   if (!values.name.trim()) {
     errors.name = 'cleaning.errorNameRequired';
   } else if (values.name.trim().length < 2) {

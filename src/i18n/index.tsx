@@ -34,9 +34,11 @@ const translations = {
   zh,
 } as const;
 
-// Translation keys are intentionally open while the project migrates
-// hardcoded interface text into the locale files.
-export type AppTranslationKey = string;
+type Leaves<T> = T extends string
+  ? ''
+  : { [K in keyof T & string]: T[K] extends string ? K : `${K}.${Leaves<T[K]>}` }[keyof T & string];
+
+export type AppTranslationKey = Leaves<import('@/src/i18n/locales/es').EsTranslations>;
 
 function getNestedValue<T extends object>(obj: T, path: string): unknown {
   return path.split('.').reduce<unknown>((acc, key) => {

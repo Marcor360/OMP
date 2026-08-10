@@ -28,7 +28,7 @@ const typeConfig: Record<
   SystemAnnouncementType,
   {
     icon: keyof typeof Ionicons.glyphMap;
-    label: string;
+    label: 'info' | 'update' | 'warning' | 'maintenance';
     colorKey: keyof Pick<AppColorSet, 'info' | 'success' | 'warning' | 'error'>;
     backgroundKey: keyof Pick<
       AppColorSet,

@@ -6,13 +6,13 @@ import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ThemedText } from '@/src/components/themed-text';
 import { useAppTheme, type ThemeMode } from '@/src/context/theme-context';
-import { useI18n } from '@/src/i18n/index';
+import { type AppTranslationKey, useI18n } from '@/src/i18n/index';
 import { useAppColors } from '@/src/styles';
 
 const THEME_OPTIONS: {
   mode: ThemeMode;
   icon: keyof typeof Ionicons.glyphMap;
-  labelKey: string;
+  labelKey: AppTranslationKey;
 }[] = [
   { mode: 'system', icon: 'phone-portrait-outline', labelKey: 'theme.option.system' },
   { mode: 'light', icon: 'sunny-outline', labelKey: 'theme.option.light' },
@@ -74,7 +74,7 @@ export function ThemeSelectorScreen() {
                     />
                   </View>
                   <ThemedText style={styles.optionLabel}>
-                    {t(option.labelKey as Parameters<typeof t>[0])}
+                    {t(option.labelKey)}
                   </ThemedText>
                 </View>
 

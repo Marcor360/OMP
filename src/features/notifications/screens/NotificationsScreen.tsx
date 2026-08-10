@@ -16,7 +16,7 @@ import {
 } from '@/src/features/notifications/types/notification.types';
 import { resolveNotificationHref } from '@/src/features/notifications/utils/notification-routes';
 import { useNotifications } from '@/src/hooks/useNotifications';
-import { useI18n } from '@/src/i18n/index';
+import { type AppTranslationKey, useI18n } from '@/src/i18n/index';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { getSafeNotificationHref } from '@/src/utils/navigation/redirect';
 
@@ -27,11 +27,11 @@ const resolveAssignmentHref = (notification: AppNotification): Href =>
 
 type NotificationFilter = 'all' | NotificationType;
 type NotificationSection = {
-  titleKey: string;
+  titleKey: AppTranslationKey;
   data: AppNotification[];
 };
 
-const FILTERS: { key: NotificationFilter; labelKey: string }[] = [
+const FILTERS: { key: NotificationFilter; labelKey: AppTranslationKey }[] = [
   { key: 'all', labelKey: 'notifications.filter.all' },
   { key: 'assignment', labelKey: 'notifications.filter.assignments' },
   { key: 'event', labelKey: 'notifications.filter.events' },

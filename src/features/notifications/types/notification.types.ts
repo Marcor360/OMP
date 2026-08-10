@@ -1,5 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
+import type { AppTranslationKey } from '@/src/i18n/index';
+
 export type NotificationType = 'assignment' | 'event' | 'billing';
 
 export type NotificationCategory = 'platform' | 'cleaning' | 'hospitality' | null;
@@ -40,13 +42,16 @@ export interface AppNotification {
   };
 }
 
-export const NOTIFICATION_CATEGORY_LABELS: Record<Exclude<NotificationCategory, null>, string> = {
+export const NOTIFICATION_CATEGORY_LABELS: Record<
+  Exclude<NotificationCategory, null>,
+  AppTranslationKey
+> = {
   platform: 'notifications.category.platform',
   cleaning: 'notifications.category.cleaning',
   hospitality: 'notifications.category.hospitality',
 };
 
-export const resolveNotificationBadgeKey = (notification: AppNotification): string => {
+export const resolveNotificationBadgeKey = (notification: AppNotification): AppTranslationKey => {
   if (notification.type === 'event') return 'notifications.category.event';
   if (notification.type === 'billing') return 'notifications.category.billing';
 

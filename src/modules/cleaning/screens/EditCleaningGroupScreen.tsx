@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useI18n } from '@/src/i18n/index';
+import { type AppTranslationKey, useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning-permission';
@@ -52,7 +52,9 @@ export function EditCleaningGroupScreen({ groupId }: EditCleaningGroupScreenProp
     groupType: 'standard',
     isActive: true,
   });
-  const [formErrors, setFormErrors] = useState<Partial<Record<keyof CleaningGroupFormValues, string>>>({});
+  const [formErrors, setFormErrors] = useState<
+    Partial<Record<keyof CleaningGroupFormValues, AppTranslationKey>>
+  >({});
   const [submitting, setSubmitting] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);

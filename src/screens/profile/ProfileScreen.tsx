@@ -7,7 +7,7 @@ import { StatusBadge, useStatusColors } from '@/src/components/common/StatusBadg
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
 import { useAuth } from '@/src/context/auth-context';
-import { useI18n } from '@/src/i18n/index';
+import { type AppTranslationKey, useI18n } from '@/src/i18n/index';
 import { getCongregationDisplayName } from '@/src/services/congregations/congregations-service';
 import {
   UserRole,
@@ -19,13 +19,13 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 const joinLabels = (items: (string | null | undefined)[]): string =>
   items.filter((item): item is string => Boolean(item)).join(', ') || '--';
 
-const roleKey: Record<UserRole, string> = {
+const roleKey: Record<UserRole, AppTranslationKey> = {
   admin: 'role.admin',
   supervisor: 'role.supervisor',
   user: 'role.user',
 };
 
-const statusKey: Record<UserStatus, string> = {
+const statusKey: Record<UserStatus, AppTranslationKey> = {
   active: 'userStatus.active',
   inactive: 'userStatus.inactive',
   suspended: 'userStatus.suspended',

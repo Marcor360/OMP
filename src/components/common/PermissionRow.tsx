@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { useOptionalI18n } from '@/src/i18n/index';
+import { type AppTranslationKey, useOptionalI18n } from '@/src/i18n/index';
 import { type AppColors, useAppColors } from '@/src/styles';
 import { PermissionStatus } from '@/src/types/permissions.types';
 
@@ -24,7 +24,7 @@ interface PermissionRowProps {
 
 const STATUS_CONFIG: Record<
   PermissionStatus,
-  { labelKey: string; colorToken: keyof AppColors; icon: keyof typeof Ionicons.glyphMap }
+  { labelKey: AppTranslationKey; colorToken: keyof AppColors; icon: keyof typeof Ionicons.glyphMap }
 > = {
   granted: {
     labelKey: 'permission.status.granted',

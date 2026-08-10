@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useI18n } from '@/src/i18n/index';
+import { type AppTranslationKey, useI18n } from '@/src/i18n/index';
 
 import { useAppColors } from '@/src/styles';
 import { useCleaningPermission } from '@/src/modules/cleaning/hooks/use-cleaning-permission';
@@ -41,7 +41,9 @@ export function CreateCleaningGroupScreen() {
   const { t } = useI18n();
 
   const [formValues, setFormValues] = useState<CleaningGroupFormValues>(DEFAULT_FORM);
-  const [formErrors, setFormErrors] = useState<Partial<Record<keyof CleaningGroupFormValues, string>>>({});
+  const [formErrors, setFormErrors] = useState<
+    Partial<Record<keyof CleaningGroupFormValues, AppTranslationKey>>
+  >({});
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [showMemberModal, setShowMemberModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
