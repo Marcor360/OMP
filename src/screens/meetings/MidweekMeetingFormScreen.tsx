@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -49,6 +48,7 @@ import {
 } from '@/src/types/meeting';
 import { MeetingPublicationStatus } from '@/src/types/meeting/publication-flow';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { showAlert } from '@/src/utils/ui/alerts';
 import { getOperationalDateBounds } from '@/src/utils/dates/operational-window';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
 
@@ -235,7 +235,7 @@ export function MidweekMeetingFormScreen() {
 
         if (mode === 'edit') {
           if (!meeting) {
-            Alert.alert('Error', 'No se encontro la reunion de entre semana.');
+            showAlert('Error', 'No se encontro la reunion de entre semana.');
             router.back();
             return;
           }
@@ -247,7 +247,7 @@ export function MidweekMeetingFormScreen() {
         }
       } catch (requestError) {
         if (!cancelled) {
-          Alert.alert('Error', formatFirestoreError(requestError));
+          showAlert('Error', formatFirestoreError(requestError));
           router.back();
         }
       } finally {
@@ -411,18 +411,18 @@ export function MidweekMeetingFormScreen() {
 
   const handleSave = async () => {
     if (!isAdminOrSupervisor) {
-      Alert.alert('Permisos insuficientes', 'No tienes permisos para guardar reuniones entre semana.');
+      showAlert('Permisos insuficientes', 'No tienes permisos para guardar reuniones entre semana.');
       return;
     }
 
     if (!congregationId) {
-      Alert.alert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
+      showAlert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
       return;
     }
 
     const validation = validate();
     if (!validation.isValid || !validation.startDate || !validation.endDate) {
-      Alert.alert('Validacion', 'Revisa los campos marcados antes de guardar.');
+      showAlert('Validacion', 'Revisa los campos marcados antes de guardar.');
       return;
     }
 
@@ -469,15 +469,15 @@ export function MidweekMeetingFormScreen() {
           displayName: appUser?.displayName ?? user?.email ?? 'Usuario',
         });
 
-        Alert.alert('Exito', 'Reunion de entre semana creada correctamente.');
+        showAlert('Exito', 'Reunion de entre semana creada correctamente.');
       } else if (id) {
         await updateMidweekMeeting(congregationId, id, payload, user?.uid);
-        Alert.alert('Exito', 'Reunion de entre semana actualizada.');
+        showAlert('Exito', 'Reunion de entre semana actualizada.');
       }
 
       router.back();
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      showAlert('Error', formatFirestoreError(requestError));
     } finally {
       setSaving(false);
     }

@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -16,6 +15,7 @@ import { LoadingState } from '@/src/components/common/LoadingState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
+import { showAlert } from '@/src/utils/ui/alerts';
 import { useUser } from '@/src/context/user-context';
 import {
   cancelOutgoingTalkByManager,
@@ -247,14 +247,14 @@ export function OutgoingTalksScreen() {
 
       if (editingTalk) {
         await updateOutgoingTalkByManager(payload);
-        Alert.alert(t('common.success'), t('assignments.successUpdate'));
+        showAlert(t('common.success'), t('assignments.successUpdate'));
       } else {
         await createOutgoingTalkByManager(payload);
-        Alert.alert(t('common.success'), t('assignments.successRegister'));
+        showAlert(t('common.success'), t('assignments.successRegister'));
       }
       resetForm();
     } catch (error) {
-      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('assignments.errorSave'));
+      showAlert(t('common.error'), error instanceof Error ? error.message : t('assignments.errorSave'));
     } finally {
       setSaving(false);
     }
@@ -278,7 +278,7 @@ export function OutgoingTalksScreen() {
         await completeOutgoingTalkByManager(payload);
       }
     } catch (error) {
-      Alert.alert(t('common.error'), error instanceof Error ? error.message : t('assignments.errorUpdate'));
+      showAlert(t('common.error'), error instanceof Error ? error.message : t('assignments.errorUpdate'));
     }
   };
 

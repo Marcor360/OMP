@@ -1,4 +1,4 @@
-import { View, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 
@@ -15,7 +15,7 @@ import {
 } from '@/src/types/user';
 import { formatDate } from '@/src/utils/dates/dates';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
-import { confirmAlert } from '@/src/utils/ui/alerts';
+import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 
 const joinLabels = (items: (string | null | undefined)[]): string =>
   items.filter((item): item is string => Boolean(item)).join(', ') || '--';
@@ -78,7 +78,7 @@ export function ProfileScreen() {
     try {
       await logout();
     } catch {
-      Alert.alert(t('common.error'), t('profile.logout.error'));
+      showAlert(t('common.error'), t('profile.logout.error'));
     }
   };
 

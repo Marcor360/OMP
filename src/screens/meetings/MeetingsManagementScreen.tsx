@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -19,7 +19,7 @@ import { Meeting } from '@/src/types/meeting';
 import { MeetingPublicationStatus } from '@/src/types/meeting/program';
 import { isExpired } from '@/src/utils/dates/operational-window';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { confirmAlert } from '@/src/utils/ui/alerts';
+import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 
 const PUBLICATION_FILTERS: (MeetingPublicationStatus | 'all')[] = [
   'all',
@@ -160,11 +160,11 @@ export function MeetingsManagementScreen() {
       });
 
       if (!result.ok) {
-        Alert.alert(t('meetings.management.alert.validation'), result.errors.join('\n'));
+        showAlert(t('meetings.management.alert.validation'), result.errors.join('\n'));
         return;
       }
 
-      Alert.alert(
+      showAlert(
         t('meetings.management.alert.success'),
         nextStatus === 'published'
           ? t('meetings.management.alert.published')
@@ -172,7 +172,7 @@ export function MeetingsManagementScreen() {
       );
       await onRefresh();
     } catch (requestError) {
-      Alert.alert(t('common.error'), formatFirestoreError(requestError));
+      showAlert(t('common.error'), formatFirestoreError(requestError));
     }
   };
 
@@ -197,9 +197,9 @@ export function MeetingsManagementScreen() {
     try {
       await deleteMeeting(congregationId, meeting.id);
       setMeetings((current) => current.filter((item) => item.id !== meeting.id));
-      Alert.alert(t('meetings.management.alert.success'), t('meetings.management.alert.deleted'));
+      showAlert(t('meetings.management.alert.success'), t('meetings.management.alert.deleted'));
     } catch (requestError) {
-      Alert.alert(t('common.error'), formatFirestoreError(requestError));
+      showAlert(t('common.error'), formatFirestoreError(requestError));
     } finally {
       setDeletingMeetingId(null);
     }

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Alert, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
@@ -28,6 +28,7 @@ import {
 } from '@/src/types/territory';
 import type { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { showAlert } from '@/src/utils/ui/alerts';
 import {
   canAssignMonthlyTerritories,
   canManagePreachingGroups,
@@ -125,19 +126,19 @@ export function TerritoriesManageScreen() {
               };
               if (draft.id) await mutations.updateTerritory(draft.id, input);
               else await mutations.createTerritory(input);
-              Alert.alert(
+              showAlert(
                 t('territoriesManagement.tabs.territories'),
                 t('territoriesManagement.territorySaved')
               );
             } catch (saveError) {
-              Alert.alert(t('common.error'), formatFirestoreError(saveError));
+              showAlert(t('common.error'), formatFirestoreError(saveError));
             }
           }}
           onDeactivate={async (territoryId) => {
             try {
               await mutations.deactivateTerritory(territoryId);
             } catch (saveError) {
-              Alert.alert(t('common.error'), formatFirestoreError(saveError));
+              showAlert(t('common.error'), formatFirestoreError(saveError));
             }
           }}
         />
@@ -166,13 +167,13 @@ export function TerritoriesManageScreen() {
               };
               if (draft.id) await mutations.updatePreachingGroup(draft.id, input);
               else await mutations.createPreachingGroup(input);
-              Alert.alert(
+              showAlert(
                 t('territoriesManagement.tabs.groups'),
                 t('territoriesManagement.groupSaved')
               );
               return true;
             } catch (saveError) {
-              Alert.alert(t('common.error'), formatFirestoreError(saveError));
+              showAlert(t('common.error'), formatFirestoreError(saveError));
               return false;
             }
           }}
@@ -180,7 +181,7 @@ export function TerritoriesManageScreen() {
             try {
               await mutations.deactivatePreachingGroup(groupId);
             } catch (saveError) {
-              Alert.alert(t('common.error'), formatFirestoreError(saveError));
+              showAlert(t('common.error'), formatFirestoreError(saveError));
             }
           }}
         />
@@ -198,12 +199,12 @@ export function TerritoriesManageScreen() {
             try {
               await mutations.upsertMonthlyTerritoryAssignment(monthId, { assignments: targets });
               await monthly.refresh();
-              Alert.alert(
+              showAlert(
                 t('territoriesManagement.tabs.monthly'),
                 t('territoriesManagement.monthlySaved')
               );
             } catch (saveError) {
-              Alert.alert(t('common.error'), formatFirestoreError(saveError));
+              showAlert(t('common.error'), formatFirestoreError(saveError));
             }
           }}
         />

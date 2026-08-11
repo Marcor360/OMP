@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useState } from 'react';
-import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
@@ -27,6 +27,7 @@ import {
 } from '@/src/modules/organization/utils/organizationPermissions';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { formatFirestoreError, isPermissionDeniedError } from '@/src/utils/errors/errors';
+import { showAlert } from '@/src/utils/ui/alerts';
 
 const noop = (): void => undefined;
 
@@ -45,7 +46,7 @@ export function OrganizationChart() {
 
   const handleRegenerate = useCallback(async () => {
     if (!canManage) {
-      Alert.alert('Error', 'Solo el coordinador o el secretario pueden generar el organigrama.');
+      showAlert('Error', 'Solo el coordinador o el secretario pueden generar el organigrama.');
       return;
     }
 
@@ -55,7 +56,7 @@ export function OrganizationChart() {
       await orgChart.refresh();
       showToast(result.warnings.length > 0 ? result.warnings[0] : 'Organigrama generado con exito');
     } catch (requestError) {
-      Alert.alert(
+      showAlert(
         'Error',
         isPermissionDeniedError(requestError)
           ? 'Solo el coordinador o el secretario pueden generar el organigrama.'
@@ -82,7 +83,7 @@ export function OrganizationChart() {
       setEditingDepartment(null);
       await orgChart.refresh();
     } catch (requestError) {
-      Alert.alert(
+      showAlert(
         'Error',
         isPermissionDeniedError(requestError)
           ? 'No tienes permisos para modificar el organigrama.'
@@ -95,11 +96,11 @@ export function OrganizationChart() {
 
   const handleSeedDefaultDepartments = async () => {
     if (!congregationId) {
-      Alert.alert('Error', 'No se pudo identificar la congregacion del usuario.');
+      showAlert('Error', 'No se pudo identificar la congregacion del usuario.');
       return;
     }
     if (!canManage) {
-      Alert.alert('Error', 'No tienes permisos para crear departamentos del organigrama.');
+      showAlert('Error', 'No tienes permisos para crear departamentos del organigrama.');
       return;
     }
 
@@ -109,7 +110,7 @@ export function OrganizationChart() {
       showToast('Departamentos base creados con exito');
       await orgChart.refresh();
     } catch (requestError) {
-      Alert.alert(
+      showAlert(
         'Error',
         isPermissionDeniedError(requestError)
           ? 'No tienes permisos para crear departamentos del organigrama.'

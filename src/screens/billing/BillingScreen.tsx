@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
@@ -27,7 +27,7 @@ import {
   type BillingPlanKey,
 } from '@/src/types/billing';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { confirmAlert } from '@/src/utils/ui/alerts';
+import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 import {
   canManageSubscription,
   canPaySubscription,
@@ -157,7 +157,7 @@ export function BillingScreen() {
       });
       await openExternalUrl(url);
     } catch (requestError) {
-      Alert.alert(t('billing.error.checkoutTitle'), formatFirestoreError(requestError));
+      showAlert(t('billing.error.checkoutTitle'), formatFirestoreError(requestError));
     } finally {
       setActionLoading(null);
     }
@@ -173,7 +173,7 @@ export function BillingScreen() {
       });
       await openExternalUrl(url);
     } catch (requestError) {
-      Alert.alert(t('billing.error.portalTitle'), formatFirestoreError(requestError));
+      showAlert(t('billing.error.portalTitle'), formatFirestoreError(requestError));
     } finally {
       setActionLoading(null);
     }
@@ -197,7 +197,7 @@ export function BillingScreen() {
       await setBillingExemption(next);
       await refresh();
     } catch (requestError) {
-      Alert.alert(t('billing.error.exemptionTitle'), formatFirestoreError(requestError));
+      showAlert(t('billing.error.exemptionTitle'), formatFirestoreError(requestError));
     } finally {
       setActionLoading(null);
     }

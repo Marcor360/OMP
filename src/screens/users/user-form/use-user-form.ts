@@ -1,6 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert } from 'react-native';
 
 import { useToast } from '@/src/context/toast-context';
 import { useUser } from '@/src/context/user-context';
@@ -32,6 +31,7 @@ import type {
 import { USER_SERVICE_DEPARTMENT_LABELS } from '@/src/types/user';
 import { copyToClipboard } from '@/src/utils/clipboard/clipboard';
 import { AppError, formatFirestoreError } from '@/src/utils/errors/errors';
+import { showAlert } from '@/src/utils/ui/alerts';
 import {
   assignmentKey,
   buildDepartmentLabel,
@@ -158,19 +158,19 @@ export const useUserForm = (): UserFormController => {
     getUserById(id)
       .then((loadedUser) => {
         if (!loadedUser) {
-          Alert.alert('Error', 'Usuario no encontrado.');
+          showAlert('Error', 'Usuario no encontrado.');
           router.back();
           return;
         }
 
         if (loadedUser.congregationId !== congregationId) {
-          Alert.alert('Error', 'No tienes permisos para editar este usuario.');
+          showAlert('Error', 'No tienes permisos para editar este usuario.');
           router.back();
           return;
         }
 
         if (loadedUser.role === 'admin' && !isAdmin) {
-          Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotManageAdmin'));
+          showAlert(t('users.error.actionNotAllowed'), t('users.error.cannotManageAdmin'));
           router.back();
           return;
         }
@@ -186,7 +186,7 @@ export const useUserForm = (): UserFormController => {
         setPermissions(formValues.permissions);
       })
       .catch((requestError) => {
-        Alert.alert('Error', formatFirestoreError(requestError));
+        showAlert('Error', formatFirestoreError(requestError));
         router.back();
       })
       .finally(() => setLoading(false));
@@ -199,15 +199,15 @@ export const useUserForm = (): UserFormController => {
 
   const handleCopyValue = async (label: string, value: string) => {
     if (!value.trim()) {
-      Alert.alert('Sin datos', `No hay ${label.toLowerCase()} para copiar.`);
+      showAlert('Sin datos', `No hay ${label.toLowerCase()} para copiar.`);
       return;
     }
 
     try {
       await copyToClipboard(value);
-      Alert.alert('Copiado', `${label} copiado al portapapeles.`);
+      showAlert('Copiado', `${label} copiado al portapapeles.`);
     } catch {
-      Alert.alert('No se pudo copiar', 'Intenta seleccionar el texto manualmente.');
+      showAlert('No se pudo copiar', 'Intenta seleccionar el texto manualmente.');
     }
   };
 
@@ -499,12 +499,12 @@ export const useUserForm = (): UserFormController => {
     if (savingRef.current) return;
 
     if (!canEdit) {
-      Alert.alert('Permisos insuficientes', 'Necesitas permiso para crear o editar usuarios.');
+      showAlert('Permisos insuficientes', 'Necesitas permiso para crear o editar usuarios.');
       return;
     }
 
     if (!congregationId) {
-      Alert.alert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
+      showAlert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
       return;
     }
 
@@ -655,7 +655,7 @@ export const useUserForm = (): UserFormController => {
 
       router.back();
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      showAlert('Error', formatFirestoreError(requestError));
     } finally {
       resetSaving();
     }

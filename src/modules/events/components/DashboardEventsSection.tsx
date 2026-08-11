@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -9,7 +9,7 @@ import { deleteEvent } from '@/src/services/events/events-service';
 import { CongregationEvent } from '@/src/types/event';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { confirmAlert } from '@/src/utils/ui/alerts';
+import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 
 interface DashboardEventsSectionProps {
   events: CongregationEvent[];
@@ -68,7 +68,7 @@ export function DashboardEventsSection({
       });
       onRefresh();
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      showAlert('Error', formatFirestoreError(requestError));
     }
   };
 

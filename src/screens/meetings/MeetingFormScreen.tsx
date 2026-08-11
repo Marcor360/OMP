@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -60,6 +59,7 @@ import { formatWeekLabel, getWeekStart, moveWeek } from '@/src/utils/dates/week-
 import { formatDateKey, parseDateKey } from '@/src/utils/dates/date-key';
 import { getOperationalDateBounds } from '@/src/utils/dates/operational-window';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { showAlert } from '@/src/utils/ui/alerts';
 import { canManageAssignments } from '@/src/utils/permissions/permissions';
 import {
   CleaningSelectionMode,
@@ -243,7 +243,7 @@ export function MeetingFormScreen() {
         }
       } catch (requestError) {
         if (!cancelled) {
-          Alert.alert('Error', formatFirestoreError(requestError));
+          showAlert('Error', formatFirestoreError(requestError));
           router.back();
         }
       } finally {

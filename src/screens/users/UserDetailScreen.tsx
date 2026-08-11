@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -32,7 +32,7 @@ import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { isSystemPrincipalUser } from '@/src/utils/users/user-protection';
 import { useI18n } from '@/src/i18n/index';
 import { canViewUsers, hasPermission } from '@/src/utils/permissions/permissions';
-import { confirmAlert } from '@/src/utils/ui/alerts';
+import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 
 const interpolate = (template: string, values: Record<string, string>): string =>
   Object.entries(values).reduce(
@@ -142,12 +142,12 @@ export function UserDetailScreen() {
     if (!user) return;
 
     if (!hasPermission(appUser, 'usuarios', 'edit') && !hasPermission(appUser, 'usuarios', 'manage')) {
-      Alert.alert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyStatus'));
+      showAlert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyStatus'));
       return;
     }
 
     if (user.role === 'admin' && !isAdmin) {
-      Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotManageAdmin'));
+      showAlert(t('users.error.actionNotAllowed'), t('users.error.cannotManageAdmin'));
       return;
     }
 
@@ -195,7 +195,7 @@ export function UserDetailScreen() {
       );
       showToast(t('users.toast.updated'));
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      showAlert('Error', formatFirestoreError(requestError));
     } finally {
       togglingRef.current = false;
       setToggling(false);
@@ -207,22 +207,22 @@ export function UserDetailScreen() {
     if (!user) return;
 
     if (!hasPermission(appUser, 'usuarios', 'delete') && !hasPermission(appUser, 'usuarios', 'manage')) {
-      Alert.alert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyDelete'));
+      showAlert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyDelete'));
       return;
     }
 
     if (user.uid === currentUid) {
-      Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteSelf'));
+      showAlert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteSelf'));
       return;
     }
 
     if (user.role === 'admin' && !isAdmin) {
-      Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteAdmin'));
+      showAlert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteAdmin'));
       return;
     }
 
     if (isSystemPrincipalUser(user)) {
-      Alert.alert(
+      showAlert(
         t('users.error.actionNotAllowed'),
         t('users.error.cannotDeleteSystemUser')
       );
@@ -246,7 +246,7 @@ export function UserDetailScreen() {
       showToast(t('users.toast.deleted'));
       router.replace('/(protected)/(tabs)/users');
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      showAlert('Error', formatFirestoreError(requestError));
     } finally {
       deletingRef.current = false;
       setDeleting(false);

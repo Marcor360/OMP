@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   FlatList,
   ScrollView,
   StyleSheet,
@@ -41,6 +40,7 @@ import { Meeting } from '@/src/types/meeting';
 import { formatDateKey, parseDateKey } from '@/src/utils/dates/date-key';
 import { getOperationalDateBounds } from '@/src/utils/dates/operational-window';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { showAlert } from '@/src/utils/ui/alerts';
 import { canManageCleaning } from '@/src/utils/permissions/permissions';
 
 type CleaningPlanningRow = {
@@ -178,7 +178,7 @@ export function CleaningScheduleScreen() {
       const parsedStart = parseDateKey(rangeStart);
       const parsedEnd = parseDateKey(rangeEnd);
       if (!parsedStart || !parsedEnd || parsedStart > parsedEnd) {
-        Alert.alert(t('cleaning.scheduleInvalidRangeTitle'), t('cleaning.scheduleInvalidRangeMsg'));
+        showAlert(t('cleaning.scheduleInvalidRangeTitle'), t('cleaning.scheduleInvalidRangeMsg'));
         return;
       }
 
@@ -342,9 +342,9 @@ export function CleaningScheduleScreen() {
     setSaving(true);
     try {
       await saveDraft();
-      Alert.alert(t('cleaning.scheduleDraftSavedTitle'), t('cleaning.scheduleDraftSavedMsg'));
+      showAlert(t('cleaning.scheduleDraftSavedTitle'), t('cleaning.scheduleDraftSavedMsg'));
     } catch (requestError) {
-      Alert.alert(t('cleaning.scheduleSaveFailed'), formatFirestoreError(requestError));
+      showAlert(t('cleaning.scheduleSaveFailed'), formatFirestoreError(requestError));
     } finally {
       setSaving(false);
     }
@@ -365,12 +365,12 @@ export function CleaningScheduleScreen() {
         syncMeetings: true,
       });
       await loadSchedules();
-      Alert.alert(
+      showAlert(
         t('cleaning.schedulePublishedTitle'),
         t('cleaning.schedulePublishedMsg', { synced: result.syncedMeetings, missing: result.missingMeetings })
       );
     } catch (requestError) {
-      Alert.alert(t('cleaning.schedulePublishFailed'), formatFirestoreError(requestError));
+      showAlert(t('cleaning.schedulePublishFailed'), formatFirestoreError(requestError));
     } finally {
       setPublishing(false);
     }
