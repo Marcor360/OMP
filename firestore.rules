@@ -1197,6 +1197,12 @@ service cloud.firestore {
     // CONGREGATIONS
     // =========================================================================
 
+    // Reservado para validación futura desde Functions: ya no se usa en
+    // rules_src/21-congregations-people-meetings.rules porque create/update
+    // del documento de congregación está cerrado a cliente (allow if false).
+    // No borrar; hasOnlyKeys() aquí no puede validar mapas gestionados por el
+    // backend (billing, billingExemption) porque request.resource.data es el
+    // documento resultante completo, no el delta del update.
     function allowedCongregationKeys() {
       return [
         'name',
@@ -2406,21 +2412,31 @@ service cloud.firestore {
       allow get: if isSuperAdmin() || sameCongregation(congregationId);
       allow list: if isSuperAdmin();
 
-      allow create: if isSuperAdmin() || (isAdmin()
-        && canAccessCongregationData(congregationId)
-        && validCongregationData(request.resource.data));
-
-      allow update: if isSuperAdmin() || (isAdmin()
-        && canAccessCongregationData(congregationId)
-        && validCongregationData(request.resource.data)
-        && preservesCreatedAt());
+      // Las mutaciones del documento de congregación pasan por Cloud Functions:
+      // el documento contiene mapas gestionados por el backend (billing,
+      // billingExemption) que hasOnlyKeys() no puede validar desde cliente, porque
+      // request.resource.data es el documento resultante completo, no el delta.
+      // Mismo criterio que meetings/ y assignments/.
+      allow create, update: if false;
 
       allow delete: if false;
 
+      // Un solo match para todo /private/{privateDocId}: dos match separados
+      // que coincidan con el mismo path (uno literal 'billing' + el comodín)
+      // duplican la evaluación de canAccessCongregationData() -- que ya hace
+      // varios get() con arboles grandes de condiciones -- y agotan el limite
+      // de expresiones de las Rules. Tampoco repetimos sameCongregation():
+      // canAccessCongregationData() ya la incluye. 'billing' (identificadores
+      // de Stripe, SEC-01) se abre a quien puede ver facturación, igual que
+      // billingHistory/ con canViewBillingData(); el resto de /private (ej.
+      // plan) sigue siendo admin-only: ver facturación no debe implicar ver
+      // cualquier documento privado.
       match /private/{privateDocId} {
-        allow get, list: if sameCongregation(congregationId)
-          && canAccessCongregationData(congregationId)
-          && isAdmin();
+        allow get, list: if canAccessCongregationData(congregationId)
+          && (
+            isAdmin()
+            || (privateDocId == 'billing' && canViewBillingData())
+          );
         allow write: if false;
       }
 

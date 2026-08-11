@@ -2,6 +2,12 @@
     // CONGREGATIONS
     // =========================================================================
 
+    // Reservado para validación futura desde Functions: ya no se usa en
+    // rules_src/21-congregations-people-meetings.rules porque create/update
+    // del documento de congregación está cerrado a cliente (allow if false).
+    // No borrar; hasOnlyKeys() aquí no puede validar mapas gestionados por el
+    // backend (billing, billingExemption) porque request.resource.data es el
+    // documento resultante completo, no el delta del update.
     function allowedCongregationKeys() {
       return [
         'name',
