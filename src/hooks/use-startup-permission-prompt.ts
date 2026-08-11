@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef } from 'react';
-import { Alert, Linking } from 'react-native';
+import { Linking } from 'react-native';
 
 import {
   getPushNotificationPermissionStatus,
@@ -9,6 +9,7 @@ import {
 } from '@/src/services/notifications/push-notifications.service';
 import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 import { useI18n } from '@/src/i18n/index';
+import { confirmAlert } from '@/src/utils/ui/alerts';
 
 const STARTUP_PERMISSION_PROMPT_KEY = '@omp/startup-permission-prompt-v1';
 
@@ -73,19 +74,13 @@ export function useStartupPermissionPrompt({
           await AsyncStorage.setItem(userPromptKey, 'exhausted');
           promptedThisSession.current = true;
 
-          Alert.alert(
-            t('permission.startup.deniedTitle'),
-            t('permission.startup.deniedDescription'),
-            [
-              { text: t('permission.startup.notNow'), style: 'cancel' },
-              {
-                text: t('permission.action.openSettings'),
-                onPress: () => {
-                  void Linking.openSettings();
-                },
-              },
-            ]
-          );
+          const shouldOpenSettings = await confirmAlert({
+            title: t('permission.startup.deniedTitle'),
+            message: t('permission.startup.deniedDescription'),
+            confirmLabel: t('permission.action.openSettings'),
+            cancelLabel: t('permission.startup.notNow'),
+          });
+          if (shouldOpenSettings) await Linking.openSettings();
         }
         return;
       }
@@ -99,40 +94,32 @@ export function useStartupPermissionPrompt({
 
       promptedThisSession.current = true;
 
-      Alert.alert(
-        t('permission.startup.title'),
-        t('permission.startup.description'),
-        [
-          {
-            text: t('permission.startup.notNow'),
-            style: 'cancel',
-            onPress: () => {
-              void AsyncStorage.setItem(
-                userPromptKey,
-                flag === 'declined_once' ? 'exhausted' : 'declined_once'
-              );
-            },
-          },
-          {
-            text: t('permission.action.allow'),
-            onPress: () => {
-              void (async () => {
-                const result = await requestPushNotificationPermission();
+      const shouldRequestPermission = await confirmAlert({
+        title: t('permission.startup.title'),
+        message: t('permission.startup.description'),
+        confirmLabel: t('permission.action.allow'),
+        cancelLabel: t('permission.startup.notNow'),
+      });
 
-                if (result === 'granted') {
-                  await AsyncStorage.setItem(userPromptKey, 'accepted');
-                  await registerExpoPushTokenForUser({ userId: uid, congregationId });
-                  return;
-                }
+      if (!shouldRequestPermission) {
+        await AsyncStorage.setItem(
+          userPromptKey,
+          flag === 'declined_once' ? 'exhausted' : 'declined_once'
+        );
+        return;
+      }
 
-                if (result === 'denied') {
-                  await AsyncStorage.setItem(userPromptKey, 'exhausted');
-                }
-              })();
-            },
-          },
-        ]
-      );
+      const result = await requestPushNotificationPermission();
+
+      if (result === 'granted') {
+        await AsyncStorage.setItem(userPromptKey, 'accepted');
+        await registerExpoPushTokenForUser({ userId: uid, congregationId });
+        return;
+      }
+
+      if (result === 'denied') {
+        await AsyncStorage.setItem(userPromptKey, 'exhausted');
+      }
     };
 
     void maybePrompt();

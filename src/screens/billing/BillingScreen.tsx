@@ -27,6 +27,7 @@ import {
   type BillingPlanKey,
 } from '@/src/types/billing';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { confirmAlert } from '@/src/utils/ui/alerts';
 import {
   canManageSubscription,
   canPaySubscription,
@@ -178,30 +179,28 @@ export function BillingScreen() {
     }
   };
 
-  const handleToggleExemption = () => {
+  const handleToggleExemption = async () => {
     const next = !isExempt;
-    Alert.alert(
-      next ? t('billing.exemption.activateTitle') : t('billing.exemption.revokeTitle'),
-      next ? t('billing.exemption.activateMessage') : t('billing.exemption.revokeMessage'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: next ? t('billing.exemption.activateConfirm') : t('billing.exemption.revokeConfirm'),
-          style: next ? 'default' : 'destructive',
-          onPress: async () => {
-            try {
-              setActionLoading('exemption');
-              await setBillingExemption(next);
-              await refresh();
-            } catch (requestError) {
-              Alert.alert(t('billing.error.exemptionTitle'), formatFirestoreError(requestError));
-            } finally {
-              setActionLoading(null);
-            }
-          },
-        },
-      ]
-    );
+    const confirmed = await confirmAlert({
+      title: next ? t('billing.exemption.activateTitle') : t('billing.exemption.revokeTitle'),
+      message: next ? t('billing.exemption.activateMessage') : t('billing.exemption.revokeMessage'),
+      confirmLabel: next
+        ? t('billing.exemption.activateConfirm')
+        : t('billing.exemption.revokeConfirm'),
+      cancelLabel: t('common.cancel'),
+      destructive: !next,
+    });
+    if (!confirmed) return;
+
+    try {
+      setActionLoading('exemption');
+      await setBillingExemption(next);
+      await refresh();
+    } catch (requestError) {
+      Alert.alert(t('billing.error.exemptionTitle'), formatFirestoreError(requestError));
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   if (loadingProfile || loading) {
