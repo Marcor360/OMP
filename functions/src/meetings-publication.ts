@@ -12,6 +12,7 @@ import {
   toFirestoreSectionsPayload,
   type MeetingPublicationStatus,
 } from './modules/meetings/meeting-sections.js';
+import { assertAdministrativeBillingAccess } from './users/authorization.js';
 
 type UserRole = 'admin' | 'supervisor' | 'user';
 type ServiceAssignment = {
@@ -552,6 +553,8 @@ export const setMeetingPublicationStatus = onCall(
         'No puedes modificar reuniones de otra congregacion.'
       );
     }
+
+    await assertAdministrativeBillingAccess(parsed.congregationId);
 
     const meetingRef = adminDb
       .collection('congregations')

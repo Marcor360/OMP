@@ -2,6 +2,7 @@ import { FieldValue, Timestamp, WriteBatch } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { adminDb } from './config/firebaseAdmin.js';
+import { assertAdministrativeBillingAccess } from './users/authorization.js';
 
 type UserRole = 'admin' | 'supervisor' | 'user';
 type RequesterProfile = {
@@ -1086,6 +1087,7 @@ export const ensurePlanningMeetingsByManager = onCall(
     }
 
     const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(congregationId);
     assertHospitalityManager(requester, congregationId);
     const payload = parseEnsurePlanningMeetingsPayload(request.data);
     const createdMidweek = 0;
@@ -1131,6 +1133,7 @@ export const publishCleaningScheduleByManager = onCall(
 
     const payload = parsePayload(request.data);
     const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(payload.congregationId);
     assertCleaningManager(requester, payload.congregationId);
 
     await publishSchedule({
@@ -1162,6 +1165,7 @@ export const publishHospitalityScheduleByManager = onCall(
 
     const payload = parsePayload(request.data);
     const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(payload.congregationId);
     assertHospitalityManager(requester, payload.congregationId);
 
     const scheduleData = await getScheduleForPublish({
@@ -1210,6 +1214,7 @@ export const substituteHospitalityAssignmentByManager = onCall(
 
     const payload = parseSubstitutePayload(request.data);
     const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(payload.congregationId);
     assertHospitalityManager(requester, payload.congregationId);
 
     const scheduleRef = adminDb

@@ -10,6 +10,7 @@ import {
   resolveMeetingType,
   toFirestoreSectionsPayload,
 } from './modules/meetings/meeting-sections.js';
+import { assertAdministrativeBillingAccess } from './users/authorization.js';
 
 type UserRole = 'admin' | 'supervisor' | 'user';
 type ServiceAssignment = {
@@ -863,6 +864,7 @@ export const createMeetingByManager = onCall(
     const requesterUid = request.auth.uid;
     const requester = await getRequesterProfile(requesterUid);
 
+    await assertAdministrativeBillingAccess(congregationId);
     assertMeetingManager({ requester, congregationId });
     const meetingRange = toMeetingRangeFromData(meetingData);
 
@@ -924,6 +926,7 @@ export const updateMeetingByManager = onCall(
     const requester = await getRequesterProfile(request.auth.uid);
     const scope = payload.scope === 'assignments' ? 'assignments' : 'meeting';
 
+    await assertAdministrativeBillingAccess(congregationId);
     if (scope === 'assignments') {
       assertAssignmentsManager({ requester, congregationId });
     } else {
@@ -1048,6 +1051,7 @@ export const syncMeetingCleaningAssignmentsByManager = onCall(
     const requesterUid = request.auth.uid;
     const requester = await getRequesterProfile(requesterUid);
 
+    await assertAdministrativeBillingAccess(congregationId);
     assertMeetingManager({ requester, congregationId });
 
     const meetingRef = adminDb
@@ -1152,6 +1156,7 @@ export const createMeetingAssignmentByManager = onCall(
     const meetingId = parseMeetingId(payload.meetingId);
     const assignmentData = sanitizeAssignmentInput(parseAssignmentData(payload.assignmentData));
     const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(congregationId);
     assertAssignmentsManager({ requester, congregationId });
 
     const meetingRef = adminDb.collection('congregations').doc(congregationId)
@@ -1206,6 +1211,7 @@ export const updateMeetingAssignmentByManager = onCall(
     const assignmentId = parseMeetingId(payload.assignmentId);
     const assignmentData = sanitizeAssignmentInput(parseAssignmentData(payload.assignmentData));
     const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(congregationId);
     assertAssignmentsManager({ requester, congregationId });
 
     const meetingRef = adminDb.collection('congregations').doc(congregationId)
@@ -1265,6 +1271,7 @@ export const deleteMeetingAssignmentByManager = onCall(
     const meetingId = parseMeetingId(payload.meetingId);
     const assignmentId = parseMeetingId(payload.assignmentId);
     const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(congregationId);
     assertAssignmentsManager({requester, congregationId});
 
     const congregationRef = adminDb.collection('congregations').doc(congregationId);
@@ -1306,6 +1313,7 @@ export const deleteMeetingByManager = onCall(
     const meetingId = parseMeetingId(payload.meetingId);
     const requester = await getRequesterProfile(request.auth.uid);
 
+    await assertAdministrativeBillingAccess(congregationId);
     assertMeetingManager({ requester, congregationId });
 
     const meetingRef = adminDb

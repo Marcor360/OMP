@@ -3,6 +3,7 @@ import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/
 
 import { adminDb } from './config/firebaseAdmin.js';
 import { createInternalNotification } from './modules/notifications/notification.firestore.js';
+import { assertAdministrativeBillingAccess } from './users/authorization.js';
 
 type UserRole = 'admin' | 'supervisor' | 'user';
 type OutgoingTalkStatus = 'scheduled' | 'cancelled' | 'completed';
@@ -304,6 +305,7 @@ const writeOutgoingTalk = async (params: {
   isCreate: boolean;
 }) => {
   const requester = await getRequesterProfile(params.requesterUid);
+  await assertAdministrativeBillingAccess(params.payload.congregationId);
   assertOutgoingTalkManager(requester, params.payload.congregationId);
   const speaker = await resolveSpeaker(params.payload.speakerUserId, params.payload.congregationId);
   const week = getWeekRangeForDate(params.payload.talkDate);
@@ -435,6 +437,7 @@ const updateOutgoingTalkStatus = async (
     throw new HttpsError('invalid-argument', 'outgoingTalkId es obligatorio.');
   }
   const requester = await getRequesterProfile(request.auth.uid);
+  await assertAdministrativeBillingAccess(payload.congregationId);
   assertOutgoingTalkManager(requester, payload.congregationId);
 
   const ref = adminDb
