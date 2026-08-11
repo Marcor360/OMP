@@ -14,6 +14,7 @@ const REQUIRED_FIELDS = {
   meetings: ['meetingDate', 'endDate', 'startDate'], tareas: ['dueDate'],
   tasks: ['dueDate'], archivos: ['endDate'], files: ['endDate'],
   notifications: ['createdAt'], billingHistory: ['createdAt'],
+  private: ['stripeSubscriptionId'],
 };
 const DYNAMIC_ALLOWLIST = new Map([
   ['functions/src/maintenance/scheduled-data-cleanup.ts::params.collectionId',

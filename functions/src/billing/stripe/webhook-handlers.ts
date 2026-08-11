@@ -14,11 +14,13 @@ import {
   asTrimmedString,
   findCongregationBySubscription,
   getBillingAccessUpdate,
+  getCongregationPrivateBillingRef,
   getCongregationRef,
   getEventTimestamp,
   getInvoiceUrl,
   getObjectMetadata,
   getSubscriptionItems,
+  readPrivateBilling,
   resolveCustomerId,
   resolveSubscriptionId,
   timestampFromSeconds,
@@ -84,24 +86,35 @@ const handleInvoiceStatus = async (
   if (!congregationId) return null;
 
   const ref = getCongregationRef(congregationId);
+  const privateRef = getCongregationPrivateBillingRef(congregationId);
   const snap = await ref.get();
   const existingBilling = snap.exists
     ? ((snap.data() as Record<string, unknown>).billing as BillingState | undefined)
     : undefined;
   const eventTimestamp = getEventTimestamp(event);
 
-  await ref.set(
+  const batch = getFirestore().batch();
+  batch.set(
+    ref,
     {
       'billing.status': status,
-      'billing.lastPaymentStatus': lastPaymentStatus,
-      'billing.lastInvoiceId': asTrimmedString(invoice.id),
-      'billing.lastInvoiceUrl': getInvoiceUrl(invoice),
-      'billing.lastStripeEventId': event?.id ?? null,
       'billing.updatedAt': FieldValue.serverTimestamp(),
       ...getBillingAccessUpdate(status, existingBilling, eventTimestamp),
     },
     { merge: true }
   );
+  batch.set(
+    privateRef,
+    {
+      lastPaymentStatus,
+      lastInvoiceId: asTrimmedString(invoice.id),
+      lastInvoiceUrl: getInvoiceUrl(invoice),
+      lastStripeEventId: event?.id ?? null,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  await batch.commit();
 
   return congregationId;
 };
@@ -169,7 +182,10 @@ const writeBillingHistory = async (
   event: StripeWebhookEvent,
   object: Record<string, unknown>
 ): Promise<void> => {
-  const congregationSnap = await getCongregationRef(congregationId).get();
+  const [congregationSnap, currentPrivateBilling] = await Promise.all([
+    getCongregationRef(congregationId).get(),
+    readPrivateBilling(congregationId),
+  ]);
   const currentBilling = congregationSnap.exists
     ? ((congregationSnap.data() as Record<string, unknown>).billing as BillingState | undefined)
     : undefined;
@@ -178,7 +194,7 @@ const writeBillingHistory = async (
     resolveSubscriptionId(object.subscription) ??
     resolveSubscriptionId(object.id) ??
     getInvoiceSubscriptionId(object) ??
-    currentBilling?.stripeSubscriptionId ??
+    currentPrivateBilling?.stripeSubscriptionId ??
     null;
 
   await getCongregationRef(congregationId)
@@ -198,7 +214,7 @@ const writeBillingHistory = async (
         stripeCustomerId:
           getInvoiceCustomerId(object) ??
           resolveCustomerId(object.customer) ??
-          currentBilling?.stripeCustomerId ??
+          currentPrivateBilling?.stripeCustomerId ??
           null,
         hostedInvoiceUrl: getInvoiceUrl(object),
         createdAt: timestampFromSeconds(event.created) ?? FieldValue.serverTimestamp(),

@@ -26,9 +26,6 @@ export type BillingState = {
   planKey?: BillingPlanKey;
   activeUsersLimit?: number;
   userLimit?: number;
-  stripePriceId?: string;
-  stripeCustomerId?: string;
-  stripeSubscriptionId?: string;
   currentPeriodStart?: Timestamp | null;
   currentPeriodEnd?: Timestamp | null;
   nextPaymentDate?: Timestamp | null;
@@ -36,6 +33,15 @@ export type BillingState = {
   graceStartedAt?: Timestamp | null;
   graceUntil?: Timestamp | null;
   adminRestricted?: boolean;
+};
+
+// SEC-01: identificadores internos de Stripe. Viven en
+// congregations/{id}/private/billing, no en el documento raiz -- ver
+// rules_src/21-congregations-people-meetings.rules.
+export type PrivateBillingState = {
+  stripePriceId?: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
   lastPaymentStatus?: string;
   lastInvoiceId?: string;
   lastInvoiceUrl?: string | null;
@@ -150,6 +156,16 @@ export const parsePortalPayload = (value: unknown): Required<PortalPayload> => {
 
 export const getCongregationRef = (congregationId: string) =>
   getFirestore().collection('congregations').doc(congregationId);
+
+export const getCongregationPrivateBillingRef = (congregationId: string) =>
+  getCongregationRef(congregationId).collection('private').doc('billing');
+
+export const readPrivateBilling = async (
+  congregationId: string
+): Promise<PrivateBillingState | undefined> => {
+  const snap = await getCongregationPrivateBillingRef(congregationId).get();
+  return snap.exists ? (snap.data() as PrivateBillingState) : undefined;
+};
 
 export const readCongregation = async (congregationId: string) => {
   const ref = getCongregationRef(congregationId);
@@ -327,10 +343,10 @@ const getSubscriptionPeriod = (subscription: Record<string, unknown>) => {
 
 const subscriptionToBillingUpdate = (
   subscription: Record<string, unknown>,
-  fallback?: Partial<BillingState>,
+  fallback?: Partial<BillingState> & Partial<PrivateBillingState>,
   existingBilling?: BillingState,
   event?: Pick<StripeWebhookEvent, 'id' | 'created'>
-): Record<string, unknown> => {
+): { publicUpdate: Record<string, unknown>; privateUpdate: Record<string, unknown> } => {
   const period = getSubscriptionPeriod(subscription);
   const price = getSubscriptionItems(subscription)[0]?.price;
   const priceId =
@@ -347,30 +363,35 @@ const subscriptionToBillingUpdate = (
   const planLimit = planKey ? PLAN_LIMITS[planKey] : null;
 
   return {
-    'billing.enabled': true,
-    'billing.provider': 'stripe',
-    'billing.status': status,
-    'billing.billingDay': BILLING_DAY,
-    'billing.billingCycle': BILLING_CYCLE,
-    'billing.planKey': planKey ?? null,
-    'billing.activeUsersLimit': planLimit,
-    'billing.userLimit': planLimit,
-    'billing.stripePriceId': priceId,
-    'billing.stripeCustomerId': resolveCustomerId(subscription.customer),
-    'billing.stripeSubscriptionId': subscriptionId,
-    'billing.currentPeriodStart': period.start,
-    'billing.currentPeriodEnd': period.end,
-    'billing.nextPaymentDate': period.end,
-    'billing.cancelAtPeriodEnd': subscription.cancel_at_period_end === true,
-    'billing.lastStripeEventId': event?.id ?? fallback?.lastStripeEventId ?? null,
-    'billing.updatedAt': FieldValue.serverTimestamp(),
-    ...getBillingAccessUpdate(status, existingBilling, getEventTimestamp(event)),
+    publicUpdate: {
+      'billing.enabled': true,
+      'billing.provider': 'stripe',
+      'billing.status': status,
+      'billing.billingDay': BILLING_DAY,
+      'billing.billingCycle': BILLING_CYCLE,
+      'billing.planKey': planKey ?? null,
+      'billing.activeUsersLimit': planLimit,
+      'billing.userLimit': planLimit,
+      'billing.currentPeriodStart': period.start,
+      'billing.currentPeriodEnd': period.end,
+      'billing.nextPaymentDate': period.end,
+      'billing.cancelAtPeriodEnd': subscription.cancel_at_period_end === true,
+      'billing.updatedAt': FieldValue.serverTimestamp(),
+      ...getBillingAccessUpdate(status, existingBilling, getEventTimestamp(event)),
+    },
+    privateUpdate: {
+      stripePriceId: priceId,
+      stripeCustomerId: resolveCustomerId(subscription.customer),
+      stripeSubscriptionId: subscriptionId,
+      lastStripeEventId: event?.id ?? fallback?.lastStripeEventId ?? null,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
   };
 };
 
 export const updateCongregationFromSubscription = async (
   subscription: Record<string, unknown>,
-  fallback?: Partial<BillingState> & { congregationId?: string },
+  fallback?: Partial<BillingState> & Partial<PrivateBillingState> & { congregationId?: string },
   event?: Pick<StripeWebhookEvent, 'id' | 'created'>
 ): Promise<string | null> => {
   const congregationId =
@@ -384,28 +405,40 @@ export const updateCongregationFromSubscription = async (
   }
 
   const ref = getCongregationRef(congregationId);
+  const privateRef = getCongregationPrivateBillingRef(congregationId);
   const snap = await ref.get();
   const existingBilling = snap.exists
     ? ((snap.data() as Record<string, unknown>).billing as BillingState | undefined)
     : undefined;
 
-  await ref.set(
-    subscriptionToBillingUpdate(subscription, fallback, existingBilling, event),
-    { merge: true }
+  const { publicUpdate, privateUpdate } = subscriptionToBillingUpdate(
+    subscription,
+    fallback,
+    existingBilling,
+    event
   );
+
+  // Atomico: si el estado publico cambia, el privado cambia con el (o ninguno).
+  const batch = getFirestore().batch();
+  batch.set(ref, publicUpdate, { merge: true });
+  batch.set(privateRef, privateUpdate, { merge: true });
+  await batch.commit();
 
   return congregationId;
 };
 
+// Requiere el indice de collectionGroup 'private' sobre 'stripeSubscriptionId'
+// declarado en firestore.indexes.json (SEC-01 movio el campo fuera del
+// documento raiz, donde antes bastaba un indice simple de coleccion).
 export const findCongregationBySubscription = async (
   subscriptionId: string
 ): Promise<string | null> => {
   const snap = await getFirestore()
-    .collection('congregations')
-    .where('billing.stripeSubscriptionId', '==', subscriptionId)
+    .collectionGroup('private')
+    .where('stripeSubscriptionId', '==', subscriptionId)
     .limit(1)
     .get();
-  return snap.docs[0]?.id ?? null;
+  return snap.docs[0]?.ref.parent.parent?.id ?? null;
 };
 
 export const getInvoiceUrl = (invoice: Record<string, unknown>): string | null =>

@@ -123,7 +123,9 @@ export function BillingScreen() {
     try {
       setLoading(true);
       setError(null);
-      const nextSummary = await getCongregationBillingSummary(congregationId);
+      const nextSummary = await getCongregationBillingSummary(congregationId, {
+        canViewPrivateBilling: canView,
+      });
       setSummary(nextSummary);
 
       try {
@@ -136,7 +138,7 @@ export function BillingScreen() {
     } finally {
       setLoading(false);
     }
-  }, [congregationId, t]);
+  }, [congregationId, t, canView]);
 
   useEffect(() => {
     if (loadingProfile) return;
@@ -248,7 +250,7 @@ export function BillingScreen() {
           />
           <Metric
             label={t('billing.lastPayment')}
-            value={summary?.billing.lastPaymentStatus ?? '--'}
+            value={summary?.privateBilling?.lastPaymentStatus ?? '--'}
           />
           <Metric
             label={t('billing.graceRemaining')}
@@ -288,10 +290,10 @@ export function BillingScreen() {
         </View>
       ) : null}
 
-      {summary?.billing.lastInvoiceUrl ? (
+      {summary?.privateBilling?.lastInvoiceUrl ? (
         <TouchableOpacity
           style={styles.invoiceLink}
-          onPress={() => void openExternalUrl(summary.billing.lastInvoiceUrl as string)}
+          onPress={() => void openExternalUrl(summary?.privateBilling?.lastInvoiceUrl as string)}
         >
           <Ionicons name="document-text-outline" size={18} color={colors.primary} />
           <ThemedText style={styles.invoiceLinkText}>{t('billing.lastInvoice')}</ThemedText>
@@ -340,9 +342,15 @@ export function BillingScreen() {
         <TouchableOpacity
           style={[
             styles.portalButton,
-            (!canManage || isExempt || !summary?.billing.stripeCustomerId) && styles.hiddenButton,
+            (!canManage || isExempt || !summary?.privateBilling?.stripeCustomerId) &&
+              styles.hiddenButton,
           ]}
-          disabled={!canManage || isExempt || !summary?.billing.stripeCustomerId || Boolean(actionLoading)}
+          disabled={
+            !canManage ||
+            isExempt ||
+            !summary?.privateBilling?.stripeCustomerId ||
+            Boolean(actionLoading)
+          }
           onPress={() => void handlePortal()}
         >
           {actionLoading === 'portal' ? (

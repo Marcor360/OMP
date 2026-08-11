@@ -2,6 +2,7 @@ import type { BillingPlanKey } from '@/src/types/billing';
 
 export interface BillingRepository {
   getCongregationDoc(congregationId: string): Promise<Record<string, unknown> | null>;
+  getPrivateBillingDoc(congregationId: string): Promise<Record<string, unknown> | null>;
   createCheckoutSession(payload: {
     congregationId: string;
     planKey: BillingPlanKey;

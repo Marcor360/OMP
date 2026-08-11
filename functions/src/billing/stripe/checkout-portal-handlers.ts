@@ -8,11 +8,12 @@ import {
 } from './authorization.js';
 import {
   asTrimmedString,
+  getCongregationPrivateBillingRef,
   isBillingExempt,
   parseCheckoutPayload,
   parsePortalPayload,
   readCongregation,
-  type BillingState,
+  readPrivateBilling,
 } from './billing-state.js';
 import {
   BILLING_CYCLE,
@@ -33,9 +34,9 @@ const ensureStripeCustomer = async (params: {
   congregationId: string;
   congregationData: Record<string, unknown>;
   requester: RequesterProfile;
+  existingCustomerId?: string | null;
 }): Promise<string> => {
-  const billing = params.congregationData.billing as BillingState | undefined;
-  const existing = asTrimmedString(billing?.stripeCustomerId);
+  const existing = asTrimmedString(params.existingCustomerId ?? null);
   if (existing) return existing;
 
   const name =
@@ -102,15 +103,20 @@ export const createStripeCheckoutSession = onCall(
     }
 
     const stripe = getStripe();
+    const existingPrivateBilling = await readPrivateBilling(payload.congregationId);
     const customerId = await ensureStripeCustomer({
       stripe,
       congregationId: payload.congregationId,
       congregationData: data,
       requester,
+      existingCustomerId: existingPrivateBilling?.stripeCustomerId,
     });
     const anchor = getNextFirstOfMonthUnix();
 
-    await ref.set(
+    const privateRef = getCongregationPrivateBillingRef(payload.congregationId);
+    const batch = getFirestore().batch();
+    batch.set(
+      ref,
       {
         billing: {
           enabled: true,
@@ -123,13 +129,21 @@ export const createStripeCheckoutSession = onCall(
           userLimit: PLAN_LIMITS[payload.planKey],
           graceDays: GRACE_DAYS,
           adminRestricted: false,
-          stripePriceId: getPriceId(payload.planKey),
-          stripeCustomerId: customerId,
           updatedAt: FieldValue.serverTimestamp(),
         },
       },
       { merge: true }
     );
+    batch.set(
+      privateRef,
+      {
+        stripePriceId: getPriceId(payload.planKey),
+        stripeCustomerId: customerId,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    await batch.commit();
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -195,8 +209,8 @@ export const createStripePortalSession = onCall(
       throw new HttpsError('failed-precondition', 'Esta congregacion esta exenta de cobro.');
     }
 
-    const billing = data.billing as BillingState | undefined;
-    const customerId = asTrimmedString(billing?.stripeCustomerId);
+    const privateBilling = await readPrivateBilling(payload.congregationId);
+    const customerId = asTrimmedString(privateBilling?.stripeCustomerId);
     if (!customerId) {
       throw new HttpsError('failed-precondition', 'Esta congregacion aun no tiene cliente Stripe.');
     }

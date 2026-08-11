@@ -10,6 +10,7 @@ import type { BillingPlanKey } from '@/src/types/billing';
 jest.mock('@/src/services/repositories/firestore/firestore-billing-repository', () => ({
   firestoreBillingRepository: {
     getCongregationDoc: async () => null,
+    getPrivateBillingDoc: async () => null,
     createCheckoutSession: async () => '',
     createPortalSession: async () => '',
     getBillingUsage: async () => null,
@@ -19,12 +20,20 @@ jest.mock('@/src/services/repositories/firestore/firestore-billing-repository', 
 
 class FakeBillingRepository implements BillingRepository {
   public docData: Record<string, unknown> | null = null;
+  public privateDocData: Record<string, unknown> | null = null;
+  public privateDocError: Error | null = null;
   public checkoutPayload: { congregationId: string; planKey: BillingPlanKey } | null = null;
   public checkoutUrl = 'https://checkout.stripe.com/session';
 
   async getCongregationDoc(congregationId: string): Promise<Record<string, unknown> | null> {
     void congregationId;
     return this.docData;
+  }
+
+  async getPrivateBillingDoc(congregationId: string): Promise<Record<string, unknown> | null> {
+    void congregationId;
+    if (this.privateDocError) throw this.privateDocError;
+    return this.privateDocData;
   }
 
   async createCheckoutSession(payload: {
@@ -105,6 +114,37 @@ describe('billing-service repository port', () => {
     const result = await getCongregationBillingSummary('   ');
 
     expect(result).toBeNull();
+  });
+
+  it('getCongregationBillingSummary does not read private doc without permission', async () => {
+    repo.docData = { billing: { enabled: true, status: 'active' } };
+    repo.privateDocData = { stripeCustomerId: 'cus_123' };
+
+    const result = await getCongregationBillingSummary('cong-1');
+
+    expect(result?.privateBilling).toBeUndefined();
+  });
+
+  it('getCongregationBillingSummary reads private doc when permitted', async () => {
+    repo.docData = { billing: { enabled: true, status: 'active' } };
+    repo.privateDocData = { stripeCustomerId: 'cus_123', stripeSubscriptionId: 'sub_456' };
+
+    const result = await getCongregationBillingSummary('cong-1', { canViewPrivateBilling: true });
+
+    expect(result?.privateBilling?.stripeCustomerId).toBe('cus_123');
+    expect(result?.privateBilling?.stripeSubscriptionId).toBe('sub_456');
+    expect((result?.billing as Record<string, unknown>).stripeCustomerId).toBeUndefined();
+  });
+
+  it('getCongregationBillingSummary degrades gracefully when private read fails', async () => {
+    repo.docData = { billing: { enabled: true, status: 'active' } };
+    repo.privateDocError = new Error('permission-denied');
+
+    const result = await getCongregationBillingSummary('cong-1', { canViewPrivateBilling: true });
+
+    expect(result).not.toBeNull();
+    expect(result?.billing.enabled).toBe(true);
+    expect(result?.privateBilling).toBeUndefined();
   });
 
   it('createStripeCheckoutSession delegates and returns URL', async () => {
