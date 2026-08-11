@@ -152,6 +152,7 @@ const refreshDashboardSummary = async (congregationId: string): Promise<void> =>
           priority: asNonEmptyString(item.data.priority) ?? "medium",
           dueDate: normalizeTimestamp(item.data.dueDate ?? item.data.date),
           assignedToUid: asNonEmptyString(item.data.assignedToUid) ?? null,
+          assignedToGroupId: asNonEmptyString(item.data.assignedToGroupId) ?? null,
           assignedToName: asNonEmptyString(item.data.assignedToName) ?? null,
           meetingId: asNonEmptyString(item.data.meetingId) ?? item.meetingId,
         })),

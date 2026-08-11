@@ -534,7 +534,7 @@ const syncCleaningScheduleToMeetings = async (params: {
         priority: 'medium',
         cleaningGroupId,
         cleaningGroupName,
-        assignedToUid: cleaningGroupId,
+        assignedToGroupId: cleaningGroupId,
         assignedToName: cleaningGroupName,
         assignedByUid: params.requesterUid,
         assignedByName: params.requesterName,

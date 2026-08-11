@@ -208,10 +208,16 @@ const getAssignmentsForMeetings = async (
   return sortAssignmentsByDueDate(dedupeAssignments(assignmentGroups.flat()));
 };
 
+type CreateCleaningAssignmentViaFunctionInput = CreateCleaningAssignmentDTO & {
+  assignedToGroupId: string;
+  assignedToName: string;
+  meetingId: string;
+};
+
 const createAssignmentViaFunction = async (
   congregationId: string,
   meetingId: string,
-  data: CreateAssignmentDTO,
+  data: CreateAssignmentDTO | CreateCleaningAssignmentViaFunctionInput,
   assignedByUid: string,
   assignedByName: string
 ): Promise<string> => {
@@ -460,7 +466,7 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
       {
         ...data,
         category: 'cleaning',
-        assignedToUid: data.cleaningGroupId,
+        assignedToGroupId: data.cleaningGroupId,
         assignedToName: data.cleaningGroupName,
         meetingId,
       },

@@ -1111,7 +1111,7 @@ export const syncMeetingCleaningAssignmentsByManager = onCall(
           priority: 'medium',
           cleaningGroupId: group.id,
           cleaningGroupName: group.name,
-          assignedToUid: group.id,
+          assignedToGroupId: group.id,
           assignedToName: group.name,
           assignedByUid: requesterUid,
           assignedByName,

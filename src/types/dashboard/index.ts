@@ -34,6 +34,7 @@ export interface DashboardSummaryAssignmentPreview {
   dueDate: Timestamp;
   assignedToName?: string;
   assignedToUid?: string;
+  assignedToGroupId?: string;
   meetingId?: string;
 }
 

@@ -100,6 +100,7 @@ const normalizeAssignmentPreview = (
     dueDate: normalizeTimestamp(raw.dueDate) ?? Timestamp.now(),
     assignedToName: typeof raw.assignedToName === 'string' ? raw.assignedToName : undefined,
     assignedToUid: typeof raw.assignedToUid === 'string' ? raw.assignedToUid : undefined,
+    assignedToGroupId: typeof raw.assignedToGroupId === 'string' ? raw.assignedToGroupId : undefined,
     meetingId: typeof raw.meetingId === 'string' ? raw.meetingId : undefined,
   };
 };

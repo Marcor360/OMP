@@ -9,7 +9,10 @@ export interface Assignment {
   description?: string;
   status: AssignmentStatus;
   priority: AssignmentPriority;
-  assignedToUid: string;
+  // Nunca un grupo: BUG-01. Una asignacion de grupo de limpieza no tiene
+  // assignedToUid, solo assignedToGroupId.
+  assignedToUid?: string;
+  assignedToGroupId?: string;
   assignedToName: string;
   assignedByUid: string;
   assignedByName: string;

@@ -223,7 +223,7 @@ export function AssignmentFormScreen() {
         setDescription(assignmentDoc.description ?? '');
         setPriority(assignmentDoc.priority);
         setAssignedToName(assignmentDoc.assignedToName);
-        setAssignedToUid(assignmentDoc.assignedToUid);
+        setAssignedToUid(assignmentDoc.assignedToUid ?? '');
         setUserSearch(assignmentDoc.assignedToName ?? '');
         if (assignmentDoc.assignedToUid?.startsWith('manual:')) {
           setPersonAssignmentMode('manual');
