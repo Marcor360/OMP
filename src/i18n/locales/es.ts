@@ -28,6 +28,12 @@ export const es = {
     datePickerNoSelection: 'Selecciona una fecha',
     removePersonA11y: 'Quitar a {{name}}',
   },
+  'forms.user.createTitle': 'Nuevo usuario',
+  'forms.user.editTitle': 'Editar usuario',
+  'forms.user.createAction': 'Crear usuario',
+  'forms.saveChanges': 'Guardar cambios',
+  'forms.assignment.createAction': 'Crear asignación',
+  'forms.midweekMeeting.createAction': 'Crear reunión VyMC',
   components: {
     cards: {
       assignmentOverdue: 'Vencida:',

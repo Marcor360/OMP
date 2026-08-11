@@ -18,17 +18,22 @@ import { RolePositionSection } from '@/src/screens/users/user-form/components/ro
 import { ServiceAssignmentsSection } from '@/src/screens/users/user-form/components/service-assignments-section';
 import { createUserFormStyles } from '@/src/screens/users/user-form/components/user-form.styles';
 import { useUserForm } from '@/src/screens/users/user-form/use-user-form';
+import { useI18n } from '@/src/i18n/index';
 
 export function UserFormScreen() {
   const colors = useAppColors();
   const styles = createUserFormStyles(colors);
+  const { t } = useI18n();
   const { mode, state, actions } = useUserForm();
 
   if (state.loading || state.loadingProfile) return <LoadingState />;
 
   return (
     <ScreenContainer scrollable={false} padded={false}>
-      <PageHeader title={mode === 'create' ? 'Nuevo usuario' : 'Editar usuario'} showBack />
+      <PageHeader
+        title={mode === 'create' ? t('forms.user.createTitle') : t('forms.user.editTitle')}
+        showBack
+      />
       <ScrollView
         contentContainerStyle={styles.form}
         showsVerticalScrollIndicator={false}
@@ -67,7 +72,7 @@ export function UserFormScreen() {
             <ActivityIndicator color={colors.onPrimary} />
           ) : (
             <ThemedText style={styles.saveButtonText}>
-              {mode === 'create' ? 'Crear usuario' : 'Guardar cambios'}
+              {mode === 'create' ? t('forms.user.createAction') : t('forms.saveChanges')}
             </ThemedText>
           )}
         </TouchableOpacity>

@@ -21,6 +21,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
 import { useMeetingsManagementPermission } from '@/src/hooks/use-meetings-management-permission';
+import { useI18n } from '@/src/i18n/index';
 import {
   MidweekMeeting,
   MidweekMeetingPayload,
@@ -191,6 +192,7 @@ export function MidweekMeetingFormScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { appUser, profileError } = useUser();
+  const { t } = useI18n();
   const {
     canManage: isAdminOrSupervisor,
     congregationId,
@@ -794,7 +796,9 @@ export function MidweekMeetingFormScreen() {
             <ActivityIndicator color={colors.onPrimary} />
           ) : (
             <ThemedText style={styles.saveButtonText}>
-              {mode === 'create' ? 'Crear reunion VyMC' : 'Guardar cambios'}
+              {mode === 'create'
+                ? t('forms.midweekMeeting.createAction')
+                : t('forms.saveChanges')}
             </ThemedText>
           )}
         </TouchableOpacity>

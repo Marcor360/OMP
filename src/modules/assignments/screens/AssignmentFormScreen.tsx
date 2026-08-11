@@ -810,7 +810,9 @@ export function AssignmentFormScreen() {
             <ActivityIndicator color={colors.onPrimary} />
           ) : (
             <ThemedText style={styles.saveButtonText}>
-              {mode === 'create' ? 'Crear asignacion' : 'Guardar cambios'}
+              {mode === 'create'
+                ? t('forms.assignment.createAction')
+                : t('forms.saveChanges')}
             </ThemedText>
           )}
         </TouchableOpacity>
