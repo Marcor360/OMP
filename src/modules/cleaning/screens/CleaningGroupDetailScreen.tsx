@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -33,6 +32,7 @@ import { ErrorState } from '@/src/components/common/ErrorState';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ActionErrorBanner } from '@/src/components/common/ActionErrorBanner';
 import { useToast } from '@/src/context/toast-context';
+import { confirmAlert } from '@/src/utils/ui/alerts';
 
 interface CleaningGroupDetailScreenProps {
   groupId: string;
@@ -121,21 +121,17 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
     }
   };
 
-  const handleRemoveMember = (uid: string) => {
+  const handleRemoveMember = async (uid: string) => {
     if (!canManage || removingUid) return;
     const displayName = members.find((member) => member.uid === uid)?.displayName ?? uid;
-    Alert.alert(
-      t('cleaning.removeMemberTitle'),
-      t('cleaning.removeMemberConfirm', { name: displayName }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('cleaning.removeBtn'),
-          style: 'destructive',
-          onPress: () => void performRemoveMember(uid, displayName),
-        },
-      ]
-    );
+    const confirmed = await confirmAlert({
+      title: t('cleaning.removeMemberTitle'),
+      message: t('cleaning.removeMemberConfirm', { name: displayName }),
+      confirmLabel: t('cleaning.removeBtn'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (confirmed) await performRemoveMember(uid, displayName);
   };
 
   const performAddMembers = async (selectedIds: string[]) => {
@@ -207,20 +203,16 @@ export function CleaningGroupDetailScreen({ groupId }: CleaningGroupDetailScreen
     }
   };
 
-  const handleDeleteGroup = () => {
+  const handleDeleteGroup = async () => {
     if (!canManage) return;
-    Alert.alert(
-      t('cleaning.deactivateGroup'),
-      t('cleaning.deactivateGroupConfirm', { name: group?.name ?? '' }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('cleaning.deactivateBtn'),
-          style: 'destructive',
-          onPress: () => void performDeactivateGroup(),
-        },
-      ]
-    );
+    const confirmed = await confirmAlert({
+      title: t('cleaning.deactivateGroup'),
+      message: t('cleaning.deactivateGroupConfirm', { name: group?.name ?? '' }),
+      confirmLabel: t('cleaning.deactivateBtn'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (confirmed) await performDeactivateGroup();
   };
 
   const styles = StyleSheet.create({

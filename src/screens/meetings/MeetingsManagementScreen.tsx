@@ -19,6 +19,7 @@ import { Meeting } from '@/src/types/meeting';
 import { MeetingPublicationStatus } from '@/src/types/meeting/program';
 import { isExpired } from '@/src/utils/dates/operational-window';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { confirmAlert } from '@/src/utils/ui/alerts';
 
 const PUBLICATION_FILTERS: (MeetingPublicationStatus | 'all')[] = [
   'all',
@@ -175,23 +176,17 @@ export function MeetingsManagementScreen() {
     }
   };
 
-  const deleteMeetingWithConfirmation = (meeting: Meeting) => {
+  const deleteMeetingWithConfirmation = async (meeting: Meeting) => {
     if (!congregationId || deletingMeetingId) return;
 
-    Alert.alert(
-      t('meetings.management.alert.deleteTitle'),
-      t('meetings.management.alert.deleteMessage'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: () => {
-            void executeDeleteMeeting(meeting);
-          },
-        },
-      ]
-    );
+    const confirmed = await confirmAlert({
+      title: t('meetings.management.alert.deleteTitle'),
+      message: t('meetings.management.alert.deleteMessage'),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (confirmed) await executeDeleteMeeting(meeting);
   };
 
   const executeDeleteMeeting = async (meeting: Meeting) => {
@@ -317,7 +312,7 @@ export function MeetingsManagementScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.deleteAction, deletingMeetingId === meeting.id && styles.actionDisabled]}
-                onPress={() => deleteMeetingWithConfirmation(meeting)}
+                onPress={() => void deleteMeetingWithConfirmation(meeting)}
                 disabled={Boolean(deletingMeetingId)}
               >
                 <Ionicons

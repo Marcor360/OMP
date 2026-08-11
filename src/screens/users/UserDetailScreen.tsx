@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, Platform, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -32,6 +32,7 @@ import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { isSystemPrincipalUser } from '@/src/utils/users/user-protection';
 import { useI18n } from '@/src/i18n/index';
 import { canViewUsers, hasPermission } from '@/src/utils/permissions/permissions';
+import { confirmAlert } from '@/src/utils/ui/alerts';
 
 const interpolate = (template: string, values: Record<string, string>): string =>
   Object.entries(values).reduce(
@@ -160,15 +161,13 @@ export function UserDetailScreen() {
       name: user.displayName,
     });
 
-    const confirmed =
-      Platform.OS === 'web'
-        ? window.confirm(confirmMessage)
-        : await new Promise<boolean>((resolve) =>
-            Alert.alert(t('users.status.confirmTitle'), confirmMessage, [
-              { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-              { text: t('common.confirm'), style: 'destructive', onPress: () => resolve(true) },
-            ])
-          );
+    const confirmed = await confirmAlert({
+      title: t('users.status.confirmTitle'),
+      message: confirmMessage,
+      confirmLabel: t('common.confirm'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
 
     if (!confirmed) return;
 
@@ -230,15 +229,13 @@ export function UserDetailScreen() {
       return;
     }
 
-    const confirmed =
-      Platform.OS === 'web'
-        ? window.confirm(interpolate(t('users.delete.confirmMessage'), { name: user.displayName }))
-        : await new Promise<boolean>((resolve) =>
-            Alert.alert(t('users.delete.confirmTitle'), interpolate(t('users.delete.confirmMessage'), { name: user.displayName }), [
-              { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-              { text: t('common.delete'), style: 'destructive', onPress: () => resolve(true) },
-            ])
-          );
+    const confirmed = await confirmAlert({
+      title: t('users.delete.confirmTitle'),
+      message: interpolate(t('users.delete.confirmMessage'), { name: user.displayName }),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
 
     if (!confirmed) return;
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -9,6 +9,7 @@ import { deleteEvent } from '@/src/services/events/events-service';
 import { CongregationEvent } from '@/src/types/event';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { confirmAlert } from '@/src/utils/ui/alerts';
 
 interface DashboardEventsSectionProps {
   events: CongregationEvent[];
@@ -19,18 +20,14 @@ interface DashboardEventsSectionProps {
   onRefresh: () => void;
 }
 
-const confirmDelete = (title: string): Promise<boolean> => {
-  if (Platform.OS === 'web') {
-    return Promise.resolve(window.confirm(`Deseas eliminar "${title}"?`));
-  }
-
-  return new Promise((resolve) => {
-    Alert.alert('Eliminar evento', `Deseas eliminar "${title}"?`, [
-      { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
-      { text: 'Eliminar', style: 'destructive', onPress: () => resolve(true) },
-    ]);
+const confirmDelete = (title: string): Promise<boolean> =>
+  confirmAlert({
+    title: 'Eliminar evento',
+    message: `Deseas eliminar "${title}"?`,
+    confirmLabel: 'Eliminar',
+    cancelLabel: 'Cancelar',
+    destructive: true,
   });
-};
 
 const eventEditHref = (eventId: string): Href => ({
   pathname: '/(protected)/events/edit/[id]',
