@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/src/components/themed-text';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { type I18nContextType, useOptionalI18n } from '@/src/i18n/index';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 
 interface DatePickerModalProps {
   visible: boolean;
@@ -28,8 +29,6 @@ type CalendarCell = {
   isCurrentMonth: boolean;
   isToday: boolean;
 };
-
-const WEEK_LABELS = ['do.', 'lu.', 'ma.', 'mi.', 'ju.', 'vi.', 'sa.'];
 
 const pad = (value: number): string => String(value).padStart(2, '0');
 
@@ -72,20 +71,32 @@ const buildCalendar = (year: number, monthIndex: number): CalendarCell[][] => {
   );
 };
 
-const formatMonth = (year: number, monthIndex: number): string =>
-  new Intl.DateTimeFormat('es-MX', {
+const formatCalendarDate = (
+  date: Date,
+  options: Intl.DateTimeFormatOptions,
+  i18n: I18nContextType | undefined
+): string =>
+  i18n?.formatDate?.(date, options)
+  ?? new Intl.DateTimeFormat(getActiveLocale(), options).format(date);
+
+const formatMonth = (
+  year: number,
+  monthIndex: number,
+  i18n: I18nContextType | undefined
+): string =>
+  formatCalendarDate(new Date(year, monthIndex, 1), {
     month: 'long',
     year: 'numeric',
-  }).format(new Date(year, monthIndex, 1));
+  }, i18n);
 
 const formatSelectedDate = (date: string | null, i18n: I18nContextType | undefined): string => {
   if (!date) return i18n?.t('common.datePickerNoSelection') ?? 'Selecciona una fecha';
 
-  return new Intl.DateTimeFormat('es-MX', {
+  return formatCalendarDate(parseDateInput(date), {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
-  }).format(parseDateInput(date));
+  }, i18n);
 };
 
 export function DatePickerModal({
@@ -100,6 +111,12 @@ export function DatePickerModal({
   const colors = useAppColors();
   const styles = createStyles(colors);
   const i18n = useOptionalI18n();
+  const weekLabels = useMemo(
+    () => Array.from({ length: 7 }, (_, day) =>
+      formatCalendarDate(new Date(2024, 0, 7 + day), { weekday: 'short' }, i18n)
+    ),
+    [i18n]
+  );
   const resolvedTitle = title ?? i18n?.t('common.datePickerDefaultTitle') ?? 'Seleccionar fecha';
   const initialDate = useMemo(() => parseDateInput(selectedDate), [selectedDate]);
   const [visibleMonth, setVisibleMonth] = useState(
@@ -111,7 +128,8 @@ export function DatePickerModal({
   );
   const monthLabel = formatMonth(
     visibleMonth.getFullYear(),
-    visibleMonth.getMonth()
+    visibleMonth.getMonth(),
+    i18n
   );
   const minDateValue = minDate ?? toDateInput(new Date());
   const previousMonth = addMonths(visibleMonth, -1);
@@ -186,7 +204,7 @@ export function DatePickerModal({
           </View>
 
           <View style={styles.weekHeader}>
-            {WEEK_LABELS.map((label) => (
+            {weekLabels.map((label) => (
               <ThemedText key={label} style={styles.weekLabel}>
                 {label}
               </ThemedText>

@@ -11,7 +11,7 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { SupportedLanguage, useI18n } from '@/src/i18n/index';
+import { useI18n } from '@/src/i18n/index';
 import { getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Meeting } from '@/src/types/meeting';
@@ -49,15 +49,6 @@ const toGroupKey = (meeting: Meeting): string => {
   ).padStart(2, '0')}`;
 };
 
-const LOCALE_BY_LANGUAGE: Record<SupportedLanguage, string> = {
-  es: 'es-MX',
-  en: 'en-US',
-  fr: 'fr-FR',
-  ar: 'ar',
-  hi: 'hi-IN',
-  zh: 'zh-CN',
-};
-
 const toGroupLabel = (meeting: Meeting, locale: string): string => {
   return toDateValue(meeting).toLocaleDateString(locale, {
     weekday: 'long',
@@ -70,10 +61,9 @@ const toGroupLabel = (meeting: Meeting, locale: string): string => {
 export function MeetingsListScreen() {
   const router = useRouter();
   const { appUser, congregationId, loadingProfile } = useUser();
-  const { t, language } = useI18n();
+  const { t, locale } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const locale = LOCALE_BY_LANGUAGE[language];
   const canManage = canManageMeetings(appUser);
 
   const [meetings, setMeetings] = useState<Meeting[]>([]);

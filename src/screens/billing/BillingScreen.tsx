@@ -9,7 +9,7 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { useI18n } from '@/src/i18n/index';
+import { type I18nContextType, useI18n } from '@/src/i18n/index';
 import {
   createStripeCheckoutSession,
   createStripePortalSession,
@@ -47,14 +47,17 @@ const toDate = (value: unknown): Date | null => {
   return null;
 };
 
-const formatDate = (value: unknown): string => {
+const formatBillingDate = (
+  value: unknown,
+  formatter: I18nContextType['formatDate']
+): string => {
   const date = toDate(value);
   if (!date) return '--';
-  return new Intl.DateTimeFormat('es-MX', {
+  return formatter(date, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
-  }).format(date);
+  });
 };
 
 const getDaysUntil = (value: unknown): number | null => {
@@ -86,7 +89,7 @@ const openExternalUrl = async (url: string): Promise<void> => {
 
 export function BillingScreen() {
   const { appUser, congregationId, loadingProfile } = useUser();
-  const { t } = useI18n();
+  const { formatDate, t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const [summary, setSummary] = useState<CongregationBillingSummary | null>(null);
@@ -233,8 +236,14 @@ export function BillingScreen() {
         </View>
 
         <View style={styles.metricGrid}>
-          <Metric label={t('billing.nextPayment')} value={formatDate(summary?.billing.nextPaymentDate)} />
-          <Metric label={t('billing.currentPeriod')} value={formatDate(summary?.billing.currentPeriodEnd)} />
+          <Metric
+            label={t('billing.nextPayment')}
+            value={formatBillingDate(summary?.billing.nextPaymentDate, formatDate)}
+          />
+          <Metric
+            label={t('billing.currentPeriod')}
+            value={formatBillingDate(summary?.billing.currentPeriodEnd, formatDate)}
+          />
           <Metric
             label={t('billing.allowedUsers')}
             value={String(activeUserLimit ?? '-')}

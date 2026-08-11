@@ -11,10 +11,10 @@ const toDate = (input: DateInput): Date | null => {
 };
 
 /** Formato: 15 ene. 2025 */
-export const formatDate = (input: DateInput): string => {
+export const formatDate = (input: DateInput, locale = getActiveLocale()): string => {
   const date = toDate(input);
   if (!date) return '—';
-  return date.toLocaleDateString(getActiveLocale(), {
+  return date.toLocaleDateString(locale, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -22,10 +22,10 @@ export const formatDate = (input: DateInput): string => {
 };
 
 /** Formato: 15 ene. 2025, 09:30 */
-export const formatDateTime = (input: DateInput): string => {
+export const formatDateTime = (input: DateInput, locale = getActiveLocale()): string => {
   const date = toDate(input);
   if (!date) return '—';
-  return date.toLocaleString('es-MX', {
+  return date.toLocaleString(locale, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -35,10 +35,10 @@ export const formatDateTime = (input: DateInput): string => {
 };
 
 /** Formato: 09:30 */
-export const formatTime = (input: DateInput): string => {
+export const formatTime = (input: DateInput, locale = getActiveLocale()): string => {
   const date = toDate(input);
   if (!date) return '—';
-  return date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 };
 
 /** Tiempo relativo: "hace 3 días", "en 2 horas" */
