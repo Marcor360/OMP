@@ -17,8 +17,9 @@ import { useInitialPermissions } from '@/src/hooks/use-initial-permissions';
 import { useCacheControlCleanup } from '@/src/hooks/use-cache-control-cleanup';
 import { configureGlobalNotificationHandler } from '@/src/services/notifications/push-notifications.service';
 import { initializePersistentCacheCycle } from '@/src/services/repositories/persistent-cache';
-import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 import { buildPathWithParams, getSafeRedirectPath } from '@/src/utils/navigation/redirect';
+import { firebaseConfigMissingKeys, isFirebaseConfigValid } from '@/src/lib/firebase/app';
+import { FatalConfigurationScreen } from '@/src/components/system/FatalConfigurationScreen';
 
 // Prevenir que el splash se oculte automáticamente
 if (Platform.OS !== 'web') {
@@ -42,6 +43,9 @@ export function ErrorBoundary({
   error: Error;
   retry: () => void;
 }) {
+  // eslint-disable-next-line no-console -- se mantiene disponible cuando se conecte OBS-01
+  console.error('[RootLayout] ErrorBoundary', error);
+
   return (
     <SafeAreaProvider>
       <View
@@ -56,7 +60,13 @@ export function ErrorBoundary({
         <Text style={{ fontSize: 18, fontWeight: '600', color: '#111827' }}>
           No se pudo iniciar OMP
         </Text>
-        <Text style={{ fontSize: 13, color: '#6B7280' }}>{error.message}</Text>
+        {__DEV__ ? (
+          <Text style={{ fontSize: 13, color: '#6B7280' }}>{error.message}</Text>
+        ) : (
+          <Text style={{ fontSize: 13, color: '#6B7280' }}>
+            Ocurrió un error inesperado al iniciar la aplicación.{'\n'}Código: APP-BOOT-104
+          </Text>
+        )}
         <Pressable
           accessibilityRole="button"
           onPress={retry}
@@ -87,32 +97,6 @@ function RootLayoutNav() {
   useEffect(() => {
     configureGlobalNotificationHandler();
   }, []);
-
-  useEffect(() => {
-    if (!canUseRemotePushNotifications) {
-      return;
-    }
-
-    let subscription: { remove: () => void } | null = null;
-    let cancelled = false;
-
-    void import('expo-notifications').then((Notifications) => {
-      if (cancelled) return;
-
-      subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-        const url = response.notification.request.content.data?.url;
-
-        if (typeof url === 'string' && url.startsWith('/')) {
-          router.push(url as never);
-        }
-      });
-    });
-
-    return () => {
-      cancelled = true;
-      subscription?.remove();
-    };
-  }, [router]);
 
   // Controlled cleanup for temporary cache.
   useCacheControlCleanup();
@@ -301,6 +285,14 @@ function AppLayout() {
 }
 
 export default function RootLayout() {
+  if (!isFirebaseConfigValid) {
+    return (
+      <SafeAreaProvider>
+        <FatalConfigurationScreen missingKeys={firebaseConfigMissingKeys} />
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <ThemeModeProvider>
