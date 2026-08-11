@@ -5,15 +5,16 @@ const expoConfig = require('eslint-config-expo/flat');
 module.exports = defineConfig([
   expoConfig,
   {
-    // eslint-config-expo@57 extends plugin:react-hooks/recommended, and
-    // react-hooks@7's "recommended" preset newly ships the React Compiler
-    // rule family as errors. This project doesn't opt into React Compiler,
-    // and these fire across dozens of pre-existing, unrelated files.
-    // Downgrading to warn avoids an unreviewed mass refactor while still
-    // surfacing them for cleanup.
+    // eslint-config-expo@57 extiende plugin:react-hooks/recommended, y
+    // react-hooks@7 envía la familia de reglas de React Compiler como error.
+    // Este proyecto SÍ tiene reactCompiler activado (app.json > expo.experiments),
+    // pero estas reglas disparan en archivos preexistentes anteriores a la
+    // migración. Se mantienen en 'warn' de forma TEMPORAL mientras se limpian.
+    // Plan: warn → limpiar warnings por dominio → error.
+    // No añadir reglas nuevas a esta lista.
     rules: {
       'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/static-components': 'warn',
+      'react-hooks/static-components': 'error',
       'react-hooks/refs': 'warn',
       'react-hooks/preserve-manual-memoization': 'warn',
       'react-hooks/globals': 'warn',
