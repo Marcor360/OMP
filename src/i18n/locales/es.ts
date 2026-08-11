@@ -1045,6 +1045,18 @@ export const es = {
       countdownLabel: 'O bien, terminando el tiempo de:',
       logout: 'Cerrar sesión',
     },
+    invalidSession: {
+      profileMissingTitle: 'Perfil no encontrado',
+      profileMissingDescription: 'Tu cuenta aún no tiene un perfil asignado. Contacta al administrador de tu congregación.',
+      accountInactiveTitle: 'Cuenta desactivada',
+      accountInactiveDescription: 'Tu cuenta está desactivada. Contacta al administrador de tu congregación.',
+      noCongregationTitle: 'Sin congregación',
+      noCongregationDescription: 'Tu cuenta no está asociada a ninguna congregación.',
+      profileErrorTitle: 'No se pudo cargar tu perfil',
+      profileErrorDescription: 'Ocurrió un problema al cargar tu perfil. Intenta de nuevo.',
+      retry: 'Reintentar',
+      logout: 'Cerrar sesión',
+    },
     notFound: {
       title: 'Página no encontrada',
       description: 'La ruta que buscas no existe o fue movida.',

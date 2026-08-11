@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 
 import { AppLockProvider, useAppLock } from '@/src/context/app-lock-context';
 import { useAuth } from '@/src/context/auth-context';
-import { UserProvider, useUser } from '@/src/context/user-context';
+import { UserProvider, useUser, type ProfileErrorKind } from '@/src/context/user-context';
 import { useNotificationDeepLink } from '@/src/hooks/use-notification-deep-link';
 import { useNotificationSetup } from '@/src/hooks/use-notification-setup';
 import { useStartupPermissionPrompt } from '@/src/hooks/use-startup-permission-prompt';
@@ -12,6 +12,10 @@ import { useI18n } from '@/src/i18n/index';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { BiometricLockScreen } from '@/src/components/security/BiometricLockScreen';
 import { CongregationBlockedScreen } from '@/src/screens/errors/CongregationBlockedScreen';
+import {
+  InvalidSessionScreen,
+  type InvalidSessionReason,
+} from '@/src/screens/errors/InvalidSessionScreen';
 import { SystemAnnouncementGate } from '@/src/components/announcements/SystemAnnouncementGate';
 import { InactivityWarningModal } from '@/src/components/session/InactivityWarningModal';
 import { buildPathWithParams } from '@/src/utils/navigation/redirect';
@@ -84,13 +88,40 @@ function ProtectedGate() {
   return <ProtectedContent />;
 }
 
+// congregationBlocked ya hace isSessionValid falso (ver user-context.tsx), pero
+// ese caso tiene su propia pantalla (CongregationBlockedScreen, mas abajo) y no
+// debe pasar por aqui: null deja que el flujo siga a ese siguiente chequeo.
+const resolveInvalidSessionReason = (
+  profileErrorKind: ProfileErrorKind
+): InvalidSessionReason | null => {
+  switch (profileErrorKind) {
+    case 'not-found':
+      return 'PROFILE_MISSING';
+    case 'inactive':
+      return 'ACCOUNT_INACTIVE';
+    case 'no-congregation':
+      return 'NO_CONGREGATION';
+    case 'error':
+      return 'PROFILE_ERROR';
+    default:
+      return null;
+  }
+};
+
 function ProtectedContent() {
   const { t } = useI18n();
-  const { congregationAccess, loadingProfile } = useUser();
+  const { congregationAccess, loadingProfile, isSessionValid, profileErrorKind } = useUser();
   const { showInactivityWarning, secondsLeft, extendSession, logout } = useAuth();
 
   if (loadingProfile) {
     return <LoadingState message="Verificando acceso..." />;
+  }
+
+  if (!isSessionValid) {
+    const reason = resolveInvalidSessionReason(profileErrorKind);
+    if (reason) {
+      return <InvalidSessionScreen reason={reason} />;
+    }
   }
 
   if (congregationAccess?.isBlocked) {

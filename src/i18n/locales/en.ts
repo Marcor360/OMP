@@ -1045,6 +1045,18 @@ export const en = {
       countdownLabel: 'Or wait for the remaining time:',
       logout: 'Log out',
     },
+    invalidSession: {
+      profileMissingTitle: 'Profile not found',
+      profileMissingDescription: 'Your account does not have a profile assigned yet. Contact your congregation administrator.',
+      accountInactiveTitle: 'Account deactivated',
+      accountInactiveDescription: 'Your account is deactivated. Contact your congregation administrator.',
+      noCongregationTitle: 'No congregation',
+      noCongregationDescription: 'Your account is not associated with any congregation.',
+      profileErrorTitle: 'We could not load your profile',
+      profileErrorDescription: 'Something went wrong loading your profile. Please try again.',
+      retry: 'Retry',
+      logout: 'Log out',
+    },
     notFound: {
       title: 'Page not found',
       description: 'The route you are looking for does not exist or was moved.',
