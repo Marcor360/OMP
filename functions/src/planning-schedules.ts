@@ -1,11 +1,18 @@
-import { FieldValue, Timestamp, WriteBatch } from 'firebase-admin/firestore';
+import {
+  DocumentReference,
+  DocumentSnapshot,
+  FieldValue,
+  Timestamp,
+  WriteBatch,
+} from 'firebase-admin/firestore';
+import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { adminDb } from './config/firebaseAdmin.js';
 import { assertAdministrativeBillingAccess } from './users/authorization.js';
 
 type UserRole = 'admin' | 'supervisor' | 'user';
-type RequesterProfile = {
+export type RequesterProfile = {
   role: UserRole;
   isActive: boolean;
   congregationId: string;
@@ -59,6 +66,7 @@ type HospitalityRoleKey =
   | 'audioVideo';
 
 type HospitalityScheduleItem = {
+  meetingId?: string;
   meetingDate: string;
   meetingType: HospitalityMeetingType;
   roleKey: HospitalityRoleKey;
@@ -97,6 +105,17 @@ const HOSPITALITY_ROLE_ORDER: Record<HospitalityRoleKey, number> = {
   watchtowerReader: 8,
   midweekBibleStudyReader: 8,
 };
+
+// Titulos por defecto de los esqueletos de reunion creados por
+// ensurePlanningMeetingsByManager. Espejo de los defaults de titulo en
+// functions/src/meetings-management.ts:buildMeetingWritePayload; si cambian
+// alla, revisar aqui tambien.
+export const PLANNING_MEETING_TITLES: Record<HospitalityMeetingType, string> = {
+  midweek: 'Reunion Vida y Ministerio Cristianos',
+  weekend: 'Reunion del fin de semana',
+};
+
+const PLANNING_MEETING_WRITE_CHUNK_SIZE = 400;
 
 const normalizeText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -240,7 +259,13 @@ const assertCleaningManager = (requester: RequesterProfile, congregationId: stri
   }
 };
 
-const assertHospitalityManager = (requester: RequesterProfile, congregationId: string): void => {
+// Frontera del contrato de permisos del modulo (ver OMP-AUDIT-hospitality-asignaciones
+// §0.2): Manager = puede publicar y tocar listas ya publicadas. Espejo de
+// isHospitalityMicrophonesManager() en rules_src/03-roles-and-managers.rules; si
+// cambia alla, cambia aqui. El auxiliar NO pasa este gate -- esa es la correccion
+// de esta ronda: antes incluia hasServiceAssignment(requester, 'auxiliar', ...),
+// dandole permiso de publicar, que es lo opuesto de lo decidido.
+export const assertHospitalityManager = (requester: RequesterProfile, congregationId: string): void => {
   if (requester.congregationId !== congregationId) {
     throw new HttpsError('permission-denied', 'No puedes gestionar otra congregacion.');
   }
@@ -249,10 +274,34 @@ const assertHospitalityManager = (requester: RequesterProfile, congregationId: s
     requester.role !== 'admin' &&
     !hasPermission(requester, 'acomodadores_microfonos', 'manage') &&
     !(hasPermission(requester, 'acomodadores_microfonos', 'create') && hasPermission(requester, 'acomodadores_microfonos', 'edit')) &&
+    !hasServiceAssignment(requester, 'encargado', 'acomodadores_microfonos')
+  ) {
+    throw new HttpsError('permission-denied', 'No tienes permisos para publicar acomodadores y microfonos.');
+  }
+};
+
+// Editor del modulo: trabaja borradores (crear, llenar, cancelar asignaciones,
+// archivar el borrador). NO publica ni toca listas publicadas -- esa frontera la
+// marca assertHospitalityManager de arriba. Espejo de
+// isHospitalityMicrophonesEditor() en rules_src/03-roles-and-managers.rules; si
+// cambia alla, cambia aqui. El auxiliar necesita rama explicita por cargo porque
+// los permisos derivados de assignmentToPermissions() (src/utils/permissions/
+// permissions.ts) viven solo en el frontend y nunca se materializan en el
+// documento del usuario.
+export const assertHospitalityEditor = (requester: RequesterProfile, congregationId: string): void => {
+  if (requester.congregationId !== congregationId) {
+    throw new HttpsError('permission-denied', 'No puedes gestionar otra congregacion.');
+  }
+
+  if (
+    requester.role !== 'admin' &&
+    !hasPermission(requester, 'acomodadores_microfonos', 'manage') &&
+    !(hasPermission(requester, 'acomodadores_microfonos', 'create') && hasPermission(requester, 'acomodadores_microfonos', 'edit')) &&
+    !hasPermission(requester, 'acomodadores_microfonos', 'edit') &&
     !hasServiceAssignment(requester, 'encargado', 'acomodadores_microfonos') &&
     !hasServiceAssignment(requester, 'auxiliar', 'acomodadores_microfonos')
   ) {
-    throw new HttpsError('permission-denied', 'No tienes permisos para publicar acomodadores y microfonos.');
+    throw new HttpsError('permission-denied', 'No tienes permisos para editar acomodadores y microfonos.');
   }
 };
 
@@ -306,27 +355,16 @@ const parsePlanningDay = (value: unknown, fieldName: string): number => {
   return value as number;
 };
 
-const parseEnsurePlanningMeetingsPayload = (
-  raw: unknown
-): {
-  congregationId: string;
-  startDate: Date;
-  endDate: Date;
-  midweekDay: number;
-  weekendDay: number;
-} => {
-  const data = raw as EnsurePlanningMeetingsPayload;
-  const congregationId = normalizeText(data?.congregationId);
-  const startDateKey = normalizeText(data?.startDate);
-  const endDateKey = normalizeText(data?.endDate);
-
-  if (!congregationId || !startDateKey || !endDateKey) {
-    throw new HttpsError(
-      'invalid-argument',
-      'congregationId, startDate y endDate son obligatorios.'
-    );
-  }
-
+// Espejo backend de validatePlanningWindow/buildPlanningWindow en
+// src/services/planning/operational-planning-service.ts (maximo 62 dias, maximo
+// dos meses calendario). Si el criterio cambia alla, cambiar aqui tambien.
+// Compartido por parseEnsurePlanningMeetingsPayload y
+// saveHospitalityScheduleDraftByManager para no validar la ventana dos veces
+// con criterios que puedan divergir.
+export const parsePlanningWindow = (
+  startDateKey: string,
+  endDateKey: string
+): { startDate: Date; endDate: Date; monthIds: string[] } => {
   const startDate = parseDateKey(startDateKey);
   const endDate = parseDateKey(endDateKey);
   if (!startDate || !endDate || startDate > endDate) {
@@ -353,6 +391,32 @@ const parseEnsurePlanningMeetingsPayload = (
       'La lista no puede cubrir mas de dos meses calendario.'
     );
   }
+
+  return { startDate, endDate, monthIds: Array.from(monthIds) };
+};
+
+const parseEnsurePlanningMeetingsPayload = (
+  raw: unknown
+): {
+  congregationId: string;
+  startDate: Date;
+  endDate: Date;
+  midweekDay: number;
+  weekendDay: number;
+} => {
+  const data = raw as EnsurePlanningMeetingsPayload;
+  const congregationId = normalizeText(data?.congregationId);
+  const startDateKey = normalizeText(data?.startDate);
+  const endDateKey = normalizeText(data?.endDate);
+
+  if (!congregationId || !startDateKey || !endDateKey) {
+    throw new HttpsError(
+      'invalid-argument',
+      'congregationId, startDate y endDate son obligatorios.'
+    );
+  }
+
+  const { startDate, endDate } = parsePlanningWindow(startDateKey, endDateKey);
 
   return {
     congregationId,
@@ -499,14 +563,9 @@ const syncCleaningScheduleToMeetings = async (params: {
       .where('meetingDate', '<=', range.end)
       .limit(10)
       .get();
-    const meetingDoc = meetingsSnap.docs.find((doc) => {
-      const data = doc.data() as Record<string, unknown>;
-      const category = normalizeText(data.meetingCategory);
-      const type = normalizeText(data.type);
-      return meetingType === 'midweek'
-        ? category === 'midweek' || type === 'midweek'
-        : category === 'weekend' || type !== 'midweek';
-    });
+    const meetingDoc = meetingsSnap.docs.find(
+      (doc) => classifyMeetingKind(doc.data() as FirestoreRecord) === meetingType
+    );
 
     if (!meetingDoc) {
       missingMeetings += 1;
@@ -588,6 +647,7 @@ const normalizeHospitalityItem = (value: FirestoreRecord): HospitalityScheduleIt
   }
 
   return {
+    meetingId: normalizeText(value.meetingId),
     meetingDate,
     meetingType,
     roleKey,
@@ -954,11 +1014,72 @@ const groupHospitalityItemsByMeeting = (
   return grouped;
 };
 
+// Clasifica una reunion como 'midweek' o 'weekend' a partir de meetingCategory/type.
+// Devuelve null para cualquier otra cosa (reuniones especiales: asamblea, visita
+// del superintendente, etc.) en vez de adivinar -- antes, cualquier reunion no
+// clasificada como entre semana se contaba como fin de semana, lo que podia
+// sincronizar asignaciones de hospitalidad en una reunion especial en vez de la
+// reunion de fin de semana real. Compartida por findMeetingForDateAndType (sync
+// puntual) y ensurePlanningMeetingsByManager (deteccion masiva de reuniones
+// existentes) para que ambas usen el mismo criterio.
+export const classifyMeetingKind = (
+  data: FirestoreRecord
+): HospitalityMeetingType | null => {
+  const category = normalizeText(data.meetingCategory);
+  const type = normalizeText(data.type);
+  if (category === 'midweek' || type === 'midweek') return 'midweek';
+  if (category === 'weekend' || type === 'weekend') return 'weekend';
+  return null;
+};
+
+const MEETING_MATCH_QUERY_LIMIT = 25;
+
+// Valida si el meetingId persistido en un item (params.data, con su
+// meetingDate/meetingCategory/type) sigue siendo el candidato correcto para la
+// fecha y tipo solicitados. Extraida como funcion pura -- separada de la lectura
+// a Firestore -- para poder probar la decision sin mockear el Admin SDK.
+export const isPreferredMeetingMatch = (params: {
+  data: FirestoreRecord;
+  requestedDateRange: { start: Timestamp; end: Timestamp };
+  meetingType: HospitalityMeetingType;
+}): boolean => {
+  const meetingDateValue = params.data.meetingDate;
+  const fallsOnRequestedDay =
+    meetingDateValue instanceof Timestamp &&
+    meetingDateValue.toMillis() >= params.requestedDateRange.start.toMillis() &&
+    meetingDateValue.toMillis() <= params.requestedDateRange.end.toMillis();
+
+  return fallsOnRequestedDay && classifyMeetingKind(params.data) === params.meetingType;
+};
+
 const findMeetingForDateAndType = async (params: {
   congregationId: string;
   meetingDate: string;
   meetingType: HospitalityMeetingType;
-}) => {
+  preferredMeetingId?: string;
+}): Promise<DocumentSnapshot | undefined> => {
+  if (params.preferredMeetingId) {
+    const preferredRef = adminDb
+      .collection('congregations')
+      .doc(params.congregationId)
+      .collection('meetings')
+      .doc(params.preferredMeetingId);
+    const preferredSnap = await preferredRef.get();
+
+    if (
+      preferredSnap.exists &&
+      isPreferredMeetingMatch({
+        data: preferredSnap.data() as FirestoreRecord,
+        requestedDateRange: dayRange(params.meetingDate),
+        meetingType: params.meetingType,
+      })
+    ) {
+      return preferredSnap;
+    }
+    // meetingId persistido pero invalido (fecha/tipo ya no coincide, o borrado):
+    // no confiar en el, seguir con la busqueda por rango de abajo.
+  }
+
   const range = dayRange(params.meetingDate);
   const meetingsSnap = await adminDb
     .collection('congregations')
@@ -966,17 +1087,25 @@ const findMeetingForDateAndType = async (params: {
     .collection('meetings')
     .where('meetingDate', '>=', range.start)
     .where('meetingDate', '<=', range.end)
-    .limit(10)
+    .orderBy('meetingDate', 'asc')
+    .limit(MEETING_MATCH_QUERY_LIMIT)
     .get();
 
-  return meetingsSnap.docs.find((doc) => {
-    const data = doc.data() as FirestoreRecord;
-    const category = normalizeText(data.meetingCategory);
-    const type = normalizeText(data.type);
-    return params.meetingType === 'midweek'
-      ? category === 'midweek' || type === 'midweek'
-      : category === 'weekend' || type !== 'midweek';
-  });
+  const candidates = meetingsSnap.docs.filter(
+    (doc) => classifyMeetingKind(doc.data() as FirestoreRecord) === params.meetingType
+  );
+
+  if (candidates.length > 1) {
+    logger.warn('[hospitalityPlanning] Multiples reuniones candidatas para sincronizar', {
+      congregationId: params.congregationId,
+      meetingDate: params.meetingDate,
+      meetingType: params.meetingType,
+      candidateIds: candidates.map((doc) => doc.id),
+    });
+    return undefined;
+  }
+
+  return candidates[0];
 };
 
 // Sincroniza una unica reunion a partir de los items de hospitalidad ya resueltos
@@ -996,6 +1125,7 @@ const syncSingleMeetingFromItems = async (params: {
     congregationId: params.congregationId,
     meetingDate: params.meetingDate,
     meetingType: params.meetingType,
+    preferredMeetingId: params.items[0]?.meetingId,
   });
 
   if (!meetingDoc) {
@@ -1073,6 +1203,95 @@ const syncHospitalityScheduleToMeetings = async (params: {
   return { syncedMeetings, missingMeetings };
 };
 
+// Esqueleto de reunion creado por ensurePlanningMeetingsByManager cuando no
+// existe una reunion para la fecha/tipo. Debe satisfacer validMeetingData() de
+// rules_src/11-meetings-validation.rules aunque el Admin SDK bypassee las rules
+// al escribir: si no lo cumple, la reunion se crea igual pero el cliente no
+// podra editarla despues (ver hasOnlyKeys/hasAllKeys de esa funcion). Por eso
+// NO incluye un campo `origin`: no esta en allowedMeetingKeys(). La deteccion de
+// "esqueleto del planificador" en syncSingleMeetingFromItems usa el prefijo del
+// docId ('planning-...') en su lugar.
+export const buildPlanningMeetingSkeleton = (params: {
+  dateKey: string;
+  meetingType: HospitalityMeetingType;
+  requesterUid: string;
+}): FirestoreRecord => {
+  const range = dayRange(params.dateKey);
+  return {
+    type: params.meetingType,
+    meetingCategory: params.meetingType,
+    title: PLANNING_MEETING_TITLES[params.meetingType],
+    publicationStatus: 'awaiting_assignments',
+    startDate: range.start,
+    endDate: range.end,
+    meetingDate: range.start,
+    assignedUserIds: [],
+    sections: [],
+    createdBy: params.requesterUid,
+    updatedBy: params.requesterUid,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+};
+
+export const planningMeetingDocId = (dateKey: string, meetingType: HospitalityMeetingType): string =>
+  `planning-${dateKey}-${meetingType}`;
+
+type PlanningMeetingCandidate = { dateKey: string; meetingType: HospitalityMeetingType };
+
+export const buildPlanningMeetingCandidates = (params: {
+  startDate: Date;
+  endDate: Date;
+  midweekDay: number;
+  weekendDay: number;
+}): PlanningMeetingCandidate[] => {
+  const candidates: PlanningMeetingCandidate[] = [];
+  const cursor = new Date(params.startDate);
+  while (cursor <= params.endDate) {
+    const dateKey = formatDateKey(cursor);
+    if (cursor.getDay() === params.midweekDay) {
+      candidates.push({ dateKey, meetingType: 'midweek' });
+    }
+    if (cursor.getDay() === params.weekendDay) {
+      candidates.push({ dateKey, meetingType: 'weekend' });
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return candidates;
+};
+
+// Separa los candidatos de la ventana solicitada entre los que ya tienen reunion
+// (existingKeys, indexada por `${dateKey}::${meetingType}`) y los que hay que
+// crear, contando por tipo. Extraida como funcion pura para poder probar el
+// conteo (incluida la idempotencia de una segunda invocacion) sin mockear
+// Firestore, siguiendo la convencion de pruebas del resto de functions/src.
+export const reconcilePlanningMeetingCandidates = (
+  candidates: PlanningMeetingCandidate[],
+  existingKeys: Set<string>
+): {
+  toCreate: PlanningMeetingCandidate[];
+  createdMidweek: number;
+  createdWeekend: number;
+  existing: number;
+} => {
+  let createdMidweek = 0;
+  let createdWeekend = 0;
+  let existing = 0;
+  const toCreate: PlanningMeetingCandidate[] = [];
+
+  for (const candidate of candidates) {
+    if (existingKeys.has(`${candidate.dateKey}::${candidate.meetingType}`)) {
+      existing += 1;
+      continue;
+    }
+    toCreate.push(candidate);
+    if (candidate.meetingType === 'midweek') createdMidweek += 1;
+    else createdWeekend += 1;
+  }
+
+  return { toCreate, createdMidweek, createdWeekend, existing };
+};
+
 export const ensurePlanningMeetingsByManager = onCall(
   { region: 'us-central1' },
   async (request): Promise<EnsurePlanningMeetingsResult> => {
@@ -1090,35 +1309,70 @@ export const ensurePlanningMeetingsByManager = onCall(
     await assertAdministrativeBillingAccess(congregationId);
     assertHospitalityManager(requester, congregationId);
     const payload = parseEnsurePlanningMeetingsPayload(request.data);
-    const createdMidweek = 0;
-    const createdWeekend = 0;
-    let existing = 0;
+    const candidates = buildPlanningMeetingCandidates(payload);
 
-    const candidates: { dateKey: string; meetingType: HospitalityMeetingType }[] = [];
-    const cursor = new Date(payload.startDate);
-    while (cursor <= payload.endDate) {
-      const dateKey = formatDateKey(cursor);
-      if (cursor.getDay() === payload.midweekDay) {
-        candidates.push({ dateKey, meetingType: 'midweek' });
+    // Una unica query de rango para todo el intervalo en vez de una consulta por
+    // candidato (hasta ~18 round-trips en serie para una lista tipica): se indexa
+    // en memoria por `${dateKey}::${meetingType}` usando el mismo clasificador
+    // que findMeetingForDateAndType.
+    const rangeStart = dayRange(formatDateKey(payload.startDate)).start;
+    const rangeEnd = dayRange(formatDateKey(payload.endDate)).end;
+    const existingMeetingsSnap = await adminDb
+      .collection('congregations')
+      .doc(payload.congregationId)
+      .collection('meetings')
+      .where('meetingDate', '>=', rangeStart)
+      .where('meetingDate', '<=', rangeEnd)
+      .get();
+
+    const existingKeys = new Set<string>();
+    existingMeetingsSnap.docs.forEach((doc) => {
+      const data = doc.data() as FirestoreRecord;
+      const meetingDateValue = data.meetingDate;
+      if (!(meetingDateValue instanceof Timestamp)) return;
+      const kind = classifyMeetingKind(data);
+      if (!kind) return;
+      existingKeys.add(`${formatDateKey(meetingDateValue.toDate())}::${kind}`);
+    });
+
+    const { toCreate, createdMidweek, createdWeekend, existing } = reconcilePlanningMeetingCandidates(
+      candidates,
+      existingKeys
+    );
+
+    let batch = adminDb.batch();
+    let opsInBatch = 0;
+    const pendingCommits: Promise<unknown>[] = [];
+
+    for (const candidate of toCreate) {
+      const ref = adminDb
+        .collection('congregations')
+        .doc(payload.congregationId)
+        .collection('meetings')
+        .doc(planningMeetingDocId(candidate.dateKey, candidate.meetingType));
+
+      batch.set(
+        ref,
+        buildPlanningMeetingSkeleton({
+          dateKey: candidate.dateKey,
+          meetingType: candidate.meetingType,
+          requesterUid: request.auth.uid,
+        })
+      );
+
+      opsInBatch += 1;
+      if (opsInBatch >= PLANNING_MEETING_WRITE_CHUNK_SIZE) {
+        pendingCommits.push(batch.commit());
+        batch = adminDb.batch();
+        opsInBatch = 0;
       }
-      if (cursor.getDay() === payload.weekendDay) {
-        candidates.push({ dateKey, meetingType: 'weekend' });
-      }
-      cursor.setDate(cursor.getDate() + 1);
     }
 
-    for (const candidate of candidates) {
-      const existingMeeting = await findMeetingForDateAndType({
-        congregationId: payload.congregationId,
-        meetingDate: candidate.dateKey,
-        meetingType: candidate.meetingType,
-      });
-      if (existingMeeting) {
-        existing += 1;
-        continue;
-      }
-
+    if (opsInBatch > 0) {
+      pendingCommits.push(batch.commit());
     }
+
+    await Promise.all(pendingCommits);
 
     return { ok: true, createdMidweek, createdWeekend, existing };
   }
@@ -1339,5 +1593,393 @@ export const substituteHospitalityAssignmentByManager = onCall(
     await batch.commit();
 
     return { ok: true, meetingSynced: syncResult.synced };
+  }
+);
+
+// =============================================================================
+// BORRADOR Y ARCHIVADO (R2.C) — cierra la escritura directa desde cliente para
+// hospitalitySchedules. El repositorio del front (Ronda 3) debe migrar de
+// addDoc/updateDoc/writeBatch a estos dos callables.
+// =============================================================================
+
+type SaveHospitalityScheduleDraftPayload = {
+  congregationId?: unknown;
+  scheduleId?: unknown;
+  title?: unknown;
+  startDate?: unknown;
+  endDate?: unknown;
+  optionalRoles?: unknown;
+  items?: unknown;
+};
+
+type SaveHospitalityScheduleDraftItemInput = {
+  meetingId: string;
+  meetingDate: string;
+  meetingType: HospitalityMeetingType;
+  roleKey: HospitalityRoleKey;
+  userId: string;
+};
+
+type SaveHospitalityScheduleDraftDroppedItem = {
+  meetingDate: string;
+  roleKey: string;
+  userId: string;
+  reason: string;
+};
+
+type SaveHospitalityScheduleDraftResult = {
+  ok: true;
+  scheduleId: string;
+  created: boolean;
+  savedItems: number;
+  droppedItems: SaveHospitalityScheduleDraftDroppedItem[];
+  startDate: string;
+  endDate: string;
+};
+
+const parseOptionalRoles = (value: unknown): { microphoneThree: boolean; attendantExtra: boolean } => {
+  const record = asRecord(value);
+  return {
+    microphoneThree: record?.microphoneThree === true,
+    attendantExtra: record?.attendantExtra === true,
+  };
+};
+
+const parseSaveHospitalityScheduleDraftItems = (
+  value: unknown
+): SaveHospitalityScheduleDraftItemInput[] => {
+  if (!Array.isArray(value)) {
+    throw new HttpsError('invalid-argument', 'items debe ser una lista.');
+  }
+
+  return value.map((raw, index) => {
+    const record = asRecord(raw);
+    const meetingId = normalizeText(record?.meetingId);
+    const meetingDate = normalizeText(record?.meetingDate);
+    const meetingType =
+      record?.meetingType === 'midweek' || record?.meetingType === 'weekend'
+        ? record.meetingType
+        : undefined;
+    const roleKey = isHospitalityRoleKey(record?.roleKey) ? record.roleKey : undefined;
+    const userId = normalizeText(record?.userId);
+
+    if (!meetingId || !meetingDate || !parseDateKey(meetingDate) || !meetingType || !roleKey || !userId) {
+      throw new HttpsError('invalid-argument', `items[${index}] tiene datos invalidos.`);
+    }
+
+    return { meetingId, meetingDate, meetingType, roleKey, userId };
+  });
+};
+
+const parseSaveHospitalityScheduleDraftPayload = (
+  raw: unknown
+): {
+  congregationId: string;
+  scheduleId?: string;
+  title: string;
+  startDateKey: string;
+  endDateKey: string;
+  optionalRoles: { microphoneThree: boolean; attendantExtra: boolean };
+  items: SaveHospitalityScheduleDraftItemInput[];
+} => {
+  const data = raw as SaveHospitalityScheduleDraftPayload;
+  const congregationId = normalizeText(data?.congregationId);
+  const scheduleId = normalizeText(data?.scheduleId);
+  const title = normalizeText(data?.title);
+  const startDateKey = normalizeText(data?.startDate);
+  const endDateKey = normalizeText(data?.endDate);
+
+  if (!congregationId || !title || !startDateKey || !endDateKey) {
+    throw new HttpsError(
+      'invalid-argument',
+      'congregationId, title, startDate y endDate son obligatorios.'
+    );
+  }
+  if (title.length > 120) {
+    throw new HttpsError('invalid-argument', 'El titulo no puede superar 120 caracteres.');
+  }
+
+  return {
+    congregationId,
+    scheduleId,
+    title,
+    startDateKey,
+    endDateKey,
+    optionalRoles: parseOptionalRoles(data?.optionalRoles),
+    items: parseSaveHospitalityScheduleDraftItems(data?.items),
+  };
+};
+
+export const hospitalityScheduleItemDocId = (meetingId: string, roleKey: string): string =>
+  `${meetingId}-${roleKey}`;
+
+// Unica puerta de escritura para borradores de hospitalidad: crea o reutiliza el
+// borrador del rango solicitado (evita duplicados cuando el cliente guarda varias
+// veces seguidas sin recargar), valida cada asignacion contra el usuario real
+// antes de escribir nada, y cancela las asignaciones previas que ya no vienen en
+// el payload. Gate de Editor: opera exclusivamente sobre `status === 'draft'`,
+// nunca sobre listas publicadas -- esa frontera la marca
+// archiveHospitalityScheduleByManager / publishHospitalityScheduleByManager.
+export const saveHospitalityScheduleDraftByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<SaveHospitalityScheduleDraftResult> => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const requesterUid = request.auth.uid;
+    const payload = parseSaveHospitalityScheduleDraftPayload(request.data);
+    const requester = await getRequesterProfile(requesterUid);
+    await assertAdministrativeBillingAccess(payload.congregationId);
+    assertHospitalityEditor(requester, payload.congregationId);
+
+    const window = parsePlanningWindow(payload.startDateKey, payload.endDateKey);
+    const schedulesRef = adminDb
+      .collection('congregations')
+      .doc(payload.congregationId)
+      .collection('hospitalitySchedules');
+
+    // --- Resolucion del schedule (solo lectura; nada se escribe todavia) ---
+    let scheduleRef: DocumentReference;
+    let created: boolean;
+    let existingScheduleData: FirestoreRecord | undefined;
+
+    if (payload.scheduleId) {
+      scheduleRef = schedulesRef.doc(payload.scheduleId);
+      const snap = await scheduleRef.get();
+      if (!snap.exists) {
+        throw new HttpsError('not-found', 'Lista no encontrada.');
+      }
+      const data = snap.data() as FirestoreRecord;
+      if (normalizeText(data.congregationId) !== payload.congregationId) {
+        throw new HttpsError('permission-denied', 'La lista no pertenece a esta congregacion.');
+      }
+      if (data.status !== 'draft') {
+        throw new HttpsError('failed-precondition', 'Solo se pueden guardar borradores.');
+      }
+      existingScheduleData = data;
+      created = false;
+    } else {
+      const matchSnap = await schedulesRef
+        .where('status', '==', 'draft')
+        .where('startDate', '==', payload.startDateKey)
+        .where('endDate', '==', payload.endDateKey)
+        .limit(1)
+        .get();
+
+      if (!matchSnap.empty) {
+        scheduleRef = matchSnap.docs[0].ref;
+        existingScheduleData = matchSnap.docs[0].data() as FirestoreRecord;
+        created = false;
+      } else {
+        scheduleRef = schedulesRef.doc();
+        created = true;
+      }
+    }
+
+    // --- Validar TODOS los items antes de escribir nada ---
+    const userIds = Array.from(new Set(payload.items.map((item) => item.userId)));
+    const userSnaps = await Promise.all(
+      userIds.map((userId) => adminDb.collection('users').doc(userId).get())
+    );
+    const usersById = new Map(
+      userSnaps.filter((snap) => snap.exists).map((snap) => [snap.id, snap.data() as FirestoreRecord])
+    );
+
+    const droppedItems: SaveHospitalityScheduleDraftDroppedItem[] = [];
+    const validItems: (SaveHospitalityScheduleDraftItemInput & { userNameSnapshot: string })[] = [];
+
+    for (const item of payload.items) {
+      const userData = usersById.get(item.userId);
+      const drop = (reason: string): void => {
+        droppedItems.push({
+          meetingDate: item.meetingDate,
+          roleKey: item.roleKey,
+          userId: item.userId,
+          reason,
+        });
+      };
+
+      if (!userData) {
+        drop('El usuario no existe.');
+        continue;
+      }
+      if (normalizeText(userData.congregationId) !== payload.congregationId) {
+        drop('El usuario no pertenece a esta congregacion.');
+        continue;
+      }
+      if (!resolveIsActive(userData)) {
+        drop('El usuario esta inactivo.');
+        continue;
+      }
+      if (!isHospitalityEligible(userData)) {
+        drop('El usuario no es anciano ni siervo ministerial.');
+        continue;
+      }
+
+      validItems.push({
+        ...item,
+        userNameSnapshot: normalizeText(userData.displayName) ?? normalizeText(userData.email) ?? 'Usuario',
+      });
+    }
+
+    if (validItems.length === 0) {
+      throw new HttpsError('failed-precondition', 'Ningun elemento de la lista es valido.');
+    }
+
+    // --- Escritura atomica ---
+    const itemsRef = scheduleRef.collection('items');
+    const existingItemsSnap = created ? null : await itemsRef.get();
+    const existingItemsById = new Map(
+      (existingItemsSnap?.docs ?? []).map((doc) => [doc.id, doc.data() as FirestoreRecord])
+    );
+
+    const batch = adminDb.batch();
+    const nextItemIds = new Set<string>();
+
+    for (const item of validItems) {
+      const itemId = hospitalityScheduleItemDocId(item.meetingId, item.roleKey);
+      nextItemIds.add(itemId);
+      const existingItem = existingItemsById.get(itemId);
+
+      batch.set(itemsRef.doc(itemId), {
+        congregationId: payload.congregationId,
+        scheduleId: scheduleRef.id,
+        meetingId: item.meetingId,
+        meetingDate: item.meetingDate,
+        meetingType: item.meetingType,
+        roleKey: item.roleKey,
+        roleLabel: HOSPITALITY_ROLE_LABELS[item.roleKey],
+        userId: item.userId,
+        userNameSnapshot: item.userNameSnapshot,
+        status: 'scheduled',
+        createdBy: normalizeText(existingItem?.createdBy) ?? requesterUid,
+        updatedBy: requesterUid,
+        createdAt: existingItem?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Items previos en 'scheduled' que ya no vienen en el payload -> 'cancelled'.
+    existingItemsById.forEach((data, itemId) => {
+      if (nextItemIds.has(itemId) || data.status !== 'scheduled') return;
+      batch.update(itemsRef.doc(itemId), {
+        status: 'cancelled',
+        updatedBy: requesterUid,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    const totalMeetings = new Set(validItems.map((item) => item.meetingId)).size;
+    batch.set(scheduleRef, {
+      congregationId: payload.congregationId,
+      title: payload.title,
+      startDate: payload.startDateKey,
+      endDate: payload.endDateKey,
+      monthIds: window.monthIds,
+      totalMeetings,
+      status: 'draft',
+      optionalRoles: payload.optionalRoles,
+      createdBy: created ? requesterUid : (normalizeText(existingScheduleData?.createdBy) ?? requesterUid),
+      createdAt: created ? FieldValue.serverTimestamp() : (existingScheduleData?.createdAt ?? FieldValue.serverTimestamp()),
+      updatedBy: requesterUid,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+
+    return {
+      ok: true,
+      scheduleId: scheduleRef.id,
+      created,
+      savedItems: validItems.length,
+      droppedItems,
+      startDate: payload.startDateKey,
+      endDate: payload.endDateKey,
+    };
+  }
+);
+
+type ArchiveHospitalitySchedulePayload = {
+  congregationId?: unknown;
+  scheduleId?: unknown;
+};
+
+const parseArchiveHospitalitySchedulePayload = (
+  raw: unknown
+): { congregationId: string; scheduleId: string } => {
+  const data = raw as ArchiveHospitalitySchedulePayload;
+  const congregationId = normalizeText(data?.congregationId);
+  const scheduleId = normalizeText(data?.scheduleId);
+
+  if (!congregationId || !scheduleId) {
+    throw new HttpsError('invalid-argument', 'congregationId y scheduleId son obligatorios.');
+  }
+
+  return { congregationId, scheduleId };
+};
+
+// Materializa el "borrar lista" del contrato (§0.3): soft-delete via
+// status: 'archived'. Gate diferenciado (§0.2): un borrador lo archiva el
+// Editor; una lista publicada solo el Manager. NO revierte las secciones ya
+// sincronizadas en las reuniones -- la UI (R3.E) debe advertirlo en el texto de
+// confirmacion antes de llamar a este callable.
+export const archiveHospitalityScheduleByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<{ ok: true; cancelledItems: number }> => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    }
+
+    const requesterUid = request.auth.uid;
+    const payload = parseArchiveHospitalitySchedulePayload(request.data);
+    const requester = await getRequesterProfile(requesterUid);
+    await assertAdministrativeBillingAccess(payload.congregationId);
+    assertHospitalityEditor(requester, payload.congregationId);
+
+    const scheduleRef = adminDb
+      .collection('congregations')
+      .doc(payload.congregationId)
+      .collection('hospitalitySchedules')
+      .doc(payload.scheduleId);
+    const scheduleSnap = await scheduleRef.get();
+
+    if (!scheduleSnap.exists) {
+      throw new HttpsError('not-found', 'Lista no encontrada.');
+    }
+
+    const scheduleData = scheduleSnap.data() as FirestoreRecord;
+    if (normalizeText(scheduleData.congregationId) !== payload.congregationId) {
+      throw new HttpsError('permission-denied', 'La lista no pertenece a esta congregacion.');
+    }
+
+    if (scheduleData.status === 'published') {
+      assertHospitalityManager(requester, payload.congregationId);
+    }
+
+    if (scheduleData.status === 'archived') {
+      return { ok: true, cancelledItems: 0 };
+    }
+
+    const itemsSnap = await scheduleRef.collection('items').where('status', '==', 'scheduled').get();
+    const batch = adminDb.batch();
+
+    batch.update(scheduleRef, {
+      status: 'archived',
+      updatedBy: requesterUid,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    itemsSnap.docs.forEach((doc) => {
+      batch.update(doc.ref, {
+        status: 'cancelled',
+        updatedBy: requesterUid,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    await batch.commit();
+
+    return { ok: true, cancelledItems: itemsSnap.size };
   }
 );

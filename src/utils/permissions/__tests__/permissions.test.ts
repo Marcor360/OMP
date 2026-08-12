@@ -1,8 +1,10 @@
 import {
   SUPERVISOR_PERMISSION_TEMPLATE,
+  canEditHospitalityAssignments,
   canManageDepartments,
   canManageCleaning,
   canManageMeetings,
+  canManageHospitalityMicrophones,
   canManageUsers,
   canViewOrgChart,
   getDefaultPermissionsByRole,
@@ -50,6 +52,45 @@ describe('permissions utilities', () => {
 
     expect(canManageCleaning(cleaningManager)).toBe(true);
     expect(canManageUsers(cleaningManager)).toBe(false);
+  });
+
+  it('separates hospitality draft editing from publishing', () => {
+    const assistant = {
+      role: 'user' as const,
+      serviceAssignments: [{
+        position: 'auxiliar' as const,
+        department: 'acomodadores_microfonos' as const,
+        label: 'Auxiliar',
+      }],
+    };
+    const manager = {
+      role: 'user' as const,
+      serviceAssignments: [{
+        position: 'encargado' as const,
+        department: 'acomodadores_microfonos' as const,
+        label: 'Encargado',
+      }],
+    };
+
+    expect(canEditHospitalityAssignments(assistant)).toBe(true);
+    expect(canManageHospitalityMicrophones(assistant)).toBe(false);
+    expect(canEditHospitalityAssignments(manager)).toBe(true);
+    expect(canManageHospitalityMicrophones(manager)).toBe(true);
+  });
+
+  it('keeps explicit hospitality manage permission additive for assistants', () => {
+    const delegatedAssistant = {
+      role: 'user' as const,
+      permissions: { acomodadores_microfonos: { manage: true } },
+      serviceAssignments: [{
+        position: 'auxiliar' as const,
+        department: 'acomodadores_microfonos' as const,
+        label: 'Auxiliar',
+      }],
+    };
+
+    expect(canEditHospitalityAssignments(delegatedAssistant)).toBe(true);
+    expect(canManageHospitalityMicrophones(delegatedAssistant)).toBe(true);
   });
 
   it('mirrors org chart permissions from organigrama to departments', () => {

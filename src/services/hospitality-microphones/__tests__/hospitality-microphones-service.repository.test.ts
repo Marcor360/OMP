@@ -2,11 +2,12 @@ import type { HospitalityScheduleRepository } from '@/src/services/repositories/
 import {
   __resetHospitalityScheduleRepositoryForTests,
   __setHospitalityScheduleRepositoryForTests,
+  archiveHospitalitySchedule,
   ensurePlanningMeetings,
   getCurrentPublishedHospitalitySchedule,
   getHospitalitySchedules,
   publishHospitalitySchedule,
-  saveHospitalityScheduleItems,
+  saveHospitalityScheduleDraft,
   substituteHospitalityAssignment,
 } from '@/src/services/hospitality-microphones/hospitality-microphones-service';
 import type {
@@ -23,10 +24,8 @@ jest.mock(
       listPublishedSchedules: async () => [],
       listScheduleItems: async () => [],
       listScheduledItemsForDateAndType: async () => [],
-      addSchedule: async () => 'sch-id',
-      updateScheduleOptionalRoles: async () => undefined,
-      archiveSchedule: async () => undefined,
-      upsertScheduleItems: async () => undefined,
+      saveDraft: async () => ({ scheduleId: 'sch-id', created: true, savedItems: 0, droppedItems: [] }),
+      archiveSchedule: async () => ({ cancelledItems: 0 }),
       publishSchedule: async () => ({ syncedMeetings: 0, missingMeetings: 0 }),
       substituteAssignment: async () => ({ meetingSynced: true }),
     },
@@ -66,12 +65,7 @@ class FakeHospitalityScheduleRepository implements HospitalityScheduleRepository
     syncMeetings?: boolean;
   } | null = null;
 
-  public upsertPayload: {
-    congregationId: string;
-    scheduleId: string;
-    items: Omit<HospitalityScheduleItem, 'id' | 'createdAt' | 'updatedAt'>[];
-    actorUid: string;
-  } | null = null;
+  public saveDraftPayload: Parameters<HospitalityScheduleRepository['saveDraft']>[0] | null = null;
 
   public publishedSchedules: HospitalitySchedule[] = [];
   public schedules: HospitalitySchedule[] = [];
@@ -101,25 +95,21 @@ class FakeHospitalityScheduleRepository implements HospitalityScheduleRepository
     return [];
   }
 
-  async addSchedule(): Promise<string> {
-    return 'sch-id';
+  async saveDraft(
+    params: Parameters<HospitalityScheduleRepository['saveDraft']>[0]
+  ): ReturnType<HospitalityScheduleRepository['saveDraft']> {
+    this.saveDraftPayload = params;
+    return {
+      scheduleId: params.scheduleId ?? 'sch-id',
+      created: !params.scheduleId,
+      savedItems: params.items.length,
+      droppedItems: [],
+    };
   }
 
-  async updateScheduleOptionalRoles(): Promise<void> {
-    return undefined;
-  }
-
-  async archiveSchedule(params: { scheduleId: string }): Promise<void> {
+  async archiveSchedule(params: { congregationId: string; scheduleId: string }): Promise<{ cancelledItems: number }> {
     this.archivedScheduleIds.push(params.scheduleId);
-  }
-
-  async upsertScheduleItems(params: {
-    congregationId: string;
-    scheduleId: string;
-    items: Omit<HospitalityScheduleItem, 'id' | 'createdAt' | 'updatedAt'>[];
-    actorUid: string;
-  }): Promise<void> {
-    this.upsertPayload = params;
+    return { cancelledItems: 2 };
   }
 
   async publishSchedule(params: {
@@ -190,7 +180,6 @@ describe('hospitality-microphones-service repository port', () => {
 
     const result = await getHospitalitySchedules('cong-1', {
       canManage: true,
-      actorUid: 'uid-1',
       today: '2026-02-15',
     });
 
@@ -266,10 +255,11 @@ describe('hospitality-microphones-service repository port', () => {
     });
   });
 
-  describe('saveHospitalityScheduleItems', () => {
-    it('persists items via repo.upsertScheduleItems with the expected payload', async () => {
+  describe('saveHospitalityScheduleDraft', () => {
+    it('persists the complete draft via one repository call', async () => {
       const items: Omit<HospitalityScheduleItem, 'id' | 'createdAt' | 'updatedAt'>[] = [
         {
+          meetingId: 'meeting-1',
           congregationId: 'cong-1',
           scheduleId: 'sch-1',
           meetingDate: '2026-01-06',
@@ -283,6 +273,7 @@ describe('hospitality-microphones-service repository port', () => {
           updatedBy: 'uid-1',
         },
         {
+          meetingId: 'meeting-2',
           congregationId: 'cong-1',
           scheduleId: 'sch-1',
           meetingDate: '2026-01-06',
@@ -297,20 +288,39 @@ describe('hospitality-microphones-service repository port', () => {
         },
       ];
 
-      await saveHospitalityScheduleItems({
+      const draftItems = items.map((item) => ({
+        meetingId: item.meetingId as string,
+        meetingDate: item.meetingDate,
+        meetingType: item.meetingType,
+        roleKey: item.roleKey,
+        userId: item.userId,
+      }));
+      await saveHospitalityScheduleDraft({
         congregationId: 'cong-1',
         scheduleId: 'sch-1',
-        items,
-        actorUid: 'uid-1',
+        title: ' Enero ',
+        startDate: '2026-01-01',
+        endDate: '2026-02-28',
+        optionalRoles: { microphoneThree: false, attendantExtra: false },
+        items: draftItems,
       });
 
-      expect(repo.upsertPayload).toMatchObject({
+      expect(repo.saveDraftPayload).toEqual({
         congregationId: 'cong-1',
         scheduleId: 'sch-1',
-        items,
-        actorUid: 'uid-1',
+        title: 'Enero',
+        startDate: '2026-01-01',
+        endDate: '2026-02-28',
+        optionalRoles: { microphoneThree: false, attendantExtra: false },
+        items: draftItems,
       });
     });
+  });
+
+  it('archives through the callable repository contract', async () => {
+    await expect(archiveHospitalitySchedule({ congregationId: 'cong-1', scheduleId: 'sch-1' }))
+      .resolves.toEqual({ cancelledItems: 2 });
+    expect(repo.archivedScheduleIds).toEqual(['sch-1']);
   });
 
   describe('substituteHospitalityAssignment', () => {

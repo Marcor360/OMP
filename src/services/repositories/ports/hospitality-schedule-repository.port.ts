@@ -1,5 +1,7 @@
 import type {
+  HospitalityMeetingType,
   HospitalityOptionalRoles,
+  HospitalityRoleKey,
   HospitalitySchedule,
   HospitalityScheduleItem,
 } from '@/src/types/hospitality-microphones';
@@ -18,6 +20,42 @@ export type EnsurePlanningMeetingsResult = {
   existing: number;
 };
 
+export type SaveHospitalityScheduleDraftItem = {
+  meetingId: string;
+  meetingDate: string;
+  meetingType: HospitalityMeetingType;
+  roleKey: HospitalityRoleKey;
+  userId: string;
+};
+
+export type SaveHospitalityScheduleDraftParams = {
+  congregationId: string;
+  scheduleId?: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  optionalRoles: HospitalityOptionalRoles;
+  items: SaveHospitalityScheduleDraftItem[];
+};
+
+export type DroppedHospitalityScheduleItem = {
+  meetingDate: string;
+  roleKey: string;
+  userId: string;
+  reason: string;
+};
+
+export type SaveHospitalityScheduleDraftResult = {
+  scheduleId: string;
+  created: boolean;
+  savedItems: number;
+  droppedItems: DroppedHospitalityScheduleItem[];
+};
+
+export type ArchiveHospitalityScheduleResult = {
+  cancelledItems: number;
+};
+
 export interface HospitalityScheduleRepository {
   ensurePlanningMeetings(
     params: EnsurePlanningMeetingsParams
@@ -31,33 +69,13 @@ export interface HospitalityScheduleRepository {
     meetingDate: string;
     meetingType: 'midweek' | 'weekend';
   }): Promise<HospitalityScheduleItem[]>;
-  addSchedule(params: {
-    congregationId: string;
-    title: string;
-    startDate: string;
-    endDate: string;
-    monthIds: string[];
-    totalMeetings: number;
-    actorUid: string;
-    optionalRoles?: HospitalityOptionalRoles;
-  }): Promise<string>;
-  updateScheduleOptionalRoles(params: {
-    congregationId: string;
-    scheduleId: string;
-    optionalRoles: HospitalityOptionalRoles;
-    actorUid: string;
-  }): Promise<void>;
+  saveDraft(
+    params: SaveHospitalityScheduleDraftParams
+  ): Promise<SaveHospitalityScheduleDraftResult>;
   archiveSchedule(params: {
     congregationId: string;
     scheduleId: string;
-    actorUid: string;
-  }): Promise<void>;
-  upsertScheduleItems(params: {
-    congregationId: string;
-    scheduleId: string;
-    items: Omit<HospitalityScheduleItem, 'id' | 'createdAt' | 'updatedAt'>[];
-    actorUid: string;
-  }): Promise<void>;
+  }): Promise<ArchiveHospitalityScheduleResult>;
   publishSchedule(params: {
     congregationId: string;
     scheduleId: string;

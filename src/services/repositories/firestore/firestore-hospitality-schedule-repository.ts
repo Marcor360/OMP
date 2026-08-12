@@ -1,22 +1,19 @@
 import {
-  addDoc,
   collection,
-  doc,
   getDocs,
   query,
-  serverTimestamp,
-  updateDoc,
   where,
-  writeBatch,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 
 import { db, functions } from '@/src/lib/firebase/app';
-import { sanitizeForFirestore } from '@/src/services/meetings/firestore-payload';
 import type {
+  ArchiveHospitalityScheduleResult,
   EnsurePlanningMeetingsParams,
   EnsurePlanningMeetingsResult,
   HospitalityScheduleRepository,
+  SaveHospitalityScheduleDraftParams,
+  SaveHospitalityScheduleDraftResult,
 } from '@/src/services/repositories/ports/hospitality-schedule-repository.port';
 import type {
   HospitalityOptionalRoles,
@@ -29,9 +26,6 @@ const schedulesRef = (congregationId: string) =>
 
 const scheduleItemsRef = (congregationId: string, scheduleId: string) =>
   collection(db, 'congregations', congregationId, 'hospitalitySchedules', scheduleId, 'items');
-
-const scheduleRef = (congregationId: string, scheduleId: string) =>
-  doc(db, 'congregations', congregationId, 'hospitalitySchedules', scheduleId);
 
 const normalizeOptionalRoles = (value: unknown): HospitalityOptionalRoles | undefined => {
   if (!value || typeof value !== 'object') return undefined;
@@ -156,111 +150,34 @@ export const firestoreHospitalityScheduleRepository: HospitalityScheduleReposito
     return snap.docs.map((docSnap) => normalizeItem(docSnap.id, docSnap.data()));
   },
 
-  addSchedule: async (params: {
-    congregationId: string;
-    title: string;
-    startDate: string;
-    endDate: string;
-    monthIds: string[];
-    totalMeetings: number;
-    actorUid: string;
-    optionalRoles?: HospitalityOptionalRoles;
-  }): Promise<string> => {
-    const ref = await addDoc(
-      schedulesRef(params.congregationId),
-      sanitizeForFirestore({
-        congregationId: params.congregationId,
-        title: params.title,
-        startDate: params.startDate,
-        endDate: params.endDate,
-        monthIds: params.monthIds,
-        totalMeetings: params.totalMeetings,
-        status: 'draft',
-        createdBy: params.actorUid,
-        updatedBy: params.actorUid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        optionalRoles: params.optionalRoles,
-      })
-    );
-    return ref.id;
-  },
+  saveDraft: async (
+    params: SaveHospitalityScheduleDraftParams
+  ): Promise<SaveHospitalityScheduleDraftResult> => {
+    const callable = httpsCallable<
+      SaveHospitalityScheduleDraftParams,
+      { ok: true } & SaveHospitalityScheduleDraftResult
+    >(functions, 'saveHospitalityScheduleDraftByManager');
+    const result = await callable(params);
 
-  updateScheduleOptionalRoles: async (params: {
-    congregationId: string;
-    scheduleId: string;
-    optionalRoles: HospitalityOptionalRoles;
-    actorUid: string;
-  }): Promise<void> => {
-    await updateDoc(
-      scheduleRef(params.congregationId, params.scheduleId),
-      sanitizeForFirestore({
-        optionalRoles: params.optionalRoles,
-        updatedBy: params.actorUid,
-        updatedAt: serverTimestamp(),
-      })
-    );
+    return {
+      scheduleId: result.data.scheduleId,
+      created: result.data.created,
+      savedItems: result.data.savedItems,
+      droppedItems: result.data.droppedItems,
+    };
   },
 
   archiveSchedule: async (params: {
     congregationId: string;
     scheduleId: string;
-    actorUid: string;
-  }): Promise<void> => {
-    await updateDoc(
-      scheduleRef(params.congregationId, params.scheduleId),
-      sanitizeForFirestore({
-        status: 'archived',
-        updatedBy: params.actorUid,
-        updatedAt: serverTimestamp(),
-      })
-    );
-  },
+  }): Promise<ArchiveHospitalityScheduleResult> => {
+    const callable = httpsCallable<
+      { congregationId: string; scheduleId: string },
+      { ok: true } & ArchiveHospitalityScheduleResult
+    >(functions, 'archiveHospitalityScheduleByManager');
+    const result = await callable(params);
 
-  upsertScheduleItems: async (params: {
-    congregationId: string;
-    scheduleId: string;
-    items: Omit<HospitalityScheduleItem, 'id' | 'createdAt' | 'updatedAt'>[];
-    actorUid: string;
-  }): Promise<void> => {
-    const existingSnap = await getDocs(
-      scheduleItemsRef(params.congregationId, params.scheduleId)
-    );
-    const existingById = new Map(
-      existingSnap.docs.map((d) => [d.id, normalizeItem(d.id, d.data())])
-    );
-    const batch = writeBatch(db);
-    const incomingIds = new Set(
-      params.items.map((item) => `${item.meetingDate}-${item.meetingType}-${item.roleKey}`)
-    );
-
-    params.items.forEach((item) => {
-      const itemId = `${item.meetingDate}-${item.meetingType}-${item.roleKey}`;
-      const ref = doc(scheduleItemsRef(params.congregationId, params.scheduleId), itemId);
-      const existing = existingById.get(itemId);
-      batch.set(ref, sanitizeForFirestore({
-        ...item,
-        congregationId: params.congregationId,
-        scheduleId: params.scheduleId,
-        createdBy: existing?.createdBy || item.createdBy || params.actorUid,
-        updatedBy: params.actorUid,
-        createdAt: existing?.createdAt ?? serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }));
-    });
-
-    existingSnap.docs.forEach((docSnap) => {
-      const existing = existingById.get(docSnap.id);
-      if (existing?.status === 'scheduled' && !incomingIds.has(docSnap.id)) {
-        batch.update(docSnap.ref, {
-          status: 'cancelled',
-          updatedBy: params.actorUid,
-          updatedAt: serverTimestamp(),
-        });
-      }
-    });
-
-    await batch.commit();
+    return { cancelledItems: result.data.cancelledItems };
   },
 
   publishSchedule: async (params: {

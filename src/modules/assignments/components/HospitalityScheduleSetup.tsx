@@ -5,6 +5,7 @@ import { ThemedText } from '@/src/components/themed-text';
 import { WEEKDAYS } from '@/src/modules/assignments/hooks/useHospitalityScheduleBuilder';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import type { HospitalityOptionalRoles, HospitalitySchedule } from '@/src/types/hospitality-microphones';
+import { confirmAlert } from '@/src/utils/ui/alerts';
 
 type Props = {
   title: string;
@@ -16,10 +17,14 @@ type Props = {
   schedules: HospitalitySchedule[];
   selectedScheduleId?: string;
   busy: boolean;
+  canEdit: boolean;
+  canPublish: boolean;
   labels: {
     workList: string; titlePlaceholder: string; microphoneThree: string; attendantExtra: string;
     midweekDay: string; weekendDay: string; generate: string; generating: string; load: string;
-    published: string; draft: string;
+    published: string; draft: string; archive: string; archiveConfirmTitle: string;
+    archiveDraftConfirm: string; archivePublishedConfirm: string; archiveConfirmAction: string;
+    cancel: string;
   };
   weekdayLabel: (weekday: typeof WEEKDAYS[number]) => string;
   onTitleChange: (value: string) => void;
@@ -31,12 +36,33 @@ type Props = {
   onGenerate: () => void;
   onLoad: () => void;
   onOpenSchedule: (schedule: HospitalitySchedule) => void;
+  onArchiveSchedule: (schedule: HospitalitySchedule) => void;
   generating: boolean;
 };
+
+export const canArchiveHospitalitySchedule = (
+  status: HospitalitySchedule['status'],
+  canEdit: boolean,
+  canPublish: boolean
+): boolean =>
+  (status === 'draft' && canEdit)
+  || (status === 'published' && canPublish);
 
 export function HospitalityScheduleSetup(props: Props) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const requestArchive = async (schedule: HospitalitySchedule) => {
+    const confirmed = await confirmAlert({
+      title: props.labels.archiveConfirmTitle,
+      message: schedule.status === 'published'
+        ? props.labels.archivePublishedConfirm
+        : props.labels.archiveDraftConfirm,
+      confirmLabel: props.labels.archiveConfirmAction,
+      cancelLabel: props.labels.cancel,
+      destructive: true,
+    });
+    if (confirmed) props.onArchiveSchedule(schedule);
+  };
   const dayPicker = (kind: 'midweek' | 'weekend', selected: number, onChange: (day: number) => void) => (
     <View style={styles.dayGroup}>
       <ThemedText style={styles.label}>{kind === 'midweek' ? props.labels.midweekDay : props.labels.weekendDay}</ThemedText>
@@ -93,11 +119,29 @@ export function HospitalityScheduleSetup(props: Props) {
       {props.schedules.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {props.schedules.map((schedule) => (
-            <TouchableOpacity key={schedule.id} style={[styles.chip, props.selectedScheduleId === schedule.id && styles.chipSelected]} onPress={() => props.onOpenSchedule(schedule)}>
-              <ThemedText style={styles.chipTitle} numberOfLines={1}>{schedule.title}</ThemedText>
-              <ThemedText style={styles.chipMeta}>{schedule.startDate} – {schedule.endDate}</ThemedText>
-              <ThemedText style={[styles.chipStatus, schedule.status === 'published' && styles.published]}>{schedule.status === 'published' ? props.labels.published : props.labels.draft}</ThemedText>
-            </TouchableOpacity>
+            <View key={schedule.id} style={[styles.chip, props.selectedScheduleId === schedule.id && styles.chipSelected]}>
+              <TouchableOpacity style={styles.chipOpen} onPress={() => props.onOpenSchedule(schedule)}>
+                <ThemedText style={styles.chipTitle} numberOfLines={1}>{schedule.title}</ThemedText>
+                <ThemedText style={styles.chipMeta}>{schedule.startDate} – {schedule.endDate}</ThemedText>
+                <ThemedText style={[styles.chipStatus, schedule.status === 'published' && styles.published]}>{schedule.status === 'published' ? props.labels.published : props.labels.draft}</ThemedText>
+              </TouchableOpacity>
+              {canArchiveHospitalitySchedule(
+                schedule.status,
+                props.canEdit,
+                props.canPublish
+              ) ? (
+                <TouchableOpacity
+                  style={styles.archiveButton}
+                  onPress={() => void requestArchive(schedule)}
+                  disabled={props.busy}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${props.labels.archive}: ${schedule.title}`}
+                >
+                  <Ionicons name="archive-outline" size={14} color={colors.error} />
+                  <ThemedText style={styles.archiveText}>{props.labels.archive}</ThemedText>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           ))}
         </ScrollView>
       ) : null}
@@ -126,10 +170,13 @@ const createStyles = (colors: AppColorSet) => StyleSheet.create({
   secondaryButton: { minHeight: 42, flex: 1, minWidth: 190, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.primary, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   secondaryText: { color: colors.primary, fontSize: 12, fontWeight: '800', textAlign: 'center' },
   chips: { gap: 8 },
-  chip: { width: 210, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 10, backgroundColor: colors.surface, gap: 3 },
+  chip: { width: 210, borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.surface, overflow: 'hidden' },
+  chipOpen: { padding: 10, gap: 3 },
   chipSelected: { borderColor: colors.primary, backgroundColor: `${colors.primary}0D` },
   chipTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '800' },
   chipMeta: { color: colors.textMuted, fontSize: 10 },
   chipStatus: { color: colors.warning, fontSize: 10, fontWeight: '800' },
   published: { color: colors.success },
+  archiveButton: { minHeight: 34, paddingHorizontal: 10, borderTopWidth: 1, borderTopColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  archiveText: { color: colors.error, fontSize: 10, fontWeight: '800' },
 });

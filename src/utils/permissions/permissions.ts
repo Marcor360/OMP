@@ -536,12 +536,25 @@ export const canManageHospitalityMicrophones = (
 ): boolean =>
   isAdmin(user) ||
   hasServiceAssignment(user, 'encargado', 'acomodadores_microfonos') ||
-  hasServiceAssignment(user, 'auxiliar', 'acomodadores_microfonos') ||
   hasPermission(user, 'acomodadores_microfonos', 'manage') ||
   (
     hasPermission(user, 'acomodadores_microfonos', 'create') &&
     hasPermission(user, 'acomodadores_microfonos', 'edit')
   );
+
+/**
+ * Editor del modulo: trabaja borradores (crear, llenar, cancelar
+ * asignaciones, archivar el borrador). NO publica ni toca listas publicadas.
+ * Espejo de isHospitalityMicrophonesEditor() en
+ * rules_src/03-roles-and-managers.rules y de assertHospitalityEditor() en
+ * functions/src/planning-schedules.ts. Si cambia el criterio, cambiar en los tres.
+ */
+export const canEditHospitalityAssignments = (
+  user: Pick<AppUser, 'role' | 'permissions' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'> | null | undefined
+): boolean =>
+  canManageHospitalityMicrophones(user) ||
+  hasServiceAssignment(user, 'auxiliar', 'acomodadores_microfonos') ||
+  hasPermission(user, 'acomodadores_microfonos', 'edit');
 
 const hasPreachingAssignment = (
   user:

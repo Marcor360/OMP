@@ -93,9 +93,11 @@ export {
 } from './cleaning.js';
 
 export {
+  archiveHospitalityScheduleByManager,
   ensurePlanningMeetingsByManager,
   publishCleaningScheduleByManager,
   publishHospitalityScheduleByManager,
+  saveHospitalityScheduleDraftByManager,
   substituteHospitalityAssignmentByManager,
 } from './planning-schedules.js';
 

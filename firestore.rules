@@ -174,6 +174,46 @@ service cloud.firestore {
         );
     }
 
+    // Editor del modulo: puede trabajar borradores (crear, llenar, cancelar
+    // asignaciones, archivar). NO puede publicar ni tocar listas publicadas:
+    // esa frontera la marca isHospitalityMicrophonesManager().
+    // El auxiliar necesita rama explicita por cargo porque los permisos derivados
+    // de assignmentToPermissions() viven solo en el frontend y nunca se
+    // materializan en el documento del usuario.
+    //
+    // NOTA DE RENDIMIENTO: esta funcion NO delega en
+    // isHospitalityMicrophonesManager() (aunque su conjunto de permitidos lo
+    // incluye) porque encadenar ambas funciones en /hospitalitySchedules -- que
+    // ya evalua canAccessCongregationData() + validPlanningScheduleData(), ambas
+    // costosas -- reevalua administrativeWritesAllowed() (con sus lecturas del
+    // documento de congregacion) dos veces y agota el presupuesto real de
+    // Firestore de ~1000 expresiones por request, causando permission-denied
+    // incluso para escrituras validas. Las condiciones de Manager estan
+    // duplicadas aqui a proposito; si cambian alla, cambian aqui tambien.
+    function isHospitalityMicrophonesEditor() {
+      return administrativeWritesAllowed(myCongregationId())
+        && isActive()
+        && (
+          isAdmin()
+          || hasPermission('acomodadores_microfonos', 'manage')
+          || (
+            hasPermission('acomodadores_microfonos', 'create')
+            && hasPermission('acomodadores_microfonos', 'edit')
+          )
+          || hasPermission('acomodadores_microfonos', 'edit')
+          || (
+            currentUserData().servicePosition == 'encargado'
+            && currentUserData().serviceDepartment == 'acomodadores_microfonos'
+          )
+          || hasServiceAssignmentKey('encargado', 'acomodadores_microfonos')
+          || (
+            currentUserData().servicePosition == 'auxiliar'
+            && currentUserData().serviceDepartment == 'acomodadores_microfonos'
+          )
+          || hasServiceAssignmentKey('auxiliar', 'acomodadores_microfonos')
+        );
+    }
+
     // Espejo en rules de isPreachingManager() de src/types/user/index.ts:252.
     // El requisito privileges.isElder para 'encargado' es intencional y existe
     // en ambas capas. Si se elimina, debe eliminarse en las dos a la vez.
@@ -2087,7 +2127,7 @@ service cloud.firestore {
         && validPlanningMonthIds(data.monthIds)
         && data.totalMeetings is int
         && data.totalMeetings >= 1
-        && data.totalMeetings <= 20
+        && data.totalMeetings <= 30
         && validScheduleStatus(data.status)
         && data.createdBy is string
         && data.updatedBy is string
@@ -2682,18 +2722,26 @@ service cloud.firestore {
         allow get, list: if canAccessCongregationData(congregationId);
 
         allow create: if canAccessCongregationData(congregationId)
-          && isHospitalityMicrophonesManager()
+          && isHospitalityMicrophonesEditor()
+          && request.resource.data.status == 'draft'
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == currentUid()
           && request.resource.data.updatedBy == currentUid();
 
         allow update: if canAccessCongregationData(congregationId)
-          && isHospitalityMicrophonesManager()
           && resource.data.congregationId == congregationId
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == resource.data.createdBy
           && request.resource.data.createdAt == resource.data.createdAt
-          && request.resource.data.updatedBy == currentUid();
+          && request.resource.data.updatedBy == currentUid()
+          && (
+            isHospitalityMicrophonesManager()
+            || (
+              isHospitalityMicrophonesEditor()
+              && resource.data.status == 'draft'
+              && request.resource.data.status in ['draft', 'archived']
+            )
+          );
 
         allow delete: if false;
 
@@ -2701,13 +2749,13 @@ service cloud.firestore {
           allow get, list: if canAccessCongregationData(congregationId);
 
           allow create: if canAccessCongregationData(congregationId)
-            && isHospitalityMicrophonesManager()
+            && isHospitalityMicrophonesEditor()
             && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == currentUid()
             && request.resource.data.updatedBy == currentUid();
 
           allow update: if canAccessCongregationData(congregationId)
-            && isHospitalityMicrophonesManager()
+            && isHospitalityMicrophonesEditor()
             && resource.data.congregationId == congregationId
             && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == resource.data.createdBy
