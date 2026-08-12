@@ -216,6 +216,11 @@ export const getDefaultPermissionsByRole = (role: UserRole | undefined): UserPer
   return {};
 };
 
+// Espejo (Fase 0) en functions/src/shared/derived-permissions.ts. Esta tabla
+// solo existia aqui, en el frontend, por eso rules y functions nunca veian lo
+// que un auxiliar/encargado deberia poder hacer. Si esta tabla cambia, cambiar
+// tambien alla en el mismo PR -- la divergencia entre ambas copias es
+// exactamente el bug que Fase 0 cierra.
 const assignmentToPermissions = (assignment: Pick<UserServiceAssignment, 'position' | 'department'>): UserPermissions => {
   if (assignment.position === 'encargado' && assignment.department === 'limpieza') {
     return {

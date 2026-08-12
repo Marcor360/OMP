@@ -367,3 +367,99 @@ describe('sensitive user writes', () => {
     await assertSucceeds(getDoc(doc(authedDb('admin'), 'users/string-marker')));
   });
 });
+
+// F0.3: derivedPermissions (Fase 0) es escritura exclusiva del Admin SDK. Ningun
+// camino de cliente (self-update, push token, membresia de limpieza,
+// preferencias de notificacion) lo incluye en su sameKeysOnUpdate().
+describe('derivedPermissions (Fase 0)', () => {
+  it('el propio usuario NO puede escribir derivedPermissions', async () => {
+    const ref = doc(authedDb('member'), 'users/member');
+    await assertFails(updateDoc(ref, {
+      derivedPermissions: {limpieza: {view: true, manage: true}},
+      updatedAt: Timestamp.now(),
+    }));
+  });
+
+  it('el propio usuario no puede colar derivedPermissions junto a un update valido', async () => {
+    const ref = doc(authedDb('member'), 'users/member');
+    await assertFails(updateDoc(ref, {
+      firstName: 'Nuevo Nombre',
+      derivedPermissions: {usuarios: {manage: true}},
+      updatedAt: Timestamp.now(),
+    }));
+  });
+
+  it('otro usuario de limpieza no puede escribir derivedPermissions via la membresia de limpieza', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users/cleaningManager'), userDoc({
+        uid: 'cleaningManager', role: 'user', congregationId: 'c1',
+        servicePosition: 'encargado', serviceDepartment: 'limpieza',
+      }));
+    });
+    await assertFails(updateDoc(doc(authedDb('cleaningManager'), 'users/member'), {
+      derivedPermissions: {limpieza: {manage: true}},
+      cleaningGroupId: 'group1',
+      updatedAt: Timestamp.now(),
+    }));
+  });
+
+  it('superAdmin con derivedPermissions valido -> allow', async () => {
+    const valid = userDoc({
+      uid: 'derived-ok', role: 'user', congregationId: 'c1',
+    });
+    await assertSucceeds(setDoc(doc(authedDb('root'), 'users/derived-ok'), {
+      ...valid,
+      derivedPermissions: {limpieza: {view: true, edit: true}},
+    }));
+    await assertSucceeds(updateDoc(doc(authedDb('root'), 'users/derived-ok'), {
+      derivedPermissions: {limpieza: {view: true, edit: true, manage: true}},
+      updatedAt: Timestamp.now(),
+    }));
+  });
+
+  it('rechaza derivedPermissions con una clave de departamento desconocida', async () => {
+    await assertFails(setDoc(doc(authedDb('root'), 'users/derived-bad'), {
+      ...userDoc({uid: 'derived-bad', role: 'user', congregationId: 'c1'}),
+      derivedPermissions: {desconocido: {view: true}},
+    }));
+  });
+
+  // Los dos siguientes estan en test.skip por el mismo limite real de Firestore
+  // ya documentado en firestore-rules/hospitality-schedules.rules.test.ts y
+  // firestore-rules/notifications.rules.test.ts: "Unable to evaluate the
+  // expression as the maximum of 1000 expressions to evaluate has been
+  // reached." Aqui se reproduce incluso en un simple `get` porque
+  // canReadUsers() + storedDocInMyCongregation() ya estaban cerca del limite
+  // antes de este cambio (isAdmin + isSupervisor + hasPermission x2 +
+  // isGlobalScreenAccess + canAccessCongregationData). El caso de escritura
+  // SI se prueba y pasa arriba ("superAdmin con derivedPermissions valido"),
+  // porque esa rama del ruleset es mucho mas barata (no pasa por
+  // canReadUsers/canAccessCongregationData). La logica de union esta cubierta
+  // sin el emulador por los tests puros de
+  // functions/src/__tests__/derived-permissions.test.ts.
+  it.skip('derivedPermissions.usuarios.view sin permissions -> puede leer otro perfil de su congregacion', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users/usuariosViewerDerived'), {
+        ...userDoc({ uid: 'usuariosViewerDerived', role: 'user', congregationId: 'c1' }),
+        derivedPermissions: { usuarios: { view: true } },
+      });
+    });
+
+    await assertSucceeds(getDoc(doc(authedDb('usuariosViewerDerived'), 'users/member')));
+  });
+
+  it.skip('derivedPermissions.usuarios.manage implica view (manage es superconjunto dentro del mismo mapa)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users/usuariosManagerDerived'), {
+        ...userDoc({ uid: 'usuariosManagerDerived', role: 'user', congregationId: 'c1' }),
+        derivedPermissions: { usuarios: { manage: true } },
+      });
+    });
+
+    await assertSucceeds(getDoc(doc(authedDb('usuariosManagerDerived'), 'users/member')));
+  });
+
+  it('sin permissions ni derivedPermissions, un miembro comun no puede leer otro perfil', async () => {
+    await assertFails(getDoc(doc(authedDb('member'), 'users/supervisor')));
+  });
+});

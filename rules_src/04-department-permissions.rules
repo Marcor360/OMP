@@ -1,13 +1,28 @@
-    function hasPermission(department, action) {
-      return isActive()
-        && currentUserData().permissions is map
-        && currentUserData().permissions[department] is map
+    // Fase 0: helper compartido por permissions (otorgado a mano) y
+    // derivedPermissions (calculado del cargo por
+    // functions/src/users/derived-permissions-trigger.ts). 'manage' sigue
+    // siendo superconjunto de las demas acciones, pero DENTRO de cada mapa por
+    // separado -- un 'manage' en permissions no se filtra a derivedPermissions
+    // ni viceversa, cada fuente se evalua de forma independiente.
+    function permissionFlag(source, department, action) {
+      return source is map
+        && source[department] is map
         && (
-          currentUserData().permissions[department][action] == true
+          source[department][action] == true
           || (
             action != 'manage'
-            && currentUserData().permissions[department].manage == true
+            && source[department].manage == true
           )
+        );
+    }
+
+    // Espejo en functions/src/shared/permissions.ts. Si cambia alla, cambia
+    // aqui tambien.
+    function hasPermission(department, action) {
+      return isActive()
+        && (
+          permissionFlag(currentUserData().permissions, department, action)
+          || permissionFlag(currentUserData().derivedPermissions, department, action)
         );
     }
 

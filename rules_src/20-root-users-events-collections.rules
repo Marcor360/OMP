@@ -27,12 +27,14 @@
       allow create: if isSuperAdmin()
         && isValidRole(request.resource.data.role)
         && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
+        && (!('derivedPermissions' in request.resource.data) || validUserPermissions(request.resource.data.derivedPermissions))
         && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments));
 
       allow update: if (
           isSuperAdmin()
           && isValidRole(request.resource.data.role)
           && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
+          && (!('derivedPermissions' in request.resource.data) || validUserPermissions(request.resource.data.derivedPermissions))
           && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments))
         ) || (
           validSelfNotificationPreferencesUpdate(userId)

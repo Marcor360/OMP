@@ -17,6 +17,10 @@ export {
 } from "./users-sync.js";
 
 export {
+  reconcileDerivedPermissionsOnUserWrite,
+} from './users/derived-permissions-trigger.js';
+
+export {
   notifyAssignmentUsers,
   notifyCongregationAssignmentUsers,
   notifyMeetingAssignmentUsers,

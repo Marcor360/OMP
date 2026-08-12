@@ -164,27 +164,41 @@
               user.serviceDepartment == 'predicacion'
               || user.serviceDepartment == 'territorios'
             )
-            && (
-              (
-                user.servicePosition == 'encargado'
-                && user.privileges is map
-                && user.privileges.isElder == true
-              )
-              || user.servicePosition == 'auxiliar'
-            )
+            && user.servicePosition == 'encargado'
+            && user.privileges is map
+            && user.privileges.isElder == true
           )
           || (
             user.serviceAssignmentKeys is list
-            && (
-              (
-                user.privileges is map
-                && user.privileges.isElder == true
-                && user.serviceAssignmentKeys.hasAny([
-                  'encargado:predicacion',
-                  'encargado:territorios'
-                ])
-              )
-              || user.serviceAssignmentKeys.hasAny([
+            && user.privileges is map
+            && user.privileges.isElder == true
+            && user.serviceAssignmentKeys.hasAny([
+              'encargado:predicacion',
+              'encargado:territorios'
+            ])
+          )
+        );
+    }
+
+    // Editor de predicacion/territorios: opera lo cotidiano (territorios, grupos)
+    // sin acceso a los informes de servicio de toda la congregacion, que quedan
+    // reservados a isPreachingManager(). Antes, el auxiliar obtenia Manager
+    // completo sin exigirsele isElder -- la via de menor requisito otorgaba el
+    // mismo acceso que el encargado. Espejo en src/types/user/index.ts.
+    function isPreachingEditor() {
+      let user = currentUserData();
+      return isPreachingManager()
+        || (
+          isActive()
+          && (
+            (
+              (user.serviceDepartment == 'predicacion'
+                || user.serviceDepartment == 'territorios')
+              && user.servicePosition == 'auxiliar'
+            )
+            || (
+              user.serviceAssignmentKeys is list
+              && user.serviceAssignmentKeys.hasAny([
                 'auxiliar:predicacion',
                 'auxiliar:territorios'
               ])

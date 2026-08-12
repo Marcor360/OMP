@@ -9,6 +9,8 @@ import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { adminDb } from './config/firebaseAdmin.js';
+import { UserPermissions } from './shared/derived-permissions.js';
+import { hasPermission } from './shared/permissions.js';
 import { assertAdministrativeBillingAccess } from './users/authorization.js';
 
 type UserRole = 'admin' | 'supervisor' | 'user';
@@ -21,7 +23,8 @@ export type RequesterProfile = {
   servicePosition?: string;
   serviceDepartment?: string;
   serviceAssignments?: { position?: string; department?: string }[];
-  permissions?: Record<string, Record<string, boolean> | undefined>;
+  permissions?: UserPermissions;
+  derivedPermissions?: UserPermissions;
 };
 
 type PublishSchedulePayload = {
@@ -219,6 +222,7 @@ const getRequesterProfile = async (uid: string): Promise<RequesterProfile> => {
     serviceDepartment: normalizeText(data.serviceDepartment),
     serviceAssignments: toServiceAssignments(data.serviceAssignments),
     permissions: asRecord(data.permissions) as RequesterProfile['permissions'],
+    derivedPermissions: asRecord(data.derivedPermissions) as RequesterProfile['derivedPermissions'],
   };
 };
 
@@ -234,15 +238,6 @@ const hasServiceAssignment = (
   requester.serviceAssignments?.some(
     (assignment) => assignment.position === position && assignment.department === department
   ) === true;
-
-const hasPermission = (
-  requester: RequesterProfile,
-  department: string,
-  action: string
-): boolean => {
-  const permissions = requester.permissions?.[department];
-  return permissions?.[action] === true || (action !== 'manage' && permissions?.manage === true);
-};
 
 const assertCleaningManager = (requester: RequesterProfile, congregationId: string): void => {
   if (requester.congregationId !== congregationId) {

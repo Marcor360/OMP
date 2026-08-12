@@ -226,27 +226,41 @@ service cloud.firestore {
               user.serviceDepartment == 'predicacion'
               || user.serviceDepartment == 'territorios'
             )
-            && (
-              (
-                user.servicePosition == 'encargado'
-                && user.privileges is map
-                && user.privileges.isElder == true
-              )
-              || user.servicePosition == 'auxiliar'
-            )
+            && user.servicePosition == 'encargado'
+            && user.privileges is map
+            && user.privileges.isElder == true
           )
           || (
             user.serviceAssignmentKeys is list
-            && (
-              (
-                user.privileges is map
-                && user.privileges.isElder == true
-                && user.serviceAssignmentKeys.hasAny([
-                  'encargado:predicacion',
-                  'encargado:territorios'
-                ])
-              )
-              || user.serviceAssignmentKeys.hasAny([
+            && user.privileges is map
+            && user.privileges.isElder == true
+            && user.serviceAssignmentKeys.hasAny([
+              'encargado:predicacion',
+              'encargado:territorios'
+            ])
+          )
+        );
+    }
+
+    // Editor de predicacion/territorios: opera lo cotidiano (territorios, grupos)
+    // sin acceso a los informes de servicio de toda la congregacion, que quedan
+    // reservados a isPreachingManager(). Antes, el auxiliar obtenia Manager
+    // completo sin exigirsele isElder -- la via de menor requisito otorgaba el
+    // mismo acceso que el encargado. Espejo en src/types/user/index.ts.
+    function isPreachingEditor() {
+      let user = currentUserData();
+      return isPreachingManager()
+        || (
+          isActive()
+          && (
+            (
+              (user.serviceDepartment == 'predicacion'
+                || user.serviceDepartment == 'territorios')
+              && user.servicePosition == 'auxiliar'
+            )
+            || (
+              user.serviceAssignmentKeys is list
+              && user.serviceAssignmentKeys.hasAny([
                 'auxiliar:predicacion',
                 'auxiliar:territorios'
               ])
@@ -304,16 +318,31 @@ service cloud.firestore {
         );
     }
 
-    function hasPermission(department, action) {
-      return isActive()
-        && currentUserData().permissions is map
-        && currentUserData().permissions[department] is map
+    // Fase 0: helper compartido por permissions (otorgado a mano) y
+    // derivedPermissions (calculado del cargo por
+    // functions/src/users/derived-permissions-trigger.ts). 'manage' sigue
+    // siendo superconjunto de las demas acciones, pero DENTRO de cada mapa por
+    // separado -- un 'manage' en permissions no se filtra a derivedPermissions
+    // ni viceversa, cada fuente se evalua de forma independiente.
+    function permissionFlag(source, department, action) {
+      return source is map
+        && source[department] is map
         && (
-          currentUserData().permissions[department][action] == true
+          source[department][action] == true
           || (
             action != 'manage'
-            && currentUserData().permissions[department].manage == true
+            && source[department].manage == true
           )
+        );
+    }
+
+    // Espejo en functions/src/shared/permissions.ts. Si cambia alla, cambia
+    // aqui tambien.
+    function hasPermission(department, action) {
+      return isActive()
+        && (
+          permissionFlag(currentUserData().permissions, department, action)
+          || permissionFlag(currentUserData().derivedPermissions, department, action)
         );
     }
 
@@ -776,6 +805,15 @@ service cloud.firestore {
         'privileges',
         'responsibilities',
         'permissions',
+        // derivedPermissions (Fase 0): calculado del cargo (servicePosition x
+        // serviceDepartment x serviceAssignments) por
+        // functions/src/users/derived-permissions-trigger.ts. Solo el Admin SDK
+        // lo escribe -- ninguna de las ramas de allow update de /users/{userId}
+        // (validSelfUserUpdate, validPushTokenUpdate,
+        // validCleaningMembershipUserUpdate, validSelfNotificationPreferencesUpdate)
+        // lo incluye en su sameKeysOnUpdate(), asi que el cliente no puede
+        // tocarlo aunque este en allowedUserKeys().
+        'derivedPermissions',
         'isElder',
         'isMinisterialServant',
         'createdAt',
@@ -875,6 +913,10 @@ service cloud.firestore {
         && (
           !('permissions' in data)
           || validUserPermissions(data.permissions)
+        )
+        && (
+          !('derivedPermissions' in data)
+          || validUserPermissions(data.derivedPermissions)
         )
         && (
           !('serviceAssignments' in data)
@@ -2408,12 +2450,14 @@ service cloud.firestore {
       allow create: if isSuperAdmin()
         && isValidRole(request.resource.data.role)
         && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
+        && (!('derivedPermissions' in request.resource.data) || validUserPermissions(request.resource.data.derivedPermissions))
         && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments));
 
       allow update: if (
           isSuperAdmin()
           && isValidRole(request.resource.data.role)
           && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
+          && (!('derivedPermissions' in request.resource.data) || validUserPermissions(request.resource.data.derivedPermissions))
           && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments))
         ) || (
           validSelfNotificationPreferencesUpdate(userId)

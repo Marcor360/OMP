@@ -259,17 +259,37 @@ export const isPreachingManager = (
   Boolean(
     (
       (user?.serviceDepartment === 'predicacion' || user?.serviceDepartment === 'territorios') &&
-        (
-          (user.servicePosition === 'encargado' && user.privileges?.isElder === true) ||
-          user.servicePosition === 'auxiliar'
-        )
+        user.servicePosition === 'encargado' &&
+        user.privileges?.isElder === true
     ) ||
       user?.serviceAssignments?.some(
         (assignment) =>
           (assignment.department === 'predicacion' || assignment.department === 'territorios') &&
-          (
-            (assignment.position === 'encargado' && user.privileges?.isElder === true) ||
-            assignment.position === 'auxiliar'
-          )
+          assignment.position === 'encargado' &&
+          user.privileges?.isElder === true
+      )
+  );
+
+// Editor de predicacion/territorios: opera lo cotidiano (territorios, grupos) sin
+// acceso a los informes de servicio de toda la congregacion, que quedan
+// reservados a isPreachingManager(). Antes, el auxiliar obtenia Manager completo
+// sin exigirsele isElder -- la via de menor requisito otorgaba el mismo acceso
+// que el encargado. Espejo en rules_src/03-roles-and-managers.rules.
+export const isPreachingEditor = (
+  user:
+    | Pick<AppUser, 'privileges' | 'servicePosition' | 'serviceDepartment' | 'serviceAssignments'>
+    | null
+    | undefined
+): boolean =>
+  isPreachingManager(user) ||
+  Boolean(
+    (
+      (user?.serviceDepartment === 'predicacion' || user?.serviceDepartment === 'territorios') &&
+        user.servicePosition === 'auxiliar'
+    ) ||
+      user?.serviceAssignments?.some(
+        (assignment) =>
+          (assignment.department === 'predicacion' || assignment.department === 'territorios') &&
+          assignment.position === 'auxiliar'
       )
   );
