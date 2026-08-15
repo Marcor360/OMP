@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, Platform, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -32,6 +32,7 @@ import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { isSystemPrincipalUser } from '@/src/utils/users/user-protection';
 import { useI18n } from '@/src/i18n/index';
 import { canViewUsers, hasPermission } from '@/src/utils/permissions/permissions';
+import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 
 const interpolate = (template: string, values: Record<string, string>): string =>
   Object.entries(values).reduce(
@@ -141,12 +142,12 @@ export function UserDetailScreen() {
     if (!user) return;
 
     if (!hasPermission(appUser, 'usuarios', 'edit') && !hasPermission(appUser, 'usuarios', 'manage')) {
-      Alert.alert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyStatus'));
+      showAlert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyStatus'));
       return;
     }
 
     if (user.role === 'admin' && !isAdmin) {
-      Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotManageAdmin'));
+      showAlert(t('users.error.actionNotAllowed'), t('users.error.cannotManageAdmin'));
       return;
     }
 
@@ -160,15 +161,13 @@ export function UserDetailScreen() {
       name: user.displayName,
     });
 
-    const confirmed =
-      Platform.OS === 'web'
-        ? window.confirm(confirmMessage)
-        : await new Promise<boolean>((resolve) =>
-            Alert.alert(t('users.status.confirmTitle'), confirmMessage, [
-              { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-              { text: t('common.confirm'), style: 'destructive', onPress: () => resolve(true) },
-            ])
-          );
+    const confirmed = await confirmAlert({
+      title: t('users.status.confirmTitle'),
+      message: confirmMessage,
+      confirmLabel: t('common.confirm'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
 
     if (!confirmed) return;
 
@@ -196,7 +195,7 @@ export function UserDetailScreen() {
       );
       showToast(t('users.toast.updated'));
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      showAlert('Error', formatFirestoreError(requestError));
     } finally {
       togglingRef.current = false;
       setToggling(false);
@@ -208,37 +207,35 @@ export function UserDetailScreen() {
     if (!user) return;
 
     if (!hasPermission(appUser, 'usuarios', 'delete') && !hasPermission(appUser, 'usuarios', 'manage')) {
-      Alert.alert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyDelete'));
+      showAlert(t('users.error.insufficientPermissions'), t('users.error.adminOnlyDelete'));
       return;
     }
 
     if (user.uid === currentUid) {
-      Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteSelf'));
+      showAlert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteSelf'));
       return;
     }
 
     if (user.role === 'admin' && !isAdmin) {
-      Alert.alert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteAdmin'));
+      showAlert(t('users.error.actionNotAllowed'), t('users.error.cannotDeleteAdmin'));
       return;
     }
 
     if (isSystemPrincipalUser(user)) {
-      Alert.alert(
+      showAlert(
         t('users.error.actionNotAllowed'),
         t('users.error.cannotDeleteSystemUser')
       );
       return;
     }
 
-    const confirmed =
-      Platform.OS === 'web'
-        ? window.confirm(interpolate(t('users.delete.confirmMessage'), { name: user.displayName }))
-        : await new Promise<boolean>((resolve) =>
-            Alert.alert(t('users.delete.confirmTitle'), interpolate(t('users.delete.confirmMessage'), { name: user.displayName }), [
-              { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-              { text: t('common.delete'), style: 'destructive', onPress: () => resolve(true) },
-            ])
-          );
+    const confirmed = await confirmAlert({
+      title: t('users.delete.confirmTitle'),
+      message: interpolate(t('users.delete.confirmMessage'), { name: user.displayName }),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
 
     if (!confirmed) return;
 
@@ -249,7 +246,7 @@ export function UserDetailScreen() {
       showToast(t('users.toast.deleted'));
       router.replace('/(protected)/(tabs)/users');
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      showAlert('Error', formatFirestoreError(requestError));
     } finally {
       deletingRef.current = false;
       setDeleting(false);

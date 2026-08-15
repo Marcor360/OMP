@@ -240,7 +240,10 @@ const weekLabel = (dateKey: string, locale: string): string => {
     : `${startDay} ${startMonth}–${endDay} ${endMonth}`;
 };
 
-export const groupRowsByWeek = (rows: HospitalityPlanningRow[], locale = 'es-MX'): HospitalityWeekGroup[] => {
+export const groupRowsByWeek = (
+  rows: HospitalityPlanningRow[],
+  locale = 'es-MX' /* default locale */
+): HospitalityWeekGroup[] => {
   const groups = new Map<string, HospitalityPlanningRow[]>();
   rows.forEach((row) => {
     const key = getWeekRangeForDate(row.meetingDate).weekStartDate;
@@ -259,7 +262,7 @@ type SaveDraftOutcome = {
 
 export function useHospitalityScheduleBuilder() {
   const { appUser, congregationId, uid, loadingProfile, profileError } = useUser();
-  const { language, t } = useI18n();
+  const { locale, t } = useI18n();
   const canEdit = canEditHospitalityAssignments(appUser);
   const canPublish = canManageHospitalityMicrophones(appUser);
   const [loading, setLoading] = useState(true);
@@ -706,7 +709,7 @@ export function useHospitalityScheduleBuilder() {
     schedules,
     selectedSchedule,
     rows,
-    weekGroups: groupRowsByWeek(rows, language),
+    weekGroups: groupRowsByWeek(rows, locale),
     users,
     usersById,
     progress: { completeMeetings, totalMeetings: rows.length, missingAssignments, canPublish: canPublishSchedule, windowErrors: windowValidation.errors, rowProgress },
@@ -732,7 +735,7 @@ export function useHospitalityScheduleBuilder() {
       generateMeetings: handleGenerateMeetings,
       archiveSchedule: (schedule: HospitalitySchedule) => void handleArchiveSchedule(schedule),
     },
-    helpers: { compactDate: (dateKey: string) => compactDate(dateKey, language), cellConflict },
+    helpers: { compactDate: (dateKey: string) => compactDate(dateKey, locale), cellConflict },
     t,
   };
 }

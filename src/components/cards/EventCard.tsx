@@ -9,6 +9,7 @@ import {
 } from '@/src/types/event';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { type I18nContextType, useOptionalI18n } from '@/src/i18n/index';
+import { getActiveLocale } from '@/src/i18n/active-locale';
 
 interface EventCardProps {
   event: CongregationEvent;
@@ -17,12 +18,15 @@ interface EventCardProps {
   onDelete?: (event: CongregationEvent) => void;
 }
 
-const formatDate = (date: Date): string =>
-  new Intl.DateTimeFormat('es-MX', {
+const formatEventDate = (date: Date, i18n: I18nContextType | undefined): string => {
+  const options: Intl.DateTimeFormatOptions = {
     day: 'numeric',
     month: 'long',
     timeZone: 'America/Mexico_City',
-  }).format(date);
+  };
+  return i18n?.formatDate?.(date, options)
+    ?? new Intl.DateTimeFormat(getActiveLocale(), options).format(date);
+};
 
 const resolveDateLabel = (event: CongregationEvent, i18n: I18nContextType | undefined): string => {
   const start = event.startDate.toDate();
@@ -42,11 +46,17 @@ const resolveDateLabel = (event: CongregationEvent, i18n: I18nContextType | unde
     }).format(end);
 
   if (sameDay) {
-    return formatDate(start);
+    return formatEventDate(start, i18n);
   }
 
   const template = i18n?.t('components.cards.eventFromTo') ?? 'Del {start} al {end}';
-  return template.replace('{start}', formatDate(start)).replace('{end}', formatDate(end)).replace('{{start}}', formatDate(start)).replace('{{end}}', formatDate(end));
+  const startLabel = formatEventDate(start, i18n);
+  const endLabel = formatEventDate(end, i18n);
+  return template
+    .replace('{start}', startLabel)
+    .replace('{end}', endLabel)
+    .replace('{{start}}', startLabel)
+    .replace('{{end}}', endLabel);
 };
 
 const resolveMainText = (event: CongregationEvent, i18n: I18nContextType | undefined): string => {

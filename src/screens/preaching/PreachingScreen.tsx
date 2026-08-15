@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   Platform,
   StyleSheet,
   TouchableOpacity,
@@ -32,6 +31,7 @@ import {
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { isPioneer, isPreachingManager } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { showAlert } from '@/src/utils/ui/alerts';
 import { createLogger } from '@/src/utils/logger';
 import { canManageTerritories } from '@/src/utils/permissions/permissions';
 
@@ -145,12 +145,12 @@ export function PreachingScreen() {
           }
         }
         setModalVisible(false);
-        Alert.alert(
+        showAlert(
           t('preachingReport.sentAlertTitle'),
           t('preachingReport.sentAlertMessage')
         );
       } catch (requestError) {
-        Alert.alert(t('common.error'), formatFirestoreError(requestError));
+        showAlert(t('common.error'), formatFirestoreError(requestError));
       }
     },
     [appUser, monthId, previousMonthId, submit, t]

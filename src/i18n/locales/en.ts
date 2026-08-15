@@ -28,6 +28,12 @@ export const en = {
     datePickerNoSelection: 'Select a date',
     removePersonA11y: 'Remove {{name}}',
   },
+  'forms.user.createTitle': 'New user',
+  'forms.user.editTitle': 'Edit user',
+  'forms.user.createAction': 'Create user',
+  'forms.saveChanges': 'Save changes',
+  'forms.assignment.createAction': 'Create assignment',
+  'forms.midweekMeeting.createAction': 'Create midweek meeting',
   components: {
     cards: {
       assignmentOverdue: 'Overdue:',

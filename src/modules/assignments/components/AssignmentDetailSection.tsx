@@ -15,23 +15,21 @@ interface AssignmentDetailSectionProps {
   assignment: Assignment;
 }
 
-const formatDate = (value: string, t: I18nContextType['t']): string => {
+const formatAssignmentDate = (
+  value: string,
+  t: I18nContextType['t'],
+  formatDateTime: I18nContextType['formatDateTime']
+): string => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return t('assignments.detailSection.noDate');
 
-  return parsed.toLocaleString('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDateTime(parsed);
 };
 
 export function AssignmentDetailSection({ assignment }: AssignmentDetailSectionProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const { t } = useI18n();
+  const { formatDateTime, t } = useI18n();
 
   const assignedPeople = useMemo(
     () => assignment.assignedUsers.map((person) => person.name).join(', ') || t('assignments.detailSection.unassigned'),
@@ -44,7 +42,10 @@ export function AssignmentDetailSection({ assignment }: AssignmentDetailSectionP
   return (
     <View style={styles.container}>
       <InfoRow label={t('assignments.detailSection.category')} value={ASSIGNMENT_CATEGORY_LABELS[assignment.category]} />
-      <InfoRow label={t('assignments.detailSection.date')} value={formatDate(assignment.date, t)} />
+      <InfoRow
+        label={t('assignments.detailSection.date')}
+        value={formatAssignmentDate(assignment.date, t, formatDateTime)}
+      />
       <InfoRow label={t('assignments.detailSection.congregation')} value={assignment.congregationId} />
       <InfoRow label={t('assignments.detailSection.assignedPeople')} value={assignedPeople} />
 
@@ -76,11 +77,17 @@ export function AssignmentDetailSection({ assignment }: AssignmentDetailSectionP
       {assignment.title ? <InfoRow label={t('assignments.detailSection.title')} value={assignment.title} multiline /> : null}
 
       {assignment.createdAt ? (
-        <InfoRow label={t('assignments.detailSection.createdAt')} value={formatDate(assignment.createdAt, t)} />
+        <InfoRow
+          label={t('assignments.detailSection.createdAt')}
+          value={formatAssignmentDate(assignment.createdAt, t, formatDateTime)}
+        />
       ) : null}
 
       {assignment.updatedAt ? (
-        <InfoRow label={t('assignments.detailSection.updatedAt')} value={formatDate(assignment.updatedAt, t)} />
+        <InfoRow
+          label={t('assignments.detailSection.updatedAt')}
+          value={formatAssignmentDate(assignment.updatedAt, t, formatDateTime)}
+        />
       ) : null}
     </View>
   );

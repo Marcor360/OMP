@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -19,6 +19,7 @@ import { Meeting } from '@/src/types/meeting';
 import { MeetingPublicationStatus } from '@/src/types/meeting/program';
 import { isExpired } from '@/src/utils/dates/operational-window';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 
 const PUBLICATION_FILTERS: (MeetingPublicationStatus | 'all')[] = [
   'all',
@@ -159,11 +160,11 @@ export function MeetingsManagementScreen() {
       });
 
       if (!result.ok) {
-        Alert.alert(t('meetings.management.alert.validation'), result.errors.join('\n'));
+        showAlert(t('meetings.management.alert.validation'), result.errors.join('\n'));
         return;
       }
 
-      Alert.alert(
+      showAlert(
         t('meetings.management.alert.success'),
         nextStatus === 'published'
           ? t('meetings.management.alert.published')
@@ -171,27 +172,21 @@ export function MeetingsManagementScreen() {
       );
       await onRefresh();
     } catch (requestError) {
-      Alert.alert(t('common.error'), formatFirestoreError(requestError));
+      showAlert(t('common.error'), formatFirestoreError(requestError));
     }
   };
 
-  const deleteMeetingWithConfirmation = (meeting: Meeting) => {
+  const deleteMeetingWithConfirmation = async (meeting: Meeting) => {
     if (!congregationId || deletingMeetingId) return;
 
-    Alert.alert(
-      t('meetings.management.alert.deleteTitle'),
-      t('meetings.management.alert.deleteMessage'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: () => {
-            void executeDeleteMeeting(meeting);
-          },
-        },
-      ]
-    );
+    const confirmed = await confirmAlert({
+      title: t('meetings.management.alert.deleteTitle'),
+      message: t('meetings.management.alert.deleteMessage'),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (confirmed) await executeDeleteMeeting(meeting);
   };
 
   const executeDeleteMeeting = async (meeting: Meeting) => {
@@ -202,9 +197,9 @@ export function MeetingsManagementScreen() {
     try {
       await deleteMeeting(congregationId, meeting.id);
       setMeetings((current) => current.filter((item) => item.id !== meeting.id));
-      Alert.alert(t('meetings.management.alert.success'), t('meetings.management.alert.deleted'));
+      showAlert(t('meetings.management.alert.success'), t('meetings.management.alert.deleted'));
     } catch (requestError) {
-      Alert.alert(t('common.error'), formatFirestoreError(requestError));
+      showAlert(t('common.error'), formatFirestoreError(requestError));
     } finally {
       setDeletingMeetingId(null);
     }
@@ -317,7 +312,7 @@ export function MeetingsManagementScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.deleteAction, deletingMeetingId === meeting.id && styles.actionDisabled]}
-                onPress={() => deleteMeetingWithConfirmation(meeting)}
+                onPress={() => void deleteMeetingWithConfirmation(meeting)}
                 disabled={Boolean(deletingMeetingId)}
               >
                 <Ionicons

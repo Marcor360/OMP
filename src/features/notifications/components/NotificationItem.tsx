@@ -36,20 +36,10 @@ const notificationIcon = (
   return notification.read ? 'notifications-outline' : 'notifications';
 };
 
-const formatTimestamp = (seconds: number, language: string): string => {
-  return new Date(seconds * 1000).toLocaleString(language === 'en' ? 'en-US' : 'es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
 function NotificationItemBase({ notification, onPress }: NotificationItemProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const { language, t } = useI18n();
+  const { formatDateTime, t } = useI18n();
 
   const accent = useMemo(
     () => categoryAccent(colors, notification),
@@ -58,7 +48,7 @@ function NotificationItemBase({ notification, onPress }: NotificationItemProps) 
 
   const categoryLabel = t(resolveNotificationBadgeKey(notification));
 
-  const createdAtLabel = formatTimestamp(notification.createdAt.seconds, language);
+  const createdAtLabel = formatDateTime(notification.createdAt.seconds * 1000);
 
   return (
     <TouchableOpacity

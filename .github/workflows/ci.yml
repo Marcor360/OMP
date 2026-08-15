@@ -28,7 +28,7 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Unit tests
-        run: npm test -- --runInBand
+        run: npm test -- --coverage --runInBand
       - name: Expo Doctor
         run: npx expo-doctor
       - name: Build web
@@ -51,7 +51,7 @@ jobs:
       - name: Build
         run: npm --prefix functions run build
       - name: Unit tests
-        run: npm --prefix functions test -- --runInBand
+        run: npm --prefix functions test -- --coverage --runInBand
 
   rules:
     name: Firestore Rules · emulator

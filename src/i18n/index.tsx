@@ -17,7 +17,7 @@ import { es } from '@/src/i18n/locales/es';
 import { fr } from '@/src/i18n/locales/fr';
 import { hi } from '@/src/i18n/locales/hi';
 import { zh } from '@/src/i18n/locales/zh';
-import { setActiveLocale } from '@/src/i18n/active-locale';
+import { getLocaleForLanguage, setActiveLocale } from '@/src/i18n/active-locale';
 
 export type SupportedLanguage = 'es' | 'en' | 'fr' | 'ar' | 'hi' | 'zh';
 
@@ -51,10 +51,20 @@ function getNestedValue<T extends object>(obj: T, path: string): unknown {
 
 export interface I18nContextType {
   language: SupportedLanguage;
+  locale: string;
   setLanguage: (lang: SupportedLanguage) => Promise<void>;
   hasCompletedLanguageOnboarding: boolean;
   completeLanguageOnboarding: () => Promise<void>;
   t: (key: AppTranslationKey, vars?: Record<string, string | number>) => string;
+  formatDate: (value: Date | number, options?: Intl.DateTimeFormatOptions) => string;
+  formatTime: (value: Date | number, options?: Intl.DateTimeFormatOptions) => string;
+  formatDateTime: (value: Date | number, options?: Intl.DateTimeFormatOptions) => string;
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
+  formatCurrency: (
+    value: number,
+    currency?: string,
+    options?: Omit<Intl.NumberFormatOptions, 'style' | 'currency'>
+  ) => string;
   isReady: boolean;
 }
 
@@ -67,6 +77,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<SupportedLanguage>(DEFAULT_LANGUAGE);
   const [hasCompletedLanguageOnboarding, setHasCompletedLanguageOnboarding] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const locale = useMemo(() => getLocaleForLanguage(language), [language]);
 
   useEffect(() => {
     setActiveLocale(language);
@@ -174,16 +185,73 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     [language]
   );
 
+  const formatters = useMemo(() => {
+    const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+    const numberFormatters = new Map<string, Intl.NumberFormat>();
+
+    const getDateTimeFormatter = (options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat => {
+      const key = JSON.stringify(options);
+      const cached = dateTimeFormatters.get(key);
+      if (cached) return cached;
+      const formatter = new Intl.DateTimeFormat(locale, options);
+      dateTimeFormatters.set(key, formatter);
+      return formatter;
+    };
+
+    const getNumberFormatter = (options: Intl.NumberFormatOptions): Intl.NumberFormat => {
+      const key = JSON.stringify(options);
+      const cached = numberFormatters.get(key);
+      if (cached) return cached;
+      const formatter = new Intl.NumberFormat(locale, options);
+      numberFormatters.set(key, formatter);
+      return formatter;
+    };
+
+    return {
+      formatDate: (value: Date | number, options: Intl.DateTimeFormatOptions = {}) =>
+        getDateTimeFormatter(options).format(value),
+      formatTime: (value: Date | number, options: Intl.DateTimeFormatOptions = {}) =>
+        getDateTimeFormatter({ hour: '2-digit', minute: '2-digit', ...options }).format(value),
+      formatDateTime: (value: Date | number, options: Intl.DateTimeFormatOptions = {}) =>
+        getDateTimeFormatter({
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          ...options,
+        }).format(value),
+      formatNumber: (value: number, options: Intl.NumberFormatOptions = {}) =>
+        getNumberFormatter(options).format(value),
+      formatCurrency: (
+        value: number,
+        currency = 'MXN',
+        options: Omit<Intl.NumberFormatOptions, 'style' | 'currency'> = {}
+      ) => getNumberFormatter({ style: 'currency', currency, ...options }).format(value),
+    };
+  }, [locale]);
+
   const value = useMemo(
     () => ({
       language,
+      locale,
       setLanguage,
       hasCompletedLanguageOnboarding,
       completeLanguageOnboarding,
       t,
+      ...formatters,
       isReady,
     }),
-    [language, setLanguage, hasCompletedLanguageOnboarding, completeLanguageOnboarding, t, isReady]
+    [
+      language,
+      locale,
+      setLanguage,
+      hasCompletedLanguageOnboarding,
+      completeLanguageOnboarding,
+      t,
+      formatters,
+      isReady,
+    ]
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

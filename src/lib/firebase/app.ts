@@ -117,6 +117,10 @@ if (firebaseConfigWarning) {
   console.warn(`[firebase] ${firebaseConfigWarning}`);
 }
 
+export const firebaseConfigMissingKeys: readonly string[] = Object.freeze([...missingEnvKeys]);
+
+export const isFirebaseConfigValid = missingEnvKeys.length === 0;
+
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 // App Check (solo web). Protege el backend frente a clientes no autorizados.

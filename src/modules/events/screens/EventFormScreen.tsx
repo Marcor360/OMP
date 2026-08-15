@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -34,6 +33,7 @@ import {
 } from '@/src/types/event';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { showAlert } from '@/src/utils/ui/alerts';
 import { canManageEvents } from '@/src/utils/permissions/permissions';
 
 interface EventFormScreenProps {
@@ -95,7 +95,7 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
         if (cancelled) return;
 
         if (!found) {
-          Alert.alert('Error', 'Evento no encontrado.');
+          showAlert('Error', 'Evento no encontrado.');
           router.back();
           return;
         }
@@ -103,7 +103,7 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
         setValues(eventToFormValues(found));
       } catch (requestError) {
         if (!cancelled) {
-          Alert.alert('Error', formatFirestoreError(requestError));
+          showAlert('Error', formatFirestoreError(requestError));
           router.back();
         }
       } finally {
@@ -140,12 +140,12 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
 
   const handleSubmit = async () => {
     if (!canManage) {
-      Alert.alert('Permisos insuficientes', 'No tienes permisos para administrar eventos.');
+      showAlert('Permisos insuficientes', 'No tienes permisos para administrar eventos.');
       return;
     }
 
     if (!uid || !congregationId) {
-      Alert.alert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
+      showAlert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
       return;
     }
 
@@ -157,7 +157,7 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
     setErrors(validationErrors);
 
     if (validationErrors.length > 0) {
-      Alert.alert('Validacion', validationErrors.join('\n'));
+      showAlert('Validacion', validationErrors.join('\n'));
       return;
     }
 
@@ -170,19 +170,19 @@ export function EventFormScreen({ mode = 'create' }: EventFormScreenProps) {
           congregationId,
           uid,
         });
-        Alert.alert('Evento actualizado', 'El evento se actualizo correctamente.');
+        showAlert('Evento actualizado', 'El evento se actualizo correctamente.');
       } else {
         await createEvent({
           values,
           congregationId,
           uid,
         });
-        Alert.alert('Evento creado', 'El evento se creo correctamente.');
+        showAlert('Evento creado', 'El evento se creo correctamente.');
       }
 
       router.back();
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      showAlert('Error', formatFirestoreError(requestError));
     } finally {
       setSaving(false);
     }

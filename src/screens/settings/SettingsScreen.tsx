@@ -81,7 +81,10 @@ const getInitials = (name?: string | null): string => {
   return (first + last).toUpperCase();
 };
 
-const formatBillingDate = (value: unknown): string | null => {
+const formatBillingDate = (
+  value: unknown,
+  formatter: I18nContextType['formatDate']
+): string | null => {
   const toDate = (v: unknown): Date | null => {
     if (!v) return null;
     if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
@@ -97,11 +100,7 @@ const formatBillingDate = (value: unknown): string | null => {
 
   const date = toDate(value);
   return date
-    ? new Intl.DateTimeFormat('es-MX', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      }).format(date)
+    ? formatter(date, { day: '2-digit', month: 'short', year: 'numeric' })
     : null;
 };
 
@@ -591,7 +590,7 @@ function PlanCard({
   onOpenBilling,
 }: PlanCardProps) {
   const { colors, styles } = useSettingsStyles();
-  const { t } = useI18n();
+  const { formatDate, t } = useI18n();
 
   const count = planUsage?.activeUsersCount ?? 0;
   const limit = planUsage?.activeUsersLimit ?? 0;
@@ -602,7 +601,10 @@ function PlanCard({
   const billing = billingSummary?.billing;
   const isExempt = billingSummary?.billingExemption?.exempt === true;
   const billingChip = resolveBillingChip(t, billing, isExempt);
-  const nextPayment = formatBillingDate(billing?.nextPaymentDate ?? billing?.currentPeriodEnd);
+  const nextPayment = formatBillingDate(
+    billing?.nextPaymentDate ?? billing?.currentPeriodEnd,
+    formatDate
+  );
 
   return (
     <View style={[styles.heroCard, styles.planCard, isWide && styles.planCardWide]}>

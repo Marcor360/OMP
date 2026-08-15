@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -41,6 +40,7 @@ import { AssignmentPriority, UpdateAssignmentDTO } from '@/src/types/assignment'
 import { Meeting, MEETING_PUBLICATION_STATUS_LABELS } from '@/src/types/meeting';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { showAlert } from '@/src/utils/ui/alerts';
 import { formatDateKey, parseDateKey } from '@/src/utils/dates/date-key';
 import {
   getOperationalDateBounds,
@@ -214,7 +214,7 @@ export function AssignmentFormScreen() {
         }
 
         if (!assignmentDoc) {
-          Alert.alert('Error', 'No se encontro la asignacion.');
+          showAlert('Error', 'No se encontro la asignacion.');
           router.back();
           return;
         }
@@ -234,7 +234,7 @@ export function AssignmentFormScreen() {
         setSelectedDueDate(safeDueDate);
         setMeetingId(assignmentDoc.meetingId ?? '');
       } catch (requestError) {
-        Alert.alert('Error', formatFirestoreError(requestError));
+        showAlert('Error', formatFirestoreError(requestError));
         router.back();
       } finally {
         setLoading(false);
@@ -318,12 +318,12 @@ export function AssignmentFormScreen() {
 
   const handleSave = async () => {
     if (!canManage) {
-      Alert.alert('Permisos insuficientes', 'No tienes permisos para crear o editar asignaciones.');
+      showAlert('Permisos insuficientes', 'No tienes permisos para crear o editar asignaciones.');
       return;
     }
 
     if (!congregationId) {
-      Alert.alert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
+      showAlert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
       return;
     }
 
@@ -340,7 +340,7 @@ export function AssignmentFormScreen() {
           const selectedGroup = cleaningGroups.find((group) => group.id === cleaningGroupId);
 
           if (!selectedGroup) {
-            Alert.alert('Error', 'Selecciona un grupo o familia de aseo.');
+            showAlert('Error', 'Selecciona un grupo o familia de aseo.');
             setSaving(false);
             return;
           }
@@ -388,7 +388,7 @@ export function AssignmentFormScreen() {
           );
         }
 
-        Alert.alert('Exito', 'Asignacion creada correctamente.');
+        showAlert('Exito', 'Asignacion creada correctamente.');
       } else if (id) {
         const payload: UpdateAssignmentDTO = {
           title,
@@ -405,12 +405,12 @@ export function AssignmentFormScreen() {
               : assignedToName,
         };
         await updateAssignment(congregationId, meetingId, id, payload);
-        Alert.alert('Exito', 'Asignacion actualizada.');
+        showAlert('Exito', 'Asignacion actualizada.');
       }
 
       router.back();
     } catch (requestError) {
-      Alert.alert('Error', formatFirestoreError(requestError));
+      showAlert('Error', formatFirestoreError(requestError));
     } finally {
       setSaving(false);
     }
@@ -810,7 +810,9 @@ export function AssignmentFormScreen() {
             <ActivityIndicator color={colors.onPrimary} />
           ) : (
             <ThemedText style={styles.saveButtonText}>
-              {mode === 'create' ? 'Crear asignacion' : 'Guardar cambios'}
+              {mode === 'create'
+                ? t('forms.assignment.createAction')
+                : t('forms.saveChanges')}
             </ThemedText>
           )}
         </TouchableOpacity>

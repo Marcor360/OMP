@@ -2,6 +2,12 @@ import { en } from '@/src/i18n/locales/en';
 
 export const zh = {
   ...en,
+  'forms.user.createTitle': 'New user',
+  'forms.user.editTitle': 'Edit user',
+  'forms.user.createAction': 'Create user',
+  'forms.saveChanges': 'Save changes',
+  'forms.assignment.createAction': 'Create assignment',
+  'forms.midweekMeeting.createAction': 'Create midweek meeting',
   common: {
     ...en.common,
     loading: 'Loading...',

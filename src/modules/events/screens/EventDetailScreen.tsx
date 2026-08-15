@@ -17,19 +17,11 @@ import { CongregationEvent } from '@/src/types/event';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { canManageEvents } from '@/src/utils/permissions/permissions';
 
-const formatDate = (date: Date): string =>
-  new Intl.DateTimeFormat('es-MX', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'America/Mexico_City',
-  }).format(date);
-
 export function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { appUser, congregationId, loadingProfile, profileError } = useUser();
-  const { t } = useI18n();
+  const { formatDate, t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const canManage = canManageEvents(appUser);
@@ -65,10 +57,17 @@ export function EventDetailScreen() {
   if (loading || loadingProfile) return <LoadingState message={t('eventDetail.loading')} />;
   if (error || !event) return <ErrorState message={error ?? t('eventDetail.notFound')} />;
 
+  const formatEventDate = (date: Date): string =>
+    formatDate(date, {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'America/Mexico_City',
+    });
   const dateRangeLabel = event.startDate.toMillis() === event.endDate.toMillis()
-    || formatDate(event.startDate.toDate()) === formatDate(event.endDate.toDate())
-    ? formatDate(event.startDate.toDate())
-    : `${formatDate(event.startDate.toDate())} - ${formatDate(event.endDate.toDate())}`;
+    || formatEventDate(event.startDate.toDate()) === formatEventDate(event.endDate.toDate())
+    ? formatEventDate(event.startDate.toDate())
+    : `${formatEventDate(event.startDate.toDate())} - ${formatEventDate(event.endDate.toDate())}`;
 
   return (
     <ScreenContainer scrollable={false} padded={false}>

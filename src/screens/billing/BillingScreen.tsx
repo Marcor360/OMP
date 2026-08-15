@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
@@ -9,7 +9,7 @@ import { PageHeader } from '@/src/components/layout/PageHeader';
 import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useUser } from '@/src/context/user-context';
-import { useI18n } from '@/src/i18n/index';
+import { type I18nContextType, useI18n } from '@/src/i18n/index';
 import {
   createStripeCheckoutSession,
   createStripePortalSession,
@@ -27,6 +27,7 @@ import {
   type BillingPlanKey,
 } from '@/src/types/billing';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 import {
   canManageSubscription,
   canPaySubscription,
@@ -46,14 +47,17 @@ const toDate = (value: unknown): Date | null => {
   return null;
 };
 
-const formatDate = (value: unknown): string => {
+const formatBillingDate = (
+  value: unknown,
+  formatter: I18nContextType['formatDate']
+): string => {
   const date = toDate(value);
   if (!date) return '--';
-  return new Intl.DateTimeFormat('es-MX', {
+  return formatter(date, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
-  }).format(date);
+  });
 };
 
 const getDaysUntil = (value: unknown): number | null => {
@@ -85,7 +89,7 @@ const openExternalUrl = async (url: string): Promise<void> => {
 
 export function BillingScreen() {
   const { appUser, congregationId, loadingProfile } = useUser();
-  const { t } = useI18n();
+  const { formatDate, t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
   const [summary, setSummary] = useState<CongregationBillingSummary | null>(null);
@@ -156,7 +160,7 @@ export function BillingScreen() {
       });
       await openExternalUrl(url);
     } catch (requestError) {
-      Alert.alert(t('billing.error.checkoutTitle'), formatFirestoreError(requestError));
+      showAlert(t('billing.error.checkoutTitle'), formatFirestoreError(requestError));
     } finally {
       setActionLoading(null);
     }
@@ -172,36 +176,34 @@ export function BillingScreen() {
       });
       await openExternalUrl(url);
     } catch (requestError) {
-      Alert.alert(t('billing.error.portalTitle'), formatFirestoreError(requestError));
+      showAlert(t('billing.error.portalTitle'), formatFirestoreError(requestError));
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleToggleExemption = () => {
+  const handleToggleExemption = async () => {
     const next = !isExempt;
-    Alert.alert(
-      next ? t('billing.exemption.activateTitle') : t('billing.exemption.revokeTitle'),
-      next ? t('billing.exemption.activateMessage') : t('billing.exemption.revokeMessage'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: next ? t('billing.exemption.activateConfirm') : t('billing.exemption.revokeConfirm'),
-          style: next ? 'default' : 'destructive',
-          onPress: async () => {
-            try {
-              setActionLoading('exemption');
-              await setBillingExemption(next);
-              await refresh();
-            } catch (requestError) {
-              Alert.alert(t('billing.error.exemptionTitle'), formatFirestoreError(requestError));
-            } finally {
-              setActionLoading(null);
-            }
-          },
-        },
-      ]
-    );
+    const confirmed = await confirmAlert({
+      title: next ? t('billing.exemption.activateTitle') : t('billing.exemption.revokeTitle'),
+      message: next ? t('billing.exemption.activateMessage') : t('billing.exemption.revokeMessage'),
+      confirmLabel: next
+        ? t('billing.exemption.activateConfirm')
+        : t('billing.exemption.revokeConfirm'),
+      cancelLabel: t('common.cancel'),
+      destructive: !next,
+    });
+    if (!confirmed) return;
+
+    try {
+      setActionLoading('exemption');
+      await setBillingExemption(next);
+      await refresh();
+    } catch (requestError) {
+      showAlert(t('billing.error.exemptionTitle'), formatFirestoreError(requestError));
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   if (loadingProfile || loading) {
@@ -234,8 +236,14 @@ export function BillingScreen() {
         </View>
 
         <View style={styles.metricGrid}>
-          <Metric label={t('billing.nextPayment')} value={formatDate(summary?.billing.nextPaymentDate)} />
-          <Metric label={t('billing.currentPeriod')} value={formatDate(summary?.billing.currentPeriodEnd)} />
+          <Metric
+            label={t('billing.nextPayment')}
+            value={formatBillingDate(summary?.billing.nextPaymentDate, formatDate)}
+          />
+          <Metric
+            label={t('billing.currentPeriod')}
+            value={formatBillingDate(summary?.billing.currentPeriodEnd, formatDate)}
+          />
           <Metric
             label={t('billing.allowedUsers')}
             value={String(activeUserLimit ?? '-')}

@@ -91,10 +91,10 @@ export const buildTerritoryId = (number: number): string => `territory_${number}
 export const getCurrentMonthId = (date = new Date()): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
-export const getMonthLabel = (monthId: string): string => {
+export const getMonthLabel = (monthId: string, locale = 'es-MX' /* default locale */): string => {
   const [year, month] = monthId.split('-').map(Number);
   if (!year || !month) return monthId;
-  return new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric' }).format(
+  return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(
     new Date(year, month - 1, 1)
   );
 };

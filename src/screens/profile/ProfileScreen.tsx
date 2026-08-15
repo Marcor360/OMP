@@ -1,4 +1,4 @@
-import { View, StyleSheet, TouchableOpacity, Alert, Platform, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 
@@ -15,6 +15,7 @@ import {
 } from '@/src/types/user';
 import { formatDate } from '@/src/utils/dates/dates';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
+import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 
 const joinLabels = (items: (string | null | undefined)[]): string =>
   items.filter((item): item is string => Boolean(item)).join(', ') || '--';
@@ -64,22 +65,20 @@ export function ProfileScreen() {
   }, [appUser?.congregationId, t]);
 
   const handleLogout = async () => {
-    const confirmed =
-      Platform.OS === 'web'
-        ? window.confirm(`${t('profile.logout.title')}?`)
-        : await new Promise<boolean>((resolve) =>
-            Alert.alert(t('profile.logout.title'), t('profile.logout.message'), [
-              { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-              { text: t('profile.logout.title'), style: 'destructive', onPress: () => resolve(true) },
-            ])
-          );
+    const confirmed = await confirmAlert({
+      title: t('profile.logout.title'),
+      message: t('profile.logout.message'),
+      confirmLabel: t('profile.logout.title'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
 
     if (!confirmed) return;
 
     try {
       await logout();
     } catch {
-      Alert.alert(t('common.error'), t('profile.logout.error'));
+      showAlert(t('common.error'), t('profile.logout.error'));
     }
   };
 
