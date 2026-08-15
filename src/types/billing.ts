@@ -23,9 +23,6 @@ export type CongregationBillingState = {
   planKey?: BillingPlanKey;
   activeUsersLimit?: number;
   userLimit?: number;
-  stripePriceId?: string;
-  stripeCustomerId?: string;
-  stripeSubscriptionId?: string;
   currentPeriodStart?: unknown;
   currentPeriodEnd?: unknown;
   nextPaymentDate?: unknown;
@@ -34,6 +31,17 @@ export type CongregationBillingState = {
   graceUntil?: unknown;
   adminRestricted?: boolean;
   cancelAtPeriodEnd?: boolean;
+  updatedAt?: unknown;
+};
+
+// SEC-01: identificadores internos de Stripe. Viven en
+// congregations/{id}/private/billing (admin + quien puede ver facturacion),
+// no en el documento raiz de la congregacion, que cualquier miembro activo
+// puede leer.
+export type CongregationPrivateBillingState = {
+  stripePriceId?: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
   lastPaymentStatus?: string;
   lastInvoiceId?: string;
   lastInvoiceUrl?: string;

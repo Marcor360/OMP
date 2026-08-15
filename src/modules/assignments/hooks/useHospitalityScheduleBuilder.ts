@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useUser } from '@/src/context/user-context';
-import { type I18nContextType, useI18n } from '@/src/i18n';
+import { useI18n } from '@/src/i18n';
 import { getScheduledOutgoingTalksInRange } from '@/src/modules/assignments/services/outgoing-talks.service';
 import {
-  createHospitalitySchedule,
+  archiveHospitalitySchedule,
   ensurePlanningMeetings,
   getHospitalityScheduleItems,
   getHospitalitySchedules,
   publishHospitalitySchedule,
-  saveHospitalityScheduleItems,
+  saveHospitalityScheduleDraft,
   substituteHospitalityAssignment,
-  updateHospitalityScheduleOptionalRoles,
 } from '@/src/services/hospitality-microphones/hospitality-microphones-service';
+import type {
+  DroppedHospitalityScheduleItem,
+  SaveHospitalityScheduleDraftItem,
+} from '@/src/services/repositories/ports/hospitality-schedule-repository.port';
 import { getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
 import { validatePlanningWindow } from '@/src/services/planning/operational-planning-service';
 import {
@@ -30,7 +33,10 @@ import type { Meeting } from '@/src/types/meeting';
 import { formatDateKey, parseDateKey } from '@/src/utils/dates/date-key';
 import { getWeekRangeForDate } from '@/src/utils/dates/week-range';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { canManageHospitalityMicrophones } from '@/src/utils/permissions/permissions';
+import {
+  canEditHospitalityAssignments,
+  canManageHospitalityMicrophones,
+} from '@/src/utils/permissions/permissions';
 import { confirmAlert, showAlert } from '@/src/utils/ui/alerts';
 
 export type HospitalityPlanningRow = {
@@ -143,7 +149,9 @@ export const buildRowsFromMeetings = (
 ): HospitalityPlanningRow[] => {
   const selectedByKey = new Map(
     items.filter((item) => item.status === 'scheduled').map((item) => [
-      `${item.meetingDate}-${item.meetingType}-${item.roleKey}`,
+      item.meetingId
+        ? `${item.meetingId}-${item.roleKey}`
+        : `${item.meetingDate}-${item.meetingType}-${item.roleKey}`,
       item.userId,
     ])
   );
@@ -154,7 +162,8 @@ export const buildRowsFromMeetings = (
     const assignments: Partial<Record<HospitalityRoleKey, string>> = {};
 
     rolesForMeetingType(meetingType, optionalRoles).forEach((roleKey) => {
-      assignments[roleKey] = selectedByKey.get(`${meetingDate}-${meetingType}-${roleKey}`);
+      assignments[roleKey] = selectedByKey.get(`${meeting.id}-${roleKey}`)
+        ?? selectedByKey.get(`${meetingDate}-${meetingType}-${roleKey}`);
     });
 
     return {
@@ -168,36 +177,43 @@ export const buildRowsFromMeetings = (
 };
 
 export const buildItemsFromRows = (params: {
-  congregationId: string;
-  scheduleId: string;
   rows: HospitalityPlanningRow[];
-  usersById: Map<string, ActiveCongregationUser>;
-  actorUid: string;
-  t: I18nContextType['t'];
   optionalRoles: HospitalityOptionalRoles;
-}): Omit<HospitalityScheduleItem, 'id' | 'createdAt' | 'updatedAt'>[] =>
+}): SaveHospitalityScheduleDraftItem[] =>
   params.rows.flatMap((row) =>
     rolesForMeetingType(row.meetingType, params.optionalRoles).flatMap((roleKey) => {
       const userId = row.assignments[roleKey];
-      const user = userId ? params.usersById.get(userId) : undefined;
-      if (!user) return [];
+      if (!userId) return [];
 
       return [{
-        congregationId: params.congregationId,
-        scheduleId: params.scheduleId,
         meetingId: row.meetingId,
         meetingDate: row.meetingDate,
         meetingType: row.meetingType,
         roleKey,
-        roleLabel: params.t(`hospitality.roles.${roleKey}`),
-        userId: user.uid,
-        userNameSnapshot: user.displayName,
-        status: 'scheduled' as const,
-        createdBy: params.actorUid,
-        updatedBy: params.actorUid,
+        userId,
       }];
     })
   );
+
+export const selectInitialHospitalitySchedule = (
+  schedules: HospitalitySchedule[],
+  today = todayKey()
+): HospitalitySchedule | null => {
+  const inCurrentRange = schedules.filter(
+    (schedule) => schedule.startDate <= today && schedule.endDate >= today
+  );
+  const recency = (schedule: HospitalitySchedule): number =>
+    typeof schedule.createdAt?.toMillis === 'function'
+      ? schedule.createdAt.toMillis()
+      : Date.parse(schedule.startDate);
+  return inCurrentRange
+    .filter((schedule) => schedule.status === 'published')
+    .sort((left, right) => recency(right) - recency(left))[0]
+    ?? inCurrentRange
+      .filter((schedule) => schedule.status === 'draft')
+      .sort((left, right) => recency(right) - recency(left))[0]
+    ?? null;
+};
 
 const compactDate = (dateKey: string, locale: string): string => {
   const date = parseDateKey(dateKey);
@@ -236,16 +252,22 @@ export const groupRowsByWeek = (rows: HospitalityPlanningRow[], locale = 'es-MX'
 };
 
 type PickerTarget = { rowId: string; roleKey: HospitalityRoleKey } | null;
+type SaveDraftOutcome = {
+  schedule: HospitalitySchedule;
+  droppedItems: DroppedHospitalityScheduleItem[];
+};
 
 export function useHospitalityScheduleBuilder() {
   const { appUser, congregationId, uid, loadingProfile, profileError } = useUser();
   const { language, t } = useI18n();
-  const canManage = canManageHospitalityMicrophones(appUser);
+  const canEdit = canEditHospitalityAssignments(appUser);
+  const canPublish = canManageHospitalityMicrophones(appUser);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [generatingMeetings, setGeneratingMeetings] = useState(false);
   const [substituting, setSubstituting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [users, setUsers] = useState<ActiveCongregationUser[]>([]);
   const [schedules, setSchedules] = useState<HospitalitySchedule[]>([]);
@@ -264,13 +286,14 @@ export function useHospitalityScheduleBuilder() {
   const usersById = useMemo(() => new Map(users.map((user) => [user.uid, user])), [users]);
   const isPublishedView = selectedSchedule?.status === 'published';
 
-  const loadSchedules = useCallback(async () => {
-    if (!congregationId) return;
-    setSchedules(await getHospitalitySchedules(congregationId, {
-      canManage,
-      actorUid: uid ?? undefined,
-    }));
-  }, [canManage, congregationId, uid]);
+  const loadSchedules = useCallback(async (): Promise<HospitalitySchedule[]> => {
+    if (!congregationId) return [];
+    const loadedSchedules = await getHospitalitySchedules(congregationId, {
+      canManage: canPublish,
+    });
+    setSchedules(loadedSchedules);
+    return loadedSchedules;
+  }, [canPublish, congregationId]);
 
   const loadRows = useCallback(async (params?: {
     rangeStart?: string;
@@ -325,30 +348,6 @@ export function useHospitalityScheduleBuilder() {
     }
   }, [congregationId, endDate, optionalRoles, startDate, t]);
 
-  const loadInitial = useCallback(async () => {
-    if (!congregationId || !canManage) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      setUsers(await getActiveCongregationUsers(congregationId));
-      await Promise.all([loadSchedules(), loadRows()]);
-    } catch (requestError) {
-      setError(formatFirestoreError(requestError));
-    } finally {
-      setLoading(false);
-    }
-  }, [canManage, congregationId, loadRows, loadSchedules]);
-
-  useEffect(() => {
-    const scope = canManage && congregationId ? congregationId : 'unavailable';
-    if (loadedScopeRef.current === scope) return;
-    loadedScopeRef.current = scope;
-    void loadInitial();
-  }, [canManage, congregationId, loadInitial]);
-
   const openSchedule = useCallback(async (schedule: HospitalitySchedule) => {
     const restoredOptionalRoles = schedule.optionalRoles ?? DEFAULT_OPTIONAL_ROLES;
     setSelectedSchedule(schedule);
@@ -364,80 +363,121 @@ export function useHospitalityScheduleBuilder() {
     });
   }, [loadRows]);
 
+  const loadInitial = useCallback(async () => {
+    if (!congregationId || !canEdit) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const [loadedUsers, loadedSchedules] = await Promise.all([
+        getActiveCongregationUsers(congregationId),
+        loadSchedules(),
+      ]);
+      setUsers(loadedUsers);
+      const initialSchedule = selectInitialHospitalitySchedule(loadedSchedules);
+      if (initialSchedule) {
+        await openSchedule(initialSchedule);
+      } else {
+        await loadRows();
+      }
+    } catch (requestError) {
+      setError(formatFirestoreError(requestError));
+    } finally {
+      setLoading(false);
+    }
+  }, [canEdit, congregationId, loadRows, loadSchedules, openSchedule]);
+
+  useEffect(() => {
+    const scope = canEdit && congregationId ? congregationId : 'unavailable';
+    if (loadedScopeRef.current === scope) return;
+    loadedScopeRef.current = scope;
+    void loadInitial();
+  }, [canEdit, congregationId, loadInitial]);
+
   const setRoleUser = useCallback((rowId: string, roleKey: HospitalityRoleKey, userId?: string) => {
     setRows((current) => current.map((row) => row.meetingId === rowId
       ? { ...row, assignments: { ...row.assignments, [roleKey]: userId } }
       : row));
   }, []);
 
-  const saveDraft = useCallback(async (): Promise<HospitalitySchedule> => {
+  const saveDraft = useCallback(async (): Promise<SaveDraftOutcome> => {
     if (!congregationId || !uid) throw new Error(t('dashboard.noCongregation'));
     const parsedStart = parseDateKey(startDate);
     const parsedEnd = parseDateKey(endDate);
     if (!parsedStart || !parsedEnd || parsedStart > parsedEnd) {
       throw new Error(t('hospitality.scheduleInvalidRangeMsg'));
     }
-    const scheduleId = selectedSchedule?.id ?? await createHospitalitySchedule({
-      congregationId,
-      title,
-      startDate: parsedStart,
-      endDate: parsedEnd,
-      totalMeetings: rows.length,
-      actorUid: uid,
-      optionalRoles,
-    });
-    const schedule: HospitalitySchedule = {
-      ...(selectedSchedule ?? {
-        id: scheduleId,
-        congregationId,
-        title,
-        startDate,
-        endDate,
-        monthIds: [],
-        totalMeetings: rows.length,
-        status: 'draft',
-        createdBy: uid,
-        updatedBy: uid,
-        createdAt: undefined as never,
-        updatedAt: undefined as never,
-      }),
-      optionalRoles,
-    };
-    if (selectedSchedule) {
-      await updateHospitalityScheduleOptionalRoles({
-        congregationId,
-        scheduleId,
-        optionalRoles,
-        actorUid: uid,
-      });
-    }
     const items = buildItemsFromRows({
-      congregationId,
-      scheduleId,
       rows,
-      usersById,
-      actorUid: uid,
-      t,
       optionalRoles,
     });
     if (items.length === 0) throw new Error(t('hospitality.scheduleRequireAssignment'));
-    await saveHospitalityScheduleItems({ congregationId, scheduleId, items, actorUid: uid });
+    const result = await saveHospitalityScheduleDraft({
+      congregationId,
+      scheduleId: selectedSchedule?.status === 'draft' ? selectedSchedule.id : undefined,
+      title,
+      startDate,
+      endDate,
+      optionalRoles,
+      items,
+    });
+    const fallbackSchedule: HospitalitySchedule = {
+      ...(selectedSchedule?.id === result.scheduleId ? selectedSchedule : {
+        id: result.scheduleId,
+        congregationId,
+        monthIds: [],
+        status: 'draft' as const,
+        createdBy: uid,
+        createdAt: undefined as never,
+        updatedAt: undefined as never,
+      }),
+      id: result.scheduleId,
+      congregationId,
+      title: title.trim(),
+      startDate,
+      endDate,
+      totalMeetings: new Set(items.map((item) => item.meetingId)).size,
+      status: 'draft',
+      updatedBy: uid,
+      optionalRoles,
+    };
+    const loadedSchedules = await loadSchedules();
+    const schedule = loadedSchedules.find((item) => item.id === result.scheduleId)
+      ?? fallbackSchedule;
     setSelectedSchedule(schedule);
-    await loadSchedules();
-    return schedule;
-  }, [congregationId, endDate, loadSchedules, optionalRoles, rows, selectedSchedule, startDate, t, title, uid, usersById]);
+    return { schedule, droppedItems: result.droppedItems };
+  }, [congregationId, endDate, loadSchedules, optionalRoles, rows, selectedSchedule, startDate, t, title, uid]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      await saveDraft();
-      showAlert(t('hospitality.scheduleDraftSavedTitle'), t('hospitality.scheduleDraftSavedMsg'));
+      const result = await saveDraft();
+      await loadRows({
+        rangeStart: result.schedule.startDate,
+        rangeEnd: result.schedule.endDate,
+        schedule: result.schedule,
+        optionalRoles: result.schedule.optionalRoles ?? optionalRoles,
+      });
+      if (result.droppedItems.length > 0) {
+        const details = result.droppedItems.map((item) => {
+          const roleKey = item.roleKey as HospitalityRoleKey;
+          return `${item.meetingDate} · ${t(`hospitality.roles.${roleKey}`)} · ${item.reason}`;
+        }).join('\n');
+        showAlert(t('hospitality.scheduleDroppedTitle'), t('hospitality.scheduleDroppedMsg', {
+          count: result.droppedItems.length,
+          details,
+        }));
+      } else {
+        showAlert(t('hospitality.scheduleDraftSavedTitle'), t('hospitality.scheduleDraftSavedMsg'));
+      }
     } catch (requestError) {
       showAlert(t('hospitality.scheduleSaveFailed'), formatFirestoreError(requestError));
     } finally {
       setSaving(false);
     }
-  }, [saveDraft, t]);
+  }, [loadRows, optionalRoles, saveDraft, t]);
 
   const handleGenerateMeetings = useCallback(async () => {
     if (!congregationId) return;
@@ -460,17 +500,36 @@ export function useHospitalityScheduleBuilder() {
     if (!congregationId || !uid) return;
     setPublishing(true);
     try {
-      const schedule = await saveDraft();
+      const draftResult = await saveDraft();
+      if (draftResult.droppedItems.length > 0) {
+        const details = draftResult.droppedItems.map((item) => {
+          const roleKey = item.roleKey as HospitalityRoleKey;
+          return `${item.meetingDate} · ${t(`hospitality.roles.${roleKey}`)} · ${item.reason}`;
+        }).join('\n');
+        showAlert(t('hospitality.scheduleDroppedTitle'), t('hospitality.scheduleDroppedMsg', {
+          count: draftResult.droppedItems.length,
+          details,
+        }));
+        return;
+      }
+      const { schedule } = draftResult;
       const result = await publishHospitalitySchedule({
         congregationId,
         scheduleId: schedule.id,
         actorUid: uid,
-        startDate,
-        endDate,
+        startDate: schedule.startDate,
+        endDate: schedule.endDate,
         syncMeetings: true,
       });
-      setSelectedSchedule({ ...schedule, status: 'published' });
+      const publishedSchedule = { ...schedule, status: 'published' as const };
+      setSelectedSchedule(publishedSchedule);
       await loadSchedules();
+      await loadRows({
+        rangeStart: schedule.startDate,
+        rangeEnd: schedule.endDate,
+        schedule: publishedSchedule,
+        optionalRoles: schedule.optionalRoles ?? optionalRoles,
+      });
       showAlert(t('hospitality.schedulePublishedTitle'), t(
         result.missingMeetings > 0
           ? 'hospitality.schedulePublishedMissingMsg'
@@ -482,7 +541,7 @@ export function useHospitalityScheduleBuilder() {
     } finally {
       setPublishing(false);
     }
-  }, [congregationId, endDate, loadSchedules, saveDraft, startDate, t, uid]);
+  }, [congregationId, loadRows, loadSchedules, optionalRoles, saveDraft, t, uid]);
 
   const rowProgress = useCallback((row: HospitalityPlanningRow) => {
     const roles = rolesForMeetingType(row.meetingType, optionalRoles);
@@ -511,10 +570,14 @@ export function useHospitalityScheduleBuilder() {
     return { ok: result.ok, errors: result.errors };
   }, [endDate, startDate, t]);
 
-  const canPublish = rows.length > 0 && missingAssignments === 0 && !isPublishedView && windowValidation.ok;
+  const canPublishSchedule = canPublish
+    && rows.length > 0
+    && missingAssignments === 0
+    && !isPublishedView
+    && windowValidation.ok;
 
   const requestPublish = useCallback(async () => {
-    if (!canPublish) return;
+    if (!canPublishSchedule) return;
     const confirmed = await confirmAlert({
       title: t('hospitality.publishConfirmTitle'),
       message: t('hospitality.publishConfirmMessage'),
@@ -523,7 +586,7 @@ export function useHospitalityScheduleBuilder() {
     });
     if (!confirmed) return;
     await publishNow();
-  }, [canPublish, publishNow, t]);
+  }, [canPublishSchedule, publishNow, t]);
 
   const pickerRow = pickerTarget ? rows.find((row) => row.meetingId === pickerTarget.rowId) : undefined;
   const pickerSelectedUserId = pickerRow && pickerTarget ? pickerRow.assignments[pickerTarget.roleKey] : undefined;
@@ -576,7 +639,7 @@ export function useHospitalityScheduleBuilder() {
       await substituteHospitalityAssignment({
         congregationId,
         scheduleId: selectedSchedule.id,
-        itemId: `${row.meetingDate}-${row.meetingType}-${roleKey}`,
+        itemId: `${row.meetingId}-${roleKey}`,
         newUserId: nextUser.uid,
       });
       await loadRows({
@@ -604,9 +667,37 @@ export function useHospitalityScheduleBuilder() {
     setRoleUser(pickerRow.meetingId, pickerTarget.roleKey, user?.uid);
   }, [confirmSubstitution, isPublishedView, pickerRow, pickerSelectedUserId, pickerTarget, setRoleUser]);
 
+  const handleArchiveSchedule = useCallback(async (schedule: HospitalitySchedule) => {
+    if (!congregationId) return;
+    setArchiving(true);
+    try {
+      const result = await archiveHospitalitySchedule({
+        congregationId,
+        scheduleId: schedule.id,
+      });
+      const loadedSchedules = await loadSchedules();
+      if (selectedSchedule?.id === schedule.id) {
+        const nextSchedule = selectInitialHospitalitySchedule(loadedSchedules);
+        if (nextSchedule) {
+          await openSchedule(nextSchedule);
+        } else {
+          setSelectedSchedule(null);
+          setRows([]);
+        }
+      }
+      showAlert(t('hospitality.scheduleArchivedTitle'), t('hospitality.scheduleArchivedMsg', {
+        count: result.cancelledItems,
+      }));
+    } catch (requestError) {
+      showAlert(t('hospitality.scheduleArchiveFailed'), formatFirestoreError(requestError));
+    } finally {
+      setArchiving(false);
+    }
+  }, [congregationId, loadSchedules, openSchedule, selectedSchedule, t]);
+
   return {
-    auth: { canManage, congregationId, loadingProfile, profileError },
-    state: { loading, saving, publishing, generatingMeetings, substituting, error, isPublishedView },
+    auth: { canEdit, canPublish, congregationId, loadingProfile, profileError },
+    state: { loading, saving, publishing, generatingMeetings, substituting, archiving, error, isPublishedView },
     setup: {
       title, setTitle, startDate, setStartDate, endDate, setEndDate,
       midweekDay, setMidweekDay, weekendDay, setWeekendDay,
@@ -618,14 +709,17 @@ export function useHospitalityScheduleBuilder() {
     weekGroups: groupRowsByWeek(rows, language),
     users,
     usersById,
-    progress: { completeMeetings, totalMeetings: rows.length, missingAssignments, canPublish, windowErrors: windowValidation.errors, rowProgress },
+    progress: { completeMeetings, totalMeetings: rows.length, missingAssignments, canPublish: canPublishSchedule, windowErrors: windowValidation.errors, rowProgress },
     picker: {
       visible: Boolean(pickerTarget),
       roleKey: pickerTarget?.roleKey,
       row: pickerRow,
       selectedUserId: pickerSelectedUserId,
       disabledReasons: pickerDisabledReasons,
-      open: (row: HospitalityPlanningRow, roleKey: HospitalityRoleKey) => setPickerTarget({ rowId: row.meetingId, roleKey }),
+      open: (row: HospitalityPlanningRow, roleKey: HospitalityRoleKey) => {
+        if (isPublishedView && !canPublish) return;
+        setPickerTarget({ rowId: row.meetingId, roleKey });
+      },
       close: () => setPickerTarget(null),
       select: selectPickerUser,
     },
@@ -636,6 +730,7 @@ export function useHospitalityScheduleBuilder() {
       save: handleSave,
       publish: () => void requestPublish(),
       generateMeetings: handleGenerateMeetings,
+      archiveSchedule: (schedule: HospitalitySchedule) => void handleArchiveSchedule(schedule),
     },
     helpers: { compactDate: (dateKey: string) => compactDate(dateKey, language), cellConflict },
     t,

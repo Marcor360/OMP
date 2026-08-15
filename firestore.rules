@@ -174,6 +174,46 @@ service cloud.firestore {
         );
     }
 
+    // Editor del modulo: puede trabajar borradores (crear, llenar, cancelar
+    // asignaciones, archivar). NO puede publicar ni tocar listas publicadas:
+    // esa frontera la marca isHospitalityMicrophonesManager().
+    // El auxiliar necesita rama explicita por cargo porque los permisos derivados
+    // de assignmentToPermissions() viven solo en el frontend y nunca se
+    // materializan en el documento del usuario.
+    //
+    // NOTA DE RENDIMIENTO: esta funcion NO delega en
+    // isHospitalityMicrophonesManager() (aunque su conjunto de permitidos lo
+    // incluye) porque encadenar ambas funciones en /hospitalitySchedules -- que
+    // ya evalua canAccessCongregationData() + validPlanningScheduleData(), ambas
+    // costosas -- reevalua administrativeWritesAllowed() (con sus lecturas del
+    // documento de congregacion) dos veces y agota el presupuesto real de
+    // Firestore de ~1000 expresiones por request, causando permission-denied
+    // incluso para escrituras validas. Las condiciones de Manager estan
+    // duplicadas aqui a proposito; si cambian alla, cambian aqui tambien.
+    function isHospitalityMicrophonesEditor() {
+      return administrativeWritesAllowed(myCongregationId())
+        && isActive()
+        && (
+          isAdmin()
+          || hasPermission('acomodadores_microfonos', 'manage')
+          || (
+            hasPermission('acomodadores_microfonos', 'create')
+            && hasPermission('acomodadores_microfonos', 'edit')
+          )
+          || hasPermission('acomodadores_microfonos', 'edit')
+          || (
+            currentUserData().servicePosition == 'encargado'
+            && currentUserData().serviceDepartment == 'acomodadores_microfonos'
+          )
+          || hasServiceAssignmentKey('encargado', 'acomodadores_microfonos')
+          || (
+            currentUserData().servicePosition == 'auxiliar'
+            && currentUserData().serviceDepartment == 'acomodadores_microfonos'
+          )
+          || hasServiceAssignmentKey('auxiliar', 'acomodadores_microfonos')
+        );
+    }
+
     // Espejo en rules de isPreachingManager() de src/types/user/index.ts:252.
     // El requisito privileges.isElder para 'encargado' es intencional y existe
     // en ambas capas. Si se elimina, debe eliminarse en las dos a la vez.
@@ -186,27 +226,41 @@ service cloud.firestore {
               user.serviceDepartment == 'predicacion'
               || user.serviceDepartment == 'territorios'
             )
-            && (
-              (
-                user.servicePosition == 'encargado'
-                && user.privileges is map
-                && user.privileges.isElder == true
-              )
-              || user.servicePosition == 'auxiliar'
-            )
+            && user.servicePosition == 'encargado'
+            && user.privileges is map
+            && user.privileges.isElder == true
           )
           || (
             user.serviceAssignmentKeys is list
-            && (
-              (
-                user.privileges is map
-                && user.privileges.isElder == true
-                && user.serviceAssignmentKeys.hasAny([
-                  'encargado:predicacion',
-                  'encargado:territorios'
-                ])
-              )
-              || user.serviceAssignmentKeys.hasAny([
+            && user.privileges is map
+            && user.privileges.isElder == true
+            && user.serviceAssignmentKeys.hasAny([
+              'encargado:predicacion',
+              'encargado:territorios'
+            ])
+          )
+        );
+    }
+
+    // Editor de predicacion/territorios: opera lo cotidiano (territorios, grupos)
+    // sin acceso a los informes de servicio de toda la congregacion, que quedan
+    // reservados a isPreachingManager(). Antes, el auxiliar obtenia Manager
+    // completo sin exigirsele isElder -- la via de menor requisito otorgaba el
+    // mismo acceso que el encargado. Espejo en src/types/user/index.ts.
+    function isPreachingEditor() {
+      let user = currentUserData();
+      return isPreachingManager()
+        || (
+          isActive()
+          && (
+            (
+              (user.serviceDepartment == 'predicacion'
+                || user.serviceDepartment == 'territorios')
+              && user.servicePosition == 'auxiliar'
+            )
+            || (
+              user.serviceAssignmentKeys is list
+              && user.serviceAssignmentKeys.hasAny([
                 'auxiliar:predicacion',
                 'auxiliar:territorios'
               ])
@@ -264,16 +318,31 @@ service cloud.firestore {
         );
     }
 
-    function hasPermission(department, action) {
-      return isActive()
-        && currentUserData().permissions is map
-        && currentUserData().permissions[department] is map
+    // Fase 0: helper compartido por permissions (otorgado a mano) y
+    // derivedPermissions (calculado del cargo por
+    // functions/src/users/derived-permissions-trigger.ts). 'manage' sigue
+    // siendo superconjunto de las demas acciones, pero DENTRO de cada mapa por
+    // separado -- un 'manage' en permissions no se filtra a derivedPermissions
+    // ni viceversa, cada fuente se evalua de forma independiente.
+    function permissionFlag(source, department, action) {
+      return source is map
+        && source[department] is map
         && (
-          currentUserData().permissions[department][action] == true
+          source[department][action] == true
           || (
             action != 'manage'
-            && currentUserData().permissions[department].manage == true
+            && source[department].manage == true
           )
+        );
+    }
+
+    // Espejo en functions/src/shared/permissions.ts. Si cambia alla, cambia
+    // aqui tambien.
+    function hasPermission(department, action) {
+      return isActive()
+        && (
+          permissionFlag(currentUserData().permissions, department, action)
+          || permissionFlag(currentUserData().derivedPermissions, department, action)
         );
     }
 
@@ -736,6 +805,15 @@ service cloud.firestore {
         'privileges',
         'responsibilities',
         'permissions',
+        // derivedPermissions (Fase 0): calculado del cargo (servicePosition x
+        // serviceDepartment x serviceAssignments) por
+        // functions/src/users/derived-permissions-trigger.ts. Solo el Admin SDK
+        // lo escribe -- ninguna de las ramas de allow update de /users/{userId}
+        // (validSelfUserUpdate, validPushTokenUpdate,
+        // validCleaningMembershipUserUpdate, validSelfNotificationPreferencesUpdate)
+        // lo incluye en su sameKeysOnUpdate(), asi que el cliente no puede
+        // tocarlo aunque este en allowedUserKeys().
+        'derivedPermissions',
         'isElder',
         'isMinisterialServant',
         'createdAt',
@@ -835,6 +913,10 @@ service cloud.firestore {
         && (
           !('permissions' in data)
           || validUserPermissions(data.permissions)
+        )
+        && (
+          !('derivedPermissions' in data)
+          || validUserPermissions(data.derivedPermissions)
         )
         && (
           !('serviceAssignments' in data)
@@ -1197,6 +1279,12 @@ service cloud.firestore {
     // CONGREGATIONS
     // =========================================================================
 
+    // Reservado para validación futura desde Functions: ya no se usa en
+    // rules_src/21-congregations-people-meetings.rules porque create/update
+    // del documento de congregación está cerrado a cliente (allow if false).
+    // No borrar; hasOnlyKeys() aquí no puede validar mapas gestionados por el
+    // backend (billing, billingExemption) porque request.resource.data es el
+    // documento resultante completo, no el delta del update.
     function allowedCongregationKeys() {
       return [
         'name',
@@ -2081,7 +2169,7 @@ service cloud.firestore {
         && validPlanningMonthIds(data.monthIds)
         && data.totalMeetings is int
         && data.totalMeetings >= 1
-        && data.totalMeetings <= 20
+        && data.totalMeetings <= 30
         && validScheduleStatus(data.status)
         && data.createdBy is string
         && data.updatedBy is string
@@ -2362,12 +2450,14 @@ service cloud.firestore {
       allow create: if isSuperAdmin()
         && isValidRole(request.resource.data.role)
         && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
+        && (!('derivedPermissions' in request.resource.data) || validUserPermissions(request.resource.data.derivedPermissions))
         && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments));
 
       allow update: if (
           isSuperAdmin()
           && isValidRole(request.resource.data.role)
           && (!('permissions' in request.resource.data) || validUserPermissions(request.resource.data.permissions))
+          && (!('derivedPermissions' in request.resource.data) || validUserPermissions(request.resource.data.derivedPermissions))
           && (!('serviceAssignments' in request.resource.data) || validUserServiceAssignments(request.resource.data.serviceAssignments))
         ) || (
           validSelfNotificationPreferencesUpdate(userId)
@@ -2406,21 +2496,31 @@ service cloud.firestore {
       allow get: if isSuperAdmin() || sameCongregation(congregationId);
       allow list: if isSuperAdmin();
 
-      allow create: if isSuperAdmin() || (isAdmin()
-        && canAccessCongregationData(congregationId)
-        && validCongregationData(request.resource.data));
-
-      allow update: if isSuperAdmin() || (isAdmin()
-        && canAccessCongregationData(congregationId)
-        && validCongregationData(request.resource.data)
-        && preservesCreatedAt());
+      // Las mutaciones del documento de congregación pasan por Cloud Functions:
+      // el documento contiene mapas gestionados por el backend (billing,
+      // billingExemption) que hasOnlyKeys() no puede validar desde cliente, porque
+      // request.resource.data es el documento resultante completo, no el delta.
+      // Mismo criterio que meetings/ y assignments/.
+      allow create, update: if false;
 
       allow delete: if false;
 
+      // Un solo match para todo /private/{privateDocId}: dos match separados
+      // que coincidan con el mismo path (uno literal 'billing' + el comodín)
+      // duplican la evaluación de canAccessCongregationData() -- que ya hace
+      // varios get() con arboles grandes de condiciones -- y agotan el limite
+      // de expresiones de las Rules. Tampoco repetimos sameCongregation():
+      // canAccessCongregationData() ya la incluye. 'billing' (identificadores
+      // de Stripe, SEC-01) se abre a quien puede ver facturación, igual que
+      // billingHistory/ con canViewBillingData(); el resto de /private (ej.
+      // plan) sigue siendo admin-only: ver facturación no debe implicar ver
+      // cualquier documento privado.
       match /private/{privateDocId} {
-        allow get, list: if sameCongregation(congregationId)
-          && canAccessCongregationData(congregationId)
-          && isAdmin();
+        allow get, list: if canAccessCongregationData(congregationId)
+          && (
+            isAdmin()
+            || (privateDocId == 'billing' && canViewBillingData())
+          );
         allow write: if false;
       }
 
@@ -2666,18 +2766,26 @@ service cloud.firestore {
         allow get, list: if canAccessCongregationData(congregationId);
 
         allow create: if canAccessCongregationData(congregationId)
-          && isHospitalityMicrophonesManager()
+          && isHospitalityMicrophonesEditor()
+          && request.resource.data.status == 'draft'
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == currentUid()
           && request.resource.data.updatedBy == currentUid();
 
         allow update: if canAccessCongregationData(congregationId)
-          && isHospitalityMicrophonesManager()
           && resource.data.congregationId == congregationId
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == resource.data.createdBy
           && request.resource.data.createdAt == resource.data.createdAt
-          && request.resource.data.updatedBy == currentUid();
+          && request.resource.data.updatedBy == currentUid()
+          && (
+            isHospitalityMicrophonesManager()
+            || (
+              isHospitalityMicrophonesEditor()
+              && resource.data.status == 'draft'
+              && request.resource.data.status in ['draft', 'archived']
+            )
+          );
 
         allow delete: if false;
 
@@ -2685,13 +2793,13 @@ service cloud.firestore {
           allow get, list: if canAccessCongregationData(congregationId);
 
           allow create: if canAccessCongregationData(congregationId)
-            && isHospitalityMicrophonesManager()
+            && isHospitalityMicrophonesEditor()
             && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == currentUid()
             && request.resource.data.updatedBy == currentUid();
 
           allow update: if canAccessCongregationData(congregationId)
-            && isHospitalityMicrophonesManager()
+            && isHospitalityMicrophonesEditor()
             && resource.data.congregationId == congregationId
             && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == resource.data.createdBy

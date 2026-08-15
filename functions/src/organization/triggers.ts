@@ -2,7 +2,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { getRequesterProfile } from '../users/authorization.js';
+import { assertAdministrativeBillingAccess, getRequesterProfile } from '../users/authorization.js';
 import type { RequesterProfile } from '../users/types.js';
 import { reconcileOrgChartProjection } from './org-chart-projection.js';
 
@@ -75,6 +75,8 @@ export const regenerateOrgChart = onCall({ region: 'us-central1' }, async (reque
   if (!congregationId) {
     throw new HttpsError('failed-precondition', 'Tu usuario no tiene congregacion asignada.');
   }
+
+  await assertAdministrativeBillingAccess(congregationId);
 
   const result = await reconcileOrgChartProjection(congregationId, getFirestore());
   return { ok: true, ...result };

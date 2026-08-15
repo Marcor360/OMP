@@ -112,6 +112,46 @@
         );
     }
 
+    // Editor del modulo: puede trabajar borradores (crear, llenar, cancelar
+    // asignaciones, archivar). NO puede publicar ni tocar listas publicadas:
+    // esa frontera la marca isHospitalityMicrophonesManager().
+    // El auxiliar necesita rama explicita por cargo porque los permisos derivados
+    // de assignmentToPermissions() viven solo en el frontend y nunca se
+    // materializan en el documento del usuario.
+    //
+    // NOTA DE RENDIMIENTO: esta funcion NO delega en
+    // isHospitalityMicrophonesManager() (aunque su conjunto de permitidos lo
+    // incluye) porque encadenar ambas funciones en /hospitalitySchedules -- que
+    // ya evalua canAccessCongregationData() + validPlanningScheduleData(), ambas
+    // costosas -- reevalua administrativeWritesAllowed() (con sus lecturas del
+    // documento de congregacion) dos veces y agota el presupuesto real de
+    // Firestore de ~1000 expresiones por request, causando permission-denied
+    // incluso para escrituras validas. Las condiciones de Manager estan
+    // duplicadas aqui a proposito; si cambian alla, cambian aqui tambien.
+    function isHospitalityMicrophonesEditor() {
+      return administrativeWritesAllowed(myCongregationId())
+        && isActive()
+        && (
+          isAdmin()
+          || hasPermission('acomodadores_microfonos', 'manage')
+          || (
+            hasPermission('acomodadores_microfonos', 'create')
+            && hasPermission('acomodadores_microfonos', 'edit')
+          )
+          || hasPermission('acomodadores_microfonos', 'edit')
+          || (
+            currentUserData().servicePosition == 'encargado'
+            && currentUserData().serviceDepartment == 'acomodadores_microfonos'
+          )
+          || hasServiceAssignmentKey('encargado', 'acomodadores_microfonos')
+          || (
+            currentUserData().servicePosition == 'auxiliar'
+            && currentUserData().serviceDepartment == 'acomodadores_microfonos'
+          )
+          || hasServiceAssignmentKey('auxiliar', 'acomodadores_microfonos')
+        );
+    }
+
     // Espejo en rules de isPreachingManager() de src/types/user/index.ts:252.
     // El requisito privileges.isElder para 'encargado' es intencional y existe
     // en ambas capas. Si se elimina, debe eliminarse en las dos a la vez.
@@ -124,27 +164,41 @@
               user.serviceDepartment == 'predicacion'
               || user.serviceDepartment == 'territorios'
             )
-            && (
-              (
-                user.servicePosition == 'encargado'
-                && user.privileges is map
-                && user.privileges.isElder == true
-              )
-              || user.servicePosition == 'auxiliar'
-            )
+            && user.servicePosition == 'encargado'
+            && user.privileges is map
+            && user.privileges.isElder == true
           )
           || (
             user.serviceAssignmentKeys is list
-            && (
-              (
-                user.privileges is map
-                && user.privileges.isElder == true
-                && user.serviceAssignmentKeys.hasAny([
-                  'encargado:predicacion',
-                  'encargado:territorios'
-                ])
-              )
-              || user.serviceAssignmentKeys.hasAny([
+            && user.privileges is map
+            && user.privileges.isElder == true
+            && user.serviceAssignmentKeys.hasAny([
+              'encargado:predicacion',
+              'encargado:territorios'
+            ])
+          )
+        );
+    }
+
+    // Editor de predicacion/territorios: opera lo cotidiano (territorios, grupos)
+    // sin acceso a los informes de servicio de toda la congregacion, que quedan
+    // reservados a isPreachingManager(). Antes, el auxiliar obtenia Manager
+    // completo sin exigirsele isElder -- la via de menor requisito otorgaba el
+    // mismo acceso que el encargado. Espejo en src/types/user/index.ts.
+    function isPreachingEditor() {
+      let user = currentUserData();
+      return isPreachingManager()
+        || (
+          isActive()
+          && (
+            (
+              (user.serviceDepartment == 'predicacion'
+                || user.serviceDepartment == 'territorios')
+              && user.servicePosition == 'auxiliar'
+            )
+            || (
+              user.serviceAssignmentKeys is list
+              && user.serviceAssignmentKeys.hasAny([
                 'auxiliar:predicacion',
                 'auxiliar:territorios'
               ])

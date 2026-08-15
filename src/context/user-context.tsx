@@ -17,6 +17,10 @@ import { AppUser, UserRole } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { createLogger } from '@/src/utils/logger';
 
+// Motivo estructurado detras de profileError, para que la UI (InvalidSessionScreen)
+// no tenga que adivinar la causa a partir de un mensaje humano.
+export type ProfileErrorKind = 'not-found' | 'inactive' | 'no-congregation' | 'error' | null;
+
 interface UserContextType {
   appUser: AppUser | null;
   uid: string | null;
@@ -35,6 +39,7 @@ interface UserContextType {
   isSessionValid: boolean;
   loadingProfile: boolean;
   profileError: string | null;
+  profileErrorKind: ProfileErrorKind;
   refreshProfile: () => void;
 }
 
@@ -55,6 +60,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     useState<CongregationAccessState | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileErrorKind, setProfileErrorKind] = useState<ProfileErrorKind>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const forceServerNextLoadRef = useRef(false);
   const loadedUidRef = useRef<string | null>(null);
@@ -72,6 +78,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       setAppUser(null);
       setCongregationAccess(null);
       setProfileError(null);
+      setProfileErrorKind(null);
       setLoadingProfile(false);
       return;
     }
@@ -82,6 +89,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     setLoadingProfile(true);
     setProfileError(null);
+    setProfileErrorKind(null);
     if (isDifferentUser) {
       setAppUser(null);
     }
@@ -131,6 +139,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           const errorMsg = 'No se encontro el perfil del usuario autenticado.';
           userLogger.warn(errorMsg);
           setProfileError(errorMsg);
+          setProfileErrorKind('not-found');
           setLoadingProfile(false);
           return;
         }
@@ -139,11 +148,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           const errorMsg = 'Tu cuenta esta inactiva. Contacta a un administrador.';
           userLogger.warn(errorMsg);
           setProfileError(errorMsg);
+          setProfileErrorKind('inactive');
           setCongregationAccess(null);
         } else if (!profile.congregationId) {
           const errorMsg = 'Tu cuenta no tiene congregacion asignada.';
           userLogger.warn(errorMsg);
           setProfileError(errorMsg);
+          setProfileErrorKind('no-congregation');
           setCongregationAccess(null);
         } else {
           const accessState = await getCongregationAccessState(profile.congregationId);
@@ -154,10 +165,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           if (accessState.isBlocked) {
             userLogger.warn(accessState.message);
             setProfileError(accessState.message);
+            setProfileErrorKind(null);
             return;
           }
 
           setProfileError(null);
+          setProfileErrorKind(null);
         }
       } catch (error) {
         if (cancelled) return;
@@ -169,6 +182,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           loadedUidRef.current = null;
         }
         setProfileError(formattedError);
+        setProfileErrorKind('error');
       } finally {
         if (!cancelled) {
           setLoadingProfile(false);
@@ -223,9 +237,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       isSessionValid,
       loadingProfile,
       profileError,
+      profileErrorKind,
       refreshProfile,
     };
-  }, [appUser, congregationAccess, loadingProfile, profileError, refreshProfile, user]);
+  }, [
+    appUser,
+    congregationAccess,
+    loadingProfile,
+    profileError,
+    profileErrorKind,
+    refreshProfile,
+    user,
+  ]);
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 }

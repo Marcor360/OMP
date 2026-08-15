@@ -4,12 +4,25 @@ import type {
   BillingExemption,
   BillingPlanKey,
   CongregationBillingState,
+  CongregationPrivateBillingState,
 } from '@/src/types/billing';
 
 export type CongregationBillingSummary = {
   congregationId: string;
   billing: CongregationBillingState;
   billingExemption?: BillingExemption;
+  // undefined: no se intento leer (sin permiso) o la lectura fallo (ej.
+  // permission-denied por drift entre el permiso efectivo del cliente y las
+  // Rules). La UI debe degradar, no reventar.
+  privateBilling?: CongregationPrivateBillingState;
+};
+
+export type GetCongregationBillingSummaryOptions = {
+  // No dispares la lectura de congregations/{id}/private/billing si sabes
+  // que el usuario no puede verla (canViewBilling() del cliente, espejo de
+  // canViewBillingData() en Rules): evita una peticion que sabes que va a
+  // fallar con permission-denied.
+  canViewPrivateBilling?: boolean;
 };
 
 type CheckoutPayload = {
@@ -52,10 +65,6 @@ const normalizeBilling = (value: unknown): CongregationBillingState => {
         : undefined,
     activeUsersLimit: typeof data.activeUsersLimit === 'number' ? data.activeUsersLimit : undefined,
     userLimit: typeof data.userLimit === 'number' ? data.userLimit : undefined,
-    stripePriceId: typeof data.stripePriceId === 'string' ? data.stripePriceId : undefined,
-    stripeCustomerId: typeof data.stripeCustomerId === 'string' ? data.stripeCustomerId : undefined,
-    stripeSubscriptionId:
-      typeof data.stripeSubscriptionId === 'string' ? data.stripeSubscriptionId : undefined,
     currentPeriodStart: data.currentPeriodStart,
     currentPeriodEnd: data.currentPeriodEnd,
     nextPaymentDate: data.nextPaymentDate,
@@ -64,6 +73,19 @@ const normalizeBilling = (value: unknown): CongregationBillingState => {
     graceUntil: data.graceUntil,
     adminRestricted: data.adminRestricted === true,
     cancelAtPeriodEnd: data.cancelAtPeriodEnd === true,
+    updatedAt: data.updatedAt,
+  };
+};
+
+const normalizePrivateBilling = (value: unknown): CongregationPrivateBillingState | undefined => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+
+  const data = value as Record<string, unknown>;
+  return {
+    stripePriceId: typeof data.stripePriceId === 'string' ? data.stripePriceId : undefined,
+    stripeCustomerId: typeof data.stripeCustomerId === 'string' ? data.stripeCustomerId : undefined,
+    stripeSubscriptionId:
+      typeof data.stripeSubscriptionId === 'string' ? data.stripeSubscriptionId : undefined,
     lastPaymentStatus:
       typeof data.lastPaymentStatus === 'string' ? data.lastPaymentStatus : undefined,
     lastInvoiceId: typeof data.lastInvoiceId === 'string' ? data.lastInvoiceId : undefined,
@@ -87,7 +109,8 @@ const normalizeExemption = (value: unknown): BillingExemption | undefined => {
 };
 
 export const getCongregationBillingSummary = async (
-  congregationId: string
+  congregationId: string,
+  options?: GetCongregationBillingSummaryOptions
 ): Promise<CongregationBillingSummary | null> => {
   if (!congregationId.trim()) return null;
 
@@ -104,10 +127,23 @@ export const getCongregationBillingSummary = async (
     billing.adminRestricted = false;
   }
 
+  let privateBilling: CongregationPrivateBillingState | undefined;
+  if (options?.canViewPrivateBilling) {
+    try {
+      const privateData = await billingRepository.getPrivateBillingDoc(congregationId);
+      privateBilling = normalizePrivateBilling(privateData);
+    } catch {
+      // Degrada con elegancia: el resumen publico sigue siendo valido aunque
+      // el permiso efectivo del cliente y las Rules hayan divergido.
+      privateBilling = undefined;
+    }
+  }
+
   return {
     congregationId,
     billing,
     billingExemption,
+    privateBilling,
   };
 };
 

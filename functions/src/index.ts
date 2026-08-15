@@ -17,6 +17,10 @@ export {
 } from "./users-sync.js";
 
 export {
+  reconcileDerivedPermissionsOnUserWrite,
+} from './users/derived-permissions-trigger.js';
+
+export {
   notifyAssignmentUsers,
   notifyCongregationAssignmentUsers,
   notifyMeetingAssignmentUsers,
@@ -93,9 +97,11 @@ export {
 } from './cleaning.js';
 
 export {
+  archiveHospitalityScheduleByManager,
   ensurePlanningMeetingsByManager,
   publishCleaningScheduleByManager,
   publishHospitalityScheduleByManager,
+  saveHospitalityScheduleDraftByManager,
   substituteHospitalityAssignmentByManager,
 } from './planning-schedules.js';
 

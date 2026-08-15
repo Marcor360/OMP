@@ -70,7 +70,7 @@
         && validPlanningMonthIds(data.monthIds)
         && data.totalMeetings is int
         && data.totalMeetings >= 1
-        && data.totalMeetings <= 20
+        && data.totalMeetings <= 30
         && validScheduleStatus(data.status)
         && data.createdBy is string
         && data.updatedBy is string

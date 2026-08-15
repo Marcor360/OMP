@@ -104,18 +104,26 @@
         allow get, list: if canAccessCongregationData(congregationId);
 
         allow create: if canAccessCongregationData(congregationId)
-          && isHospitalityMicrophonesManager()
+          && isHospitalityMicrophonesEditor()
+          && request.resource.data.status == 'draft'
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == currentUid()
           && request.resource.data.updatedBy == currentUid();
 
         allow update: if canAccessCongregationData(congregationId)
-          && isHospitalityMicrophonesManager()
           && resource.data.congregationId == congregationId
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == resource.data.createdBy
           && request.resource.data.createdAt == resource.data.createdAt
-          && request.resource.data.updatedBy == currentUid();
+          && request.resource.data.updatedBy == currentUid()
+          && (
+            isHospitalityMicrophonesManager()
+            || (
+              isHospitalityMicrophonesEditor()
+              && resource.data.status == 'draft'
+              && request.resource.data.status in ['draft', 'archived']
+            )
+          );
 
         allow delete: if false;
 
@@ -123,13 +131,13 @@
           allow get, list: if canAccessCongregationData(congregationId);
 
           allow create: if canAccessCongregationData(congregationId)
-            && isHospitalityMicrophonesManager()
+            && isHospitalityMicrophonesEditor()
             && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == currentUid()
             && request.resource.data.updatedBy == currentUid();
 
           allow update: if canAccessCongregationData(congregationId)
-            && isHospitalityMicrophonesManager()
+            && isHospitalityMicrophonesEditor()
             && resource.data.congregationId == congregationId
             && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == resource.data.createdBy

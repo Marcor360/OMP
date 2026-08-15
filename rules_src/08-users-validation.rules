@@ -34,6 +34,15 @@
         'privileges',
         'responsibilities',
         'permissions',
+        // derivedPermissions (Fase 0): calculado del cargo (servicePosition x
+        // serviceDepartment x serviceAssignments) por
+        // functions/src/users/derived-permissions-trigger.ts. Solo el Admin SDK
+        // lo escribe -- ninguna de las ramas de allow update de /users/{userId}
+        // (validSelfUserUpdate, validPushTokenUpdate,
+        // validCleaningMembershipUserUpdate, validSelfNotificationPreferencesUpdate)
+        // lo incluye en su sameKeysOnUpdate(), asi que el cliente no puede
+        // tocarlo aunque este en allowedUserKeys().
+        'derivedPermissions',
         'isElder',
         'isMinisterialServant',
         'createdAt',
@@ -133,6 +142,10 @@
         && (
           !('permissions' in data)
           || validUserPermissions(data.permissions)
+        )
+        && (
+          !('derivedPermissions' in data)
+          || validUserPermissions(data.derivedPermissions)
         )
         && (
           !('serviceAssignments' in data)

@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
 import { EmptyState } from '@/src/components/common/EmptyState';
 import { ErrorState } from '@/src/components/common/ErrorState';
@@ -19,12 +21,17 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 export function HospitalityMicrophonesScheduleScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 900;
   const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
   const builder = useHospitalityScheduleBuilder();
   const { auth, state, setup, progress, picker, actions, helpers, t } = builder;
-  const busy = state.saving || state.publishing || state.generatingMeetings || state.substituting;
+  const busy = state.saving || state.publishing || state.generatingMeetings || state.substituting || state.archiving;
+  const hasEligibleUsers = useMemo(
+    () => builder.users.some((user) => user.isElder || user.isMinisterialServant),
+    [builder.users]
+  );
 
   if (auth.loadingProfile || state.loading) {
     return <LoadingState message={t('hospitality.scheduleLoading')} />;
@@ -32,7 +39,7 @@ export function HospitalityMicrophonesScheduleScreen() {
   if (!auth.congregationId) {
     return <ErrorState message={auth.profileError ?? t('dashboard.noCongregation')} />;
   }
-  if (!auth.canManage) {
+  if (!auth.canEdit) {
     return <ErrorState message={t('hospitality.scheduleNoPermission')} />;
   }
   if (state.error) {
@@ -57,6 +64,8 @@ export function HospitalityMicrophonesScheduleScreen() {
             schedules={builder.schedules}
             selectedScheduleId={builder.selectedSchedule?.id}
             busy={busy}
+            canEdit={auth.canEdit}
+            canPublish={auth.canPublish}
             generating={state.generatingMeetings}
             labels={{
               workList: t('hospitality.scheduleWorkList'),
@@ -70,6 +79,12 @@ export function HospitalityMicrophonesScheduleScreen() {
               load: t('hospitality.scheduleLoadMeetings'),
               published: t('hospitality.scheduleStatusPublished'),
               draft: t('hospitality.scheduleStatusDraft'),
+              archive: t('hospitality.scheduleArchive'),
+              archiveConfirmTitle: t('hospitality.scheduleArchiveConfirmTitle'),
+              archiveDraftConfirm: t('hospitality.scheduleArchiveDraftConfirm'),
+              archivePublishedConfirm: t('hospitality.scheduleArchivePublishedConfirm'),
+              archiveConfirmAction: t('hospitality.scheduleArchiveConfirmAction'),
+              cancel: t('common.cancel'),
             }}
             weekdayLabel={(weekday) => t(`hospitality.weekdays.${weekday}`)}
             onTitleChange={setup.setTitle}
@@ -81,7 +96,25 @@ export function HospitalityMicrophonesScheduleScreen() {
             onGenerate={actions.generateMeetings}
             onLoad={() => void actions.loadRows()}
             onOpenSchedule={(schedule) => void actions.openSchedule(schedule)}
+            onArchiveSchedule={actions.archiveSchedule}
           />
+
+          {!hasEligibleUsers ? (
+            <View style={styles.eligibilityBanner} accessibilityRole="alert">
+              <Ionicons name="information-circle-outline" size={22} color={colors.warning} />
+              <View style={styles.eligibilityCopy}>
+                <ThemedText style={styles.eligibilityTitle}>{t('hospitality.eligibilityBannerTitle')}</ThemedText>
+                <ThemedText style={styles.eligibilityText}>{t('hospitality.eligibilityBannerMessage')}</ThemedText>
+              </View>
+              <TouchableOpacity
+                style={styles.eligibilityButton}
+                onPress={() => router.push('/(protected)/(tabs)/users')}
+                accessibilityRole="button"
+              >
+                <ThemedText style={styles.eligibilityButtonText}>{t('hospitality.eligibilityBannerAction')}</ThemedText>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
           {builder.rows.length === 0 ? (
             <EmptyState icon="calendar-clear-outline" title={t('hospitality.scheduleEmptyTitle')} description={t('hospitality.scheduleEmptyDesc')} />
@@ -91,7 +124,7 @@ export function HospitalityMicrophonesScheduleScreen() {
               optionalRoles={setup.optionalRoles}
               usersById={builder.usersById}
               published={state.isPublishedView}
-              disabled={busy}
+              disabled={busy || (state.isPublishedView && !auth.canPublish)}
               dateColumnLabel={t('hospitality.gridMeeting')}
               readerLabel={t('hospitality.gridReader')}
               unassignedLabel={t('hospitality.scheduleUnassigned')}
@@ -116,7 +149,7 @@ export function HospitalityMicrophonesScheduleScreen() {
                       usersById={builder.usersById}
                       expanded={expandedMeetingId === row.meetingId}
                       published={state.isPublishedView}
-                      disabled={busy}
+                      disabled={busy || (state.isPublishedView && !auth.canPublish)}
                       midweekLabel={t('hospitality.scheduleMidweek')}
                       weekendLabel={t('hospitality.scheduleWeekend')}
                       unassignedLabel={t('hospitality.scheduleUnassigned')}
@@ -145,6 +178,7 @@ export function HospitalityMicrophonesScheduleScreen() {
         publishing={state.publishing}
         published={state.isPublishedView}
         canPublish={progress.canPublish}
+        publishPermissionMessage={!auth.canPublish ? t('hospitality.schedulePublishManagerOnly') : undefined}
         windowErrors={progress.windowErrors}
         labels={{
           summary: t('hospitality.completeMeetingSummary', { complete: progress.completeMeetings, total: progress.totalMeetings }),
@@ -189,4 +223,10 @@ const createStyles = (colors: AppColorSet) => StyleSheet.create({
   cards: { gap: 14 },
   weekBlock: { gap: 8 },
   weekSeparator: { paddingHorizontal: 4, paddingTop: 4, borderBottomWidth: 1, borderBottomColor: `${colors.primary}44`, paddingBottom: 6 },
+  eligibilityBanner: { borderWidth: 1, borderColor: `${colors.warning}66`, borderRadius: 12, backgroundColor: `${colors.warning}10`, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  eligibilityCopy: { flex: 1, minWidth: 220, gap: 2 },
+  eligibilityTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '800' },
+  eligibilityText: { color: colors.textSecondary, fontSize: 11 },
+  eligibilityButton: { minHeight: 36, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.warning, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  eligibilityButtonText: { color: colors.warning, fontSize: 11, fontWeight: '800' },
 });

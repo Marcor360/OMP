@@ -86,8 +86,17 @@ const isDashboardAssignmentUpcoming = (assignment: Assignment): boolean =>
 const isPanelAssignmentCompleted = (assignment: PanelAssignment): boolean =>
   assignment.status === 'completed';
 
-const isPanelAssignmentForUser = (assignment: PanelAssignment, uid: string): boolean =>
-  assignment.assignedUsers.some((person) => person.userId === uid);
+// Una asignacion de grupo de limpieza no tiene un assignedUsers[].userId real
+// (BUG-01: assignedToUid nunca debe ser un ID de grupo), asi que pertenecer al
+// grupo se resuelve aparte via cleaningGroupId, igual que ya hace
+// my-cleaning-dashboard-service.ts.
+const isPanelAssignmentForUser = (
+  assignment: PanelAssignment,
+  uid: string,
+  cleaningGroupId?: string | null
+): boolean =>
+  assignment.assignedUsers.some((person) => person.userId === uid) ||
+  (Boolean(cleaningGroupId) && assignment.cleaningGroupId === cleaningGroupId);
 
 const toTimestamp = (value: string | undefined): Timestamp => {
   if (!value) return Timestamp.now();
@@ -231,9 +240,10 @@ export const getDashboardData = async (params: {
   uid: string;
   isAdmin: boolean;
   canManageAssignments: boolean;
+  cleaningGroupId?: string | null;
   forceServer?: boolean;
 }): Promise<DashboardData> => {
-  const { congregationId, uid, isAdmin, canManageAssignments, forceServer } = params;
+  const { congregationId, uid, isAdmin, canManageAssignments, cleaningGroupId, forceServer } = params;
   let summary: DashboardSummary | null = null;
 
   try {
@@ -256,7 +266,7 @@ export const getDashboardData = async (params: {
       const userAssignments = (await getPanelAssignments({
         congregationId,
         forceServer,
-      })).filter((assignment) => isPanelAssignmentForUser(assignment, uid));
+      })).filter((assignment) => isPanelAssignmentForUser(assignment, uid, cleaningGroupId));
       const pending = userAssignments
         .filter(isPanelAssignmentPending)
         .filter(isPanelAssignmentUpcoming);
@@ -312,7 +322,9 @@ export const getDashboardData = async (params: {
 
   const visibleAssignments = canManageAssignments
     ? panelAssignments
-    : panelAssignments.filter((assignment) => isPanelAssignmentForUser(assignment, uid));
+    : panelAssignments.filter((assignment) =>
+        isPanelAssignmentForUser(assignment, uid, cleaningGroupId)
+      );
   const pending = visibleAssignments
     .filter(isPanelAssignmentPending)
     .filter(isPanelAssignmentUpcoming);

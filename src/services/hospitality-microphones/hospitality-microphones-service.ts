@@ -1,8 +1,11 @@
 import { firestoreHospitalityScheduleRepository } from '@/src/services/repositories/firestore/firestore-hospitality-schedule-repository';
 import type {
+  ArchiveHospitalityScheduleResult,
   EnsurePlanningMeetingsParams,
   EnsurePlanningMeetingsResult,
   HospitalityScheduleRepository,
+  SaveHospitalityScheduleDraftParams,
+  SaveHospitalityScheduleDraftResult,
 } from '@/src/services/repositories/ports/hospitality-schedule-repository.port';
 import {
   buildPlanningWindow,
@@ -11,11 +14,7 @@ import {
 import { validateHospitalityScheduleBeforePublish } from '@/src/services/planning/planning-conflict-service';
 import { getScheduledOutgoingTalksInRange } from '@/src/modules/assignments/services/outgoing-talks.service';
 import { getActiveCongregationUsers } from '@/src/services/users/active-users-service';
-import type {
-  HospitalityOptionalRoles,
-  HospitalitySchedule,
-  HospitalityScheduleItem,
-} from '@/src/types/hospitality-microphones';
+import type { HospitalitySchedule, HospitalityScheduleItem } from '@/src/types/hospitality-microphones';
 import { formatDateKey, parseDateKey } from '@/src/utils/dates/date-key';
 
 let hospitalityScheduleRepository: HospitalityScheduleRepository =
@@ -38,7 +37,7 @@ export const ensurePlanningMeetings = async (
 
 export const getHospitalitySchedules = async (
   congregationId: string,
-  options?: { canManage?: boolean; actorUid?: string; today?: string }
+  options?: { canManage?: boolean; today?: string }
 ): Promise<HospitalitySchedule[]> => {
   if (!congregationId) return [];
   const schedules = await hospitalityScheduleRepository.listSchedules(congregationId);
@@ -46,15 +45,12 @@ export const getHospitalitySchedules = async (
   const expiredPublished = schedules.filter(
     (schedule) => schedule.status === 'published' && schedule.endDate < today
   );
-  const actorUid = options?.actorUid;
-
-  if (options?.canManage && actorUid && expiredPublished.length > 0) {
+  if (options?.canManage && expiredPublished.length > 0) {
     await Promise.all(
       expiredPublished.map((schedule) =>
         hospitalityScheduleRepository.archiveSchedule({
           congregationId,
           scheduleId: schedule.id,
-          actorUid,
         })
       )
     );
@@ -113,54 +109,38 @@ export const getHospitalityAssignmentsForMeetingDate = async (params: {
   return results.flat();
 };
 
-export const createHospitalitySchedule = async (params: {
-  congregationId: string;
-  title: string;
-  startDate: Date;
-  endDate: Date;
-  totalMeetings: number;
-  actorUid: string;
-  optionalRoles?: HospitalityOptionalRoles;
-}): Promise<string> => {
+export const saveHospitalityScheduleDraft = async (
+  params: SaveHospitalityScheduleDraftParams
+): Promise<SaveHospitalityScheduleDraftResult> => {
+  const parsedStart = parseDateKey(params.startDate);
+  const parsedEnd = parseDateKey(params.endDate);
+  if (!parsedStart || !parsedEnd) {
+    throw new Error('El rango de la lista no es valido.');
+  }
+
   const validation = validatePlanningWindow({
-    startDate: params.startDate,
-    endDate: params.endDate,
+    startDate: parsedStart,
+    endDate: parsedEnd,
     module: 'hospitalityMicrophones',
   });
-
   if (!validation.ok) {
     throw new Error(validation.errors.join('\n'));
   }
 
-  const window = buildPlanningWindow(params.startDate, params.endDate);
-  return hospitalityScheduleRepository.addSchedule({
-    congregationId: params.congregationId,
+  return hospitalityScheduleRepository.saveDraft({
+    ...params,
     title: params.title.trim(),
-    startDate: window.startDate,
-    endDate: window.endDate,
-    monthIds: window.monthIds,
-    totalMeetings: params.totalMeetings,
-    actorUid: params.actorUid,
-    optionalRoles: params.optionalRoles,
   });
 };
 
-export const updateHospitalityScheduleOptionalRoles = async (params: {
+export const archiveHospitalitySchedule = async (params: {
   congregationId: string;
   scheduleId: string;
-  optionalRoles: HospitalityOptionalRoles;
-  actorUid: string;
-}): Promise<void> => {
-  return hospitalityScheduleRepository.updateScheduleOptionalRoles(params);
-};
-
-export const saveHospitalityScheduleItems = async (params: {
-  congregationId: string;
-  scheduleId: string;
-  items: Omit<HospitalityScheduleItem, 'id' | 'createdAt' | 'updatedAt'>[];
-  actorUid: string;
-}): Promise<void> => {
-  return hospitalityScheduleRepository.upsertScheduleItems(params);
+}): Promise<ArchiveHospitalityScheduleResult> => {
+  if (!params.congregationId || !params.scheduleId) {
+    throw new Error('Faltan datos para archivar la lista.');
+  }
+  return hospitalityScheduleRepository.archiveSchedule(params);
 };
 
 export const publishHospitalitySchedule = async (params: {

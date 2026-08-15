@@ -146,6 +146,14 @@ beforeEach(async () => {
         serviceAssignments: [{ position: 'auxiliar', department: 'territorios' }],
         serviceAssignmentKeys: ['auxiliar:territorios'],
       })),
+      setDoc(doc(db, 'users/nonElderPreachingManager'), userDoc({
+        uid: 'nonElderPreachingManager',
+        role: 'user',
+        congregationId: 'c1',
+        servicePosition: 'encargado',
+        serviceDepartment: 'predicacion',
+        privileges: { isElder: false },
+      })),
       setDoc(doc(db, 'users/member'), userDoc({
         uid: 'member', role: 'user', congregationId: 'c1',
       })),
@@ -166,22 +174,37 @@ test('elder preaching manager can list submissions through flat fields', async (
   await assertSucceeds(getDocs(submissions('elderPreachingDept')));
 });
 
-test('preaching assistant can list submissions through assignment key', async () => {
-  await assertSucceeds(getDocs(submissions('assistantPreachKey')));
+// P0: el auxiliar de predicacion/territorios ya NO es Manager (antes obtenia el
+// mismo acceso que el encargado sin exigirsele isElder). No puede listar los
+// informes de servicio de toda la congregacion.
+test('preaching assistant cannot list submissions (P0: auxiliar ya no es Manager)', async () => {
+  await assertFails(getDocs(submissions('assistantPreachKey')));
 });
 
-// FALLA HOY A PROPOSITO. firestore.rules:194-197 solo cubre
-// hasServiceAssignmentKey(pos,'predicacion') y omite 'territorios',
-// mientras src/types/user/index.ts:252 si cubre ambos. Lo corrige el PR 3.
 test('elder territories manager can list submissions through assignment key', async () => {
   await assertSucceeds(getDocs(submissions('elderTerritoriesKey')));
 });
 
-// FALLA HOY A PROPOSITO. firestore.rules:194-197 solo cubre
-// hasServiceAssignmentKey(pos,'predicacion') y omite 'territorios',
-// mientras src/types/user/index.ts:252 si cubre ambos. Lo corrige el PR 3.
-test('territories assistant can list submissions through assignment key', async () => {
-  await assertSucceeds(getDocs(submissions('assistantTerrKey')));
+test('territories assistant cannot list submissions (P0: auxiliar ya no es Manager)', async () => {
+  await assertFails(getDocs(submissions('assistantTerrKey')));
+});
+
+test('encargado de predicacion sin isElder no puede listar submissions', async () => {
+  await assertFails(getDocs(submissions('nonElderPreachingManager')));
+});
+
+test('auxiliar de predicacion puede leer su PROPIA submission', async () => {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'congregations/c1/preachingReports/2026-07/submissions/assistantPreachKey'),
+      { congregationId: 'c1', userId: 'assistantPreachKey', hours: 5 }
+    );
+  });
+
+  await assertSucceeds(getDoc(doc(
+    authedDb('assistantPreachKey'),
+    'congregations/c1/preachingReports/2026-07/submissions/assistantPreachKey'
+  )));
 });
 
 test('regular member cannot list submissions', async () => {

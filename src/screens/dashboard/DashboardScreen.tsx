@@ -130,6 +130,7 @@ export function DashboardScreen() {
         uid,
         isAdmin,
         canManageAssignments: canManage,
+        cleaningGroupId: appUser?.cleaningGroupId,
         forceServer,
       });
 
@@ -148,7 +149,7 @@ export function DashboardScreen() {
       setRefreshing(false);
       loadingRef.current = false;
     }
-  }, [canManage, congregationId, isAdmin, profileError, t, user?.uid]);
+  }, [canManage, congregationId, isAdmin, profileError, t, user?.uid, appUser?.cleaningGroupId]);
 
   useEffect(() => {
     if (loadingProfile) {

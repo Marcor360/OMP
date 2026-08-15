@@ -13,6 +13,7 @@ type Props = {
   publishing: boolean;
   published: boolean;
   canPublish: boolean;
+  publishPermissionMessage?: string;
   windowErrors: string[];
   labels: { summary: string; save: string; saving: string; publish: string; publishing: string; missing: string };
   onSave: () => void;
@@ -28,6 +29,9 @@ export function HospitalityScheduleFooter(props: Props) {
         <ThemedText style={styles.summary}>{props.labels.summary}</ThemedText>
         {!props.canPublish && !props.published && props.missing > 0 ? (
           <ThemedText style={styles.reason}>{props.labels.missing}</ThemedText>
+        ) : null}
+        {props.publishPermissionMessage && !props.published ? (
+          <ThemedText style={styles.reason}>{props.publishPermissionMessage}</ThemedText>
         ) : null}
         {props.windowErrors.map((message) => (
           <ThemedText key={message} style={styles.reason}>{message}</ThemedText>
