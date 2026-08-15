@@ -79,10 +79,7 @@
             && (
               (
                 currentUserData().servicePosition == 'encargado'
-                && (
-                  !('serviceDepartment' in currentUserData())
-                  || currentUserData().serviceDepartment == 'limpieza'
-                )
+                && currentUserData().serviceDepartment == 'limpieza'
               )
               || hasServiceAssignmentKey('encargado', 'limpieza')
             )

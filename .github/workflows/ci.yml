@@ -34,6 +34,24 @@ jobs:
       - name: Build web
         run: npm run build:web
 
+  commitlint:
+    name: Commitlint · mensajes del PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint commit messages
+        run: |
+          npx commitlint --from ${{ github.event.pull_request.base.sha }} \
+                         --to ${{ github.event.pull_request.head.sha }} --verbose
+
   functions:
     name: Functions · lint + build + test
     runs-on: ubuntu-latest
