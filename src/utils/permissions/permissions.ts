@@ -7,6 +7,7 @@ import {
   UserPermissions,
   UserRole,
   UserServiceAssignment,
+  UserServiceDepartment,
 } from '@/src/types/user';
 
 export const ROLE_HIERARCHY: Record<UserRole, number> = {
@@ -216,6 +217,50 @@ export const getDefaultPermissionsByRole = (role: UserRole | undefined): UserPer
   return {};
 };
 
+/**
+ * Decision explicita para cada departamento de servicio.
+ *
+ * Un departamento de SERVICIO es una etiqueta organizacional; un departamento
+ * de PERMISO es una capacidad del sistema. No son la misma lista y no deben serlo.
+ *
+ * null  -> mapeado en assignmentToPermissions()
+ * string -> deliberadamente sin permisos derivados; el string es el motivo.
+ *
+ * Espejo en functions/src/shared/derived-permissions.ts. Copia fiel, sin
+ * "mejoras" -- misma razon que assignmentToPermissions arriba.
+ */
+export const SERVICE_DEPARTMENT_PERMISSION_DECISIONS: Record<UserServiceDepartment, string | null> = {
+  limpieza: null,
+  tesoreria: null,
+  predicacion: null,
+  reuniones: null,
+  discursos: null,
+  acomodadores_microfonos: null,
+  asignaciones: null,
+  hospitalidad: null,
+  territorios: null,
+  literatura: 'Sin modulo en la app: un permiso hacia el no gatea nada.',
+  mantenimiento: 'Sin modulo en la app: un permiso hacia el no gatea nada.',
+  audio_video: 'Es un rol dentro de la lista de acomodadores, no un modulo propio.',
+  usuarios: 'DELIBERADO por seguridad: ver nota abajo. Delegacion solo explicita.',
+  configuracion: 'DELIBERADO por seguridad: misma razon que usuarios.',
+  coordinacion:
+    'Ya recibe acceso global via hasGlobalScreenAccess()/canManageDepartments(), que ' +
+    'evaluan la posicion "coordinador" sin importar el departamento. Mapearlo aqui ' +
+    'duplicaria un camino que ya esta cubierto.',
+  secretaria:
+    'Ya recibe acceso global via hasGlobalScreenAccess()/canManageDepartments(), que ' +
+    'evaluan la posicion "secretario" sin importar el departamento. Mapearlo aqui ' +
+    'duplicaria un camino que ya esta cubierto.',
+};
+
+// NOTA DE SEGURIDAD sobre 'usuarios' y 'configuracion':
+// hasPermission('usuarios', ...) gatea crear, editar y borrar usuarios, y
+// MODIFICAR LOS PERMISOS DE OTROS (rules_src/06-user-permissions.rules:20-30).
+// Derivarlo de un cargo convertiria "asignar encargado de usuarios" en una
+// escalada de privilegios silenciosa: esa persona podria otorgarse cualquier
+// permiso a si misma. La delegacion aqui es explicita a proposito.
+
 // Espejo (Fase 0) en functions/src/shared/derived-permissions.ts. Esta tabla
 // solo existia aqui, en el frontend, por eso rules y functions nunca veian lo
 // que un auxiliar/encargado deberia poder hacer. Si esta tabla cambia, cambiar
@@ -290,7 +335,22 @@ const assignmentToPermissions = (assignment: Pick<UserServiceAssignment, 'positi
     };
   }
 
-  if (assignment.position === 'encargado' && assignment.department === 'acomodadores_microfonos') {
+  if (assignment.position === 'encargado' && assignment.department === 'asignaciones') {
+    return {
+      asignaciones: { view: true, create: true, edit: true, delete: true, manage: true },
+    };
+  }
+
+  if (assignment.position === 'auxiliar' && assignment.department === 'asignaciones') {
+    return {
+      asignaciones: { view: true, edit: true },
+    };
+  }
+
+  if (
+    assignment.position === 'encargado' &&
+    (assignment.department === 'acomodadores_microfonos' || assignment.department === 'hospitalidad')
+  ) {
     return {
       acomodadores_microfonos: { view: true, create: true, edit: true, manage: true },
       asignaciones: { view: true, create: true, edit: true, manage: true },
@@ -298,7 +358,10 @@ const assignmentToPermissions = (assignment: Pick<UserServiceAssignment, 'positi
     };
   }
 
-  if (assignment.position === 'auxiliar' && assignment.department === 'acomodadores_microfonos') {
+  if (
+    assignment.position === 'auxiliar' &&
+    (assignment.department === 'acomodadores_microfonos' || assignment.department === 'hospitalidad')
+  ) {
     return {
       acomodadores_microfonos: { view: true, edit: true },
       asignaciones: { view: true, edit: true },
@@ -306,7 +369,19 @@ const assignmentToPermissions = (assignment: Pick<UserServiceAssignment, 'positi
     };
   }
 
-  return {};
+  const permissions: UserPermissions = {};
+
+  if (__DEV__ && Object.keys(permissions).length === 0 && assignment.department) {
+    const decision = SERVICE_DEPARTMENT_PERMISSION_DECISIONS[assignment.department];
+    if (decision === null) {
+      console.warn(
+        `[permissions] '${assignment.department}' esta marcado como mapeado pero devolvio {}. ` +
+        `Revisa assignmentToPermissions().`
+      );
+    }
+  }
+
+  return permissions;
 };
 
 export const getPermissionsFromServiceAssignments = (

@@ -112,6 +112,68 @@ export const mergePermissions = (
     return merged;
   }, {});
 
+// Espejo exacto de UserServiceDepartment en src/types/user/index.ts. Solo para
+// tipar SERVICE_DEPARTMENT_PERMISSION_DECISIONS abajo -- este modulo es PURO y
+// no puede importar el tipo real del proyecto frontend.
+type UserServiceDepartment =
+  | 'coordinacion'
+  | 'secretaria'
+  | 'limpieza'
+  | 'literatura'
+  | 'tesoreria'
+  | 'mantenimiento'
+  | 'discursos'
+  | 'reuniones'
+  | 'predicacion'
+  | 'territorios'
+  | 'asignaciones'
+  | 'hospitalidad'
+  | 'usuarios'
+  | 'configuracion'
+  | 'audio_video'
+  | 'acomodadores_microfonos';
+
+/**
+ * Decision explicita para cada departamento de servicio. Espejo exacto de
+ * SERVICE_DEPARTMENT_PERMISSION_DECISIONS en
+ * src/utils/permissions/permissions.ts. Copia fiel, sin "mejoras" -- misma
+ * razon que assignmentToPermissions abajo.
+ *
+ * null  -> mapeado en assignmentToPermissions()
+ * string -> deliberadamente sin permisos derivados; el string es el motivo.
+ */
+export const SERVICE_DEPARTMENT_PERMISSION_DECISIONS: Record<UserServiceDepartment, string | null> = {
+  limpieza: null,
+  tesoreria: null,
+  predicacion: null,
+  reuniones: null,
+  discursos: null,
+  acomodadores_microfonos: null,
+  asignaciones: null,
+  hospitalidad: null,
+  territorios: null,
+  literatura: 'Sin modulo en la app: un permiso hacia el no gatea nada.',
+  mantenimiento: 'Sin modulo en la app: un permiso hacia el no gatea nada.',
+  audio_video: 'Es un rol dentro de la lista de acomodadores, no un modulo propio.',
+  usuarios: 'DELIBERADO por seguridad: ver nota abajo. Delegacion solo explicita.',
+  configuracion: 'DELIBERADO por seguridad: misma razon que usuarios.',
+  coordinacion:
+    'Ya recibe acceso global via hasGlobalScreenAccess()/canManageDepartments(), que ' +
+    'evaluan la posicion "coordinador" sin importar el departamento. Mapearlo aqui ' +
+    'duplicaria un camino que ya esta cubierto.',
+  secretaria:
+    'Ya recibe acceso global via hasGlobalScreenAccess()/canManageDepartments(), que ' +
+    'evaluan la posicion "secretario" sin importar el departamento. Mapearlo aqui ' +
+    'duplicaria un camino que ya esta cubierto.',
+};
+
+// NOTA DE SEGURIDAD sobre 'usuarios' y 'configuracion':
+// hasPermission('usuarios', ...) gatea crear, editar y borrar usuarios, y
+// MODIFICAR LOS PERMISOS DE OTROS (rules_src/06-user-permissions.rules:20-30).
+// Derivarlo de un cargo convertiria "asignar encargado de usuarios" en una
+// escalada de privilegios silenciosa: esa persona podria otorgarse cualquier
+// permiso a si misma. La delegacion aqui es explicita a proposito.
+
 // Tabla completa position x department -> permisos otorgados. Espejo exacto de
 // assignmentToPermissions en src/utils/permissions/permissions.ts:219-305.
 export const assignmentToPermissions = (assignment: ServiceAssignmentLike): UserPermissions => {
@@ -183,7 +245,22 @@ export const assignmentToPermissions = (assignment: ServiceAssignmentLike): User
     };
   }
 
-  if (assignment.position === 'encargado' && assignment.department === 'acomodadores_microfonos') {
+  if (assignment.position === 'encargado' && assignment.department === 'asignaciones') {
+    return {
+      asignaciones: { view: true, create: true, edit: true, delete: true, manage: true },
+    };
+  }
+
+  if (assignment.position === 'auxiliar' && assignment.department === 'asignaciones') {
+    return {
+      asignaciones: { view: true, edit: true },
+    };
+  }
+
+  if (
+    assignment.position === 'encargado' &&
+    (assignment.department === 'acomodadores_microfonos' || assignment.department === 'hospitalidad')
+  ) {
     return {
       acomodadores_microfonos: { view: true, create: true, edit: true, manage: true },
       asignaciones: { view: true, create: true, edit: true, manage: true },
@@ -191,7 +268,10 @@ export const assignmentToPermissions = (assignment: ServiceAssignmentLike): User
     };
   }
 
-  if (assignment.position === 'auxiliar' && assignment.department === 'acomodadores_microfonos') {
+  if (
+    assignment.position === 'auxiliar' &&
+    (assignment.department === 'acomodadores_microfonos' || assignment.department === 'hospitalidad')
+  ) {
     return {
       acomodadores_microfonos: { view: true, edit: true },
       asignaciones: { view: true, edit: true },

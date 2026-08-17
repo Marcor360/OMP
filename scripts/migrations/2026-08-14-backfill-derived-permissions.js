@@ -27,6 +27,13 @@
 //
 // Dry-run por defecto; requiere --apply para escribir.
 //
+// Desglose de cobertura (actualizado tras el PR de cobertura explicita de la
+// tabla de derivacion): ademas del conteo por servicePosition, agrupa por
+// serviceDepartment y contrasta cada departamento vacio contra
+// SERVICE_DEPARTMENT_PERMISSION_DECISIONS -- si aparece un departamento con
+// derivedPermissions vacio que esa tabla NO documenta como deliberado (motivo
+// != null), es un hueco real y Fase 1 no debe desplegarse hasta cerrarlo.
+//
 // PREREQUISITO: este script requiere el build compilado de functions/.
 // Correr primero:
 //   cd functions && npm run build
@@ -43,6 +50,7 @@ const { getFirestore } = require('firebase-admin/firestore');
 const {
   getPermissionsFromServiceAssignments,
   permissionsEqual,
+  SERVICE_DEPARTMENT_PERMISSION_DECISIONS,
 } = require('../../functions/lib/shared/derived-permissions.js');
 
 const PAGE_SIZE = 300;
@@ -69,15 +77,17 @@ const buildAssignmentInput = (data) => ({
 
 // Mismos assignments que arma internamente getPermissionsFromServiceAssignments,
 // solo para el desglose de cobertura (no participan en el calculo de permisos).
-const listAssignmentPositions = (input) => {
-  const positions = [];
-  if (input.servicePosition) positions.push(input.servicePosition);
+const listAssignments = (input) => {
+  const assignments = [];
+  if (input.servicePosition) {
+    assignments.push({ position: input.servicePosition, department: input.serviceDepartment });
+  }
   (input.serviceAssignments ?? []).forEach((assignment) => {
     if (assignment && typeof assignment.position === 'string' && assignment.position) {
-      positions.push(assignment.position);
+      assignments.push({ position: assignment.position, department: assignment.department });
     }
   });
-  return positions;
+  return assignments;
 };
 
 const main = async () => {
@@ -90,10 +100,14 @@ const main = async () => {
 
   const report = { processed: 0, migrated: 0, alreadyMigrated: 0, failed: 0 };
   // Desglose clave: usuarios con cargo (servicePosition o serviceAssignments)
-  // cuyo derivedPermissions calculado queda VACIO. Es el hueco conocido de
-  // assignmentToPermissions (7 de 16 departamentos sin mapear, 'apoyo' sin
-  // mapear en ninguno) y el insumo para decidir si Fase 1 puede desplegarse.
+  // cuyo derivedPermissions calculado queda VACIO. Con las decisiones de
+  // SERVICE_DEPARTMENT_PERMISSION_DECISIONS ya explicitas, cada departamento
+  // vacio DEBE tener un motivo documentado (string) alli. Si aparece uno con
+  // motivo null (o ausente de la tabla), es un hueco real: Fase 1 no debe
+  // desplegarse hasta cerrarlo.
   const emptyByPosition = {};
+  const emptyByDepartment = {};
+  const undocumentedGaps = new Set();
 
   let cursor = null;
   let batch = firestore.batch();
@@ -121,10 +135,26 @@ const main = async () => {
       const derived = getPermissionsFromServiceAssignments(input);
       const stored = data.derivedPermissions ?? null;
 
-      const positions = listAssignmentPositions(input);
-      if (positions.length > 0 && Object.keys(derived).length === 0) {
-        positions.forEach((position) => {
+      const assignments = listAssignments(input);
+      if (assignments.length > 0 && Object.keys(derived).length === 0) {
+        assignments.forEach(({ position, department }) => {
           emptyByPosition[position] = (emptyByPosition[position] ?? 0) + 1;
+
+          if (!department) return;
+          emptyByDepartment[department] = (emptyByDepartment[department] ?? 0) + 1;
+
+          const decision = Object.prototype.hasOwnProperty.call(
+            SERVICE_DEPARTMENT_PERMISSION_DECISIONS,
+            department
+          )
+            ? SERVICE_DEPARTMENT_PERMISSION_DECISIONS[department]
+            : undefined;
+          // null = mapeado deliberadamente (aqui no deberia dar vacio, pero eso
+          // se contrasta en PR C/tests, no en produccion). undefined = fuera de
+          // la tabla. string = motivo documentado para estar vacio: esperado.
+          if (decision === undefined || decision === null) {
+            undocumentedGaps.add(department);
+          }
         });
       }
 
@@ -162,6 +192,24 @@ const main = async () => {
   console.log({ mode: apply ? 'apply' : 'dry-run', ...report });
   console.log('Usuarios con cargo y derivedPermissions vacio, por servicePosition:');
   console.log(emptyByPosition);
+  console.log('Usuarios con cargo y derivedPermissions vacio, por serviceDepartment:');
+  console.log(emptyByDepartment);
+
+  if (undocumentedGaps.size > 0) {
+    console.error(
+      '[derived-permissions] HUECO NO DOCUMENTADO: los siguientes departamentos quedan ' +
+        'con derivedPermissions vacio sin una decision (null o motivo) registrada en ' +
+        'SERVICE_DEPARTMENT_PERMISSION_DECISIONS. Fase 1 NO debe desplegarse hasta ' +
+        'cerrarlo:',
+      Array.from(undocumentedGaps)
+    );
+    process.exitCode = 1;
+  } else {
+    console.log(
+      '[derived-permissions] Cada departamento vacio corresponde a una decision ' +
+        'documentada en SERVICE_DEPARTMENT_PERMISSION_DECISIONS. Sin huecos.'
+    );
+  }
 };
 
 main().catch((error) => {

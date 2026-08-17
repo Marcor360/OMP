@@ -9,9 +9,11 @@ import {
   canViewOrgChart,
   getDefaultPermissionsByRole,
   getEffectivePermissions,
+  getPermissionsFromServiceAssignments,
   hasPermission,
   hasRole,
 } from '@/src/utils/permissions/permissions';
+import { USER_SERVICE_DEPARTMENTS } from '@/src/types/user';
 
 describe('permissions utilities', () => {
   it('orders technical roles without organizational privilege assumptions', () => {
@@ -175,5 +177,96 @@ describe('permissions utilities', () => {
 
   it('keeps org chart visible to active congregation users', () => {
     expect(canViewOrgChart({ isActive: true, congregationId: 'c1' })).toBe(true);
+  });
+
+  describe('service department permission coverage (PR A)', () => {
+    const derive = (position: string, department: string) =>
+      getPermissionsFromServiceAssignments({
+        servicePosition: position as never,
+        serviceDepartment: department as never,
+        serviceAssignments: [],
+      });
+
+    it('maps encargado:asignaciones to full asignaciones control', () => {
+      expect(derive('encargado', 'asignaciones')).toEqual({
+        asignaciones: { view: true, create: true, edit: true, delete: true, manage: true },
+      });
+    });
+
+    it('maps auxiliar:asignaciones to limited asignaciones control', () => {
+      expect(derive('auxiliar', 'asignaciones')).toEqual({
+        asignaciones: { view: true, edit: true },
+      });
+    });
+
+    it('treats hospitalidad as an exact alias of acomodadores_microfonos', () => {
+      expect(derive('encargado', 'hospitalidad')).toEqual(
+        derive('encargado', 'acomodadores_microfonos')
+      );
+      expect(derive('auxiliar', 'hospitalidad')).toEqual(
+        derive('auxiliar', 'acomodadores_microfonos')
+      );
+    });
+
+    it('derives no permissions for usuarios or configuracion regardless of position', () => {
+      expect(derive('encargado', 'usuarios')).toEqual({});
+      expect(derive('encargado', 'configuracion')).toEqual({});
+    });
+
+    it('derives no permissions for the apoyo position across every service department', () => {
+      USER_SERVICE_DEPARTMENTS.forEach((department) => {
+        expect(derive('apoyo', department)).toEqual({});
+      });
+    });
+
+    it('keeps the six previously-mapped departments producing the same permissions as before this PR', () => {
+      expect(derive('encargado', 'limpieza')).toEqual({
+        limpieza: { view: true, create: true, edit: true, delete: true, manage: true },
+      });
+      expect(derive('auxiliar', 'limpieza')).toEqual({
+        limpieza: { view: true, edit: true },
+      });
+
+      expect(derive('encargado', 'tesoreria')).toEqual({
+        tesoreria: { view: true, create: true, edit: true, delete: true, manage: true },
+        pagos: { view: true, create: true, approve: true, manage: true },
+      });
+      expect(derive('auxiliar', 'tesoreria')).toEqual({
+        tesoreria: { view: true, create: true, edit: true },
+        pagos: { view: true },
+      });
+
+      expect(derive('encargado', 'predicacion')).toEqual({
+        predicacion: { view: true, approve: true, export: true, manage: true },
+      });
+      expect(derive('auxiliar', 'predicacion')).toEqual({
+        predicacion: { view: true, export: true },
+      });
+
+      expect(derive('encargado', 'reuniones')).toEqual({
+        reuniones: { view: true, create: true, edit: true, delete: true, manage: true },
+      });
+      expect(derive('auxiliar', 'reuniones')).toEqual({
+        reuniones: { view: true, edit: true },
+      });
+
+      expect(derive('encargado', 'discursos')).toEqual({
+        asignaciones: { view: true, create: true, edit: true, delete: true, manage: true },
+      });
+      expect(derive('auxiliar', 'discursos')).toEqual({
+        asignaciones: { view: true, edit: true },
+      });
+
+      expect(derive('encargado', 'acomodadores_microfonos')).toEqual({
+        acomodadores_microfonos: { view: true, create: true, edit: true, manage: true },
+        asignaciones: { view: true, create: true, edit: true, manage: true },
+        reuniones: { view: true, edit: true },
+      });
+      expect(derive('auxiliar', 'acomodadores_microfonos')).toEqual({
+        acomodadores_microfonos: { view: true, edit: true },
+        asignaciones: { view: true, edit: true },
+        reuniones: { view: true, edit: true },
+      });
+    });
   });
 });
