@@ -223,7 +223,6 @@ const NavigationThemes = {
 
 function AppLayout() {
   const { colorScheme, isReady } = useAppTheme();
-  const colors = getAppColors(colorScheme);
   const [forceReady, setForceReady] = useState(false);
   const [persistentCacheReady, setPersistentCacheReady] = useState(false);
 
