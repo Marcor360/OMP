@@ -1,4 +1,4 @@
-import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
+import { Expo, ExpoPushMessage, ExpoPushReceipt, ExpoPushTicket } from 'expo-server-sdk';
 import { FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
@@ -7,6 +7,7 @@ import { adminDb } from '../../config/firebaseAdmin.js';
 
 const expo = new Expo();
 const DEFAULT_CHANNEL_ID = 'default';
+const MAX_PUSH_ATTEMPTS = 3;
 
 const triggerOptions = {
   region: 'us-central1' as const,
@@ -68,6 +69,29 @@ const deactivateTokenDoc = async (
       },
       { merge: true }
     );
+};
+
+const isDeviceNotRegisteredReceipt = (receipt: ExpoPushReceipt): boolean =>
+  receipt.status === 'error' && receipt.details?.error === 'DeviceNotRegistered';
+
+const isTransientError = (error: unknown): boolean => {
+  const status = typeof error === 'object' && error !== null && 'statusCode' in error
+    ? (error as { statusCode?: unknown }).statusCode : null;
+  return status === 429 || (typeof status === 'number' && status >= 500) ||
+    error instanceof Error && /timeout|network|temporar/i.test(error.message);
+};
+
+const sendWithRetry = async (messages: ExpoPushMessage[]): Promise<ExpoPushTicket[]> => {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await expo.sendPushNotificationsAsync(messages);
+    } catch (error) {
+      attempt += 1;
+      if (attempt >= MAX_PUSH_ATTEMPTS || !isTransientError(error)) throw error;
+      await new Promise<void>((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
+    }
+  }
 };
 
 export const sendExpoPushOnNotificationCreated = onDocumentCreated(
@@ -175,7 +199,8 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
 
     for (const chunk of chunks) {
       try {
-        const tickets = await expo.sendPushNotificationsAsync(chunk);
+        const tickets = await sendWithRetry(chunk);
+        const receiptToToken = new Map<string, string>();
 
         await Promise.all(
           tickets.map(async (ticket, index) => {
@@ -207,8 +232,49 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
                 details: ticket.details,
               });
             }
+            if (ticket.status === 'ok') {
+              receiptToToken.set(ticket.id, tokenValue);
+              const tokenDoc = tokenDocsByToken.get(tokenValue);
+              if (tokenDoc) {
+                await snapshot.ref.collection('pushReceipts').doc(ticket.id).set({
+                  userId: tokenDoc.userId,
+                  tokenDocId: tokenDoc.tokenDocId,
+                  congregationId,
+                  status: 'pending',
+                  attempts: 0,
+                  createdAt: FieldValue.serverTimestamp(),
+                  updatedAt: FieldValue.serverTimestamp(),
+                });
+              }
+            }
           })
         );
+        for (const receiptIds of expo.chunkPushNotificationReceiptIds(
+          Array.from(receiptToToken.keys())
+        )) {
+          const receipts = await expo.getPushNotificationReceiptsAsync(receiptIds);
+          await Promise.all(Object.entries(receipts).map(async ([receiptId, receipt]) => {
+            if (!isDeviceNotRegisteredReceipt(receipt)) return;
+            const tokenValue = receiptToToken.get(receiptId);
+            const tokenDoc = tokenValue ? tokenDocsByToken.get(tokenValue) : null;
+            if (tokenValue && tokenDoc?.tokenDocId) {
+              await deactivateTokenDoc(tokenDoc.userId, tokenDoc.tokenDocId, tokenValue);
+            }
+          }));
+          logger.info('Expo push receipts processed', {
+            congregationId,
+            notificationId,
+            receiptSuccessCount: Object.values(receipts).filter((receipt) => receipt.status === 'ok').length,
+            receiptErrorCount: Object.values(receipts).filter((receipt) => receipt.status === 'error').length,
+          });
+          await Promise.all(Object.entries(receipts).map(([receiptId, receipt]) =>
+            snapshot.ref.collection('pushReceipts').doc(receiptId).set({
+              status: receipt.status === 'ok' ? 'accepted' : 'error',
+              receiptError: receipt.status === 'error' ? receipt.details?.error ?? 'unknown' : null,
+              updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true })
+          ));
+        }
       } catch (error) {
         logger.error('Expo push chunk failed', {
           congregationId,
