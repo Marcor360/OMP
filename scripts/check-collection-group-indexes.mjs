@@ -14,6 +14,8 @@ const REQUIRED_FIELDS = {
   meetings: ['meetingDate', 'endDate', 'startDate'], tareas: ['dueDate'],
   tasks: ['dueDate'], archivos: ['endDate'], files: ['endDate'],
   notifications: ['createdAt'], billingHistory: ['createdAt'],
+  pushReceipts: ['status', 'nextCheckAt'],
+  pushDispatches: ['status', 'nextAttemptAt', 'leaseUntil'],
   private: ['stripeSubscriptionId'],
 };
 const DYNAMIC_ALLOWLIST = new Map([

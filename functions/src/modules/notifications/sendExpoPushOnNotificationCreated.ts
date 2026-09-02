@@ -1,9 +1,10 @@
 import { Expo, ExpoPushMessage, ExpoPushReceipt, ExpoPushTicket } from 'expo-server-sdk';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 
 import { adminDb } from '../../config/firebaseAdmin.js';
+import { durableBackoffMs, expoErrorCode, isPermanentExpoResult, isTransientTransportError, sanitizePushError } from './push-dispatch.helpers.js';
 
 const expo = new Expo();
 const DEFAULT_CHANNEL_ID = 'default';
@@ -74,13 +75,6 @@ const deactivateTokenDoc = async (
 const isDeviceNotRegisteredReceipt = (receipt: ExpoPushReceipt): boolean =>
   receipt.status === 'error' && receipt.details?.error === 'DeviceNotRegistered';
 
-const isTransientError = (error: unknown): boolean => {
-  const status = typeof error === 'object' && error !== null && 'statusCode' in error
-    ? (error as { statusCode?: unknown }).statusCode : null;
-  return status === 429 || (typeof status === 'number' && status >= 500) ||
-    error instanceof Error && /timeout|network|temporar/i.test(error.message);
-};
-
 const sendWithRetry = async (messages: ExpoPushMessage[]): Promise<ExpoPushTicket[]> => {
   let attempt = 0;
   while (true) {
@@ -88,7 +82,7 @@ const sendWithRetry = async (messages: ExpoPushMessage[]): Promise<ExpoPushTicke
       return await expo.sendPushNotificationsAsync(messages);
     } catch (error) {
       attempt += 1;
-      if (attempt >= MAX_PUSH_ATTEMPTS || !isTransientError(error)) throw error;
+      if (attempt >= MAX_PUSH_ATTEMPTS || !isTransientTransportError(error)) throw error;
       await new Promise<void>((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
     }
   }
@@ -140,6 +134,7 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
       string,
       { userId: string; tokenDocId: string }
     >();
+    const tokenLookupFailedUsers: string[] = [];
 
     await Promise.all(
       userIds.map(async (userId) => {
@@ -160,6 +155,7 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
           });
 
         } catch (error) {
+          tokenLookupFailedUsers.push(userId);
           logger.error('Failed to read Expo push tokens for user', {
             congregationId,
             notificationId,
@@ -170,7 +166,41 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
       })
     );
 
-    const messages: ExpoPushMessage[] = Array.from(tokenDocsByToken.keys()).map(
+    const notificationRef = snapshot.ref;
+    const dispatchRefsByToken = new Map<string, DocumentReference>();
+    const claimedTokens: string[] = [];
+    await Promise.all(Array.from(tokenDocsByToken.entries()).map(async ([token, tokenDoc]) => {
+      const dispatchRef = notificationRef.collection('pushDispatches').doc(tokenDoc.tokenDocId);
+      const claimed = await adminDb.runTransaction(async (transaction) => {
+        const current = await transaction.get(dispatchRef);
+        if (current.exists) return false;
+        const now = Timestamp.now();
+        transaction.create(dispatchRef, {
+          notificationId, congregationId, dispatchId: dispatchRef.id,
+          userId: tokenDoc.userId, tokenDocId: tokenDoc.tokenDocId,
+          status: 'processing', attempts: 1, nextAttemptAt: now,
+          processingStartedAt: now, leaseUntil: Timestamp.fromMillis(now.toMillis() + 120_000),
+          createdAt: now, updatedAt: now, lastErrorClass: null, lastErrorMessage: null,
+        });
+        return true;
+      });
+      if (claimed) {
+        claimedTokens.push(token);
+        dispatchRefsByToken.set(token, dispatchRef);
+      }
+    }));
+
+    await Promise.all(tokenLookupFailedUsers.map((userId) =>
+      notificationRef.collection('pushDispatches').doc(`resolve-${userId}`).set({
+        notificationId, congregationId, dispatchId: `resolve-${userId}`,
+        userId, tokenDocId: '', status: 'pending', attempts: 0,
+        nextAttemptAt: Timestamp.fromMillis(Date.now() + 60_000),
+        createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+        lastErrorClass: 'token_lookup', lastErrorMessage: 'Active token lookup failed',
+      }, { merge: false })
+    ));
+
+    const messages: ExpoPushMessage[] = claimedTokens.map(
       (token) => ({
         to: token,
         title,
@@ -221,10 +251,23 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
                   tokenValue
                 );
               }
+              await dispatchRefsByToken.get(tokenValue)?.set({ status: 'permanent_error', leaseUntil: FieldValue.delete(), lastErrorClass: 'DeviceNotRegistered', updatedAt: FieldValue.serverTimestamp() }, { merge: true });
               return;
             }
 
             if (ticket.status === 'error') {
+              const code = expoErrorCode(ticket) ?? 'unknown';
+              const dispatchRef = dispatchRefsByToken.get(tokenValue);
+              if (dispatchRef) {
+                await dispatchRef.set(isPermanentExpoResult(ticket) ? {
+                  status: 'permanent_error', leaseUntil: FieldValue.delete(), lastErrorClass: code,
+                  lastErrorMessage: sanitizePushError(ticket.message), updatedAt: FieldValue.serverTimestamp(),
+                } : {
+                  status: 'pending', leaseUntil: FieldValue.delete(), lastErrorClass: code,
+                  lastErrorMessage: sanitizePushError(ticket.message),
+                  nextAttemptAt: Timestamp.fromMillis(Date.now() + durableBackoffMs(1)), updatedAt: FieldValue.serverTimestamp(),
+                }, { merge: true });
+              }
               logger.error('Expo push ticket failed', {
                 congregationId,
                 notificationId,
@@ -236,12 +279,16 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
               receiptToToken.set(ticket.id, tokenValue);
               const tokenDoc = tokenDocsByToken.get(tokenValue);
               if (tokenDoc) {
+                await dispatchRefsByToken.get(tokenValue)?.set({ status: 'sent', ticketId: ticket.id, leaseUntil: FieldValue.delete(), sentAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
                 await snapshot.ref.collection('pushReceipts').doc(ticket.id).set({
                   userId: tokenDoc.userId,
                   tokenDocId: tokenDoc.tokenDocId,
                   congregationId,
+                  notificationId,
+                  dispatchId: tokenDoc.tokenDocId,
                   status: 'pending',
                   attempts: 0,
+                  nextCheckAt: Timestamp.fromMillis(Date.now() + 60_000),
                   createdAt: FieldValue.serverTimestamp(),
                   updatedAt: FieldValue.serverTimestamp(),
                 });
@@ -254,11 +301,16 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
         )) {
           const receipts = await expo.getPushNotificationReceiptsAsync(receiptIds);
           await Promise.all(Object.entries(receipts).map(async ([receiptId, receipt]) => {
-            if (!isDeviceNotRegisteredReceipt(receipt)) return;
             const tokenValue = receiptToToken.get(receiptId);
             const tokenDoc = tokenValue ? tokenDocsByToken.get(tokenValue) : null;
-            if (tokenValue && tokenDoc?.tokenDocId) {
+            if (isDeviceNotRegisteredReceipt(receipt) && tokenValue && tokenDoc?.tokenDocId) {
               await deactivateTokenDoc(tokenDoc.userId, tokenDoc.tokenDocId, tokenValue);
+            }
+            if (receipt.status === 'error' && !isPermanentExpoResult(receipt) && tokenDoc) {
+              await snapshot.ref.collection('pushDispatches').doc(tokenDoc.tokenDocId).set({
+                status: 'pending', nextAttemptAt: Timestamp.fromMillis(Date.now() + durableBackoffMs(1)),
+                lastErrorClass: expoErrorCode(receipt) ?? 'receipt_transient', updatedAt: FieldValue.serverTimestamp(),
+              }, { merge: true });
             }
           }));
           logger.info('Expo push receipts processed', {
@@ -276,10 +328,23 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
           ));
         }
       } catch (error) {
+        const transient = isTransientTransportError(error);
+        await Promise.all(chunk.map(async (message) => {
+          const tokenValue = Array.isArray(message.to) ? message.to[0] : message.to;
+          const dispatchRef = typeof tokenValue === 'string' ? dispatchRefsByToken.get(tokenValue) : null;
+          if (!dispatchRef) return;
+          await dispatchRef.set(transient ? {
+            status: 'pending', leaseUntil: FieldValue.delete(), nextAttemptAt: Timestamp.fromMillis(Date.now() + durableBackoffMs(1)),
+            lastErrorClass: 'transport', lastErrorMessage: sanitizePushError(error), updatedAt: FieldValue.serverTimestamp(),
+          } : {
+            status: 'permanent_error', leaseUntil: FieldValue.delete(), lastErrorClass: 'transport_permanent',
+            lastErrorMessage: sanitizePushError(error), updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }));
         logger.error('Expo push chunk failed', {
           congregationId,
           notificationId,
-          error,
+          error: sanitizePushError(error),
         });
       }
     }

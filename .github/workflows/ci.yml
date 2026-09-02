@@ -29,6 +29,8 @@ jobs:
         run: npx tsc --noEmit
       - name: Unit tests
         run: npm test -- --coverage --runInBand
+      - name: Expo dependency compatibility
+        run: npx expo install --check
       - name: Expo Doctor
         run: npx expo-doctor
       - name: Build web

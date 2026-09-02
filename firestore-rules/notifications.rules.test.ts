@@ -118,6 +118,12 @@ beforeEach(async () => {
         type: 'assignment',
         isRead: false,
       }),
+      setDoc(doc(db, 'congregations/c1/notifications/event-member/pushReceipts/receipt-1'), {
+        status: 'pending', attempts: 0,
+      }),
+      setDoc(doc(db, 'congregations/c1/notifications/event-member/pushDispatches/dispatch-1'), {
+        status: 'pending', attempts: 0,
+      }),
       // F0.5: sin `permissions`, solo derivedPermissions (como lo dejaria el
       // trigger de Fase 0 para un encargado/auxiliar de avisos).
       setDoc(doc(db, 'users/avisosEditorDerived'), {
@@ -219,5 +225,24 @@ describe('notification read rules', () => {
       doc(authedDb('member'), 'congregations/c1/notifications/event-member'),
       { isRead: true, readAt: serverTimestamp(), title: 'Alterado' }
     ));
+  });
+});
+
+describe('internal push delivery metadata', () => {
+  const assertInternalPathDenied = async (collectionName: 'pushReceipts' | 'pushDispatches', id: string) => {
+    const path = `congregations/c1/notifications/event-member/${collectionName}/${id}`;
+    const db = authedDb('member');
+    await assertFails(getDoc(doc(db, path)));
+    await assertFails(setDoc(doc(db, path), { status: 'accepted', attempts: 99 }));
+    await assertFails(updateDoc(doc(db, path), { status: 'accepted' }));
+    await assertFails(deleteDoc(doc(db, path)));
+  };
+
+  it('denies all client access to pushReceipts', async () => {
+    await assertInternalPathDenied('pushReceipts', 'receipt-1');
+  });
+
+  it('denies all client access to pushDispatches', async () => {
+    await assertInternalPathDenied('pushDispatches', 'dispatch-1');
   });
 });

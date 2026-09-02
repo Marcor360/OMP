@@ -66,6 +66,16 @@
           );
 
         allow delete: if isAdmin() && sameCongregation(congregationId);
+
+        // Metadata interna de entrega Expo; únicamente Admin SDK la administra.
+        match /pushReceipts/{receiptId} {
+          allow read, write: if false;
+        }
+
+        // Outbox interno de entrega push; únicamente Admin SDK lo administra.
+        match /pushDispatches/{dispatchId} {
+          allow read, write: if false;
+        }
       }
 
       // -----------------------------------------------------------------------

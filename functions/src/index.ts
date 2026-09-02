@@ -30,6 +30,7 @@ export {
   sendExpoPushOnNotificationCreated,
 } from './modules/notifications/sendExpoPushOnNotificationCreated.js';
 export { processPendingExpoPushReceipts } from './modules/notifications/processExpoPushReceipts.js';
+export { processPendingExpoPushDispatches } from './modules/notifications/processPendingExpoPushDispatches.js';
 
 export { setMeetingPublicationStatus } from './meetings-publication.js';
 export {

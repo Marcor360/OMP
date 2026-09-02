@@ -13,101 +13,29 @@ import { getFunctions } from 'firebase/functions';
 import { Platform } from 'react-native';
 
 import { logFirestoreConfig } from '@/src/services/firebase/firestore-debug';
+import { resolveFirebaseConfigValues } from '@/src/lib/firebase/firebase-config';
 
 const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__ === true;
 
 // Valores del proyecto de desarrollo por defecto. La apiKey web no es secreta
 // (identificador publico protegido por Rules + App Check); el riesgo real es
 // conectar en silencio a este proyecto cuando faltan las env vars de produccion.
-const DEV_FALLBACK_FIREBASE_CONFIG = {
-  apiKey: 'AIzaSyDPIp_Omy9GrNyCdmIgLz2RK4IjEfWpMnA',
-  authDomain: 'ormeprassig-public.firebaseapp.com',
-  projectId: 'ormeprassig-public',
-  storageBucket: 'ormeprassig-public.firebasestorage.app',
-  messagingSenderId: '525513661085',
-  appId: '1:525513661085:web:bb6db6d331f3e864e89274',
-} as const;
-
 // Nota: Expo solo inlinea env vars EXPO_PUBLIC_* cuando el acceso es estatico
 // (process.env.EXPO_PUBLIC_X). Por eso cada variable se lee de forma literal
 // en vez de con un bucle dinamico (process.env[key] no se reemplaza en build).
-const resolveFirebaseValue = (
-  envKey: string,
-  envValue: string | undefined,
-  devFallback: string,
-  missingEnvKeys: string[]
-): string => {
-  if (typeof envValue === 'string' && envValue.trim().length > 0) {
-    return envValue;
-  }
-
-  if (isDevelopment) {
-    console.warn(`[firebase] Falta ${envKey}; usando valor de desarrollo por defecto.`);
-    return devFallback;
-  }
-
-  missingEnvKeys.push(envKey);
-  return devFallback;
-};
-
-type FirebaseConfigValues = Record<keyof typeof DEV_FALLBACK_FIREBASE_CONFIG, string>;
-
-type ResolvedFirebaseConfig = {
-  config: FirebaseConfigValues;
-  missingEnvKeys: string[];
-};
-
-const resolveFirebaseConfig = (): ResolvedFirebaseConfig => {
-  const missingEnvKeys: string[] = [];
-
-  const config = {
-    apiKey: resolveFirebaseValue(
-      'EXPO_PUBLIC_FIREBASE_API_KEY',
-      process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-      DEV_FALLBACK_FIREBASE_CONFIG.apiKey,
-      missingEnvKeys
-    ),
-    authDomain: resolveFirebaseValue(
-      'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN',
-      process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-      DEV_FALLBACK_FIREBASE_CONFIG.authDomain,
-      missingEnvKeys
-    ),
-    projectId: resolveFirebaseValue(
-      'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
-      process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-      DEV_FALLBACK_FIREBASE_CONFIG.projectId,
-      missingEnvKeys
-    ),
-    storageBucket: resolveFirebaseValue(
-      'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
-      process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      DEV_FALLBACK_FIREBASE_CONFIG.storageBucket,
-      missingEnvKeys
-    ),
-    messagingSenderId: resolveFirebaseValue(
-      'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
-      process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-      DEV_FALLBACK_FIREBASE_CONFIG.messagingSenderId,
-      missingEnvKeys
-    ),
-    appId: resolveFirebaseValue(
-      'EXPO_PUBLIC_FIREBASE_APP_ID',
-      process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
-      DEV_FALLBACK_FIREBASE_CONFIG.appId,
-      missingEnvKeys
-    ),
-  };
-
-  return { config, missingEnvKeys };
-};
-
-const { config: firebaseConfig, missingEnvKeys } = resolveFirebaseConfig();
+const { config: firebaseConfig, missingEnvKeys } = resolveFirebaseConfigValues({
+  EXPO_PUBLIC_FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  EXPO_PUBLIC_FIREBASE_PROJECT_ID: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  EXPO_PUBLIC_FIREBASE_APP_ID: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+}, isDevelopment);
 
 // Nunca lanzar durante la evaluacion del modulo: un throw aqui rompe el bundle
 // antes de montar React y la app nativa se cierra sin renderizar pantalla.
-// Se degrada al proyecto por defecto (que es el de produccion) y se expone el
-// fallo para que la UI pueda avisarlo.
+// En produccion se usan marcadores no funcionales y se expone el fallo para
+// que la UI muestre FatalConfigurationScreen; nunca conecta al fallback dev.
 export const firebaseConfigWarning: string | null =
   missingEnvKeys.length > 0
     ? `Configuracion de Firebase incompleta. Faltan variables de entorno: ${missingEnvKeys.join(', ')}`
