@@ -48,29 +48,6 @@ const getActivePushTokenDocs = async (
   return snap.docs;
 };
 
-const getProfileExpoTokens = async (
-  userId: string,
-  congregationId: string
-): Promise<string[]> => {
-  const snap = await adminDb.collection('users').doc(userId).get();
-  if (!snap.exists) return [];
-
-  const data = snap.data() as Record<string, unknown>;
-
-  if (asNonEmptyString(data.congregationId) !== congregationId) {
-    return [];
-  }
-
-  return [
-    ...asStringArray(data.notificationTokens),
-    ...asStringArray(data.expoPushTokens),
-    ...asStringArray(data.pushTokens),
-    asNonEmptyString(data.expoPushToken),
-    asNonEmptyString(data.pushToken),
-    asNonEmptyString(data.notificationToken),
-  ].filter((token): token is string => Boolean(token) && Expo.isExpoPushToken(token));
-};
-
 const deactivateTokenDoc = async (
   userId: string,
   tokenDocId: string,
@@ -85,26 +62,12 @@ const deactivateTokenDoc = async (
       {
         token,
         isActive: false,
-        deactivatedReason: 'DeviceNotRegistered',
+        invalidatedAt: FieldValue.serverTimestamp(),
+        lastError: 'DeviceNotRegistered',
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
-};
-
-const removeProfileToken = async (
-  userId: string,
-  token: string
-): Promise<void> => {
-  await adminDb.collection('users').doc(userId).set(
-    {
-      notificationTokens: FieldValue.arrayRemove(token),
-      expoPushTokens: FieldValue.arrayRemove(token),
-      pushTokens: FieldValue.arrayRemove(token),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
 };
 
 export const sendExpoPushOnNotificationCreated = onDocumentCreated(
@@ -172,15 +135,6 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
             });
           });
 
-          const profileTokens = await getProfileExpoTokens(userId, congregationId);
-          profileTokens.forEach((token) => {
-            if (!tokenDocsByToken.has(token)) {
-              tokenDocsByToken.set(token, {
-                userId,
-                tokenDocId: '',
-              });
-            }
-          });
         } catch (error) {
           logger.error('Failed to read Expo push tokens for user', {
             congregationId,
@@ -242,9 +196,6 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
                   tokenValue
                 );
               }
-              if (tokenDoc?.userId) {
-                await removeProfileToken(tokenDoc.userId, tokenValue);
-              }
               return;
             }
 
@@ -252,7 +203,6 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
               logger.error('Expo push ticket failed', {
                 congregationId,
                 notificationId,
-                token: tokenValue,
                 message: ticket.message,
                 details: ticket.details,
               });

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 
 import { useAuth } from '@/src/context/auth-context';
 import { syncCacheCleanupControl } from '@/src/services/cache/cache-control-service';
@@ -9,20 +10,26 @@ import { syncCacheCleanupControl } from '@/src/services/cache/cache-control-serv
  */
 export function useCacheControlCleanup(): void {
   const { loading, user } = useAuth();
-  const lastSyncedUidRef = useRef<string | null>(null);
+  const lastSyncedAtRef = useRef(0);
 
   useEffect(() => {
     if (loading) return;
 
     const uid = user?.uid ?? null;
-    if (!uid) {
-      lastSyncedUidRef.current = null;
-      return;
-    }
+    if (!uid) return;
 
-    if (lastSyncedUidRef.current === uid) return;
-    lastSyncedUidRef.current = uid;
+    const sync = (): void => {
+      // Una lectura al volver al foreground, con límite para rebotes de AppState.
+      if (Date.now() - lastSyncedAtRef.current < 60_000) return;
+      lastSyncedAtRef.current = Date.now();
+      void syncCacheCleanupControl();
+    };
 
-    void syncCacheCleanupControl();
+    sync();
+    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState === 'active') sync();
+    });
+
+    return () => subscription.remove();
   }, [loading, user?.uid]);
 }

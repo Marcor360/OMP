@@ -1,14 +1,6 @@
-import {
-  arrayRemove,
-  arrayUnion,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
+import { serverTimestamp, setDoc } from 'firebase/firestore';
 
-import {
-  userDocRef,
-  userPushTokenDocRef,
-} from '@/src/lib/firebase/refs';
+import { userPushTokenDocRef } from '@/src/lib/firebase/refs';
 import type {
   PushTokenDocumentPayload,
   PushTokenRepository,
@@ -42,32 +34,17 @@ export const firestorePushTokenRepository: PushTokenRepository = {
       return;
     }
 
-    await setDoc(
-      userDocRef(uid),
-      {
-        uid,
-        notificationTokens: arrayUnion(payload.token),
-        ...(payload.includePushTokenUpdatedAt
-          ? { pushTokenUpdatedAt: serverTimestamp() }
-          : {}),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    // Los tokens push canónicos viven únicamente en /users/{uid}/pushTokens.
+    // No persistir tokens nativos o arrays legacy en el perfil del usuario.
+    void uid;
+    void payload;
   },
 
   removePushToken: async (
     uid: string,
     payload: { token: string | null }
   ): Promise<void> => {
-    await setDoc(
-      userDocRef(uid),
-      {
-        ...(payload.token ? { notificationTokens: arrayRemove(payload.token) } : {}),
-        pushTokenUpdatedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    void uid;
+    void payload;
   },
 };

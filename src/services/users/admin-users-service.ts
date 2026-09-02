@@ -128,7 +128,7 @@ export const updateUserByAdmin = async (
       'updateUserByAdmin',
       payload
     );
-    invalidateCacheEntry(`users/${payload.uid}`);
+    await invalidateCacheEntry(`users/${payload.uid}`);
     clearSessionCacheByPrefix('query:users/');
     return result;
   } catch (error) {
@@ -145,7 +145,7 @@ export const updateUserByAdmin = async (
 export const disableUserByAdmin = async ({ uid }: ToggleUserByAdminPayload): Promise<void> => {
   try {
     await callFunction<ToggleUserByAdminPayload, unknown>('disableUserByAdmin', { uid });
-    invalidateCacheEntry(`users/${uid}`);
+    await invalidateCacheEntry(`users/${uid}`);
     clearSessionCacheByPrefix('query:users/');
   } catch (error) {
     if (isFunctionUnavailable(error)) {
@@ -161,7 +161,7 @@ export const disableUserByAdmin = async ({ uid }: ToggleUserByAdminPayload): Pro
 export const deleteUserByAdmin = async ({ uid }: ToggleUserByAdminPayload): Promise<void> => {
   try {
     await callFunction<ToggleUserByAdminPayload, unknown>('deleteUserByAdmin', { uid });
-    invalidateCacheEntry(`users/${uid}`);
+    await invalidateCacheEntry(`users/${uid}`);
     clearSessionCacheByPrefix('query:users/');
   } catch (error) {
     if (isFunctionUnavailable(error)) {

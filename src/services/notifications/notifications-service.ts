@@ -6,8 +6,6 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-import { firestorePushTokenRepository } from '@/src/services/repositories/firestore/firestore-push-token-repository';
-import type { PushTokenRepository } from '@/src/services/repositories/ports/push-token-repository.port';
 import { PermissionStatus } from '@/src/types/permissions.types';
 import {
   canUseRemotePushNotifications,
@@ -44,9 +42,7 @@ export interface LocalNotificationOptions {
   delaySeconds?: number;
 }
 
-type PushTokenSubscription = { remove: () => void };
 
-const NOOP = () => {};
 const EXPO_GO_UNSUPPORTED_MESSAGE =
   'Las notificaciones push remotas no estan disponibles en Expo Go. Usa una development build.';
 const WEB_UNSUPPORTED_MESSAGE =
@@ -58,18 +54,6 @@ let notificationsModulePromise: Promise<NotificationsModule | null> | null =
   null;
 let notificationsModuleOverride: NotificationsModule | null | undefined;
 let notificationHandlerConfigured = false;
-let pushTokenRepository: PushTokenRepository = firestorePushTokenRepository;
-
-export const __setPushTokenRepositoryForTests = (
-  repo: PushTokenRepository
-): void => {
-  pushTokenRepository = repo;
-};
-
-export const __resetPushTokenRepositoryForTests = (): void => {
-  pushTokenRepository = firestorePushTokenRepository;
-};
-
 export const __setNotificationsModuleForTests = (
   module: NotificationsModule | null
 ): void => {
@@ -162,19 +146,6 @@ const ensureAndroidChannels = async (
   });
 };
 
-const getNativeDevicePushToken = async (
-  Notifications: NotificationsModule
-): Promise<string | null> => {
-  try {
-    const tokenData = await Notifications.getDevicePushTokenAsync();
-    return typeof tokenData.data === 'string' && tokenData.data.trim().length > 0
-      ? tokenData.data.trim()
-      : null;
-  } catch {
-    return null;
-  }
-};
-
 export function configureNotificationHandler(): void {
   if (!canUseRemotePushNotifications || notificationHandlerConfigured) {
     return;
@@ -198,51 +169,6 @@ export function configureNotificationHandler(): void {
     notificationHandlerConfigured = true;
   })();
 }
-
-export const startPushTokenListener = (
-  callback: (token: string) => void
-): (() => void) => {
-  if (!canUseRemotePushNotifications) {
-    return NOOP;
-  }
-
-  let disposed = false;
-  let unsubscribe: () => void = NOOP;
-
-  void (async () => {
-    const Notifications = await loadNotificationsModule();
-    if (!Notifications || disposed) {
-      return;
-    }
-
-    const addListener = (
-      Notifications as unknown as {
-        addPushTokenListener?: (
-          cb: (event: { data?: unknown }) => void
-        ) => PushTokenSubscription;
-      }
-    ).addPushTokenListener;
-
-    if (typeof addListener !== 'function') {
-      return;
-    }
-
-    const subscription = addListener((event) => {
-      if (typeof event?.data === 'string' && event.data.trim().length > 0) {
-        callback(event.data.trim());
-      }
-    });
-
-    unsubscribe = () => {
-      subscription.remove();
-    };
-  })();
-
-  return () => {
-    disposed = true;
-    unsubscribe();
-  };
-};
 
 export async function getNotificationPermissionStatus(): Promise<PermissionStatus> {
   if (!canUseRemotePushNotifications) {
@@ -379,53 +305,6 @@ export async function registerForPushNotificationsAsync(): Promise<PushRegistrat
   }
 }
 
-export async function registerPushTokenForUser(
-  uid: string
-): Promise<string | null> {
-  if (!uid || uid.trim().length === 0) return null;
-  if (!canUseRemotePushNotifications) return null;
-
-  const status = await getNotificationPermissionStatus();
-  if (status !== 'granted') return null;
-
-  const Notifications = await loadNotificationsModule();
-  if (!Notifications) return null;
-
-  try {
-    await ensureAndroidChannels(Notifications);
-
-    const token = await getNativeDevicePushToken(Notifications);
-    if (!token) {
-      return null;
-    }
-
-    await pushTokenRepository.savePushToken(uid, {
-      kind: 'userProfile',
-      token,
-      includePushTokenUpdatedAt: true,
-    });
-
-    return token;
-  } catch {
-    return null;
-  }
-}
-
-export async function unregisterPushToken(uid: string): Promise<void> {
-  if (!uid || uid.trim().length === 0) return;
-  if (!canUseRemotePushNotifications) return;
-
-  const Notifications = await loadNotificationsModule();
-  if (!Notifications) return;
-
-  try {
-    const token = await getNativeDevicePushToken(Notifications);
-    await pushTokenRepository.removePushToken(uid, { token });
-  } catch {
-    // Silent fallback: user could be deleted or permissions unavailable.
-  }
-}
-
 export async function clearDeliveredNotificationsAndBadge(): Promise<void> {
   if (!canUseRemotePushNotifications) return;
 
@@ -478,12 +357,15 @@ export async function scheduleLocalNotification({
   if (!Notifications) return null;
 
   try {
+    await ensureAndroidChannels(Notifications);
+
     const id = await Notifications.scheduleNotificationAsync({
       content: {
         title,
         body,
         data,
         sound: 'default',
+        ...(Platform.OS === 'android' ? { channelId } : {}),
       },
       trigger:
         delaySeconds > 0
@@ -493,13 +375,6 @@ export async function scheduleLocalNotification({
             }
           : null,
     });
-
-    if (Platform.OS === 'android' && channelId !== 'default') {
-      await Notifications.setNotificationChannelAsync(channelId, {
-        name: channelId,
-        importance: Notifications.AndroidImportance.DEFAULT,
-      });
-    }
 
     return id;
   } catch {

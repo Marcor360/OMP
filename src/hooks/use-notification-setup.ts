@@ -10,7 +10,10 @@ import {
   syncNativeUnreadNotifications,
 } from '@/src/services/notifications/notifications-service';
 import { subscribeToUnreadNotificationsCount } from '@/src/services/notifications/notificationService';
-import { registerExpoPushTokenForUser } from '@/src/services/notifications/push-notifications.service';
+import {
+  registerExpoPushTokenForUser,
+  startExpoPushTokenListener,
+} from '@/src/services/notifications/push-notifications.service';
 import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 
 interface UseNotificationSetupOptions {
@@ -53,6 +56,11 @@ export function useNotificationSetup({
     };
 
     void tryRegisterPushToken();
+    const unsubscribeTokenRotation = startExpoPushTokenListener(async () => {
+      if (!cancelled) {
+        await tryRegisterPushToken();
+      }
+    });
     unsubscribeUnread = subscribeToUnreadNotificationsCount(
       uid,
       congregationId,
@@ -67,6 +75,7 @@ export function useNotificationSetup({
     return () => {
       cancelled = true;
       unsubscribeUnread();
+      unsubscribeTokenRotation();
     };
   }, [congregationId, isAuthenticated, uid]);
 }

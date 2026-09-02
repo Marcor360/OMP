@@ -93,6 +93,8 @@ const resolveProjectId = (): string | null => {
 const tokenToDocId = (token: string): string =>
   encodeURIComponent(token).replace(/\./g, '%2E');
 
+type PushTokenSubscription = { remove: () => void };
+
 export const configureGlobalNotificationHandler = (): void => {
   if (!canUseRemotePushNotifications) {
     return;
@@ -255,12 +257,6 @@ export const registerExpoPushTokenForUser = async (params: {
       isActive: true,
     });
 
-    await pushTokenRepository.savePushToken(userId, {
-      kind: 'userProfile',
-      token,
-      includePushTokenUpdatedAt: true,
-    });
-
     return {
       ok: true,
       token,
@@ -272,4 +268,26 @@ export const registerExpoPushTokenForUser = async (params: {
       message: 'Error inesperado al registrar notificaciones push.',
     };
   }
+};
+
+/** Reobtiene el Expo token tras una rotación del token nativo. */
+export const startExpoPushTokenListener = (
+  register: () => Promise<void>
+): (() => void) => {
+  if (!canUseRemotePushNotifications) return () => {};
+
+  let disposed = false;
+  let subscription: PushTokenSubscription | null = null;
+
+  void loadExpoNotifications().then((Notifications) => {
+    if (disposed || !Notifications) return;
+    subscription = Notifications.addPushTokenListener(() => {
+      void register();
+    });
+  });
+
+  return () => {
+    disposed = true;
+    subscription?.remove();
+  };
 };

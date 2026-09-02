@@ -12,6 +12,7 @@ import {
 import { logFirestoreRead } from '@/src/services/firebase/firestore-debug';
 import {
   getPersistentCachedValue,
+  clearPersistentCachedValue,
   setPersistentCachedValue,
 } from '@/src/services/repositories/persistent-cache';
 import {
@@ -281,7 +282,11 @@ export const getQueryCacheFirst = async <T>(
   });
 };
 
-export const invalidateCacheEntry = (cacheKey: string): void => {
+export const invalidateCacheEntry = async (cacheKey: string): Promise<void> => {
   clearSessionCachedValue(`doc:${cacheKey}`);
   clearSessionCachedValue(`query:${cacheKey}`);
+  await Promise.all([
+    clearPersistentCachedValue(`doc:${cacheKey}`),
+    clearPersistentCachedValue(`query:${cacheKey}`),
+  ]);
 };
