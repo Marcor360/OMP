@@ -1,6 +1,8 @@
 export type Role = 'admin' | 'supervisor' | 'user';
 export type Gender = 'masculino' | 'femenino';
-export type ServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar';
+// Compatibilidad con perfiles existentes: "apoyo" no concede permisos
+// derivados, pero debe poder leerse y conservarse sin rechazar el documento.
+export type ServicePosition = 'coordinador' | 'secretario' | 'encargado' | 'auxiliar' | 'apoyo';
 export type ServiceDepartment =
   | 'coordinacion'
   | 'secretaria'

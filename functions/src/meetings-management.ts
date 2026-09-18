@@ -1279,11 +1279,18 @@ export const deleteMeetingAssignmentByManager = onCall(
     assertAssignmentsManager({requester, congregationId});
 
     const congregationRef = adminDb.collection('congregations').doc(congregationId);
+    const operationId = `delete-assignment-${meetingId}-${assignmentId}`;
+    const auditRef = congregationRef.collection('changeLogs').doc(operationId);
+    await auditRef.set({ action: 'meeting_assignment_deleted', meetingId, assignmentId, congregationId,
+      performedBy: request.auth.uid, operationId, status: 'pending', createdAt: FieldValue.serverTimestamp() }, { merge: true });
     const meetingRef = congregationRef.collection('meetings').doc(meetingId);
     const assignmentRef = meetingRef.collection('assignments').doc(assignmentId);
     const [meetingSnap, assignmentSnap] = await Promise.all([meetingRef.get(), assignmentRef.get()]);
     if (!meetingSnap.exists) throw new HttpsError('not-found', 'Reunion no encontrada.');
-    if (!assignmentSnap.exists) return {ok: true, assignmentId, notificationsDeleted: 0};
+    if (!assignmentSnap.exists) {
+      await auditRef.set({ status: 'completed', completedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return {ok: true, assignmentId, notificationsDeleted: 0};
+    }
 
     const notifications = await congregationRef.collection('notifications')
       .where('assignmentId', '==', assignmentId).get();
@@ -1296,11 +1303,7 @@ export const deleteMeetingAssignmentByManager = onCall(
     relatedNotifications.forEach((doc) => writer.delete(doc.ref));
     writer.delete(assignmentRef);
     await writer.close();
-    await congregationRef.collection('changeLogs').add({
-      action: 'meeting_assignment_deleted', meetingId, assignmentId,
-      congregationId, performedBy: request.auth.uid,
-      performedAt: FieldValue.serverTimestamp(),
-    });
+    await auditRef.set({ status: 'completed', completedAt: FieldValue.serverTimestamp(), notificationsDeleted: relatedNotifications.length }, { merge: true });
     return {ok: true, assignmentId, notificationsDeleted: relatedNotifications.length};
   }
 );
@@ -1325,9 +1328,14 @@ export const deleteMeetingByManager = onCall(
       .doc(congregationId)
       .collection('meetings')
       .doc(meetingId);
+    const operationId = `delete-meeting-${meetingId}`;
+    const auditRef = adminDb.collection('congregations').doc(congregationId).collection('changeLogs').doc(operationId);
+    await auditRef.set({ action: 'meeting_deleted', meetingId, congregationId, performedBy: request.auth.uid,
+      operationId, status: 'pending', createdAt: FieldValue.serverTimestamp() }, { merge: true });
 
     const meetingSnap = await meetingRef.get();
     if (!meetingSnap.exists) {
+      await auditRef.set({ status: 'completed', completedAt: FieldValue.serverTimestamp() }, { merge: true });
       return {ok: true};
     }
 
@@ -1342,10 +1350,7 @@ export const deleteMeetingByManager = onCall(
     notificationRefs.forEach((ref) => writer.delete(ref));
     await writer.close();
     await adminDb.recursiveDelete(meetingRef);
-    await adminDb.collection('congregations').doc(congregationId).collection('changeLogs').add({
-      action: 'meeting_deleted', meetingId, congregationId,
-      performedBy: request.auth.uid, performedAt: FieldValue.serverTimestamp(),
-    });
+    await auditRef.set({ status: 'completed', completedAt: FieldValue.serverTimestamp() }, { merge: true });
 
     return { ok: true };
   }

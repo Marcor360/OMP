@@ -78,7 +78,7 @@ export const resolveActorEmail = (
 export const parseServicePosition = (value: unknown): ServicePosition | undefined => {
   const text = normalizeText(value);
   if (!text) return undefined;
-  if (text === 'coordinador' || text === 'secretario' || text === 'encargado' || text === 'auxiliar') {
+  if (text === 'coordinador' || text === 'secretario' || text === 'encargado' || text === 'auxiliar' || text === 'apoyo') {
     return text;
   }
   throw new HttpsError('invalid-argument', 'Asignacion de servicio invalida.');
@@ -337,6 +337,7 @@ export const buildServiceAssignmentLabel = (position?: ServicePosition, departme
   const departmentLabel = SERVICE_DEPARTMENT_LABELS[department];
   if (position === 'encargado') return `Encargado de ${departmentLabel}`;
   if (position === 'auxiliar') return `Auxiliar de ${departmentLabel}`;
+  if (position === 'apoyo') return `Apoyo de ${departmentLabel}`;
 
   return undefined;
 };
@@ -387,11 +388,11 @@ export const normalizeAssignmentForRole = (
     );
   }
 
-  if (position === 'encargado' || position === 'auxiliar') {
+  if (position === 'encargado' || position === 'auxiliar' || position === 'apoyo') {
     if (!department) {
       throw new HttpsError(
         'invalid-argument',
-        `El departamento es obligatorio para ${position === 'encargado' ? 'Encargado' : 'Auxiliar'}.`
+        `El departamento es obligatorio para ${position === 'encargado' ? 'Encargado' : position === 'auxiliar' ? 'Auxiliar' : 'Apoyo'}.`
       );
     }
   } else if (department) {
