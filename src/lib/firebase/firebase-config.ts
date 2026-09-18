@@ -34,9 +34,10 @@ export const resolveFirebaseConfigValues = (
 ): { config: FirebaseConfigValues; missingEnvKeys: string[] } => {
   const missingEnvKeys: string[] = [];
   const config = {} as FirebaseConfigValues;
-  for (const [envKey, configKey] of Object.entries(ENV_TO_CONFIG) as Array<
-    [keyof typeof ENV_TO_CONFIG, keyof FirebaseConfigValues]
-  >) {
+  for (const [envKey, configKey] of Object.entries(ENV_TO_CONFIG) as [
+    keyof typeof ENV_TO_CONFIG,
+    keyof FirebaseConfigValues,
+  ][]) {
     const value = env[envKey]?.trim();
     if (value) {
       config[configKey] = value;
@@ -49,4 +50,3 @@ export const resolveFirebaseConfigValues = (
   }
   return { config, missingEnvKeys };
 };
-

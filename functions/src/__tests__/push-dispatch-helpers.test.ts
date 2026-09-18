@@ -2,6 +2,7 @@ import type { ExpoPushReceipt } from 'expo-server-sdk';
 
 import {
   durableBackoffMs,
+  canClaimPushDispatch,
   isPermanentExpoResult,
   isTransientTransportError,
   sanitizePushError,
@@ -33,9 +34,17 @@ describe('push dispatch hardening helpers', () => {
     expect(durableBackoffMs(99)).toBe(21_600_000);
   });
 
+  it('only reclaims a retry or an expired worker lease', () => {
+    const now = 1_000_000;
+    expect(canClaimPushDispatch('pending', null, now)).toBe(true);
+    expect(canClaimPushDispatch('processing', now - 1, now)).toBe(true);
+    expect(canClaimPushDispatch('processing', now + 1, now)).toBe(false);
+    expect(canClaimPushDispatch('sent', null, now)).toBe(false);
+    expect(canClaimPushDispatch('permanent_error', null, now)).toBe(false);
+  });
+
   it('redacts Expo push tokens from errors', () => {
     expect(sanitizePushError(new Error('failed ExponentPushToken[secret-value]')))
       .toBe('failed [expo-token-redacted]');
   });
 });
-

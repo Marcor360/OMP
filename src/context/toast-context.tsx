@@ -25,7 +25,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const styles = createStyles(colors, insets.bottom);
-  const progress = useRef(new Animated.Value(1)).current;
+  const [progress] = useState(() => new Animated.Value(1));
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
 

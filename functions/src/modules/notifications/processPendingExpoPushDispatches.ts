@@ -7,6 +7,7 @@ import { adminDb } from '../../config/firebaseAdmin.js';
 import {
   MAX_DURABLE_PUSH_ATTEMPTS,
   PUSH_DISPATCH_LEASE_MS,
+  canClaimPushDispatch,
   durableBackoffMs,
   expoErrorCode,
   isPermanentExpoResult,
@@ -34,7 +35,11 @@ const claimDispatch = async (
   if (!data) return null;
   const status = data.status;
   const leaseUntil = data.leaseUntil instanceof Timestamp ? data.leaseUntil : null;
-  const claimable = status === 'pending' || (status === 'processing' && (!leaseUntil || leaseUntil.toMillis() <= now.toMillis()));
+  const claimable = canClaimPushDispatch(
+    status,
+    leaseUntil?.toMillis() ?? null,
+    now.toMillis()
+  );
   if (!claimable) return null;
   const attempts = typeof data.attempts === 'number' ? data.attempts + 1 : 1;
   transaction.set(doc.ref, {

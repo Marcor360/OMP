@@ -43,7 +43,6 @@ export function ErrorBoundary({
   error: Error;
   retry: () => void;
 }) {
-  // eslint-disable-next-line no-console -- se mantiene disponible cuando se conecte OBS-01
   console.error('[RootLayout] ErrorBoundary', error);
 
   return (

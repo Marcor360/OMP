@@ -22,6 +22,15 @@ module.exports = defineConfig([
     },
   },
   {
+    // React Compiler analiza componentes de ejecución; los harnesses de Jest y
+    // los tipos generados de Expo no forman parte del bundle de la aplicación.
+    files: ['**/__tests__/**/*.{ts,tsx}', '.expo/**/*.{ts,tsx,d.ts}'],
+    rules: {
+      'react-hooks/globals': 'off',
+      'import/first': 'off',
+    },
+  },
+  {
     // Scripts de Node (CommonJS) fuera del bundle de la app.
     files: ['*.js', 'scripts/**/*.{js,mjs}'],
     languageOptions: {
@@ -36,6 +45,6 @@ module.exports = defineConfig([
     },
   },
   {
-    ignores: ['dist/*', 'functions/lib/*', 'node_modules/*'],
+    ignores: ['.expo/**/*', 'dist/*', 'functions/lib/*', 'node_modules/*'],
   },
 ]);

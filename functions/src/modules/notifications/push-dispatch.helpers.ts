@@ -29,6 +29,15 @@ export const isTransientTransportError = (error: unknown): boolean => {
 export const durableBackoffMs = (attempt: number): number =>
   Math.min(6 * 60 * 60 * 1000, 60 * 1000 * 2 ** Math.max(0, attempt - 1));
 
+/** Only pending work or an expired lease may be claimed by a worker. */
+export const canClaimPushDispatch = (
+  status: unknown,
+  leaseUntilMillis: number | null,
+  nowMillis: number
+): boolean => status === 'pending' || (
+  status === 'processing' && (leaseUntilMillis === null || leaseUntilMillis <= nowMillis)
+);
+
 export const sanitizePushError = (error: unknown): string => {
   const raw = error instanceof Error ? error.message : String(error);
   return raw
@@ -36,4 +45,3 @@ export const sanitizePushError = (error: unknown): string => {
     .replace(/ExpoPushToken\[[^\]]+\]/g, '[expo-token-redacted]')
     .slice(0, 300);
 };
-

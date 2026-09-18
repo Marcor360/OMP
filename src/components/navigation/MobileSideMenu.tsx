@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { usePathname, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -68,7 +68,7 @@ export function MobileSideMenu({ visibleTabs }: MobileSideMenuProps) {
   const { width } = useWindowDimensions();
   const [isOpen, setIsOpen] = useState(false);
   const drawerWidth = Math.round(width * 0.5);
-  const slideX = useRef(new Animated.Value(-drawerWidth)).current;
+  const [slideX] = useState(() => new Animated.Value(-drawerWidth));
   const styles = useMemo(
     () => createStyles(colors, insets.top, insets.bottom, drawerWidth),
     [colors, drawerWidth, insets.bottom, insets.top]

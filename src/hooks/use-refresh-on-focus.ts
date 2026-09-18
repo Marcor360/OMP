@@ -33,47 +33,39 @@ export function useRefreshOnFocus(
   const lastRefreshAt = useRef<number>(0);
   const mountedRef = useRef(false);
 
-  const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
-
-  const onRefreshRef = useRef(onRefresh);
-  onRefreshRef.current = onRefresh;
-
-  const refreshOnAppActiveRef = useRef(options?.refreshOnAppActive ?? true);
-  refreshOnAppActiveRef.current = options?.refreshOnAppActive ?? true;
-  const skipInitialFocusRef = useRef(options?.skipInitialFocus ?? true);
-  skipInitialFocusRef.current = options?.skipInitialFocus ?? true;
+  const refreshOnAppActive = options?.refreshOnAppActive ?? true;
+  const skipInitialFocus = options?.skipInitialFocus ?? true;
 
   // Refresh on focus. By default skips first focus, configurable via options.
   useFocusEffect(
     useCallback(() => {
       if (!mountedRef.current) {
         mountedRef.current = true;
-        if (skipInitialFocusRef.current) return;
+        if (skipInitialFocus) return;
       }
 
-      if (!enabledRef.current) return;
+      if (!enabled) return;
 
-      onRefreshRef.current();
+      onRefresh();
       lastRefreshAt.current = Date.now();
-    }, [])
+    }, [enabled, onRefresh, skipInitialFocus])
   );
 
   // Optional refresh when app returns to foreground.
   useEffect(() => {
     const handleAppState = (next: AppStateStatus) => {
       if (next !== 'active') return;
-      if (!enabledRef.current) return;
-      if (!refreshOnAppActiveRef.current) return;
+      if (!enabled) return;
+      if (!refreshOnAppActive) return;
 
       const now = Date.now();
       if (now - lastRefreshAt.current < FOREGROUND_COOLDOWN_MS) return;
 
-      onRefreshRef.current();
+      onRefresh();
       lastRefreshAt.current = now;
     };
 
     const sub = AppState.addEventListener('change', handleAppState);
     return () => sub.remove();
-  }, []);
+  }, [enabled, onRefresh, refreshOnAppActive]);
 }

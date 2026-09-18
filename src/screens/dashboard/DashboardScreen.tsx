@@ -149,7 +149,9 @@ export function DashboardScreen() {
       setRefreshing(false);
       loadingRef.current = false;
     }
-  }, [canManage, congregationId, isAdmin, profileError, t, user?.uid, appUser?.cleaningGroupId]);
+  // `isAdmin` y `canManage` se derivan de appUser. Incluir el perfil completo
+  // mantiene la memoización correcta si cambia cualquiera de sus permisos.
+  }, [appUser, canManage, congregationId, isAdmin, profileError, t, user?.uid]);
 
   useEffect(() => {
     if (loadingProfile) {
