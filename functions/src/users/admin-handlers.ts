@@ -15,6 +15,7 @@ import {
 import { assertCongregationHasUserCapacity } from './capacity.js';
 import { resolveCongregationEmailDomain, resolveGeneratedEmail, splitDisplayName } from './email.js';
 import { logCreateUserFailure } from './logging.js';
+import { criticalCallableOptions } from '../shared/callable-security.js';
 import { updateDashboardUserCountsIfPresent } from './dashboard-user-counts.js';
 import { runReversibleUserMutation } from './user-mutation-coordinator.js';
 import { decideManualPermissionsUpdate } from './manual-permissions.js';
@@ -47,7 +48,7 @@ import type {
 } from './types.js';
 
 export const createUserByAdmin = onCall(
-  { region: 'us-central1' },
+  criticalCallableOptions,
   async (request) => {
     let step = 'auth';
     let payload: CreateUserPayload | undefined;
@@ -205,7 +206,7 @@ export const createUserByAdmin = onCall(
 );
 
 export const updateUserByAdmin = onCall(
-  { region: 'us-central1' },
+  criticalCallableOptions,
   async (request) => {
     if (!request.auth?.uid) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
@@ -482,7 +483,7 @@ export const updateUserByAdmin = onCall(
 );
 
 export const updateUserPasswordByAdmin = onCall(
-  { region: 'us-central1' },
+  criticalCallableOptions,
   async (request) => {
     if (!request.auth?.uid) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
@@ -533,13 +534,16 @@ export const updateUserPasswordByAdmin = onCall(
       logger.error('Password changed but user metadata update failed; reconciliation required', {
         operationId, uid: payload.uid, metadataError, reconciliationRequired: true,
       });
-      return { ok: false, passwordUpdated: true, metadataUpdated: false };
+      // La contrasena ya fue aceptada por Firebase Auth. Exponerlo como un
+      // resultado exitoso pero parcial evita que la UI informe falsamente que
+      // no cambio y permite programar la reconciliacion de metadata.
+      return { ok: true, passwordUpdated: true, metadataUpdated: false };
     }
   }
 );
 
 export const disableUserByAdmin = onCall(
-  { region: 'us-central1' },
+  criticalCallableOptions,
   async (request) => {
     if (!request.auth?.uid) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
@@ -608,7 +612,7 @@ export const disableUserByAdmin = onCall(
 );
 
 export const deleteUserByAdmin = onCall(
-  { region: 'us-central1' },
+  criticalCallableOptions,
   async (request) => {
     if (!request.auth?.uid) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
