@@ -17,6 +17,8 @@ import { resolveCongregationEmailDomain, resolveGeneratedEmail, splitDisplayName
 import { logCreateUserFailure } from './logging.js';
 import { updateDashboardUserCountsIfPresent } from './dashboard-user-counts.js';
 import { runReversibleUserMutation } from './user-mutation-coordinator.js';
+import { decideManualPermissionsUpdate } from './manual-permissions.js';
+import { executeUserHardDelete, preflightUserDeletion } from './user-deletion.js';
 import {
   ensureAdminElderPrivileges,
   buildServiceAssignmentKeys,
@@ -395,15 +397,12 @@ export const updateUserByAdmin = onCall(
           : FieldValue.delete();
     }
 
-    // Permisos pegajosos: un payload ausente o vacio conserva el set actual.
-    // Para retirar permisos se desmarcan individualmente o se cambia el rol.
-    if (
-      payload.permissionsProvided &&
-      payload.permissions &&
-      Object.keys(payload.permissions).length > 0
-    ) {
-      const safePermissions = stripOrgChartManageUnlessAuthorized(
-        payload.permissions,
+    const manualPermissions = decideManualPermissionsUpdate({
+      nextRole: finalRole,
+      permissionsProvided: payload.permissionsProvided,
+      permissions: payload.permissions,
+      sanitize: (permissions) => stripOrgChartManageUnlessAuthorized(
+        permissions,
         nextServiceAssignments,
         {
           isSystemUser: target.isSystemUser,
@@ -411,10 +410,12 @@ export const updateUserByAdmin = onCall(
           isRootAdmin: target.isRootAdmin,
           systemProtected: target.systemProtected,
         }
-      );
-      if (safePermissions && Object.keys(safePermissions).length > 0) {
-        docUpdates.permissions = safePermissions;
-      }
+      ),
+    });
+    if (manualPermissions.action === 'remove') {
+      docUpdates.permissions = FieldValue.delete();
+    } else if (manualPermissions.action === 'set') {
+      docUpdates.permissions = manualPermissions.permissions;
     }
 
     const operationId = `user-update:${payload.uid}:${requesterUid}:${Date.now()}`;
@@ -657,8 +658,20 @@ export const deleteUserByAdmin = onCall(
       );
     }
 
-    await getAuth().deleteUser(uid);
-    await targetRef.delete();
+    const preflight = await preflightUserDeletion(target.congregationId, uid);
+    if (preflight.active.length > 0) {
+      throw new HttpsError('failed-precondition', 'No se puede eliminar el usuario: tiene referencias activas que deben reasignarse.', {
+        references: preflight.active,
+      });
+    }
+
+    const deletion = await executeUserHardDelete({
+      uid,
+      congregationId: target.congregationId,
+      requesterUid: request.auth.uid,
+      wasActive: target.isActive === true,
+    });
+    if (deletion.alreadyDeleted) return { ok: true };
     await updateDashboardUserCountsIfPresent(target.congregationId, {
       total: -1,
       active: target.isActive === true ? -1 : 0,

@@ -120,7 +120,10 @@ describe('user-form.mapper', () => {
       role: 'supervisor',
       phone: '555',
       department: 'Auxiliar de Predicacion',
+      permissions: { predicacion: { view: true } },
     });
+
+    expect(toUpdatePayload({ ...base, mode: 'edit', role: 'user' })).toHaveProperty('permissions', undefined);
 
     expect(toUpdatePayload({ ...base, mode: 'edit', isAdmin: false })).toEqual({
       displayName: 'Juan Perez',
