@@ -1,5 +1,6 @@
 import { logger } from 'firebase-functions/v2';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { FieldPath, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { adminDb } from '../config/firebaseAdmin.js';
@@ -11,6 +12,7 @@ import {
 } from '../shared/derived-permissions.js';
 
 const RELEVANT_FIELDS = ['servicePosition', 'serviceDepartment', 'serviceAssignments'] as const;
+const RECONCILIATION_PAGE_SIZE = 250;
 
 // Exportada para pruebas puras. Solo estos tres campos determinan
 // derivedPermissions; cualquier otro cambio (displayName, permissions
@@ -113,16 +115,34 @@ export const reconcileDerivedPermissionsOnUserWrite = onDocumentWritten(
 export const reconcileDerivedPermissionsScheduled = onSchedule(
   { schedule: 'every day 03:17', region: 'us-central1', timeoutSeconds: 540, maxInstances: 1 },
   async () => {
-    const users = await adminDb.collection('users')
-      .select('servicePosition', 'serviceDepartment', 'serviceAssignments', 'derivedPermissions')
-      .get();
-
+    let cursor: QueryDocumentSnapshot | undefined;
+    let scanned = 0;
     let updated = 0;
-    for (const user of users.docs) {
-      if (await reconcileDerivedPermissionsDocument(user.id, user.data() as Record<string, unknown>)) {
-        updated += 1;
+    let pages = 0;
+
+    // Paginar evita leer toda la coleccion de usuarios en memoria. El cursor
+    // por documentId tambien hace que una repeticion sea segura: cada pagina
+    // vuelve a calcular de forma idempotente y solo escribe divergencias.
+    while (true) {
+      let query = adminDb.collection('users')
+        .select('servicePosition', 'serviceDepartment', 'serviceAssignments', 'derivedPermissions')
+        .orderBy(FieldPath.documentId())
+        .limit(RECONCILIATION_PAGE_SIZE);
+      if (cursor) query = query.startAfter(cursor);
+
+      const users = await query.get();
+      if (users.empty) break;
+      pages += 1;
+      scanned += users.size;
+
+      for (const user of users.docs) {
+        if (await reconcileDerivedPermissionsDocument(user.id, user.data() as Record<string, unknown>)) {
+          updated += 1;
+        }
       }
+      cursor = users.docs[users.docs.length - 1];
+      if (users.size < RECONCILIATION_PAGE_SIZE) break;
     }
-    logger.info('reconcileDerivedPermissionsScheduled completed', { scanned: users.size, updated });
+    logger.info('reconcileDerivedPermissionsScheduled completed', { scanned, updated, pages });
   }
 );
