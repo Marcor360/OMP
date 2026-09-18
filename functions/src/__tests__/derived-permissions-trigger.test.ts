@@ -8,6 +8,7 @@
 import {
   changedRelevantField,
   decideDerivedPermissionsUpdate,
+  isRetryableDerivedPermissionsError,
 } from '../users/derived-permissions-trigger.js';
 
 describe('changedRelevantField', () => {
@@ -136,5 +137,17 @@ describe('decideDerivedPermissionsUpdate', () => {
   it('usuario sin cargo -> no escribe (evita poblar derivedPermissions vacio en cada doc)', () => {
     const decision = decideDerivedPermissionsUpdate(undefined, { role: 'user', isActive: true });
     expect(decision.shouldWrite).toBe(false);
+  });
+});
+
+describe('derived permissions retry classification', () => {
+  it('propagates transient failures so the configured Eventarc retry can recover them', () => {
+    expect(isRetryableDerivedPermissionsError({ code: 'unavailable' })).toBe(true);
+    expect(isRetryableDerivedPermissionsError({ code: 'resource-exhausted' })).toBe(true);
+  });
+
+  it('does not retry deterministic validation and authorization failures forever', () => {
+    expect(isRetryableDerivedPermissionsError({ code: 'permission-denied' })).toBe(false);
+    expect(isRetryableDerivedPermissionsError({ code: 'failed-precondition' })).toBe(false);
   });
 });

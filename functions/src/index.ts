@@ -18,6 +18,7 @@ export {
 
 export {
   reconcileDerivedPermissionsOnUserWrite,
+  reconcileDerivedPermissionsScheduled,
 } from './users/derived-permissions-trigger.js';
 
 export {

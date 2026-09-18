@@ -1,6 +1,7 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { normalizeRole, parsePermissions } from './parsers.js';
+import { hasPermission } from '../shared/permissions.js';
 import type {
   CreateUserPayload,
   PermissionAction,
@@ -72,6 +73,7 @@ export async function getRequesterProfile(uid: string): Promise<RequesterProfile
     ...(data as RequesterProfile),
     role,
     permissions: parsePermissions(data.permissions, { strict: false }),
+    derivedPermissions: parsePermissions(data.derivedPermissions, { strict: false }),
   };
 }
 
@@ -136,13 +138,11 @@ export const assertAdministrativeBillingAccess = async (
 };
 
 export const requesterHasPermission = (
-  profile: Pick<RequesterProfile, 'role' | 'permissions'>,
+  profile: Pick<RequesterProfile, 'role' | 'permissions' | 'derivedPermissions'>,
   department: PermissionDepartment,
   action: PermissionAction
 ): boolean =>
-  profile.role === 'admin' ||
-  profile.permissions?.[department]?.[action] === true ||
-  profile.permissions?.[department]?.manage === true;
+  profile.role === 'admin' || hasPermission(profile, department, action);
 
 export function assertUserPermission(
   profile: RequesterProfile,
@@ -167,7 +167,7 @@ export function assertCanListUsers(profile: RequesterProfile) {
   const canList =
     profile.role === 'admin' ||
     requesterHasGlobalScreenAccess(profile) ||
-    profile.permissions?.departments?.manage === true ||
+    requesterHasPermission(profile, 'departments', 'manage') ||
     requesterHasPermission(profile, 'usuarios', 'view') ||
     requesterHasPermission(profile, 'usuarios', 'manage');
 

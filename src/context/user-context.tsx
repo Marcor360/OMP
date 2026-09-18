@@ -11,7 +11,7 @@ import React, {
 import { useAuth } from '@/src/context/auth-context';
 import { useCongregationCacheBoundary } from '@/src/hooks/use-congregation-cache-boundary';
 import { getCongregationAccessState } from '@/src/services/congregations/congregations-service';
-import { getCurrentUserProfile } from '@/src/services/users/users-service';
+import { getCurrentUserProfile, subscribeToUser } from '@/src/services/users/users-service';
 import { CongregationAccessState } from '@/src/types/congregation-access';
 import { AppUser, UserRole } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
@@ -96,6 +96,53 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     let cancelled = false;
 
+    const isCurrentUser = () => !cancelled && loadedUidRef.current === user.uid;
+
+    const applyProfile = async (profile: AppUser | null): Promise<void> => {
+      // Bootstrap y listener son asincronos: una respuesta de una sesion
+      // anterior no puede sobrescribir el perfil del UID actual.
+      if (!isCurrentUser()) return;
+
+      setAppUser(profile);
+      setCongregationAccess(null);
+
+      if (!profile) {
+        const errorMsg = 'No se encontro el perfil del usuario autenticado.';
+        userLogger.warn(errorMsg);
+        setProfileError(errorMsg);
+        setProfileErrorKind('not-found');
+        return;
+      }
+      if (!profile.isActive) {
+        const errorMsg = 'Tu cuenta esta inactiva. Contacta a un administrador.';
+        userLogger.warn(errorMsg);
+        setProfileError(errorMsg);
+        setProfileErrorKind('inactive');
+        return;
+      }
+      if (!profile.congregationId) {
+        const errorMsg = 'Tu cuenta no tiene congregacion asignada.';
+        userLogger.warn(errorMsg);
+        setProfileError(errorMsg);
+        setProfileErrorKind('no-congregation');
+        return;
+      }
+
+      const accessState = await getCongregationAccessState(profile.congregationId);
+      if (!isCurrentUser()) return;
+      setCongregationAccess(accessState);
+      if (accessState.isBlocked) {
+        userLogger.warn(accessState.message);
+        setProfileError(accessState.message);
+        setProfileErrorKind(null);
+        return;
+      }
+      setProfileError(null);
+      setProfileErrorKind(null);
+    };
+
+    let unsubscribeProfile: (() => void) | null = null;
+
     const loadProfile = async () => {
       forceServerNextLoadRef.current = false;
 
@@ -128,50 +175,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           throw lastError;
         }
 
-        if (cancelled) return;
+        if (!isCurrentUser()) return;
 
         userLogger.debug('Perfil cargado', profile ? 'existe' : 'null');
-        loadedUidRef.current = user.uid;
-        setAppUser(profile);
-        setCongregationAccess(null);
+        await applyProfile(profile);
+        if (!profile || !isCurrentUser()) return;
 
-        if (!profile) {
-          const errorMsg = 'No se encontro el perfil del usuario autenticado.';
-          userLogger.warn(errorMsg);
-          setProfileError(errorMsg);
-          setProfileErrorKind('not-found');
-          setLoadingProfile(false);
-          return;
-        }
-
-        if (!profile.isActive) {
-          const errorMsg = 'Tu cuenta esta inactiva. Contacta a un administrador.';
-          userLogger.warn(errorMsg);
-          setProfileError(errorMsg);
-          setProfileErrorKind('inactive');
-          setCongregationAccess(null);
-        } else if (!profile.congregationId) {
-          const errorMsg = 'Tu cuenta no tiene congregacion asignada.';
-          userLogger.warn(errorMsg);
-          setProfileError(errorMsg);
-          setProfileErrorKind('no-congregation');
-          setCongregationAccess(null);
-        } else {
-          const accessState = await getCongregationAccessState(profile.congregationId);
-          if (cancelled) return;
-
-          setCongregationAccess(accessState);
-
-          if (accessState.isBlocked) {
-            userLogger.warn(accessState.message);
-            setProfileError(accessState.message);
-            setProfileErrorKind(null);
-            return;
+        // El repositorio conserva la propiedad del listener Firestore. Este
+        // effect siempre lo desmonta antes de montar otro UID/refresco.
+        unsubscribeProfile = subscribeToUser(
+          user.uid,
+          (nextProfile) => { void applyProfile(nextProfile); },
+          (error) => {
+            // Un fallo temporal no invalida un perfil que ya era valido.
+            if (isCurrentUser()) userLogger.warn('Error temporal escuchando el perfil actual', error);
           }
-
-          setProfileError(null);
-          setProfileErrorKind(null);
-        }
+        );
       } catch (error) {
         if (cancelled) return;
         const formattedError = formatFirestoreError(error);
@@ -195,6 +214,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+      unsubscribeProfile?.();
     };
   }, [user, refreshKey]);
 

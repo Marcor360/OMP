@@ -86,6 +86,7 @@ export type RequesterProfile = {
   isRootAdmin?: boolean;
   systemProtected?: boolean;
   permissions?: UserPermissions;
+  derivedPermissions?: UserPermissions;
 };
 
 export type ListUsersPayload = {

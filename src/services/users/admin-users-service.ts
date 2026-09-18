@@ -74,6 +74,12 @@ type UpdateUserPasswordByAdminPayload = {
   newPassword: string;
 };
 
+export type UpdateUserPasswordByAdminResult = {
+  ok: boolean;
+  passwordUpdated: boolean;
+  metadataUpdated: boolean;
+};
+
 const callFunction = async <TRequest extends object, TResponse>(
   name: string,
   payload: TRequest
@@ -176,9 +182,17 @@ export const deleteUserByAdmin = async ({ uid }: ToggleUserByAdminPayload): Prom
 
 export const updateUserPasswordByAdmin = async (
   payload: UpdateUserPasswordByAdminPayload
-): Promise<void> => {
+): Promise<UpdateUserPasswordByAdminResult> => {
   try {
-    await callFunction<UpdateUserPasswordByAdminPayload, unknown>('updateUserPasswordByAdmin', payload);
+    const result = await callFunction<UpdateUserPasswordByAdminPayload, Partial<UpdateUserPasswordByAdminResult>>(
+      'updateUserPasswordByAdmin', payload
+    );
+    // Compatibilidad temporal con Functions desplegadas antes de Fase B.
+    return {
+      ok: result.ok !== false,
+      passwordUpdated: result.passwordUpdated !== false,
+      metadataUpdated: result.metadataUpdated !== false,
+    };
   } catch (error) {
     if (isFunctionUnavailable(error)) {
       throw new AppError(

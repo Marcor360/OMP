@@ -614,11 +614,22 @@ export const useUserForm = (): UserFormController => {
 
         await updateUserByAdmin({ uid: id, data: payload });
 
+        let passwordMetadataPending = false;
         if (isAdmin && newPassword.trim().length > 0) {
-          await updateUserPasswordByAdmin({
-            uid: id,
-            newPassword: newPassword.trim(),
-          });
+          try {
+            const passwordResult = await updateUserPasswordByAdmin({
+              uid: id,
+              newPassword: newPassword.trim(),
+            });
+            passwordMetadataPending = passwordResult.passwordUpdated && !passwordResult.metadataUpdated;
+          } catch (passwordError) {
+            showAlert(
+              'Actualizacion parcial',
+              `Los datos del usuario se actualizaron, pero no se pudo cambiar la contrasena. ${formatFirestoreError(passwordError)}`
+            );
+            resetSaving();
+            return;
+          }
         }
 
         const verifiedUser = await getUserById(id, { forceServer: true });
@@ -648,7 +659,14 @@ export const useUserForm = (): UserFormController => {
           }
         }
 
-        showToast(t('users.toast.updated'));
+        if (passwordMetadataPending) {
+          showAlert(
+            'Actualizacion parcial',
+            'Los datos y la contrasena se actualizaron, pero no se pudo registrar la metadata de la contrasena. Se reconciliara posteriormente.'
+          );
+        } else {
+          showToast(t('users.toast.updated'));
+        }
         router.replace('/(protected)/(tabs)/users');
         return;
       }

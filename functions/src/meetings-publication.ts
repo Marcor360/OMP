@@ -13,13 +13,15 @@ import {
   type MeetingPublicationStatus,
 } from './modules/meetings/meeting-sections.js';
 import { assertAdministrativeBillingAccess } from './users/authorization.js';
+import { parsePermissions } from './users/parsers.js';
+import { hasPermission } from './shared/permissions.js';
+import type { UserPermissions } from './users/types.js';
 
 type UserRole = 'admin' | 'supervisor' | 'user';
 type ServiceAssignment = {
   position?: string;
   department?: string;
 };
-type UserPermissions = Record<string, Record<string, boolean> | undefined>;
 
 type RequesterProfile = {
   role: UserRole;
@@ -29,6 +31,7 @@ type RequesterProfile = {
   serviceDepartment?: string;
   serviceAssignments?: ServiceAssignment[];
   permissions?: UserPermissions;
+  derivedPermissions?: UserPermissions;
 };
 
 type SetMeetingPublicationStatusPayload = {
@@ -139,10 +142,10 @@ const hasServiceAssignment = (
 
 const isMeetingsManager = (requester: RequesterProfile): boolean =>
   requester.role === 'admin' ||
-  requester.permissions?.reuniones?.manage === true ||
+  hasPermission(requester, 'reuniones', 'manage') ||
   (
-    requester.permissions?.reuniones?.create === true &&
-    requester.permissions?.reuniones?.edit === true
+    hasPermission(requester, 'reuniones', 'create') &&
+    hasPermission(requester, 'reuniones', 'edit')
   ) ||
   hasServiceAssignment(requester, 'encargado', 'reuniones');
 
@@ -288,7 +291,8 @@ const getRequesterProfile = async (uid: string): Promise<RequesterProfile> => {
     servicePosition: normalizeText(data.servicePosition),
     serviceDepartment: normalizeText(data.serviceDepartment),
     serviceAssignments: toServiceAssignments(data.serviceAssignments),
-    permissions: data.permissions as UserPermissions | undefined,
+    permissions: parsePermissions(data.permissions, { strict: false }),
+    derivedPermissions: parsePermissions(data.derivedPermissions, { strict: false }),
   };
 };
 

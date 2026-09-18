@@ -7,6 +7,9 @@ import {
   type BillingPagosAction,
 } from '../../shared/billing-access.js';
 import { listActiveUserDocsForCongregation } from './billing-state.js';
+import { parsePermissions } from '../../users/parsers.js';
+import { hasPermission } from '../../shared/permissions.js';
+import type { UserPermissions } from '../../users/types.js';
 
 export type RequesterProfile = {
   uid: string;
@@ -21,7 +24,8 @@ export type RequesterProfile = {
     position?: string;
     department?: string;
   }[];
-  permissions?: Record<string, Record<string, boolean>>;
+  permissions?: UserPermissions;
+  derivedPermissions?: UserPermissions;
 };
 
 const normalizeRole = (value: unknown): string | undefined => {
@@ -48,13 +52,14 @@ export const getRequesterProfile = async (uid: string): Promise<RequesterProfile
     ...(data as RequesterProfile),
     uid,
     role: normalizeRole(data.role),
+    permissions: parsePermissions(data.permissions, { strict: false }),
+    derivedPermissions: parsePermissions(data.derivedPermissions, { strict: false }),
   };
 };
 
 export const billingDeps = (profile: RequesterProfile) => ({
   hasPagosPermission: (action: BillingPagosAction): boolean =>
-    profile.permissions?.pagos?.[action] === true ||
-    profile.permissions?.pagos?.manage === true,
+    hasPermission(profile, 'pagos', action),
 });
 
 export const assertBillingActor = async (

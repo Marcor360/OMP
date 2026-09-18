@@ -16,6 +16,7 @@ import { assertCongregationHasUserCapacity } from './capacity.js';
 import { resolveCongregationEmailDomain, resolveGeneratedEmail, splitDisplayName } from './email.js';
 import { logCreateUserFailure } from './logging.js';
 import { updateDashboardUserCountsIfPresent } from './dashboard-user-counts.js';
+import { runReversibleUserMutation } from './user-mutation-coordinator.js';
 import {
   ensureAdminElderPrivileges,
   buildServiceAssignmentKeys,
@@ -159,6 +160,12 @@ export const createUserByAdmin = onCall(
         }
 
         await db.collection('users').doc(userRecord.uid).set(userDoc);
+        const persistedProfile = await db.collection('users').doc(userRecord.uid).get();
+        if (!persistedProfile.exists) {
+          throw new HttpsError('internal', 'El perfil creado no pudo verificarse en Firestore.');
+        }
+        // dashboardSummary es una proyeccion reconstruible. Su helper registra
+        // fallos internamente y nunca debe disparar el rollback de Auth/perfil.
         await updateDashboardUserCountsIfPresent(payload.congregationId, {
           total: 1,
           active: payload.isActive ? 1 : 0,
@@ -170,7 +177,16 @@ export const createUserByAdmin = onCall(
           requiredDomain,
         };
       } catch (error) {
-        await auth.deleteUser(userRecord.uid);
+        try {
+          await auth.deleteUser(userRecord.uid);
+        } catch (rollbackError) {
+          logger.error('CRITICAL createUserByAdmin rollback failed; reconciliation required', {
+            uid: userRecord.uid,
+            error,
+            rollbackError,
+            reconciliationRequired: true,
+          });
+        }
         throw error;
       }
     } catch (error) {
@@ -192,8 +208,9 @@ export const updateUserByAdmin = onCall(
     if (!request.auth?.uid) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
     }
+    const requesterUid = request.auth.uid;
 
-    const requester = await getRequesterProfile(request.auth.uid);
+    const requester = await getRequesterProfile(requesterUid);
     await assertAdministrativeBillingAccess(requester.congregationId);
     assertUserPermission(requester, 'edit');
 
@@ -293,13 +310,9 @@ export const updateUserByAdmin = onCall(
       authUpdates.disabled = !payload.isActive;
     }
 
-    if (Object.keys(authUpdates).length > 0) {
-      await getAuth().updateUser(payload.uid, authUpdates);
-    }
-
     const docUpdates: Record<string, unknown> = {
-      updatedBy: request.auth.uid,
-      updatedByName: resolveActorName(requester, request.auth.uid),
+      updatedBy: requesterUid,
+      updatedByName: resolveActorName(requester, requesterUid),
       updatedByEmail: resolveActorEmail(requester),
       updatedAt: FieldValue.serverTimestamp(),
     };
@@ -404,7 +417,14 @@ export const updateUserByAdmin = onCall(
       }
     }
 
-    await targetRef.update(docUpdates);
+    const operationId = `user-update:${payload.uid}:${requesterUid}:${Date.now()}`;
+    await runReversibleUserMutation({
+      operationId,
+      uid: payload.uid,
+      auth: getAuth(),
+      authUpdates,
+      applyFirestore: () => targetRef.update(docUpdates),
+    });
 
     if (
       !isSystemPrincipalUser(target as Record<string, unknown>) &&
@@ -428,7 +448,7 @@ export const updateUserByAdmin = onCall(
     } | undefined;
 
     logger.info('updateUserByAdmin persisted user fields', {
-      requesterUid: request.auth.uid,
+      requesterUid,
       targetUid: payload.uid,
       updatedKeys: Object.keys(docUpdates),
       persisted: {
@@ -466,14 +486,15 @@ export const updateUserPasswordByAdmin = onCall(
     if (!request.auth?.uid) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
     }
+    const requesterUid = request.auth.uid;
 
-    const requester = await getRequesterProfile(request.auth.uid);
+    const requester = await getRequesterProfile(requesterUid);
     await assertAdministrativeBillingAccess(requester.congregationId);
     assertUserPermission(requester, 'edit');
 
     const payload = parseUpdatePasswordPayload(request.data);
 
-    if (payload.uid === request.auth.uid) {
+    if (payload.uid === requesterUid) {
       throw new HttpsError('failed-precondition', 'No puedes cambiar tu propia contrasena desde este flujo.');
     }
 
@@ -497,15 +518,22 @@ export const updateUserPasswordByAdmin = onCall(
       );
     }
 
+    const operationId = `user-password:${payload.uid}:${requesterUid}:${Date.now()}`;
     await getAuth().updateUser(payload.uid, { password: payload.newPassword });
-    await targetRef.update({
-      updatedBy: request.auth.uid,
-      updatedByName: resolveActorName(requester, request.auth.uid),
-      updatedByEmail: resolveActorEmail(requester),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    return { ok: true };
+    try {
+      await targetRef.update({
+        updatedBy: requesterUid,
+        updatedByName: resolveActorName(requester, requesterUid),
+        updatedByEmail: resolveActorEmail(requester),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return { ok: true, passwordUpdated: true, metadataUpdated: true };
+    } catch (metadataError) {
+      logger.error('Password changed but user metadata update failed; reconciliation required', {
+        operationId, uid: payload.uid, metadataError, reconciliationRequired: true,
+      });
+      return { ok: false, passwordUpdated: true, metadataUpdated: false };
+    }
   }
 );
 
@@ -515,14 +543,15 @@ export const disableUserByAdmin = onCall(
     if (!request.auth?.uid) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
     }
+    const requesterUid = request.auth.uid;
 
-    const requester = await getRequesterProfile(request.auth.uid);
+    const requester = await getRequesterProfile(requesterUid);
     await assertAdministrativeBillingAccess(requester.congregationId);
     assertUserPermission(requester, 'edit');
 
     const uid = parseUidFromPayload(request.data ?? {});
 
-    if (uid === request.auth.uid) {
+    if (uid === requesterUid) {
       throw new HttpsError('failed-precondition', 'No puedes desactivar tu propio usuario.');
     }
 
@@ -553,14 +582,20 @@ export const disableUserByAdmin = onCall(
       throw new HttpsError('permission-denied', 'Solo un administrador puede desactivar a otro administrador.');
     }
 
-    await getAuth().updateUser(uid, { disabled: true });
-    await targetRef.update({
+    const operationId = `user-disable:${uid}:${requesterUid}:${Date.now()}`;
+    await runReversibleUserMutation({
+      operationId,
+      uid,
+      auth: getAuth(),
+      authUpdates: { disabled: true },
+      applyFirestore: () => targetRef.update({
       isActive: false,
       status: 'inactive',
-      updatedBy: request.auth.uid,
-      updatedByName: resolveActorName(requester, request.auth.uid),
+      updatedBy: requesterUid,
+      updatedByName: resolveActorName(requester, requesterUid),
       updatedByEmail: resolveActorEmail(requester),
       updatedAt: FieldValue.serverTimestamp(),
+      }),
     });
 
     if (target.isActive === true && !isSystemPrincipalUser(target as Record<string, unknown>)) {
