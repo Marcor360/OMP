@@ -18,7 +18,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     android: {
       ...baseConfig.android,
       ...config.android,
-      googleServicesFile: googleServicesFile || './google-services.json',
+      ...(googleServicesFile ? { googleServicesFile } : {}),
     },
   };
 };

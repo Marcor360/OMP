@@ -2,7 +2,7 @@
 
 Follow `AGENTS.md` in the repository root.
 
-OMP is built with Expo SDK 54, React 19, React Native 0.81, TypeScript, Expo Router, NativeWind, Firebase Auth, Firestore, Cloud Functions, Expo Notifications, and React Native Web.
+OMP is built with Expo SDK 57, React 19, React Native 0.86, TypeScript, Expo Router, NativeWind, Firebase Auth, Firestore, Cloud Functions, Expo Notifications, and React Native Web.
 
 Do:
 

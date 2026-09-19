@@ -12,8 +12,8 @@ OMP is not an official JW.ORG application. Do not present it as official, approv
 
 Use the current stack unless the user explicitly requests a migration:
 
-- Expo SDK 54.
-- React 19 and React Native 0.81.
+- Expo SDK 57.
+- React 19 and React Native 0.86.
 - TypeScript.
 - Expo Router.
 - NativeWind / Tailwind CSS.
@@ -355,7 +355,7 @@ App (root), 19 moderate:
 - All inside `@expo/cli`, `@expo/config`, `@expo/config-plugins`, `@expo/metro-config`, `@expo/prebuild-config`, `xcode`, `expo-asset`, and `firebase-tools` (via `@google-cloud/pubsub`, `@opentelemetry/core`, `gaxios`, `uuid`).
 - These are build toolchain dependencies; they do not ship in the bundle that reaches end users. The real exposure is CI supply chain, not the shipped app.
 - `npm audit`'s suggested fix (`firebase-tools@14.23.0`) is a downgrade — do not apply it.
-- The only real closure path is the Expo SDK 57 migration (multi-step, not part of routine dependency maintenance).
+- Re-evaluate on the next Expo SDK migration; do not use forced overrides or audit downgrades.
 
 `functions/`, 7 moderate:
 
@@ -365,9 +365,9 @@ App (root), 19 moderate:
 
 Review monthly whether Google has published `@google-cloud/storage@8`; if so, re-run the audit and re-evaluate.
 
-`expo-doctor`, 1 accepted mismatch:
+`expo-doctor`, unavailable SDK 57 patch targets:
 
-- `@react-navigation/native` is pinned to `^7.3.15`, one minor ahead of the `^7.1.8` Expo SDK 54 expects. This is intentional (routine minor bump, same major, no breaking API changes) and causes `expo-doctor`'s "Check that packages match versions required by installed Expo SDK" to report 17/18 instead of 18/18. All tests, `tsc --noEmit`, and lint pass clean. Do not "fix" this by running `npx expo install --check` unless re-evaluating on a real SDK migration (see below).
+- Expo's compatibility catalog references `expo@~57.0.24`, `expo-constants@~57.0.19`, `expo-notifications@~57.0.20`, and `expo-router@~57.0.22`, but those releases are not published in npm. The project uses the latest published compatible versions (`57.0.22`, `57.0.18`, `57.0.18`, and `57.0.21`) and lists only these packages in `expo.install.exclude` so `expo-doctor` and CI validate all other dependencies. Remove each exclusion as soon as its matching published version is available.
 
 ## Never Do These Things
 

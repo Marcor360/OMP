@@ -12,6 +12,7 @@
     "build:web": "expo export --platform web && node scripts/copy-web-htaccess.js",
     "preview:web": "npx serve dist --single",
     "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -19,7 +20,7 @@
     "check:rules": "node build-rules.js --check",
     "test:rules": "npm run build:rules && firebase emulators:exec --only firestore --project demo-omp \"jest --config jest.rules.config.js --runInBand\"",
     "check:indexes": "node scripts/check-collection-group-indexes.mjs",
-    "validate": "npm run check:indexes && npm run lint && tsc --noEmit && npm test -- --runInBand && npm --prefix functions run lint && npm --prefix functions run build && npm --prefix functions test -- --runInBand && npx expo-doctor",
+    "validate": "npm run check:indexes && npm run lint && npm run typecheck && npm test -- --runInBand && npm --prefix functions run lint && npm --prefix functions run build && npm --prefix functions test -- --runInBand && npx expo-doctor",
     "deploy:rules": "npm run build:rules && node scripts/firebase-deploy-retry.js --only firestore:rules,firestore:indexes",
     "deploy:functions": "node scripts/firebase-deploy-retry.js --only functions",
     "deploy:all": "npm run deploy:rules && npm run deploy:functions",
@@ -80,6 +81,16 @@
     "typescript": "~6.0.3"
   },
   "private": true,
+  "expo": {
+    "install": {
+      "exclude": [
+        "expo",
+        "expo-constants",
+        "expo-notifications",
+        "expo-router"
+      ]
+    }
+  },
   "overrides": {
     "brace-expansion@<1.1.18": "^1.1.18",
     "postcss@<8.5.25": "^8.5.25"
