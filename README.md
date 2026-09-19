@@ -8,7 +8,7 @@ Aplicación multiplataforma para la organización interna, administración y coo
 
 `Web` · `Android` · `iOS` · `Expo` · `React Native` · `Firebase` · `Stripe`
 
-**Versión actual:** `1.36.1`
+**Versión actual:** `1.44.0`
 
 **Estado:** beta avanzada en estabilización
 
@@ -53,8 +53,8 @@ El producto administra información por congregación. Toda operación congregac
 | Dato | Valor |
 | --- | --- |
 | Nombre | OMP Suite |
-| Versión pública | `1.36.1` |
-| Android `versionCode` | `13601` |
+| Versión pública | `1.44.0` |
+| Android `versionCode` | `14400` |
 | Android package | `com.marcor360.omp` |
 | iOS bundle identifier | `com.marcor360.omp` |
 | Plataformas | Web, Android e iOS |
@@ -490,19 +490,19 @@ MAJOR.MINOR.PATCH
 - `MINOR`: funciones nuevas compatibles;
 - `PATCH`: correcciones compatibles.
 
-Estado de la versión `1.36.1`:
+Estado de la versión `1.44.0`:
 
 ```text
-package.json:                    1.36.1
-package-lock.json:               1.36.1
-app.json → expo.version:         1.36.1
-app.json → ios.buildNumber:      1.36.1
-app.json → android.versionCode:  13601
-android versionName:             1.36.1
-android versionCode:             13601
+package.json:                    1.44.0
+package-lock.json:               1.44.0
+app.json → expo.version:         1.44.0
+app.json → ios.buildNumber:      1.44.0
+app.json → android.versionCode:  14400
+android versionName:             1.44.0
+android versionCode:             14400
 ```
 
-Los nombres de lanzamiento son opcionales y no reemplazan la versión técnica. Pueden usarse en notas de release con el formato `OMP 1.36.1 — Nombre`.
+Los nombres de lanzamiento son opcionales y no reemplazan la versión técnica. Pueden usarse en notas de release con el formato `OMP 1.44.0 — Nombre`.
 
 ## Notificaciones
 
