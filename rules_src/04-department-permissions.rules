@@ -20,10 +20,17 @@
     // aqui tambien.
     function hasPermission(department, action) {
       return isActive()
-        && (
-          permissionFlag(currentUserData().permissions, department, action)
-          || permissionFlag(currentUserData().derivedPermissions, department, action)
-        );
+        && userHasPermission(currentUserData(), department, action);
+    }
+
+    function userHasPermission(user, department, action) {
+      return permissionFlag(user.permissions, department, action)
+        || permissionFlag(user.derivedPermissions, department, action);
+    }
+
+    function userHasServiceAssignmentKey(user, position, department) {
+      return user.serviceAssignmentKeys is list
+        && user.serviceAssignmentKeys.hasAny([position + ':' + department]);
     }
 
     function hasTerritoryPermission(action) {

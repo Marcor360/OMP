@@ -4,9 +4,18 @@
 
     function currentUserHasRequiredShape() {
       return hasCurrentUserDoc()
-        && isValidRole(currentUserData().role)
-        && isNonEmptyString(currentUserData().congregationId)
-        && currentUserData().isActive is bool;
+        && activeUserDataHasRequiredShape(currentUserData());
+    }
+
+    function activeUserDataHasRequiredShape(data) {
+      return isValidRole(data.role)
+        && isNonEmptyString(data.congregationId)
+        && data.isActive is bool;
+    }
+
+    function isActiveUserData(data) {
+      return activeUserDataHasRequiredShape(data)
+        && data.isActive == true;
     }
 
     function isActive() {
@@ -67,44 +76,50 @@
 
     function isCleaningManager() {
       return administrativeWritesAllowed(myCongregationId())
+        && hasCurrentUserDoc()
+        && isCleaningManagerData(currentUserData());
+    }
+
+    function isCleaningManagerData(user) {
+      return isActiveUserData(user)
         && (
-          isAdmin()
-          || hasPermission('limpieza', 'manage')
+          user.role == 'admin'
+          || userHasPermission(user, 'limpieza', 'manage')
           || (
-            hasPermission('limpieza', 'create')
-            && hasPermission('limpieza', 'edit')
+            userHasPermission(user, 'limpieza', 'create')
+            && userHasPermission(user, 'limpieza', 'edit')
           )
           || (
-            isActive()
-            && (
-              (
-                currentUserData().servicePosition == 'encargado'
-                && currentUserData().serviceDepartment == 'limpieza'
-              )
-              || hasServiceAssignmentKey('encargado', 'limpieza')
+            (
+              user.servicePosition == 'encargado'
+              && user.serviceDepartment == 'limpieza'
             )
+            || userHasServiceAssignmentKey(user, 'encargado', 'limpieza')
           )
         );
     }
 
     function isHospitalityMicrophonesManager() {
       return administrativeWritesAllowed(myCongregationId())
+        && hasCurrentUserDoc()
+        && isHospitalityMicrophonesManagerData(currentUserData());
+    }
+
+    function isHospitalityMicrophonesManagerData(user) {
+      return isActiveUserData(user)
         && (
-          isAdmin()
-          || hasPermission('acomodadores_microfonos', 'manage')
+          user.role == 'admin'
+          || userHasPermission(user, 'acomodadores_microfonos', 'manage')
           || (
-            hasPermission('acomodadores_microfonos', 'create')
-            && hasPermission('acomodadores_microfonos', 'edit')
+            userHasPermission(user, 'acomodadores_microfonos', 'create')
+            && userHasPermission(user, 'acomodadores_microfonos', 'edit')
           )
           || (
-            isActive()
-            && (
-              (
-                currentUserData().servicePosition == 'encargado'
-                && currentUserData().serviceDepartment == 'acomodadores_microfonos'
-              )
-              || hasServiceAssignmentKey('encargado', 'acomodadores_microfonos')
+            (
+              user.servicePosition == 'encargado'
+              && user.serviceDepartment == 'acomodadores_microfonos'
             )
+            || userHasServiceAssignmentKey(user, 'encargado', 'acomodadores_microfonos')
           )
         );
     }
@@ -127,25 +142,30 @@
     // duplicadas aqui a proposito; si cambian alla, cambian aqui tambien.
     function isHospitalityMicrophonesEditor() {
       return administrativeWritesAllowed(myCongregationId())
-        && isActive()
+        && hasCurrentUserDoc()
+        && isHospitalityMicrophonesEditorData(currentUserData());
+    }
+
+    function isHospitalityMicrophonesEditorData(user) {
+      return isActiveUserData(user)
         && (
-          isAdmin()
-          || hasPermission('acomodadores_microfonos', 'manage')
+          user.role == 'admin'
+          || userHasPermission(user, 'acomodadores_microfonos', 'manage')
           || (
-            hasPermission('acomodadores_microfonos', 'create')
-            && hasPermission('acomodadores_microfonos', 'edit')
+            userHasPermission(user, 'acomodadores_microfonos', 'create')
+            && userHasPermission(user, 'acomodadores_microfonos', 'edit')
           )
-          || hasPermission('acomodadores_microfonos', 'edit')
+          || userHasPermission(user, 'acomodadores_microfonos', 'edit')
           || (
-            currentUserData().servicePosition == 'encargado'
-            && currentUserData().serviceDepartment == 'acomodadores_microfonos'
+            user.servicePosition == 'encargado'
+            && user.serviceDepartment == 'acomodadores_microfonos'
           )
-          || hasServiceAssignmentKey('encargado', 'acomodadores_microfonos')
+          || userHasServiceAssignmentKey(user, 'encargado', 'acomodadores_microfonos')
           || (
-            currentUserData().servicePosition == 'auxiliar'
-            && currentUserData().serviceDepartment == 'acomodadores_microfonos'
+            user.servicePosition == 'auxiliar'
+            && user.serviceDepartment == 'acomodadores_microfonos'
           )
-          || hasServiceAssignmentKey('auxiliar', 'acomodadores_microfonos')
+          || userHasServiceAssignmentKey(user, 'auxiliar', 'acomodadores_microfonos')
         );
     }
 

@@ -18,15 +18,22 @@
 
     function congregationAccessBlocked(congregationId) {
       return exists(congregationPath(congregationId))
-        && !accessBlockExpired(get(congregationPath(congregationId)).data)
+        && congregationDataAccessBlocked(get(congregationPath(congregationId)).data);
+    }
+
+    // Keep the document read in the guarded caller above. Besides avoiding
+    // repeated get() expressions, this preserves the short-circuit for a
+    // congregation that does not exist.
+    function congregationDataAccessBlocked(data) {
+      return !accessBlockExpired(data)
         && (
-          get(congregationPath(congregationId)).data.disabled == true
-          || get(congregationPath(congregationId)).data.deactivated == true
-          || get(congregationPath(congregationId)).data.accessDisabled == true
-          || get(congregationPath(congregationId)).data.isActive == false
-          || get(congregationPath(congregationId)).data.active == false
-          || get(congregationPath(congregationId)).data.enabled == false
-          || get(congregationPath(congregationId)).data.status in [
+          data.disabled == true
+          || data.deactivated == true
+          || data.accessDisabled == true
+          || data.isActive == false
+          || data.active == false
+          || data.enabled == false
+          || data.status in [
             'inactive',
             'inactivo',
             'disabled',
@@ -93,15 +100,19 @@
 
     function systemMaintenanceDocBlocked(systemDocPath) {
       return exists(systemDocPath)
-        && !accessBlockExpired(get(systemDocPath).data)
+        && systemMaintenanceDataBlocked(get(systemDocPath).data);
+    }
+
+    function systemMaintenanceDataBlocked(data) {
+      return !accessBlockExpired(data)
         && (
-          get(systemDocPath).data.maintenanceMode == true
-          || get(systemDocPath).data.systemMaintenance == true
-          || get(systemDocPath).data.disableCongregations == true
-          || get(systemDocPath).data.allCongregationsDisabled == true
-          || get(systemDocPath).data.congregationsDisabled == true
-          || get(systemDocPath).data.enabled == false
-          || get(systemDocPath).data.isActive == false
+          data.maintenanceMode == true
+          || data.systemMaintenance == true
+          || data.disableCongregations == true
+          || data.allCongregationsDisabled == true
+          || data.congregationsDisabled == true
+          || data.enabled == false
+          || data.isActive == false
         );
     }
 

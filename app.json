@@ -2,14 +2,14 @@
   "expo": {
     "name": "OMP",
     "slug": "omp",
-    "version": "1.44.0",
+    "version": "1.45.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ormeprassig",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "1.44.0",
+      "buildNumber": "1.45.0",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
@@ -40,7 +40,7 @@
         "android.permission.SCHEDULE_EXACT_ALARM"
       ],
       "package": "com.marcor360.omp",
-      "versionCode": 14400
+      "versionCode": 14500
     },
     "web": {
       "bundler": "metro",
