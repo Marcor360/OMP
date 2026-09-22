@@ -82,15 +82,24 @@ export const useUserForm = (): UserFormController => {
   const [role, setRole] = useState<UserRole>('user');
   const [gender, setGender] = useState<UserGender | null>(null);
   const [phone, setPhone] = useState('');
-  const [activeUsers, setActiveUsers] = useState<AppUser[]>([]);
+  const [activeUsersState, setActiveUsersState] = useState({
+    congregationId: null as string | null,
+    users: [] as AppUser[],
+  });
   const [servicePositionDraft, setServicePositionDraft] = useState<ServiceSelection>('none');
   const [serviceDepartmentDraft, setServiceDepartmentDraft] = useState<UserServiceDepartment | ''>('');
   const [serviceAssignments, setServiceAssignments] = useState<UserServiceAssignment[]>([]);
   const [privileges, setPrivileges] = useState<UserPrivileges>({});
   const [responsibilities, setResponsibilities] = useState<UserResponsibilities>({});
   const [permissions, setPermissions] = useState<UserPermissions>({});
-  const [allowedEmailDomain, setAllowedEmailDomain] = useState('congregacion.com');
-  const [planUsage, setPlanUsage] = useState<UserFormController['state']['planUsage']>(null);
+  const [emailDomainState, setEmailDomainState] = useState({
+    congregationId: null as string | null,
+    domain: 'congregacion.com',
+  });
+  const [planUsageState, setPlanUsageState] = useState<{
+    congregationId: string | null;
+    usage: UserFormController['state']['planUsage'];
+  }>({ congregationId: null, usage: null });
   const [errors, setErrors] = useState<UserFormErrors>({});
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
@@ -99,53 +108,67 @@ export const useUserForm = (): UserFormController => {
   useEffect(() => {
     if (!congregationId) return;
 
-    getCongregationEmailDomain(congregationId)
-      .then((domain) => setAllowedEmailDomain(domain))
-      .catch(() => setAllowedEmailDomain('congregacion.com'));
-  }, [congregationId]);
-
-  useEffect(() => {
-    if (!congregationId || !isAdmin) {
-      setPlanUsage(null);
-      return;
-    }
-
-    let cancelled = false;
-    getCongregationPlanUsage(congregationId, { forceServer: true })
-      .then((usage) => {
-        if (!cancelled) setPlanUsage(usage);
+    let active = true;
+    void getCongregationEmailDomain(congregationId)
+      .then((domain) => {
+        if (active) setEmailDomainState({ congregationId, domain });
       })
       .catch(() => {
-        if (!cancelled) setPlanUsage(null);
+        if (active) setEmailDomainState({ congregationId, domain: 'congregacion.com' });
       });
 
     return () => {
-      cancelled = true;
+      active = false;
+    };
+  }, [congregationId]);
+
+  useEffect(() => {
+    if (!congregationId || !isAdmin) return;
+
+    let active = true;
+    void getCongregationPlanUsage(congregationId, { forceServer: true })
+      .then((usage) => {
+        if (active) setPlanUsageState({ congregationId, usage });
+      })
+      .catch(() => {
+        if (active) setPlanUsageState({ congregationId, usage: null });
+      });
+
+    return () => {
+      active = false;
     };
   }, [congregationId, isAdmin]);
 
   useEffect(() => {
-    if (!congregationId) {
-      setActiveUsers([]);
-      return;
-    }
+    if (!congregationId) return;
 
-    let cancelled = false;
+    let active = true;
 
-    getAllUsers(congregationId)
+    void getAllUsers(congregationId)
       .then((users) => {
-        if (cancelled) return;
-        setActiveUsers(users.filter((user) => user.isActive));
+        if (active) setActiveUsersState({
+          congregationId,
+          users: users.filter((user) => user.isActive),
+        });
       })
       .catch(() => {
-        if (cancelled) return;
-        setActiveUsers([]);
+        if (active) setActiveUsersState({ congregationId, users: [] });
       });
 
     return () => {
-      cancelled = true;
+      active = false;
     };
   }, [congregationId]);
+
+  const allowedEmailDomain = emailDomainState.congregationId === congregationId
+    ? emailDomainState.domain
+    : 'congregacion.com';
+  const planUsage = isAdmin && planUsageState.congregationId === congregationId
+    ? planUsageState.usage
+    : null;
+  const activeUsers = activeUsersState.congregationId === congregationId
+    ? activeUsersState.users
+    : [];
 
   useEffect(() => {
     if (mode !== 'edit') {
@@ -309,17 +332,6 @@ export const useUserForm = (): UserFormController => {
   );
   const requiresAdminElder = requiresAdminElderAssignment(assignmentsRequiringAdminElder);
 
-  useEffect(() => {
-    if (!requiresAdminElder) return;
-
-    setRole((current) => (current === 'admin' ? current : 'admin'));
-    setPrivileges((current) =>
-      current.isElder === true && current.isMinisterialServant !== true
-        ? current
-        : { ...current, isElder: true, isMinisterialServant: false }
-    );
-  }, [requiresAdminElder]);
-
   const addServiceAssignment = () => {
     if (!isAdmin || !selectedDraftAssignment) return;
     if (serviceAssignments.some((item) => assignmentKey(item) === assignmentKey(selectedDraftAssignment))) {
@@ -443,36 +455,45 @@ export const useUserForm = (): UserFormController => {
     [effectivePermissions]
   );
 
-  useEffect(() => {
-    if (!positionOptions.includes(servicePositionDraft)) {
+  const updateRole = (nextRole: UserRole) => {
+    setRole(nextRole);
+    if (nextRole !== 'admin' && (servicePositionDraft === 'coordinador' || servicePositionDraft === 'secretario')) {
       setServicePositionDraft('none');
+      setServiceDepartmentDraft('');
+    }
+  };
+
+  const updateServicePositionDraft = (nextPosition: ServiceSelection) => {
+    const unavailable =
+      !positionOptions.includes(nextPosition)
+      || ((nextPosition === 'coordinador' || nextPosition === 'secretario')
+        && occupiedAssignments.occupiedUniquePositions.has(nextPosition));
+    const normalizedPosition = unavailable ? 'none' : nextPosition;
+
+    setServicePositionDraft(normalizedPosition);
+    if (!needsDepartment(normalizedPosition)) {
       setServiceDepartmentDraft('');
       return;
     }
 
-    if (!needsDepartment(servicePositionDraft) && serviceDepartmentDraft) {
-      setServiceDepartmentDraft('');
-    }
-  }, [positionOptions, serviceDepartmentDraft, servicePositionDraft]);
-
-  useEffect(() => {
     if (
-      (servicePositionDraft === 'coordinador' || servicePositionDraft === 'secretario') &&
-      occupiedAssignments.occupiedUniquePositions.has(servicePositionDraft)
-    ) {
-      setServicePositionDraft('none');
-    }
-  }, [occupiedAssignments.occupiedUniquePositions, servicePositionDraft]);
-
-  useEffect(() => {
-    if (
-      servicePositionDraft === 'encargado' &&
-      serviceDepartmentDraft &&
-      occupiedAssignments.occupiedManagerDepartments.has(serviceDepartmentDraft)
+      normalizedPosition === 'encargado'
+      && serviceDepartmentDraft
+      && occupiedAssignments.occupiedManagerDepartments.has(serviceDepartmentDraft)
     ) {
       setServiceDepartmentDraft('');
     }
-  }, [occupiedAssignments.occupiedManagerDepartments, serviceDepartmentDraft, servicePositionDraft]);
+  };
+
+  const updateServiceDepartmentDraft = (nextDepartment: UserServiceDepartment | '') => {
+    const unavailable =
+      servicePositionDraft === 'none'
+      || !needsDepartment(servicePositionDraft)
+      || (servicePositionDraft === 'encargado'
+        && nextDepartment !== ''
+        && occupiedAssignments.occupiedManagerDepartments.has(nextDepartment));
+    setServiceDepartmentDraft(unavailable ? '' : nextDepartment);
+  };
 
   const validate = (): boolean => {
     const nextErrors = validateUserForm({
@@ -720,11 +741,11 @@ export const useUserForm = (): UserFormController => {
       setSecondLastName,
       setPassword,
       setNewPassword,
-      setRole,
+      setRole: updateRole,
       setGender,
       setPhone,
-      setServicePositionDraft,
-      setServiceDepartmentDraft,
+      setServicePositionDraft: updateServicePositionDraft,
+      setServiceDepartmentDraft: updateServiceDepartmentDraft,
       togglePasswordVisibility: () => setShowPassword((value) => !value),
       toggleNewPasswordVisibility: () => setShowNewPassword((value) => !value),
       handleCopyValue,
