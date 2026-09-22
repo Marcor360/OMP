@@ -25,10 +25,12 @@ module.exports = {
       lines: 90,
     },
     global: {
-      statements: 0,
-      branches: 0,
-      functions: 0,
-      lines: 0,
+      // Línea base medida en septiembre de 2026. Evita regresiones globales
+      // mientras se aumenta cobertura de pantallas y flujos de integración.
+      statements: 50,
+      branches: 33,
+      functions: 49,
+      lines: 52,
     },
   },
 };

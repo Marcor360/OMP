@@ -1,4 +1,3 @@
-/* eslint-disable import/first */
 import type { PersistentBlobStore } from '@/src/services/repositories/ports/persistent-blob-store';
 
 const mockStorage = new Map<string, string>();

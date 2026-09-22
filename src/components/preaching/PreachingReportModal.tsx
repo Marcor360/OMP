@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -71,15 +71,14 @@ export function PreachingReportModal({
   const [hours, setHours] = useState(String(existingReport?.hours ?? 0));
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!visible) return;
+  const resetForm = () => {
     setParticipated(existingReport?.participated ?? false);
     setBibleStudies(String(existingReport?.bibleStudies ?? 0));
     setReturnVisits(String(existingReport?.returnVisits ?? 0));
     setComments(existingReport?.comments ?? '');
     setHours(String(existingReport?.hours ?? 0));
     setError(null);
-  }, [existingReport, visible]);
+  };
 
   const handleSubmit = async () => {
     const normalizedBibleStudies = parseIntegerField(bibleStudies);
@@ -113,7 +112,13 @@ export function PreachingReportModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      onShow={resetForm}
+    >
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <View style={styles.header}>

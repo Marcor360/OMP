@@ -20,4 +20,14 @@ module.exports = {
       },
     ],
   },
+  coverageThreshold: {
+    // Línea base medida en septiembre de 2026. Los handlers grandes se
+    // elevarán por módulo; este mínimo impide que el conjunto retroceda.
+    global: {
+      statements: 30,
+      branches: 15,
+      functions: 25,
+      lines: 28,
+    },
+  },
 };

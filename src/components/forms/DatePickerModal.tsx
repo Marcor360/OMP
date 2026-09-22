@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -143,13 +143,12 @@ export function DatePickerModal({
   const canGoNextMonth =
     !maxDate || toDateInput(nextMonth) <= maxDate;
 
-  useEffect(() => {
-    if (!visible) return;
+  const resetVisibleMonth = () => {
     const nextVisibleDate = parseDateInput(selectedDate);
     setVisibleMonth(
       new Date(nextVisibleDate.getFullYear(), nextVisibleDate.getMonth(), 1)
     );
-  }, [selectedDate, visible]);
+  };
 
   const moveMonth = (offset: number) => {
     setVisibleMonth((current) => addMonths(current, offset));
@@ -170,6 +169,7 @@ export function DatePickerModal({
       transparent
       animationType="fade"
       onRequestClose={onClose}
+      onShow={resetVisibleMonth}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={styles.panel}>

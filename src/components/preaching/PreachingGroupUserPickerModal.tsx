@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -66,13 +66,14 @@ export function PreachingGroupUserPickerModal({
   const [draftIds, setDraftIds] = useState<string[]>(selectedIds);
   const selectedIdsKey = selectedIds.join('\u0000');
 
-  useEffect(() => {
-    if (visible) {
-      setDraftIds(selectedIdsKey ? selectedIdsKey.split('\u0000') : []);
-      return;
-    }
+  const resetPicker = () => {
+    setDraftIds(selectedIdsKey ? selectedIdsKey.split('\u0000') : []);
+  };
+
+  const closePicker = () => {
     setSearch('');
-  }, [selectedIdsKey, visible]);
+    onClose();
+  };
 
   const activeGroups = useMemo(() => groups.filter((group) => group.isActive), [groups]);
   const currentGroup = useMemo(
@@ -177,7 +178,8 @@ export function PreachingGroupUserPickerModal({
       animationType="slide"
       transparent
       statusBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={closePicker}
+      onShow={resetPicker}
     >
       <SafeAreaView style={styles.overlay}>
         <KeyboardAvoidingView
@@ -190,7 +192,7 @@ export function PreachingGroupUserPickerModal({
               <Text style={styles.title}>{title}</Text>
               <TouchableOpacity
                 style={styles.closeButton}
-                onPress={onClose}
+                onPress={closePicker}
                 accessibilityRole="button"
                 accessibilityLabel={t('common.close')}
               >
@@ -285,7 +287,7 @@ export function PreachingGroupUserPickerModal({
             />
 
             <View style={styles.footer}>
-              <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+              <TouchableOpacity style={styles.cancelButton} onPress={closePicker}>
                 <Text style={styles.cancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity

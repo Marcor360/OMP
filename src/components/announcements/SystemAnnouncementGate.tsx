@@ -1,18 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { SystemAnnouncementModal } from '@/src/components/announcements/SystemAnnouncementModal';
 import { useSystemAnnouncements } from '@/src/hooks/use-system-announcements';
 
 export function SystemAnnouncementGate() {
   const { currentAnnouncement, markAsViewed } = useSystemAnnouncements();
-  const [visibleAnnouncementId, setVisibleAnnouncementId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setVisibleAnnouncementId(currentAnnouncement?.id ?? null);
-  }, [currentAnnouncement?.id]);
+  // La identidad del anuncio es la fuente de verdad: al llegar uno nuevo se
+  // muestra automaticamente, sin sincronizar estado derivado dentro de un effect.
+  const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState<string | null>(null);
 
   const handleClose = async () => {
-    setVisibleAnnouncementId(null);
+    setDismissedAnnouncementId(currentAnnouncement?.id ?? null);
 
     try {
       await markAsViewed();
@@ -25,7 +23,7 @@ export function SystemAnnouncementGate() {
     <SystemAnnouncementModal
       announcement={currentAnnouncement}
       onClose={handleClose}
-      visible={Boolean(currentAnnouncement && visibleAnnouncementId === currentAnnouncement.id)}
+      visible={Boolean(currentAnnouncement && dismissedAnnouncementId !== currentAnnouncement.id)}
     />
   );
 }

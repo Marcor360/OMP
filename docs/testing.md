@@ -7,6 +7,11 @@ npm run validate
 ```
 
 Este comando ejecuta lint de la app, TypeScript, tests frontend, lint/build de Functions y tests de Functions.
+La cobertura forma parte de CI: el cliente no puede bajar de 50% statements,
+33% branches, 49% functions y 52% lines; Functions no puede bajar de 30%,
+15%, 25% y 28%, respectivamente. Los mínimos son una línea base, no una meta
+de calidad: cada módulo nuevo debe incluir pruebas de sus flujos autorizados y
+de sus fallos relevantes.
 
 ## Frontend
 
@@ -25,9 +30,7 @@ Cobertura inicial agregada:
 - Helpers de fecha `YYYY-MM-DD` y rango semanal.
 - Cache persistente AsyncStorage con ciclo anual, TTL, limpieza por valor y limpieza por congregacion.
 
-Pendiente ampliar pruebas para:
-
-Agregar pruebas para:
+Prioridad para ampliar pruebas:
 
 - Roles.
 - Permisos.
@@ -57,14 +60,28 @@ Cobertura inicial agregada:
 - Congregacion suspendida bloquea acceso a datos de esa congregacion.
 - Push token solo puede escribirse por el usuario dueno.
 
-Pendiente ampliar:
+### Bloqueador actual de Rules permitidas
 
-- Admin puede crear usuario.
-- Supervisor solo puede hacer lo permitido.
-- Usuario normal no puede editar roles.
-- Encargado puede gestionar su modulo.
-- Usuario con permiso `usuarios.view` lee usuarios de la misma congregacion sin agotar el presupuesto de expresiones de Rules.
-- Endurecimiento post-migracion de roles y planes legacy.
+Trece pruebas de casos **permitidos** permanecen en `skip` porque la evaluación
+de Rules supera el máximo real de 1,000 expresiones. No deben habilitarse hasta
+reducir el coste de las Rules; hacerlas pasar ignorando ese error ocultaría una
+denegación real en producción.
+
+Plan obligatorio antes de retirar los `skip`:
+
+1. Medir cada operación permitida con un fixture mínimo en el emulador.
+2. Simplificar predicados compartidos de acceso y escritura administrativa,
+   evitando reevaluar el mismo documento/permisos en cada validación.
+3. Mantener sin cambios la semántica de aislamiento por `congregationId` y los
+   denies existentes.
+4. Volver a activar una prueba permitida por vez y ejecutar `npm run test:rules`.
+5. Desplegar Rules e índices juntos sólo después de que todas las pruebas de
+   allow y deny estén verdes.
+
+También queda pendiente:
+
+- Crear/editar/eliminar por rol y por módulo.
+- Migración y endurecimiento post-migración de roles y planes legacy.
 
 ## Manual
 

@@ -12,7 +12,7 @@ Aplicación multiplataforma para la organización interna, administración y coo
 
 **Estado:** beta avanzada en estabilización
 
-**Última actualización:** 9 de agosto de 2026
+**Última actualización:** 18 de septiembre de 2026
 
 </div>
 
@@ -55,6 +55,8 @@ El producto administra información por congregación. Toda operación congregac
 | Nombre | OMP Suite |
 | Versión pública | `1.44.0` |
 | Android `versionCode` | `14400` |
+| iOS `buildNumber` | `1.44.0` |
+| EAS remoto | Android `14400` · iOS `1.44.0` |
 | Android package | `com.marcor360.omp` |
 | iOS bundle identifier | `com.marcor360.omp` |
 | Plataformas | Web, Android e iOS |
@@ -66,7 +68,16 @@ El producto administra información por congregación. Toda operación congregac
 | Pagos | Stripe Billing |
 | CI | GitHub Actions |
 
-La versión visible proviene de `app.json → expo.version`. `package.json`, `package-lock.json`, `app.json` y la configuración nativa Android deben actualizarse juntos en cada release.
+La versión visible proviene de `app.json → expo.version`. `package.json`, `package-lock.json`, `app.json` y la configuración nativa Android deben actualizarse juntos en cada release. EAS usa números remotos para builds de tienda.
+
+### Cambios recientes
+
+- actualización compatible a Expo SDK 57, React Native 0.86 y Firebase Web SDK 12.19;
+- validación de Expo restaurada: `expo install --check` y Expo Doctor completan correctamente, excluyendo solo cuatro parches SDK 57 que todavía no están publicados en npm;
+- reconciliación diaria de permisos derivados paginada para no leer todos los usuarios de una sola vez;
+- operaciones administrativas de contraseña informan el resultado parcial cuando Auth se actualiza pero falla la metadata de Firestore;
+- App Check para callables críticos se controla centralmente con `ENFORCE_APPCHECK_CRITICAL_CALLABLES`; permanece desactivado mientras se implementa la atestación nativa real;
+- Functions desplegadas en `ormeprassig-public` después de validar lint, compilación y pruebas.
 
 ## Funciones principales
 
@@ -142,16 +153,16 @@ Las versiones siguientes se obtienen de los manifiestos actuales del repositorio
 
 | Tecnología | Versión |
 | --- | --- |
-| Expo | SDK `57` (`~57.0.11`) |
+| Expo | SDK `57` (`~57.0.22`) |
 | React | `19.2.3` |
-| React Native | `0.86.2` |
+| React Native | `0.86.3` |
 | React Native Web | `~0.21.0` |
-| Expo Router | `^57.0.11` |
+| Expo Router | `~57.0.21` |
 | TypeScript | `~6.0.3` |
-| Firebase Web SDK | `^12.17.1` |
+| Firebase Web SDK | `^12.19.0` |
 | NativeWind | `^4.2.6` |
 | Tailwind CSS | `^3.4.17` |
-| React Navigation | `^7.3.15` |
+| React Navigation | `^7.3.18` |
 | Reanimated | `4.5.1` |
 | AsyncStorage | `2.2.0` |
 
@@ -172,7 +183,7 @@ La aplicación tiene activados `typedRoutes` y React Compiler.
 
 - Firebase Authentication;
 - Cloud Firestore;
-- Cloud Functions de segunda generación;
+- Cloud Functions de primera y segunda generación, principalmente Gen 2;
 - Firebase Admin Messaging;
 - Expo Notifications;
 - Stripe Checkout, Customer Portal y Webhooks;
@@ -208,6 +219,10 @@ Authentication / Firestore / Stripe / Push
 8. Los documentos de `/system` no son escribibles desde el cliente.
 9. Los tokens push pertenecen al usuario autenticado.
 10. Los usuarios no pueden cambiar por sí mismos `role`, `isActive` o `congregationId`.
+
+### App Check
+
+Los callables críticos comparten una bandera de backend `ENFORCE_APPCHECK_CRITICAL_CALLABLES`, desplegada actualmente como `false`. No debe activarse hasta completar el bridge Expo de atestación nativa y la verificación de backend; el detalle está en [app-check-native-implementation.md](docs/app-check-native-implementation.md).
 
 ## Modelo de datos
 
@@ -360,6 +375,12 @@ STRIPE_PRICE_OMP_250
 APP_BILLING_RETURN_URL
 ```
 
+Parámetro de runtime no secreto:
+
+```text
+ENFORCE_APPCHECK_CRITICAL_CALLABLES=false
+```
+
 Configúralos con Firebase Secrets. Nunca confirmes `.env`, keystores, certificados, credenciales o archivos de logs.
 
 ## Comandos
@@ -373,9 +394,11 @@ Configúralos con Firebase Secrets. Nunca confirmes `.env`, keystores, certifica
 | `npm run android` | Ejecuta Android nativo |
 | `npm run android:release` | Ejecuta variante release Android |
 | `npm run ios` | Ejecuta iOS nativo |
+| `npm run web` | Inicia Web en desarrollo |
 | `npm run build:web` | Exporta Web a `dist/` y copia `.htaccess` |
 | `npm run preview:web` | Sirve `dist/` como SPA |
 | `npm run lint` | Ejecuta ESLint |
+| `npm run typecheck` | Ejecuta TypeScript sin emitir archivos |
 | `npm test` | Ejecuta Jest |
 | `npm run test:watch` | Jest en modo watch |
 | `npm run test:coverage` | Genera cobertura |
@@ -420,7 +443,7 @@ npm run build:web
 
 1. validación de índices;
 2. lint de la aplicación;
-3. TypeScript de la aplicación;
+3. typecheck de la aplicación;
 4. pruebas Jest de la aplicación;
 5. lint de Functions;
 6. build de Functions;
@@ -459,6 +482,7 @@ La firma release usa propiedades `MYAPP_UPLOAD_*` en el `gradle.properties` pers
 npx eas-cli@latest login
 npx eas-cli@latest build --platform android --profile production
 npx eas-cli@latest build --platform ios --profile production
+npx eas-cli@latest submit --platform android --latest --profile production
 ```
 
 Perfiles disponibles:
@@ -467,7 +491,7 @@ Perfiles disponibles:
 - `preview`: distribución interna y APK Android;
 - `production`: build de tienda con incremento remoto automático.
 
-`eas.json` usa `appVersionSource: remote`. Antes de publicar, comprueba que el número remoto de EAS no retroceda respecto al `versionCode` o `buildNumber` esperado.
+`eas.json` usa `appVersionSource: remote`. La línea base remota de la versión 1.44.0 es Android `14400` e iOS `1.44.0`; el perfil `production` incrementa el número de build remoto automáticamente. Antes de publicar, confirma el número que EAS asignará.
 
 ### Web
 
@@ -582,6 +606,7 @@ La aplicación está en beta avanzada. El código contiene flujos productivos, p
 | [qa-notifications.md](docs/qa-notifications.md) | QA de push |
 | [qa-mobile-navigation.md](docs/qa-mobile-navigation.md) | QA móvil |
 | [app-check-rollout.md](docs/app-check-rollout.md) | Despliegue de App Check |
+| [app-check-native-implementation.md](docs/app-check-native-implementation.md) | Requisitos de atestación nativa de App Check |
 | [cache-strategy.md](docs/cache-strategy.md) | Estrategia de cache |
 | [testing.md](docs/testing.md) | Estrategia de pruebas |
 | [predeploy-validation.md](docs/predeploy-validation.md) | Checklist previo al despliegue |

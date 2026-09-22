@@ -1,4 +1,3 @@
-/* eslint-disable import/first */
 jest.mock('firebase/firestore', () => {
   class MockTimestamp {
     private readonly mockDate: Date;

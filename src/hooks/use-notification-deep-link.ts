@@ -43,7 +43,12 @@ export function useNotificationDeepLink(): void {
   const pendingHrefRef = useRef<string | null>(null);
   const processedIdsRef = useRef<Set<string>>(new Set());
   const authStateRef = useRef({ isSessionValid, loadingProfile, congregationId, isAppLocked });
-  authStateRef.current = { isSessionValid, loadingProfile, congregationId, isAppLocked };
+
+  // El listener de notificaciones se registra una sola vez; mantener el estado
+  // actual en una ref evita cierres obsoletos sin mutar refs durante el render.
+  useEffect(() => {
+    authStateRef.current = { isSessionValid, loadingProfile, congregationId, isAppLocked };
+  }, [congregationId, isAppLocked, isSessionValid, loadingProfile]);
 
   const consumePendingHref = useCallback((): void => {
     const { isSessionValid: authed, loadingProfile: loading, isAppLocked: locked } = authStateRef.current;

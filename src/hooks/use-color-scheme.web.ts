@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { useColorScheme as useRNColorScheme } from 'react-native';
 
 import { resolveColorScheme, useOptionalAppTheme } from '@/src/context/theme-context';
@@ -8,11 +8,13 @@ import { resolveColorScheme, useOptionalAppTheme } from '@/src/context/theme-con
  */
 export function useColorScheme() {
   const appTheme = useOptionalAppTheme();
-  const [hasHydrated, setHasHydrated] = useState(false);
-
-  useEffect(() => {
-    setHasHydrated(true);
-  }, []);
+  // En SSR el snapshot es estable y claro; React vuelve a leer el snapshot
+  // cliente durante la hidratación sin sincronizar estado derivado en un effect.
+  const hasHydrated = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  );
 
   const colorScheme = useRNColorScheme();
 
