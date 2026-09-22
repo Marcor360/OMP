@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -58,14 +58,15 @@ export function AddMembersToCleaningGroupModal({
     currentGroupId
   );
 
-  useEffect(() => {
-    if (visible) {
-      setSelectedIds(preSelectedIds);
-      return;
-    }
-
+  const resetPicker = useCallback(() => {
+    setSelectedIds(preSelectedIds);
     setSearch('');
-  }, [preSelectedIds, visible]);
+  }, [preSelectedIds]);
+
+  const closePicker = useCallback(() => {
+    setSearch('');
+    onClose();
+  }, [onClose]);
 
   const filteredUsers = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -251,7 +252,8 @@ export function AddMembersToCleaningGroupModal({
       visible={visible}
       animationType="slide"
       transparent
-      onRequestClose={onClose}
+      onRequestClose={closePicker}
+      onShow={resetPicker}
       statusBarTranslucent
     >
       <SafeAreaView style={styles.overlay} edges={['top']}>
@@ -266,7 +268,7 @@ export function AddMembersToCleaningGroupModal({
             <Text style={styles.title}>{t('cleaning.addMembersModalTitle')}</Text>
             <TouchableOpacity
               style={styles.closeBtn}
-              onPress={onClose}
+              onPress={closePicker}
               disabled={confirming}
               accessibilityRole="button"
               accessibilityLabel={t('cleaning.closeAddMembersModal')}
@@ -344,7 +346,7 @@ export function AddMembersToCleaningGroupModal({
           <View style={styles.footer}>
             <TouchableOpacity
               style={styles.cancelBtn}
-              onPress={onClose}
+              onPress={closePicker}
               disabled={confirming}
             >
               <Text style={styles.cancelText}>{t('common.cancel')}</Text>

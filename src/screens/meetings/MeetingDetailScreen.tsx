@@ -53,40 +53,52 @@ export function MeetingDetailScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
 
-  const [meeting, setMeeting] = useState<Meeting | null>(null);
-  const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const canManage = canManageMeetings(appUser);
+  const requestKey = congregationId && id ? `${congregationId}:${id}:${canManage}` : null;
+  const [meetingState, setMeetingState] = useState<{
+    requestKey: string | null;
+    meeting: Meeting | null;
+    error: string | null;
+  }>({ requestKey: null, meeting: null, error: null });
   const scrollViewRef = useRef<ScrollView>(null);
   const highlightedRef = useRef<View>(null);
 
   useEffect(() => {
-    if (loadingProfile) return;
+    if (loadingProfile || !congregationId || !id || !requestKey) return;
 
-    if (!congregationId || !id) {
-      setError(profileError ?? 'No se encontro la congregacion del usuario actual.');
-      setLoading(false);
-      return;
-    }
+    let active = true;
 
-    getMeetingById(congregationId, id)
+    void getMeetingById(congregationId, id)
       .then((doc) => {
+        if (!active) return;
         if (!doc) {
-          setError('Reunion no encontrada.');
+          setMeetingState({ requestKey, meeting: null, error: 'Reunion no encontrada.' });
           return;
         }
 
         if (!canManage && doc.publicationStatus !== 'published') {
-          setError('No tienes acceso a esta reunion.');
+          setMeetingState({ requestKey, meeting: null, error: 'No tienes acceso a esta reunion.' });
           return;
         }
 
-        setMeeting(doc);
+        setMeetingState({ requestKey, meeting: doc, error: null });
       })
-      .catch((requestError) => setError(formatFirestoreError(requestError)))
-      .finally(() => setLoading(false));
-  }, [canManage, congregationId, id, loadingProfile, profileError]);
+      .catch((requestError) => {
+        if (active) setMeetingState({ requestKey, meeting: null, error: formatFirestoreError(requestError) });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [canManage, congregationId, id, loadingProfile, requestKey]);
+
+  const hasCurrentMeeting = meetingState.requestKey === requestKey;
+  const loading = loadingProfile || Boolean(requestKey && !hasCurrentMeeting);
+  const meeting = hasCurrentMeeting ? meetingState.meeting : null;
+  const error = !requestKey && !loadingProfile
+    ? profileError ?? 'No se encontro la congregacion del usuario actual.'
+    : hasCurrentMeeting ? meetingState.error : null;
 
   const sections = useMemo(() => (meeting ? buildMeetingProgramFromMeeting(meeting) : []), [meeting]);
   const weekendSessions = useMemo(

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Modal,
   StyleSheet,
@@ -39,15 +39,14 @@ export function DepartmentEditorModal({
   const [allowMultipleManagers, setAllowMultipleManagers] = useState(false);
   const [allowMultipleAssistants, setAllowMultipleAssistants] = useState(true);
 
-  useEffect(() => {
-    if (!visible) return;
+  const resetForm = useCallback(() => {
     setName(department?.name ?? '');
     setDescription(department?.description ?? '');
     setOrder(String(department?.order ?? 1));
     setIsActive(department?.isActive ?? true);
     setAllowMultipleManagers(department?.allowMultipleManagers ?? false);
     setAllowMultipleAssistants(department?.allowMultipleAssistants ?? true);
-  }, [department, visible]);
+  }, [department]);
 
   const save = () => {
     if (!name.trim()) return;
@@ -64,7 +63,7 @@ export function DepartmentEditorModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onShow={resetForm}>
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <View style={styles.header}>

@@ -39,30 +39,38 @@ export function ProfileScreen() {
   const { roleColor, userStatusColor } = useStatusColors();
   const styles = createStyles(colors);
   const { t } = useI18n();
-  const [congregationName, setCongregationName] = useState('--');
+  const congregationId = appUser?.congregationId ?? null;
+  const [congregationState, setCongregationState] = useState({
+    congregationId: null as string | null,
+    name: '',
+  });
 
   useEffect(() => {
-    const congregationId = appUser?.congregationId;
-    if (!congregationId) {
-      setCongregationName('--');
-      return;
-    }
+    if (!congregationId) return;
 
     let cancelled = false;
-    setCongregationName(t('profile.loadingCongregation'));
 
     getCongregationDisplayName(congregationId, { forceServer: true })
       .then((name) => {
-        if (!cancelled) setCongregationName(name);
+        if (!cancelled) setCongregationState({ congregationId, name });
       })
       .catch(() => {
-        if (!cancelled) setCongregationName(t('profile.unnamedCongregation'));
+        if (!cancelled) setCongregationState({
+          congregationId,
+          name: t('profile.unnamedCongregation'),
+        });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [appUser?.congregationId, t]);
+  }, [congregationId, t]);
+
+  const congregationName = !congregationId
+    ? '--'
+    : congregationState.congregationId === congregationId
+      ? congregationState.name
+      : t('profile.loadingCongregation');
 
   const handleLogout = async () => {
     const confirmed = await confirmAlert({

@@ -30,59 +30,47 @@ export function AssignmentDetailScreen() {
   const canEditMeetingAssignment =
     canManageAssignments(appUser) && canManageMeetings(appUser);
 
-  const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const requestKey = congregationId && id ? [congregationId, id, meetingId ?? '', source ?? ''].join(':') : null;
+  const [assignmentState, setAssignmentState] = useState<{
+    requestKey: string | null;
+    assignment: Assignment | null;
+    error: string | null;
+  }>({ requestKey: null, assignment: null, error: null });
 
   useEffect(() => {
-    if (loadingProfile) return;
-
-    if (!congregationId || !id) {
-      setError(profileError ?? t('assignments.errorLoadDetail'));
-      setLoading(false);
-      return;
-    }
+    if (loadingProfile || !congregationId || !id || !requestKey) return;
 
     let cancelled = false;
 
-    const load = async () => {
-      try {
-        const result = await getAssignmentById({
-          congregationId,
-          assignmentId: id,
-          meetingId,
-          source,
+    void getAssignmentById({ congregationId, assignmentId: id, meetingId, source })
+      .then((result) => {
+        if (!cancelled) setAssignmentState({
+          requestKey,
+          assignment: result,
+          error: result ? null : t('assignments.errorNotFound'),
         });
-
-        if (cancelled) return;
-
-        if (!result) {
-          setAssignment(null);
-          setError(t('assignments.errorNotFound'));
-          return;
-        }
-
-        setAssignment(result);
-        setError(null);
-      } catch (requestError) {
-        if (cancelled) return;
-        setAssignment(null);
-        setError(formatFirestoreError(requestError));
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void load();
+      })
+      .catch((requestError) => {
+        if (!cancelled) setAssignmentState({
+          requestKey,
+          assignment: null,
+          error: formatFirestoreError(requestError),
+        });
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [congregationId, id, loadingProfile, meetingId, profileError, source, t]);
+  }, [congregationId, id, loadingProfile, meetingId, requestKey, source, t]);
 
-  if (loading || loadingProfile) {
+  const hasCurrentAssignment = assignmentState.requestKey === requestKey;
+  const loading = loadingProfile || Boolean(requestKey && !hasCurrentAssignment);
+  const assignment = hasCurrentAssignment ? assignmentState.assignment : null;
+  const error = !requestKey && !loadingProfile
+    ? profileError ?? t('assignments.errorLoadDetail')
+    : hasCurrentAssignment ? assignmentState.error : null;
+
+  if (loading) {
     return <LoadingState message={t('assignments.loadingDetail')} />;
   }
 

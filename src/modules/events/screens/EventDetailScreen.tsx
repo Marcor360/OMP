@@ -26,35 +26,47 @@ export function EventDetailScreen() {
   const styles = createStyles(colors);
   const canManage = canManageEvents(appUser);
 
-  const [event, setEvent] = useState<CongregationEvent | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const requestKey = congregationId && id ? `${congregationId}:${id}` : null;
+  const [eventState, setEventState] = useState<{
+    requestKey: string | null;
+    event: CongregationEvent | null;
+    error: string | null;
+  }>({ requestKey: null, event: null, error: null });
 
   useEffect(() => {
-    if (loadingProfile) return;
+    if (loadingProfile || !congregationId || !id || !requestKey) return;
 
-    if (!congregationId || !id) {
-      setError(profileError ?? t('eventDetail.notFound'));
-      setLoading(false);
-      return;
-    }
+    let active = true;
 
-    getEventById(id)
+    void getEventById(id)
       .then((doc) => {
+        if (!active) return;
         // getEventById no filtra por congregacion: la coleccion 'events' es raiz,
         // asi que la pertenencia se verifica aqui antes de mostrar cualquier dato.
         if (!doc || doc.congregationId !== congregationId) {
-          setError(t('eventDetail.notFound'));
+          setEventState({ requestKey, event: null, error: t('eventDetail.notFound') });
           return;
         }
 
-        setEvent(doc);
+        setEventState({ requestKey, event: doc, error: null });
       })
-      .catch((requestError) => setError(formatFirestoreError(requestError)))
-      .finally(() => setLoading(false));
-  }, [congregationId, id, loadingProfile, profileError, t]);
+      .catch((requestError) => {
+        if (active) setEventState({ requestKey, event: null, error: formatFirestoreError(requestError) });
+      });
 
-  if (loading || loadingProfile) return <LoadingState message={t('eventDetail.loading')} />;
+    return () => {
+      active = false;
+    };
+  }, [congregationId, id, loadingProfile, requestKey, t]);
+
+  const hasCurrentEvent = eventState.requestKey === requestKey;
+  const loading = loadingProfile || Boolean(requestKey && !hasCurrentEvent);
+  const event = hasCurrentEvent ? eventState.event : null;
+  const error = !requestKey && !loadingProfile
+    ? profileError ?? t('eventDetail.notFound')
+    : hasCurrentEvent ? eventState.error : null;
+
+  if (loading) return <LoadingState message={t('eventDetail.loading')} />;
   if (error || !event) return <ErrorState message={error ?? t('eventDetail.notFound')} />;
 
   const formatEventDate = (date: Date): string =>

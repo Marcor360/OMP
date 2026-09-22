@@ -11,36 +11,41 @@ import { formatFirestoreError } from '@/src/utils/errors/errors';
 export const useNotifications = () => {
   const { uid, congregationId } = useUser();
 
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [notificationState, setNotificationState] = useState<{
+    ownerUid: string | null;
+    notifications: AppNotification[];
+    loading: boolean;
+    error: string | null;
+  }>({ ownerUid: null, notifications: [], loading: true, error: null });
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!uid) {
-      setNotifications([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
+    if (!uid) return;
 
-    setLoading(true);
+    let active = true;
 
     const unsubscribe = subscribeToUserNotifications(
       uid,
       congregationId,
       (items) => {
-        setNotifications(items);
-        setError(null);
-        setLoading(false);
+        if (!active) return;
+        setNotificationState({ ownerUid: uid, notifications: items, loading: false, error: null });
       },
       (listenError) => {
-        setError(formatFirestoreError(listenError));
-        setLoading(false);
+        if (!active) return;
+        setNotificationState((current) => ({
+          ownerUid: uid,
+          notifications: current.ownerUid === uid ? current.notifications : [],
+          loading: false,
+          error: formatFirestoreError(listenError),
+        }));
       }
     );
 
-    return unsubscribe;
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [congregationId, uid]);
 
   const refresh = useCallback(async () => {
@@ -53,10 +58,11 @@ export const useNotifications = () => {
 
     try {
       const data = await getUserNotifications(uid, congregationId);
-      setNotifications(data);
-      setError(null);
+      setNotificationState({ ownerUid: uid, notifications: data, loading: false, error: null });
     } catch (requestError) {
-      setError(formatFirestoreError(requestError));
+      setNotificationState((current) => current.ownerUid === uid
+        ? { ...current, error: formatFirestoreError(requestError) }
+        : current);
     } finally {
       setRefreshing(false);
     }
@@ -71,11 +77,13 @@ export const useNotifications = () => {
     return markAllNotificationsAsRead(uid, congregationId);
   }, [congregationId, uid]);
 
+  const hasCurrentNotifications = notificationState.ownerUid === uid;
+
   return {
-    notifications,
-    loading,
+    notifications: hasCurrentNotifications ? notificationState.notifications : [],
+    loading: uid ? !hasCurrentNotifications || notificationState.loading : false,
     refreshing,
-    error,
+    error: hasCurrentNotifications ? notificationState.error : null,
     refresh,
     markRead,
     markAllRead,

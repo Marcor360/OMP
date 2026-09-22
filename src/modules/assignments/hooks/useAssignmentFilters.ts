@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import {
   AssignmentCategory,
@@ -62,13 +62,6 @@ export const useAssignmentFilters = (congregationId: string) => {
   const [filters, setFilters] = useState<AssignmentFilters>(
     createDefaultFilters(congregationId)
   );
-
-  useEffect(() => {
-    setFilters((current) => ({
-      ...current,
-      congregationId,
-    }));
-  }, [congregationId]);
 
   const updateFilter = useCallback(
     <K extends keyof AssignmentFilters>(key: K, value: AssignmentFilters[K]) => {

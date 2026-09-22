@@ -9,7 +9,7 @@
  * - Domingo NO puede habilitarse en esta versión
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -69,10 +69,8 @@ export function FieldServiceDayModal({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Poblar campos cuando se abre el modal con datos existentes
-  useEffect(() => {
-    if (!visible || !date) return;
-
+  // Poblar campos cuando el modal termina de abrirse con datos existentes.
+  const resetForm = useCallback(() => {
     setValidationError(null);
     setShowDeleteConfirm(false);
 
@@ -82,7 +80,7 @@ export function FieldServiceDayModal({
     setSaveMode(hasExisting ? 'add' : 'replace');
     setHoursText('');
     setMinutesText('');
-  }, [visible, date, existingMinutes]);
+  }, [existingMinutes]);
 
   const handleModeChange = useCallback(
     (mode: SaveMode) => {
@@ -169,6 +167,7 @@ export function FieldServiceDayModal({
       transparent
       animationType="slide"
       onRequestClose={handleClose}
+      onShow={resetForm}
       statusBarTranslucent
     >
       <TouchableWithoutFeedback onPress={handleClose}>

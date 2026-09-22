@@ -6,36 +6,34 @@ import { subscribeToUnreadNotificationsCount } from '@/src/services/notification
 export const useUnreadNotificationsCount = () => {
   const { uid, congregationId } = useUser();
 
-  const [count, setCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [countState, setCountState] = useState({ ownerUid: null as string | null, count: 0, loading: true });
 
   useEffect(() => {
-    if (!uid) {
-      setCount(0);
-      setLoading(false);
-      return;
-    }
+    if (!uid) return;
 
-    setLoading(true);
+    let active = true;
 
     const unsubscribe = subscribeToUnreadNotificationsCount(
       uid,
       congregationId,
       (nextCount) => {
-        setCount(nextCount);
-        setLoading(false);
+        if (active) setCountState({ ownerUid: uid, count: nextCount, loading: false });
       },
       () => {
-        setCount(0);
-        setLoading(false);
+        if (active) setCountState({ ownerUid: uid, count: 0, loading: false });
       }
     );
 
-    return unsubscribe;
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [congregationId, uid]);
 
+  const hasCurrentCount = countState.ownerUid === uid;
+
   return {
-    unreadCount: count,
-    loading,
+    unreadCount: hasCurrentCount ? countState.count : 0,
+    loading: uid ? !hasCurrentCount || countState.loading : false,
   };
 };
