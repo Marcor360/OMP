@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Consolidacion de grupos de limpieza hacia la ruta canonica:
  *   congregations/{congregationId}/cleaningGroups   (scoped, camelCase)

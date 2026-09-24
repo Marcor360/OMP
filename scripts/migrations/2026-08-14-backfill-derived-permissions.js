@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // F0.4: backfill de derivedPermissions para usuarios existentes.
 //
 // Fase 0 materializo la derivacion de permisos por cargo (position x

@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Quita permissions.departments.manage / permissions.organigrama.manage de usuarios
  * que no son coordinador/secretario ni admin de sistema.

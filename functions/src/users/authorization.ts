@@ -12,7 +12,7 @@ import type {
 } from './types.js';
 
 export const hasCoordinatorOrSecretaryAssignment = (
-  assignments: ReadonlyArray<{ position?: string }> | undefined
+  assignments: readonly { position?: string }[] | undefined
 ): boolean =>
   Array.isArray(assignments) &&
   assignments.some((assignment) => assignment?.position === 'coordinador' || assignment?.position === 'secretario');
@@ -30,7 +30,7 @@ export const isSystemRootUser = (flags: {
 
 export const stripOrgChartManageUnlessAuthorized = (
   permissions: UserPermissions | undefined,
-  assignments: ReadonlyArray<{ position?: string }> | undefined,
+  assignments: readonly { position?: string }[] | undefined,
   flags: { isSystemUser?: boolean; isPrimaryAdmin?: boolean; isRootAdmin?: boolean; systemProtected?: boolean }
 ): UserPermissions | undefined => {
   if (!permissions) return permissions;

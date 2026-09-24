@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // SEC-01: mueve los identificadores internos de Stripe del documento raiz
 // congregations/{id} a congregations/{id}/private/billing.
 //

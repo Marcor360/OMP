@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * P0 (predicacion/territorios) — script de solo lectura.
  *

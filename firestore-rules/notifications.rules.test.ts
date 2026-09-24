@@ -21,7 +21,7 @@ import {
 } from 'firebase/firestore';
 
 let testEnv: RulesTestEnvironment;
-const projectId = `omp-notification-rules-${Date.now()}`;
+const projectId = 'demo-omp';
 const rules = readFileSync(resolve(__dirname, '../firestore.rules'), 'utf8');
 
 jest.setTimeout(30_000);

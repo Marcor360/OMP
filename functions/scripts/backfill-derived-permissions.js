@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Fase 0 (F0.4) — backfill de derivedPermissions para todos los usuarios
  * existentes.

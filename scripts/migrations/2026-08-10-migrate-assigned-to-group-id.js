@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // BUG-01: separa assignedToGroupId de assignedToUid. Las asignaciones de
 // grupos de limpieza escribian el mismo valor en ambos campos
 // (assignedToUid: cleaningGroupId), lo que rompia el filtro

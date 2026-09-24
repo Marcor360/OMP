@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 const { initializeApp, applicationDefault } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
