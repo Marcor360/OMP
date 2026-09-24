@@ -8,11 +8,11 @@ Aplicación multiplataforma para la organización interna, administración y coo
 
 `Web` · `Android` · `iOS` · `Expo` · `React Native` · `Firebase` · `Stripe`
 
-**Versión actual:** `1.44.0`
+**Versión actual:** `1.50.0`
 
 **Estado:** beta avanzada en estabilización
 
-**Última actualización:** 18 de septiembre de 2026
+**Última actualización:** 23 de septiembre de 2026
 
 </div>
 
@@ -53,10 +53,10 @@ El producto administra información por congregación. Toda operación congregac
 | Dato | Valor |
 | --- | --- |
 | Nombre | OMP Suite |
-| Versión pública | `1.44.0` |
-| Android `versionCode` | `14400` |
-| iOS `buildNumber` | `1.44.0` |
-| EAS remoto | Android `14400` · iOS `1.44.0` |
+| Versión pública | `1.50.0` |
+| Android `versionCode` | `15000` |
+| iOS `buildNumber` | `1.50.0` |
+| Referencia de release EAS | Android `15000` · iOS `1.50.0` |
 | Android package | `com.marcor360.omp` |
 | iOS bundle identifier | `com.marcor360.omp` |
 | Plataformas | Web, Android e iOS |
@@ -71,6 +71,55 @@ El producto administra información por congregación. Toda operación congregac
 La versión visible proviene de `app.json → expo.version`. `package.json`, `package-lock.json`, `app.json` y la configuración nativa Android deben actualizarse juntos en cada release. EAS usa números remotos para builds de tienda.
 
 ### Cambios recientes
+
+### Novedades de la versión 1.50.0
+
+Esta versión consolida las mejoras entregadas desde `1.45.0` y actualiza los
+manifiestos Web, Android e iOS al mismo release público.
+
+#### Web
+
+- la sesión web por inactividad usa una única fuente de tiempo fuera del render,
+  evitando trabajo impuro durante la compilación de React;
+- la configuración de Firebase se valida al arrancar, con diagnóstico claro de
+  variables públicas faltantes durante builds y despliegues web;
+- los anuncios, notificaciones y datos de congregación se asocian al usuario y
+  congregación actuales, impidiendo que una respuesta previa se muestre al
+  cambiar de sesión o pestaña.
+
+#### Aplicación móvil y experiencia compartida
+
+- los detalles de reuniones, eventos y asignaciones cancelan solicitudes que
+  dejan de ser vigentes y muestran únicamente datos del contexto actual;
+- los formularios de usuarios normalizan rol, cargo y departamento al momento
+  de la interacción, evitando estados intermedios inválidos y puestos duplicados;
+- el contador de predicación mantiene el usuario hidratado como estado visible,
+  para no revelar datos locales del usuario anterior en dispositivos compartidos;
+- territorios, grupos de predicación, planes y dominios de correo usan estados
+  con clave de congregación para aislar resultados asíncronos;
+- la lectura de anuncios, notificaciones no leídas y permisos iniciales evita
+  suscripciones duplicadas y limpia suscripciones al desmontar.
+
+#### Seguridad, reglas y backend
+
+- las reglas Firestore validan primero la estructura de asignaciones, territorios,
+  grupos y programaciones antes de ejecutar comprobaciones administrativas más
+  costosas; los permisos efectivos no cambian;
+- la actualización de lectura de notificaciones valida primero los campos que
+  puede cambiar el destinatario;
+- las pruebas de reglas usan el proyecto local único `demo-omp`, cierran el
+  emulador de forma confiable y cubren 74 casos de autorización;
+- se modernizaron tipos de autorización del backend y se limpiaron directivas
+  ESLint obsoletas en scripts de mantenimiento.
+
+#### Calidad y refactorización
+
+- el lint principal y global quedan sin advertencias;
+- se corrigieron dependencias de memoización y accesos a refs durante render;
+- los módulos asíncronos aplican cancelación y estados con clave de solicitud
+  para reducir renders redundantes y condiciones de carrera;
+- se mantienen 46 suites de pruebas de aplicación, 33 de Cloud Functions y 8
+  de reglas Firestore como validación de regresión.
 
 - actualización compatible a Expo SDK 57, React Native 0.86 y Firebase Web SDK 12.19;
 - validación de Expo restaurada: `expo install --check` y Expo Doctor completan correctamente, excluyendo solo cuatro parches SDK 57 que todavía no están publicados en npm;
@@ -358,6 +407,7 @@ EXPO_PUBLIC_FIREBASE_PROJECT_ID=
 EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=
 EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
 EXPO_PUBLIC_FIREBASE_APP_ID=
+EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=
 EXPO_PUBLIC_FIREBASE_APPCHECK_RECAPTCHA_SITE_KEY=
 EXPO_PUBLIC_FIRESTORE_DEBUG=0
 ```
@@ -491,7 +541,7 @@ Perfiles disponibles:
 - `preview`: distribución interna y APK Android;
 - `production`: build de tienda con incremento remoto automático.
 
-`eas.json` usa `appVersionSource: remote`. La línea base remota de la versión 1.44.0 es Android `14400` e iOS `1.44.0`; el perfil `production` incrementa el número de build remoto automáticamente. Antes de publicar, confirma el número que EAS asignará.
+`eas.json` usa `appVersionSource: remote`. La referencia local de la versión 1.50.0 es Android `15000` e iOS `1.50.0`; el perfil `production` incrementa el número de build remoto automáticamente. Antes de publicar, confirma el número que EAS asignará.
 
 ### Web
 
@@ -514,19 +564,19 @@ MAJOR.MINOR.PATCH
 - `MINOR`: funciones nuevas compatibles;
 - `PATCH`: correcciones compatibles.
 
-Estado de la versión `1.44.0`:
+Estado de la versión `1.50.0`:
 
 ```text
-package.json:                    1.44.0
-package-lock.json:               1.44.0
-app.json → expo.version:         1.44.0
-app.json → ios.buildNumber:      1.44.0
-app.json → android.versionCode:  14400
-android versionName:             1.44.0
-android versionCode:             14400
+package.json:                    1.50.0
+package-lock.json:               1.50.0
+app.json → expo.version:         1.50.0
+app.json → ios.buildNumber:      1.50.0
+app.json → android.versionCode:  15000
+android versionName:             1.50.0
+android versionCode:             15000
 ```
 
-Los nombres de lanzamiento son opcionales y no reemplazan la versión técnica. Pueden usarse en notas de release con el formato `OMP 1.44.0 — Nombre`.
+Los nombres de lanzamiento son opcionales y no reemplazan la versión técnica. Pueden usarse en notas de release con el formato `OMP 1.50.0 — Nombre`.
 
 ## Notificaciones
 
