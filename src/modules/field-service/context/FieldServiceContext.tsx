@@ -74,6 +74,9 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
     error: null,
     purgeExecutedThisSession: false,
   });
+  // Se conserva en estado (no en una ref durante render) para evitar mostrar
+  // brevemente datos del usuario anterior al cambiar de sesiÃ³n.
+  const [hydratedUid, setHydratedUid] = useState<string | null>(null);
 
   /**
    * storeRef es la fuente de verdad para callbacks async.
@@ -102,6 +105,7 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
       // disparada sincrónicamente vea el store y el uid correctos desde ya.
       storeRef.current = store;
       hydratedUidRef.current = targetUid;
+      setHydratedUid(targetUid);
       setState({
         store,
         loading: false,
@@ -111,6 +115,7 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (err) {
       if (requestId !== hydrationRequestRef.current) return;
       log.error('[FieldServiceContext] Error hidratando:', err);
+      setHydratedUid(null);
       setState({
         store: null,
         loading: false,
@@ -130,6 +135,7 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
       hydrationRequestRef.current += 1;
       hydratedUidRef.current = null;
       storeRef.current = null;
+      setHydratedUid(null);
       setState({ store: null, loading: true, error: null, purgeExecutedThisSession: false });
       return;
     }
@@ -224,7 +230,7 @@ export const FieldServiceProvider: React.FC<{ children: React.ReactNode }> = ({
     await hydrate(uid);
   }, [uid, hydrate]);
 
-  const visibleState = hydratedUidRef.current === uid
+  const visibleState = hydratedUid === uid
     ? state
     : { store: null, loading: true, error: null, purgeExecutedThisSession: false };
 

@@ -146,7 +146,7 @@ export function FieldServiceScreen() {
         setModalVisible(true);
       }
     },
-    []
+    [setModalVisible]
   );
 
   // Guardar horas

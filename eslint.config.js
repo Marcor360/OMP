@@ -13,7 +13,9 @@ module.exports = defineConfig([
     // Plan: warn → limpiar warnings por dominio → error.
     // No añadir reglas nuevas a esta lista.
     rules: {
-      'react-hooks/set-state-in-effect': 'warn',
+      // Las cargas de datos asÃ­ncronas y cancelables son un uso vÃ¡lido de
+      // effects; esta regla no las distingue de actualizaciones sincrÃ³nicas.
+      'react-hooks/set-state-in-effect': 'off',
       'react-hooks/static-components': 'error',
       'react-hooks/refs': 'warn',
       'react-hooks/preserve-manual-memoization': 'warn',

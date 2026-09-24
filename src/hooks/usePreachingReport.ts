@@ -44,7 +44,7 @@ export const usePreachingReport = ({
     } finally {
       setLoading(false);
     }
-  }, [monthId, user?.congregationId, user?.uid]);
+  }, [monthId, user]);
 
   useEffect(() => {
     void loadReport();

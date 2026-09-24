@@ -166,9 +166,10 @@ export const useUserForm = (): UserFormController => {
   const planUsage = isAdmin && planUsageState.congregationId === congregationId
     ? planUsageState.usage
     : null;
-  const activeUsers = activeUsersState.congregationId === congregationId
-    ? activeUsersState.users
-    : [];
+  const activeUsers = useMemo(
+    () => (activeUsersState.congregationId === congregationId ? activeUsersState.users : []),
+    [activeUsersState, congregationId]
+  );
 
   useEffect(() => {
     if (mode !== 'edit') {

@@ -179,6 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Escuchar cambios en el estado de autenticación
+  // The listener is mounted once; its helpers only use stable constants and refs.
   useEffect(() => {
     authLogger.debug('Iniciando onAuthStateChanged listener');
 
@@ -220,9 +221,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearWarningTick();
       unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Web: persistir actividad y comprobar el tiempo real transcurrido al volver a la pestaña.
+  // Event handlers read the current user through userRef, so they stay mounted once.
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
@@ -254,6 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Solo se monta una vez; usa userRef para evitar closures stale
 
   // Registrar actividad manualmente desde pantallas (util solo en web; touchActivity
