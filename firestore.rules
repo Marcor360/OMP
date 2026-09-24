@@ -2061,7 +2061,13 @@ service cloud.firestore {
     }
 
     function validOwnNotificationReadUpdate(congregationId) {
-      return (
+      // Rechazar primero una mutacion con forma invalida; la comprobacion de
+      // pertenencia a la congregacion requiere lecturas y es mas costosa.
+      return sameKeysOnUpdate(['isRead', 'readAt'])
+        && request.resource.data.isRead == true
+        && request.resource.data.readAt is timestamp
+        && request.resource.data.readAt == request.time
+        && (
           (
             'userId' in resource.data
             && resource.data.userId == currentUid()
@@ -2072,10 +2078,6 @@ service cloud.firestore {
             && currentUid() in resource.data.userIds
           )
         )
-        && sameKeysOnUpdate(['isRead', 'readAt'])
-        && request.resource.data.isRead == true
-        && request.resource.data.readAt is timestamp
-        && request.resource.data.readAt == request.time
         && sameCongregation(congregationId);
     }
 
@@ -2624,14 +2626,16 @@ service cloud.firestore {
       match /assignments/{assignmentId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canManageAssignments()
-          && canAccessCongregationData(congregationId)
-          && validStandaloneAssignmentData(request.resource.data, congregationId);
+        // La validacion estructural va primero: una escritura invalida no debe
+        // consumir las comprobaciones costosas de rol, facturacion y sistema.
+        allow create: if validStandaloneAssignmentData(request.resource.data, congregationId)
+          && canManageAssignments()
+          && canAccessCongregationData(congregationId);
 
-        allow update: if canManageAssignments()
-          && canAccessCongregationData(congregationId)
-          && validStandaloneAssignmentData(request.resource.data, congregationId)
-          && preservesCreatedAt();
+        allow update: if validStandaloneAssignmentData(request.resource.data, congregationId)
+          && preservesCreatedAt()
+          && canManageAssignments()
+          && canAccessCongregationData(congregationId);
 
         allow delete: if isAdmin();
       }
@@ -2642,20 +2646,20 @@ service cloud.firestore {
       match /territories/{territoryId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canCreateTerritories()
-          && canAccessCongregationData(congregationId)
-          && validTerritoryCreate(request.resource.data, congregationId);
+        allow create: if validTerritoryCreate(request.resource.data, congregationId)
+          && canCreateTerritories()
+          && canAccessCongregationData(congregationId);
 
-        allow update: if (
+        allow update: if validTerritoryUpdate(request.resource.data, congregationId)
+          && resource.data.congregationId == congregationId
+          && (
             (resource.data.status == 'active' && request.resource.data.status == 'inactive' && canDeactivateTerritories())
             || (
               request.resource.data.status == resource.data.status
               && canEditTerritories()
             )
           )
-          && canAccessCongregationData(congregationId)
-          && resource.data.congregationId == congregationId
-          && validTerritoryUpdate(request.resource.data, congregationId);
+          && canAccessCongregationData(congregationId);
 
         allow delete: if false;
       }
@@ -2663,14 +2667,14 @@ service cloud.firestore {
       match /preachingGroups/{groupId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canManagePreachingGroups()
-          && canAccessCongregationData(congregationId)
-          && validPreachingGroupCreate(request.resource.data, congregationId);
+        allow create: if validPreachingGroupCreate(request.resource.data, congregationId)
+          && canManagePreachingGroups()
+          && canAccessCongregationData(congregationId);
 
-        allow update: if canManagePreachingGroups()
-          && canAccessCongregationData(congregationId)
+        allow update: if validPreachingGroupUpdate(request.resource.data, congregationId)
           && resource.data.congregationId == congregationId
-          && validPreachingGroupUpdate(request.resource.data, congregationId);
+          && canManagePreachingGroups()
+          && canAccessCongregationData(congregationId);
 
         allow delete: if false;
       }
@@ -2678,14 +2682,14 @@ service cloud.firestore {
       match /monthlyTerritoryAssignments/{monthId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canManageTerritorySchedule()
-          && canAccessCongregationData(congregationId)
-          && validMonthlyTerritoryAssignmentCreate(request.resource.data, congregationId, monthId);
+        allow create: if validMonthlyTerritoryAssignmentCreate(request.resource.data, congregationId, monthId)
+          && canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId);
 
-        allow update: if canManageTerritorySchedule()
-          && canAccessCongregationData(congregationId)
+        allow update: if validMonthlyTerritoryAssignmentUpdate(request.resource.data, congregationId, monthId)
           && resource.data.congregationId == congregationId
-          && validMonthlyTerritoryAssignmentUpdate(request.resource.data, congregationId, monthId);
+          && canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId);
 
         allow delete: if false;
       }
@@ -2693,13 +2697,13 @@ service cloud.firestore {
       match /territorySchedule/{scheduleId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canManageTerritorySchedule()
-          && canAccessCongregationData(congregationId)
-          && validTerritoryScheduleCreate(request.resource.data, scheduleId);
+        allow create: if validTerritoryScheduleCreate(request.resource.data, scheduleId)
+          && canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId);
 
-        allow update: if canManageTerritorySchedule()
-          && canAccessCongregationData(congregationId)
-          && validTerritoryScheduleUpdate(request.resource.data, scheduleId);
+        allow update: if validTerritoryScheduleUpdate(request.resource.data, scheduleId)
+          && canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId);
 
         allow delete: if canManageTerritorySchedule()
           && canAccessCongregationData(congregationId);
@@ -2917,12 +2921,15 @@ service cloud.firestore {
         allow create: if false;
 
         allow update: if validOwnNotificationReadUpdate(congregationId) || (
+            // La forma se valida antes de permisos/estado de congregacion para
+            // denegar temprano documentos malformados.
+            validNotificationData(request.resource.data, congregationId)
+            &&
             // Primero el permiso especifico: para un editor derivado evita
             // evaluar las rutas mas costosas de admin/acceso global que no le
             // corresponden. Las cuatro alternativas son disyuntivas.
             (hasPermission('avisos', 'edit') || hasPermission('avisos', 'manage') || isAdmin() || isGlobalScreenAccess())
             && canAccessCongregationData(congregationId)
-            && validNotificationData(request.resource.data, congregationId)
           );
 
         allow delete: if isAdmin() && sameCongregation(congregationId);

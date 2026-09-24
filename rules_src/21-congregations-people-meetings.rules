@@ -89,14 +89,16 @@
       match /assignments/{assignmentId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canManageAssignments()
-          && canAccessCongregationData(congregationId)
-          && validStandaloneAssignmentData(request.resource.data, congregationId);
+        // La validacion estructural va primero: una escritura invalida no debe
+        // consumir las comprobaciones costosas de rol, facturacion y sistema.
+        allow create: if validStandaloneAssignmentData(request.resource.data, congregationId)
+          && canManageAssignments()
+          && canAccessCongregationData(congregationId);
 
-        allow update: if canManageAssignments()
-          && canAccessCongregationData(congregationId)
-          && validStandaloneAssignmentData(request.resource.data, congregationId)
-          && preservesCreatedAt();
+        allow update: if validStandaloneAssignmentData(request.resource.data, congregationId)
+          && preservesCreatedAt()
+          && canManageAssignments()
+          && canAccessCongregationData(congregationId);
 
         allow delete: if isAdmin();
       }
@@ -107,20 +109,20 @@
       match /territories/{territoryId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canCreateTerritories()
-          && canAccessCongregationData(congregationId)
-          && validTerritoryCreate(request.resource.data, congregationId);
+        allow create: if validTerritoryCreate(request.resource.data, congregationId)
+          && canCreateTerritories()
+          && canAccessCongregationData(congregationId);
 
-        allow update: if (
+        allow update: if validTerritoryUpdate(request.resource.data, congregationId)
+          && resource.data.congregationId == congregationId
+          && (
             (resource.data.status == 'active' && request.resource.data.status == 'inactive' && canDeactivateTerritories())
             || (
               request.resource.data.status == resource.data.status
               && canEditTerritories()
             )
           )
-          && canAccessCongregationData(congregationId)
-          && resource.data.congregationId == congregationId
-          && validTerritoryUpdate(request.resource.data, congregationId);
+          && canAccessCongregationData(congregationId);
 
         allow delete: if false;
       }
@@ -128,14 +130,14 @@
       match /preachingGroups/{groupId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canManagePreachingGroups()
-          && canAccessCongregationData(congregationId)
-          && validPreachingGroupCreate(request.resource.data, congregationId);
+        allow create: if validPreachingGroupCreate(request.resource.data, congregationId)
+          && canManagePreachingGroups()
+          && canAccessCongregationData(congregationId);
 
-        allow update: if canManagePreachingGroups()
-          && canAccessCongregationData(congregationId)
+        allow update: if validPreachingGroupUpdate(request.resource.data, congregationId)
           && resource.data.congregationId == congregationId
-          && validPreachingGroupUpdate(request.resource.data, congregationId);
+          && canManagePreachingGroups()
+          && canAccessCongregationData(congregationId);
 
         allow delete: if false;
       }
@@ -143,14 +145,14 @@
       match /monthlyTerritoryAssignments/{monthId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canManageTerritorySchedule()
-          && canAccessCongregationData(congregationId)
-          && validMonthlyTerritoryAssignmentCreate(request.resource.data, congregationId, monthId);
+        allow create: if validMonthlyTerritoryAssignmentCreate(request.resource.data, congregationId, monthId)
+          && canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId);
 
-        allow update: if canManageTerritorySchedule()
-          && canAccessCongregationData(congregationId)
+        allow update: if validMonthlyTerritoryAssignmentUpdate(request.resource.data, congregationId, monthId)
           && resource.data.congregationId == congregationId
-          && validMonthlyTerritoryAssignmentUpdate(request.resource.data, congregationId, monthId);
+          && canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId);
 
         allow delete: if false;
       }
@@ -158,13 +160,13 @@
       match /territorySchedule/{scheduleId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canManageTerritorySchedule()
-          && canAccessCongregationData(congregationId)
-          && validTerritoryScheduleCreate(request.resource.data, scheduleId);
+        allow create: if validTerritoryScheduleCreate(request.resource.data, scheduleId)
+          && canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId);
 
-        allow update: if canManageTerritorySchedule()
-          && canAccessCongregationData(congregationId)
-          && validTerritoryScheduleUpdate(request.resource.data, scheduleId);
+        allow update: if validTerritoryScheduleUpdate(request.resource.data, scheduleId)
+          && canManageTerritorySchedule()
+          && canAccessCongregationData(congregationId);
 
         allow delete: if canManageTerritorySchedule()
           && canAccessCongregationData(congregationId);

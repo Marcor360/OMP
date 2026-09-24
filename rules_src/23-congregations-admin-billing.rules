@@ -60,12 +60,15 @@
         allow create: if false;
 
         allow update: if validOwnNotificationReadUpdate(congregationId) || (
+            // La forma se valida antes de permisos/estado de congregacion para
+            // denegar temprano documentos malformados.
+            validNotificationData(request.resource.data, congregationId)
+            &&
             // Primero el permiso especifico: para un editor derivado evita
             // evaluar las rutas mas costosas de admin/acceso global que no le
             // corresponden. Las cuatro alternativas son disyuntivas.
             (hasPermission('avisos', 'edit') || hasPermission('avisos', 'manage') || isAdmin() || isGlobalScreenAccess())
             && canAccessCongregationData(congregationId)
-            && validNotificationData(request.resource.data, congregationId)
           );
 
         allow delete: if isAdmin() && sameCongregation(congregationId);

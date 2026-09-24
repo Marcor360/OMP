@@ -29,7 +29,13 @@
     }
 
     function validOwnNotificationReadUpdate(congregationId) {
-      return (
+      // Rechazar primero una mutacion con forma invalida; la comprobacion de
+      // pertenencia a la congregacion requiere lecturas y es mas costosa.
+      return sameKeysOnUpdate(['isRead', 'readAt'])
+        && request.resource.data.isRead == true
+        && request.resource.data.readAt is timestamp
+        && request.resource.data.readAt == request.time
+        && (
           (
             'userId' in resource.data
             && resource.data.userId == currentUid()
@@ -40,10 +46,6 @@
             && currentUid() in resource.data.userIds
           )
         )
-        && sameKeysOnUpdate(['isRead', 'readAt'])
-        && request.resource.data.isRead == true
-        && request.resource.data.readAt is timestamp
-        && request.resource.data.readAt == request.time
         && sameCongregation(congregationId);
     }
 
