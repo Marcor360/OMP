@@ -87,8 +87,8 @@ function RootLayoutNav() {
   const pathname = usePathname();
   const searchParams = useGlobalSearchParams();
   const router = useRouter();
-  const [appReady, setAppReady] = useState(false);
   const [splashHidden, setSplashHidden] = useState(false);
+  const appReady = i18nReady && (!hasCompletedLanguageOnboarding || !loading);
 
   // Request initial permissions once on app mount.
   useInitialPermissions();
@@ -107,13 +107,11 @@ function RootLayoutNav() {
 
     // Si ya completó onboarding de idioma y auth terminó de cargar (o timeout)
     if (hasCompletedLanguageOnboarding && !loading) {
-      setAppReady(true);
     } else if (hasCompletedLanguageOnboarding && loading) {
       // Auth aún cargando, esperar
       return;
     } else if (!hasCompletedLanguageOnboarding) {
       // Ir a language-setup inmediatamente
-      setAppReady(true);
     }
   }, [i18nReady, loading, hasCompletedLanguageOnboarding]);
 

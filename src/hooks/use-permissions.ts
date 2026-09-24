@@ -49,7 +49,10 @@ export function usePermissions(): UsePermissionsResult {
   }, []);
 
   useEffect(() => {
-    void fetchAll();
+    const loadInitialPermissions = async () => {
+      await fetchAll();
+    };
+    void loadInitialPermissions();
   }, [fetchAll]);
 
   useEffect(() => {

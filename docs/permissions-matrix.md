@@ -26,10 +26,14 @@ Esta matriz mantiene alineados UI, Cloud Functions y Firestore Rules. Las reglas
 | Notificaciones | Usuario activo destinatario | Funciones autorizadas | Marcar leido por destinatario | No destructivo desde cliente | Backend | Backend | Functions + Rules |
 | Configuracion | Admin, supervisor, `configuracion.view` | Admin | Admin, `configuracion.edit/manage` | Admin | N/A | `configuracion.manage` | Rules |
 
-## Pendientes De Endurecimiento
+## Estado De Endurecimiento
 
-- Ejecutar migracion legacy de roles y planes en dry-run.
-- Ejecutar migracion con `--write` despues de revisar salida.
-- Confirmar que no queden `administrador`, `usuario`, `basic`, `intermediate`, `complete` ni limites legacy.
-- Endurecer `isValidRole()` en `firestore.rules` para aceptar solo `admin`, `supervisor`, `user`.
-- Agregar pruebas de Rules para creacion/edicion/eliminacion por modulo.
+El dry-run de migracion realizado el 23 de septiembre de 2026 no encontro
+usuarios con `administrador` ni `usuario`, y la unica congregacion leida ya
+tenia su plan normalizado; no hubo documentos que modificar con `--write`.
+`isValidRole()` ya acepta exclusivamente `admin`, `supervisor` y `user`, y las
+pruebas de Rules rechazan los alias legacy incluso en escrituras de superadmin.
+
+Permanece pendiente ampliar las pruebas de Rules permitidas de
+creacion/edicion/eliminacion por modulo. Algunas pruebas permitidas existentes
+siguen en `skip` hasta reducir el coste de expresiones de las Rules.

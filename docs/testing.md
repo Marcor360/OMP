@@ -81,7 +81,10 @@ Plan obligatorio antes de retirar los `skip`:
 También queda pendiente:
 
 - Crear/editar/eliminar por rol y por módulo.
-- Migración y endurecimiento post-migración de roles y planes legacy.
+
+El dry-run de roles y planes legacy realizado el 23 de septiembre de 2026 no
+encontro documentos que requirieran migracion. Las Rules ya rechazan roles
+legacy y validan solo `admin`, `supervisor` y `user`.
 
 ## Manual
 

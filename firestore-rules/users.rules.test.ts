@@ -437,7 +437,7 @@ describe('derivedPermissions (Fase 0)', () => {
   // canReadUsers/canAccessCongregationData). La logica de union esta cubierta
   // sin el emulador por los tests puros de
   // functions/src/__tests__/derived-permissions.test.ts.
-  it.skip('derivedPermissions.usuarios.view sin permissions -> puede leer otro perfil de su congregacion', async () => {
+  it('derivedPermissions.usuarios.view sin permissions -> puede leer otro perfil de su congregacion', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'users/usuariosViewerDerived'), {
         ...userDoc({ uid: 'usuariosViewerDerived', role: 'user', congregationId: 'c1' }),
@@ -448,7 +448,7 @@ describe('derivedPermissions (Fase 0)', () => {
     await assertSucceeds(getDoc(doc(authedDb('usuariosViewerDerived'), 'users/member')));
   });
 
-  it.skip('derivedPermissions.usuarios.manage implica view (manage es superconjunto dentro del mismo mapa)', async () => {
+  it('derivedPermissions.usuarios.manage implica view (manage es superconjunto dentro del mismo mapa)', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'users/usuariosManagerDerived'), {
         ...userDoc({ uid: 'usuariosManagerDerived', role: 'user', congregationId: 'c1' }),

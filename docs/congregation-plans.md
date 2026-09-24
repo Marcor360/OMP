@@ -49,9 +49,9 @@ Durante la migracion, mantener `activeUsersLimit` y `userLimit` sincronizados pa
 
 ## Pendientes Tecnicos
 
-- Ejecutar migracion real de documentos legacy.
-- Confirmar que no quedan documentos con `basic`, `intermediate`, `complete` o limites legacy 70, 120 o 200 como limite vigente.
-- Endurecer reglas y validaciones despues de confirmar la migracion.
+- El dry-run del 23 de septiembre de 2026 no encontro migraciones pendientes:
+  la unica congregacion leida ya tenia plan y limites normalizados. Por ello no
+  se ejecuto `--write`.
 - Panel administrativo externo para gestion de congregaciones, plan y billing.
 - Enforcement gradual de App Check en Functions cuando Android, iOS y Web esten configurados.
 

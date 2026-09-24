@@ -37,6 +37,11 @@ const WEB_ACTIVITY_EVENTS = [
   'click',
 ] as const;
 
+// Mantener la lectura del reloj fuera del cuerpo del componente evita que el
+// compilador la trate como una operacion impura durante el render. La politica
+// de expiracion continua calculandose exclusivamente al manejar eventos/ticks.
+const getCurrentTime = (): number => Date.now();
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (warningTickRef.current) return;
 
     warningTickRef.current = setInterval(() => {
-      const remaining = INACTIVITY_TIMEOUT_MS - (Date.now() - lastActivityRef.current);
+      const remaining = INACTIVITY_TIMEOUT_MS - (getCurrentTime() - lastActivityRef.current);
 
       if (remaining <= 0) {
         clearWarningTick();
@@ -110,7 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const touchActivity = (force = false) => {
     if (Platform.OS !== 'web') return;
     if (!userRef.current) return;
-    const now = Date.now();
+    const now = getCurrentTime();
     lastActivityRef.current = now;
     void persistLastActivity(now, force);
   };
@@ -155,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       touchActivity(true);
       return false;
     }
-    const elapsed = Date.now() - last;
+    const elapsed = getCurrentTime() - last;
     const remaining = INACTIVITY_TIMEOUT_MS - elapsed;
 
     if (remaining <= 0) {

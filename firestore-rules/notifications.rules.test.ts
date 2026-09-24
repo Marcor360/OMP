@@ -152,14 +152,14 @@ beforeEach(async () => {
 // is*Editor() y dejar de leer servicePosition en las rules) es la que baja
 // ese costo; no se intenta aqui. El assertFails SI corre y pasa.
 describe('hasPermission reads derivedPermissions (F0.5)', () => {
-  it.skip('derivedPermissions.avisos.edit sin permissions -> puede editar el contenido', async () => {
+  it('derivedPermissions.avisos.edit sin permissions -> puede editar el contenido', async () => {
     await assertSucceeds(updateDoc(
       doc(authedDb('avisosEditorDerived'), 'congregations/c1/notifications/plain'),
       { title: 'Editado por derivedPermissions.edit' }
     ));
   });
 
-  it.skip('derivedPermissions.avisos.manage implica edit (manage es superconjunto dentro del mismo mapa)', async () => {
+  it('derivedPermissions.avisos.manage implica edit (manage es superconjunto dentro del mismo mapa)', async () => {
     await assertSucceeds(updateDoc(
       doc(authedDb('avisosManagerDerived'), 'congregations/c1/notifications/plain'),
       { title: 'Editado por derivedPermissions.manage' }

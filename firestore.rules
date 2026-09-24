@@ -670,26 +670,36 @@ service cloud.firestore {
     function congregationBillingAdministrativeRestricted(congregationId) {
       return isNonEmptyString(congregationId)
         && exists(congregationPath(congregationId))
-        && !billingExemptionActive(get(congregationPath(congregationId)).data)
-        && 'billing' in get(congregationPath(congregationId)).data
-        && get(congregationPath(congregationId)).data.billing is map
-        && get(congregationPath(congregationId)).data.billing.provider == 'stripe'
+        && congregationBillingDataAdministrativeRestricted(
+          get(congregationPath(congregationId)).data
+        );
+    }
+
+    // El documento de congregacion se lee una sola vez por evaluacion. Antes
+    // esta misma comprobacion repetia get(congregationPath(...)) para cada
+    // campo de billing, lo que agotaba el presupuesto de expresiones de
+    // escrituras validas en schedules.
+    function congregationBillingDataAdministrativeRestricted(data) {
+      return !billingExemptionActive(data)
+        && 'billing' in data
+        && data.billing is map
+        && data.billing.provider == 'stripe'
         && (
-          get(congregationPath(congregationId)).data.billing.adminRestricted == true
-          || get(congregationPath(congregationId)).data.billing.status in [
+          data.billing.adminRestricted == true
+          || data.billing.status in [
             'unpaid',
             'canceled',
             'incomplete_expired'
           ]
           || (
-            get(congregationPath(congregationId)).data.billing.status in [
+            data.billing.status in [
               'past_due',
               'payment_action_required',
               'incomplete'
             ]
-            && 'graceUntil' in get(congregationPath(congregationId)).data.billing
-            && get(congregationPath(congregationId)).data.billing.graceUntil is timestamp
-            && get(congregationPath(congregationId)).data.billing.graceUntil <= request.time
+            && 'graceUntil' in data.billing
+            && data.billing.graceUntil is timestamp
+            && data.billing.graceUntil <= request.time
           )
         );
     }
@@ -2907,7 +2917,10 @@ service cloud.firestore {
         allow create: if false;
 
         allow update: if validOwnNotificationReadUpdate(congregationId) || (
-            (isAdmin() || isGlobalScreenAccess() || hasPermission('avisos', 'edit') || hasPermission('avisos', 'manage'))
+            // Primero el permiso especifico: para un editor derivado evita
+            // evaluar las rutas mas costosas de admin/acceso global que no le
+            // corresponden. Las cuatro alternativas son disyuntivas.
+            (hasPermission('avisos', 'edit') || hasPermission('avisos', 'manage') || isAdmin() || isGlobalScreenAccess())
             && canAccessCongregationData(congregationId)
             && validNotificationData(request.resource.data, congregationId)
           );

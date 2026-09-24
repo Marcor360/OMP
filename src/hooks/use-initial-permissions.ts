@@ -18,27 +18,19 @@ interface UseInitialPermissionsResult {
 
 export function useInitialPermissions(): UseInitialPermissionsResult {
   const initialized = useRef(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(canUseRemotePushNotifications);
   const [requested] = useState(false);
   const [permissions, setPermissions] = useState({
-    notifications: 'undetermined' as PermissionStatus,
+    notifications: (canUseRemotePushNotifications ? 'undetermined' : 'unavailable') as PermissionStatus,
   });
 
   useEffect(() => {
-    if (initialized.current) {
-      setLoading(false);
-      return;
-    }
+    if (initialized.current) return;
 
     initialized.current = true;
 
-    if (!canUseRemotePushNotifications) {
-      setPermissions({ notifications: 'unavailable' });
-      setLoading(false);
-      return;
-    }
-
     const readPermissionStatus = async () => {
+      if (!canUseRemotePushNotifications) return;
       try {
         const notificationsStatus = await getNotificationPermissionStatus();
         setPermissions({

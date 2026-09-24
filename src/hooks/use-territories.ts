@@ -28,66 +28,78 @@ import type { AppUser } from '@/src/types/user';
 const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'No se pudieron cargar los territorios.';
 
+type ScopedLoadState<T> = {
+  key: string | null;
+  data: T;
+  error: string | null;
+};
+
 export function useTerritoriesCatalog(congregationId: string | null) {
-  const [territories, setTerritories] = useState<Territory[]>([]);
-  const [loading, setLoading] = useState(Boolean(congregationId));
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<ScopedLoadState<Territory[]>>({
+    key: null,
+    data: [],
+    error: null,
+  });
 
   useEffect(() => {
-    if (!congregationId) {
-      setTerritories([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
+    if (!congregationId) return;
 
-    setLoading(true);
-    return subscribeTerritories(
+    let active = true;
+    const unsubscribe = subscribeTerritories(
       congregationId,
       (next) => {
-        setTerritories(next);
-        setLoading(false);
-        setError(null);
+        if (active) setState({ key: congregationId, data: next, error: null });
       },
       (snapshotError) => {
-        setError(getErrorMessage(snapshotError));
-        setLoading(false);
+        if (active) setState({ key: congregationId, data: [], error: getErrorMessage(snapshotError) });
       }
     );
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [congregationId]);
 
-  return { territories, loading, error };
+  const current = state.key === congregationId;
+  return {
+    territories: current ? state.data : [],
+    loading: Boolean(congregationId && !current),
+    error: current ? state.error : null,
+  };
 }
 
 export function usePreachingGroups(congregationId: string | null) {
-  const [groups, setGroups] = useState<PreachingGroup[]>([]);
-  const [loading, setLoading] = useState(Boolean(congregationId));
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<ScopedLoadState<PreachingGroup[]>>({
+    key: null,
+    data: [],
+    error: null,
+  });
 
   useEffect(() => {
-    if (!congregationId) {
-      setGroups([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
+    if (!congregationId) return;
 
-    setLoading(true);
-    return subscribePreachingGroups(
+    let active = true;
+    const unsubscribe = subscribePreachingGroups(
       congregationId,
       (next) => {
-        setGroups(next);
-        setLoading(false);
-        setError(null);
+        if (active) setState({ key: congregationId, data: next, error: null });
       },
       (snapshotError) => {
-        setError(getErrorMessage(snapshotError));
-        setLoading(false);
+        if (active) setState({ key: congregationId, data: [], error: getErrorMessage(snapshotError) });
       }
     );
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [congregationId]);
 
-  return { groups, loading, error };
+  const current = state.key === congregationId;
+  return {
+    groups: current ? state.data : [],
+    loading: Boolean(congregationId && !current),
+    error: current ? state.error : null,
+  };
 }
 
 export function useVisibleMonthlyTerritories(
@@ -95,65 +107,78 @@ export function useVisibleMonthlyTerritories(
   userId: string | null,
   monthId: string
 ) {
-  const [data, setData] = useState<VisibleMonthlyTerritories | null>(null);
-  const [loading, setLoading] = useState(Boolean(congregationId && userId));
-  const [error, setError] = useState<string | null>(null);
+  const requestKey = congregationId && userId ? `${congregationId}:${userId}:${monthId}` : null;
+  const [state, setState] = useState<ScopedLoadState<VisibleMonthlyTerritories | null>>({
+    key: null,
+    data: null,
+    error: null,
+  });
 
   useEffect(() => {
-    if (!congregationId || !userId) {
-      setData(null);
-      setLoading(false);
-      setError(null);
-      return;
-    }
+    if (!congregationId || !userId || !requestKey) return;
 
-    setLoading(true);
-    return subscribeVisibleMonthlyTerritories(
+    let active = true;
+    const unsubscribe = subscribeVisibleMonthlyTerritories(
       congregationId,
       userId,
       monthId,
       (next) => {
-        setData(next);
-        setLoading(false);
-        setError(null);
+        if (active) setState({ key: requestKey, data: next, error: null });
       },
       (snapshotError) => {
-        setError(getErrorMessage(snapshotError));
-        setLoading(false);
+        if (active) setState({ key: requestKey, data: null, error: getErrorMessage(snapshotError) });
       }
     );
-  }, [congregationId, monthId, userId]);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [congregationId, monthId, requestKey, userId]);
 
-  return { data, loading, error };
+  const current = state.key === requestKey;
+  return {
+    data: current ? state.data : null,
+    loading: Boolean(requestKey && !current),
+    error: current ? state.error : null,
+  };
 }
 
 export function useMonthlyTerritoryAssignment(congregationId: string | null, monthId: string) {
-  const [assignment, setAssignment] = useState<MonthlyTerritoryAssignment | null>(null);
-  const [loading, setLoading] = useState(Boolean(congregationId));
-  const [error, setError] = useState<string | null>(null);
+  const requestKey = congregationId ? `${congregationId}:${monthId}` : null;
+  const [state, setState] = useState<ScopedLoadState<MonthlyTerritoryAssignment | null>>({
+    key: null,
+    data: null,
+    error: null,
+  });
 
-  const load = useCallback(async () => {
-    if (!congregationId) {
-      setAssignment(null);
-      setLoading(false);
-      return;
-    }
+  const load = useCallback(async (isCurrent: () => boolean = () => true) => {
+    if (!congregationId || !requestKey) return;
     try {
-      setLoading(true);
-      setAssignment(await getMonthlyTerritoryAssignment(congregationId, monthId));
-      setError(null);
+      const assignment = await getMonthlyTerritoryAssignment(congregationId, monthId);
+      if (isCurrent()) setState({ key: requestKey, data: assignment, error: null });
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
-    } finally {
-      setLoading(false);
+      if (isCurrent()) setState({ key: requestKey, data: null, error: getErrorMessage(requestError) });
     }
-  }, [congregationId, monthId]);
+  }, [congregationId, monthId, requestKey]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!requestKey) return;
+    let active = true;
+    void (async () => {
+      await load(() => active);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [load, requestKey]);
 
-  return { assignment, loading, error, refresh: load };
+  const current = state.key === requestKey;
+  return {
+    assignment: current ? state.data : null,
+    loading: Boolean(requestKey && !current),
+    error: current ? state.error : null,
+    refresh: load,
+  };
 }
 
 export function useTerritoryMutations(congregationId: string | null, actorUid: string | null) {
@@ -197,30 +222,38 @@ export function useTerritoryMutations(congregationId: string | null, actorUid: s
 }
 
 export function useActiveCongregationUsers(congregationId: string | null) {
-  const [users, setUsers] = useState<AppUser[]>([]);
-  const [loading, setLoading] = useState(Boolean(congregationId));
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<ScopedLoadState<AppUser[]>>({
+    key: null,
+    data: [],
+    error: null,
+  });
 
-  const load = useCallback(async () => {
-    if (!congregationId) {
-      setUsers([]);
-      setLoading(false);
-      return;
-    }
+  const load = useCallback(async (isCurrent: () => boolean = () => true) => {
+    if (!congregationId) return;
     try {
-      setLoading(true);
-      setUsers(await getActiveCongregationUsersForGroups(congregationId));
-      setError(null);
+      const users = await getActiveCongregationUsersForGroups(congregationId);
+      if (isCurrent()) setState({ key: congregationId, data: users, error: null });
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
-    } finally {
-      setLoading(false);
+      if (isCurrent()) setState({ key: congregationId, data: [], error: getErrorMessage(requestError) });
     }
   }, [congregationId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!congregationId) return;
+    let active = true;
+    void (async () => {
+      await load(() => active);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [congregationId, load]);
 
-  return { users, loading, error, refresh: load };
+  const current = state.key === congregationId;
+  return {
+    users: current ? state.data : [],
+    loading: Boolean(congregationId && !current),
+    error: current ? state.error : null,
+    refresh: load,
+  };
 }

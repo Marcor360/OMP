@@ -142,21 +142,23 @@ const sortAnnouncements = (announcements: SystemAnnouncement[]) => {
 
 export function useSystemAnnouncements() {
   const { uid, congregationId, isSessionValid } = useUser();
-  const [announcements, setAnnouncements] = useState<SystemAnnouncement[]>([]);
-  const [viewedIds, setViewedIds] = useState<Set<string>>(() => new Set());
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
-  const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
-  const [loadingViewed, setLoadingViewed] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [announcementState, setAnnouncementState] = useState<{
+    ownerUid: string | null;
+    announcements: SystemAnnouncement[];
+    loading: boolean;
+    error: string | null;
+  }>({ ownerUid: null, announcements: [], loading: true, error: null });
+  const [viewedState, setViewedState] = useState<{
+    ownerUid: string | null;
+    viewedIds: Set<string>;
+    dismissedIds: Set<string>;
+    loading: boolean;
+  }>({ ownerUid: null, viewedIds: new Set(), dismissedIds: new Set(), loading: true });
 
   useEffect(() => {
-    if (!isSessionValid || !uid) {
-      setAnnouncements([]);
-      setLoadingAnnouncements(false);
-      return;
-    }
+    if (!isSessionValid || !uid) return;
 
-    setLoadingAnnouncements(true);
+    let active = true;
     const announcementsQuery = query(
       collection(db, ANNOUNCEMENTS_COLLECTION),
       where('active', '==', true)
@@ -174,29 +176,33 @@ export function useSystemAnnouncements() {
           )
           .filter((announcement): announcement is SystemAnnouncement => announcement != null);
 
-        setAnnouncements(nextAnnouncements);
-        setLoadingAnnouncements(false);
-        setError(null);
+        if (active) setAnnouncementState({
+          ownerUid: uid,
+          announcements: nextAnnouncements,
+          loading: false,
+          error: null,
+        });
       },
       (snapshotError) => {
-        setError(snapshotError.message);
-        setLoadingAnnouncements(false);
+        if (active) setAnnouncementState({
+          ownerUid: uid,
+          announcements: [],
+          loading: false,
+          error: snapshotError.message,
+        });
       }
     );
 
-    return unsubscribe;
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [isSessionValid, uid]);
 
   useEffect(() => {
-    if (!isSessionValid || !uid) {
-      setViewedIds(new Set());
-      setDismissedIds(new Set());
-      setLoadingViewed(false);
-      return;
-    }
+    if (!isSessionValid || !uid) return;
 
     let cancelled = false;
-    setLoadingViewed(true);
 
     const loadViewedAnnouncements = async () => {
       try {
@@ -206,14 +212,21 @@ export function useSystemAnnouncements() {
 
         if (cancelled) return;
 
-        setViewedIds(new Set(viewedSnapshot.docs.map((viewedDoc) => viewedDoc.id)));
-        setLoadingViewed(false);
-        setError(null);
+        setViewedState({
+          ownerUid: uid,
+          viewedIds: new Set(viewedSnapshot.docs.map((viewedDoc) => viewedDoc.id)),
+          dismissedIds: new Set(),
+          loading: false,
+        });
       } catch (loadError) {
         if (cancelled) return;
 
-        setError(loadError instanceof Error ? loadError.message : 'No se pudieron cargar avisos.');
-        setLoadingViewed(false);
+        setAnnouncementState((current) => current.ownerUid === uid
+          ? { ...current, error: loadError instanceof Error ? loadError.message : 'No se pudieron cargar avisos.' }
+          : current);
+        setViewedState((current) => current.ownerUid === uid
+          ? { ...current, loading: false }
+          : { ownerUid: uid, viewedIds: new Set(), dismissedIds: new Set(), loading: false });
       }
     };
 
@@ -223,6 +236,14 @@ export function useSystemAnnouncements() {
       cancelled = true;
     };
   }, [isSessionValid, uid]);
+
+  const hasCurrentAnnouncements = announcementState.ownerUid === uid;
+  const hasCurrentViewed = viewedState.ownerUid === uid;
+  const emptyAnnouncements = useMemo<SystemAnnouncement[]>(() => [], []);
+  const emptyIds = useMemo<Set<string>>(() => new Set(), []);
+  const announcements = hasCurrentAnnouncements ? announcementState.announcements : emptyAnnouncements;
+  const viewedIds = hasCurrentViewed ? viewedState.viewedIds : emptyIds;
+  const dismissedIds = hasCurrentViewed ? viewedState.dismissedIds : emptyIds;
 
   const currentAnnouncement = useMemo(() => {
     if (!uid || !isSessionValid) return null;
@@ -246,8 +267,13 @@ export function useSystemAnnouncements() {
     if (!uid || !currentAnnouncement) return;
 
     const announcementId = currentAnnouncement.id;
-    setDismissedIds((current) => new Set(current).add(announcementId));
-    setViewedIds((current) => new Set(current).add(announcementId));
+    setViewedState((current) => current.ownerUid === uid
+      ? {
+        ...current,
+        dismissedIds: new Set(current.dismissedIds).add(announcementId),
+        viewedIds: new Set(current.viewedIds).add(announcementId),
+      }
+      : current);
 
     await setDoc(
       doc(db, 'users', uid, VIEWED_ANNOUNCEMENTS_COLLECTION, announcementId),
@@ -261,8 +287,9 @@ export function useSystemAnnouncements() {
 
   return {
     currentAnnouncement,
-    loading: loadingAnnouncements || loadingViewed,
-    error,
+    loading: Boolean(uid && isSessionValid) && (!hasCurrentAnnouncements || !hasCurrentViewed
+      || announcementState.loading || viewedState.loading),
+    error: hasCurrentAnnouncements ? announcementState.error : null,
     markAsViewed,
   };
 }
