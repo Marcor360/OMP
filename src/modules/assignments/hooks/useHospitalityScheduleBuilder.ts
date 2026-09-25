@@ -45,6 +45,7 @@ export type HospitalityPlanningRow = {
   meetingTitle: string;
   meetingDate: string;
   meetingType: HospitalityMeetingType;
+  chairmanUserId?: string;
   assignments: Partial<Record<HospitalityRoleKey, string>>;
   // Conserva el doc.id de Firestore; nunca se deriva de la celda renderizada.
   assignmentItemIds: Partial<Record<HospitalityRoleKey, string>>;
@@ -177,6 +178,9 @@ export const buildRowsFromMeetings = (
       meetingTitle: meeting.title,
       meetingDate,
       meetingType,
+      chairmanUserId: typeof (meeting as Meeting & { chairmanUserId?: unknown }).chairmanUserId === 'string'
+        ? (meeting as Meeting & { chairmanUserId: string }).chairmanUserId
+        : undefined,
       assignments,
       assignmentItemIds,
     };

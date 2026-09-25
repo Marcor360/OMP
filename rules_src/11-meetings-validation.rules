@@ -38,6 +38,7 @@
         'closingSong',
         'closingPrayer',
         'chairman',
+        'chairmanUserId',
         'sections',
         'midweekSections',
         'createdBy',
@@ -90,6 +91,7 @@
         && (!('closingSong' in data) || data.closingSong is string)
         && (!('closingPrayer' in data) || data.closingPrayer is string)
         && (!('chairman' in data) || data.chairman is string)
+        && (!('chairmanUserId' in data) || data.chairmanUserId is string)
         && (!('sections' in data) || data.sections is list)
         && (!('midweekSections' in data) || data.midweekSections is list)
         && (!('createdBy' in data) || data.createdBy is string)

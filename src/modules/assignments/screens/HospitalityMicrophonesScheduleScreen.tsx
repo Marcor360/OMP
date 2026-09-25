@@ -198,7 +198,10 @@ export function HospitalityMicrophonesScheduleScreen() {
         visible={picker.visible}
         title={picker.roleKey ? roleLabel(picker.roleKey) : t('hospitality.selectUser')}
         subtitle={picker.row ? helpers.compactDate(picker.row.meetingDate) : undefined}
-        users={filterEligibleUsers(builder.users, picker.roleKey, picker.row?.assignments)}
+        users={filterEligibleUsers(builder.users, picker.roleKey, {
+          ...picker.row?.assignments,
+          ...(picker.row?.chairmanUserId ? { chairman: picker.row.chairmanUserId } : {}),
+        })}
         selectedUserId={picker.selectedUserId}
         disabledReasons={picker.disabledReasons}
         allowClear={!state.isPublishedView}

@@ -49,6 +49,7 @@ export interface Meeting {
   closingSong?: string;
   closingPrayer?: string;
   chairman?: string;
+  chairmanUserId?: string;
   sections?: MeetingProgramSection[];
   midweekSections?: MidweekMeetingSection[];
   createdBy?: string;
@@ -86,6 +87,7 @@ export interface CreateMeetingDTO {
   closingSong?: string;
   closingPrayer?: string;
   chairman?: string;
+  chairmanUserId?: string;
   sections?: MeetingProgramSection[];
   midweekSections?: MidweekMeetingSection[];
   createdBy?: string;
@@ -121,6 +123,7 @@ export interface UpdateMeetingDTO {
   closingSong?: string;
   closingPrayer?: string;
   chairman?: string;
+  chairmanUserId?: string;
   sections?: MeetingProgramSection[];
   midweekSections?: MidweekMeetingSection[];
   createdBy?: string;

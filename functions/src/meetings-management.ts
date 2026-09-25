@@ -787,6 +787,7 @@ const buildMeetingWritePayload = (params: {
     closingSong: normalizeText(params.meetingData.closingSong),
     closingPrayer: normalizeText(params.meetingData.closingPrayer),
     chairman: normalizeText(params.meetingData.chairman),
+    chairmanUserId: normalizeText(params.meetingData.chairmanUserId),
     sections: toFirestoreSectionsPayload(sections),
     assignedUserIds,
     cleaningAssignmentMode: toCleaningMode(params.meetingData.cleaningAssignmentMode),

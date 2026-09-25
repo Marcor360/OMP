@@ -797,6 +797,19 @@ const isHospitalityEligible = (data: Record<string, unknown>): boolean => {
   return isElder || isMinisterialServant;
 };
 
+const assertNotMeetingChairman = async (params: {
+  congregationId: string;
+  meetingId?: string;
+  userId: string;
+}): Promise<void> => {
+  if (!params.meetingId) return; // Compatibilidad con items historicos sin meetingId.
+  const meeting = await adminDb.collection('congregations').doc(params.congregationId)
+    .collection('meetings').doc(params.meetingId).get();
+  if (meeting.exists && normalizeText((meeting.data() as FirestoreRecord).chairmanUserId) === params.userId) {
+    throw new HttpsError('failed-precondition', 'La persona dirige esta reunion y no puede recibir una asignacion operativa.');
+  }
+};
+
 const assertHospitalityRoleEligibility = async (params: {
   congregationId: string;
   scheduleId: string;
@@ -1562,6 +1575,12 @@ export const substituteHospitalityAssignmentByManager = onCall(
       );
     }
 
+    await assertNotMeetingChairman({
+      congregationId: payload.congregationId,
+      meetingId: item.meetingId,
+      userId: payload.newUserId,
+    });
+
     const newUserName =
       normalizeText(newUserData.displayName) ?? normalizeText(newUserData.email) ?? 'Usuario';
 
@@ -1644,6 +1663,7 @@ export const assignHospitalityAssignmentByManager = onCall(
     if (normalizeText(scheduleData.congregationId) !== payload.congregationId || scheduleData.status !== 'published') {
       throw new HttpsError('failed-precondition', 'La lista publicada no es valida para esta asignacion.');
     }
+
     if (payload.meetingDate < normalizeText(scheduleData.startDate)! || payload.meetingDate > normalizeText(scheduleData.endDate)!) {
       throw new HttpsError('failed-precondition', 'La fecha no pertenece al rango de la lista.');
     }
@@ -1657,6 +1677,7 @@ export const assignHospitalityAssignmentByManager = onCall(
     if (!user.exists || !userData || normalizeText(userData.congregationId) !== payload.congregationId || !resolveIsActive(userData) || !isHospitalityEligible(userData)) {
       throw new HttpsError('failed-precondition', 'El usuario no es elegible para esta asignacion.');
     }
+    await assertNotMeetingChairman({ congregationId: payload.congregationId, meetingId: payload.meetingId, userId: payload.newUserId });
     const itemId = hospitalityScheduleItemDocId(payload.meetingId, payload.roleKey);
     const itemRef = scheduleRef.collection('items').doc(itemId);
     if ((await itemRef.get()).exists) throw new HttpsError('already-exists', 'La asignacion ya existe; actualiza la lista antes de sustituirla.');

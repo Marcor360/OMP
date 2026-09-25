@@ -341,6 +341,13 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "private",
+      "fieldPath": "stripeSubscriptionId",
+      "indexes": [
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "billingHistory",
       "fieldPath": "createdAt",
       "indexes": [

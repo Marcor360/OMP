@@ -46,6 +46,7 @@ export interface MidweekMeeting {
   closingSong?: string;
   closingPrayer?: string;
   chairman?: string;
+  chairmanUserId?: string;
   midweekSections: MidweekMeetingSection[];
   sections?: MeetingProgramSection[];
   assignedUserIds?: string[];
@@ -267,6 +268,7 @@ export const toMidweekMeeting = (
     closingSong: normalizeMidweekText(data.closingSong),
     closingPrayer: normalizeMidweekText(data.closingPrayer),
     chairman: normalizeMidweekText(data.chairman),
+    chairmanUserId: normalizeMidweekText(data.chairmanUserId),
     midweekSections,
     sections: normalizedProgram.sections,
     assignedUserIds: normalizedProgram.assignedUserIds,

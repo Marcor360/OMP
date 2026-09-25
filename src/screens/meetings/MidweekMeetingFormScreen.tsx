@@ -461,6 +461,7 @@ export function MidweekMeetingFormScreen() {
           ? availableUsers.find((u) => u.uid === form.closingPrayerUserId)?.displayName ?? form.closingPrayer
           : form.closingPrayer,
         chairman: form.chairmanName,
+        chairmanUserId: form.chairmanUserId,
         midweekSections: normalizeSectionOrder(form.sections),
         attendeeNames,
       };

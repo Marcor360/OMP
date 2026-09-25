@@ -47,6 +47,7 @@ export interface MidweekMeetingPayload {
   closingSong?: string;
   closingPrayer?: string;
   chairman?: string;
+  chairmanUserId?: string;
   midweekSections: MidweekMeetingSection[];
   sections?: MeetingProgramSection[];
   assignedUserIds?: string[];
@@ -136,6 +137,7 @@ export const createMidweekMeeting = async (
     closingSong: payload.closingSong?.trim() || undefined,
     closingPrayer: payload.closingPrayer?.trim() || undefined,
     chairman: payload.chairman?.trim() || undefined,
+    chairmanUserId: payload.chairmanUserId?.trim() || undefined,
     sections: payload.sections,
     midweekSections: payload.midweekSections,
     attendees: actor.uid ? [actor.uid] : [],
@@ -205,6 +207,7 @@ export const updateMidweekMeeting = async (
     closingSong: payload.closingSong?.trim() || null,
     closingPrayer: payload.closingPrayer?.trim() || null,
     chairman: payload.chairman?.trim() || null,
+    chairmanUserId: payload.chairmanUserId?.trim() || null,
     sections: plannedSections,
     midweekSections: normalizedSections,
     assignedUserIds: plannedAssignedUserIds,
