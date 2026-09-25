@@ -28,12 +28,23 @@ type UserPickerModalProps = {
   availableLabel: string;
   selectedLabel: string;
   emptyLabel?: string;
+  noSearchResultsLabel?: string;
   onClose: () => void;
   onSelect: (user?: ActiveCongregationUser) => void;
 };
 
-const normalizeSearch = (value: string): string =>
+export const normalizePersonSearch = (value: string): string =>
   value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
+
+export const filterPersonCandidates = (
+  users: ActiveCongregationUser[],
+  search: string
+): ActiveCongregationUser[] => {
+  const query = normalizePersonSearch(search);
+  return query
+    ? users.filter((user) => normalizePersonSearch(`${user.displayName} ${user.email ?? ''}`).includes(query))
+    : users;
+};
 
 const initials = (name: string): string => name
   .split(/\s+/)
@@ -56,6 +67,7 @@ export function UserPickerModal({
   availableLabel,
   selectedLabel,
   emptyLabel,
+  noSearchResultsLabel,
   onClose,
   onSelect,
 }: UserPickerModalProps) {
@@ -63,10 +75,7 @@ export function UserPickerModal({
   const styles = createStyles(colors);
   const [search, setSearch] = useState('');
   const filteredUsers = useMemo(() => {
-    const query = normalizeSearch(search);
-    const matches = query
-      ? users.filter((user) => normalizeSearch(`${user.displayName} ${user.email ?? ''}`).includes(query))
-      : users;
+    const matches = filterPersonCandidates(users, search);
     return [...matches].sort((left, right) => {
       if (left.uid === selectedUserId) return -1;
       if (right.uid === selectedUserId) return 1;
@@ -107,6 +116,8 @@ export function UserPickerModal({
               onChangeText={setSearch}
               placeholder={searchPlaceholder}
               placeholderTextColor={colors.textDisabled}
+              accessibilityLabel={searchPlaceholder}
+              autoFocus
               autoCorrect={false}
               autoCapitalize="none"
             />
@@ -124,8 +135,8 @@ export function UserPickerModal({
             keyExtractor={(user) => user.uid}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.listContent}
-            ListEmptyComponent={emptyLabel ? (
-              <ThemedText style={styles.emptyText}>{emptyLabel}</ThemedText>
+            ListEmptyComponent={(search.trim() ? noSearchResultsLabel : emptyLabel) ? (
+              <ThemedText style={styles.emptyText}>{search.trim() ? noSearchResultsLabel : emptyLabel}</ThemedText>
             ) : null}
             renderItem={({ item }) => {
               const selected = item.uid === selectedUserId;

@@ -144,6 +144,7 @@ describe('buildPlanningMeetingCandidates + reconcilePlanningMeetingCandidates', 
     endDate: new Date(2026, 7, 30), // domingo 30 de agosto de 2026 (4 semanas)
     midweekDay: 3,
     weekendDay: 6,
+    today: new Date(2026, 7, 1),
   };
 
   it('genera 4 candidatos midweek y 4 weekend para un rango de 4 semanas', () => {
@@ -180,6 +181,28 @@ describe('buildPlanningMeetingCandidates + reconcilePlanningMeetingCandidates', 
 
     expect(result.existing).toBe(1);
     expect(result.toCreate).toHaveLength(7);
+  });
+
+  it('una reunion in_progress existente cuenta como existente, sin importar su status', () => {
+    const candidates = buildPlanningMeetingCandidates(fourWeekRange);
+    const existing = new Set([`${candidates[0].dateKey}::${candidates[0].meetingType}`]);
+    const result = reconcilePlanningMeetingCandidates(candidates, existing);
+    expect(result.existing).toBe(1);
+    expect(result.toCreate).not.toContainEqual(candidates[0]);
+  });
+
+  it('no propone ayer, pero si hoy y manana', () => {
+    const candidates = buildPlanningMeetingCandidates({
+      startDate: new Date(2026, 8, 24),
+      endDate: new Date(2026, 8, 26),
+      midweekDay: 5,
+      weekendDay: 6,
+      today: new Date(2026, 8, 25),
+    });
+    expect(candidates).toEqual([
+      { dateKey: '2026-09-25', meetingType: 'midweek' },
+      { dateKey: '2026-09-26', meetingType: 'weekend' },
+    ]);
   });
 });
 

@@ -217,4 +217,11 @@ export const firestoreHospitalityScheduleRepository: HospitalityScheduleReposito
 
     return { meetingSynced: result.data.meetingSynced };
   },
+  assignPublishedAssignment: async (params) => {
+    const callable = httpsCallable<typeof params, { ok: true; itemId: string; meetingSynced: boolean }>(
+      functions, 'assignHospitalityAssignmentByManager'
+    );
+    const result = await callable(params);
+    return { itemId: result.data.itemId, meetingSynced: result.data.meetingSynced };
+  },
 };

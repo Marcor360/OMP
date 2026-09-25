@@ -85,6 +85,8 @@ export function HospitalityMicrophonesScheduleScreen() {
               archivePublishedConfirm: t('hospitality.scheduleArchivePublishedConfirm'),
               archiveConfirmAction: t('hospitality.scheduleArchiveConfirmAction'),
               cancel: t('common.cancel'),
+              startDate: t('hospitality.scheduleStartDate'),
+              endDate: t('hospitality.scheduleEndDate'),
             }}
             weekdayLabel={(weekday) => t(`hospitality.weekdays.${weekday}`)}
             onTitleChange={setup.setTitle}
@@ -196,7 +198,7 @@ export function HospitalityMicrophonesScheduleScreen() {
         visible={picker.visible}
         title={picker.roleKey ? roleLabel(picker.roleKey) : t('hospitality.selectUser')}
         subtitle={picker.row ? helpers.compactDate(picker.row.meetingDate) : undefined}
-        users={filterEligibleUsers(builder.users, picker.roleKey)}
+        users={filterEligibleUsers(builder.users, picker.roleKey, picker.row?.assignments)}
         selectedUserId={picker.selectedUserId}
         disabledReasons={picker.disabledReasons}
         allowClear={!state.isPublishedView}
@@ -206,6 +208,7 @@ export function HospitalityMicrophonesScheduleScreen() {
         availableLabel={t('hospitality.userAvailable')}
         selectedLabel={t('hospitality.userSelected')}
         emptyLabel={t('hospitality.noEligibleUsers')}
+        noSearchResultsLabel={t('hospitality.noAvailableSearchResults')}
         onClose={picker.close}
         onSelect={picker.select}
       />

@@ -87,4 +87,8 @@ export interface HospitalityScheduleRepository {
     itemId: string;
     newUserId: string;
   }): Promise<{ meetingSynced: boolean }>;
+  assignPublishedAssignment(params: {
+    congregationId: string; scheduleId: string; meetingId: string; meetingDate: string;
+    meetingType: 'midweek' | 'weekend'; roleKey: HospitalityRoleKey; newUserId: string;
+  }): Promise<{ itemId: string; meetingSynced: boolean }>;
 }

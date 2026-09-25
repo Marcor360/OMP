@@ -139,6 +139,10 @@ class FakeHospitalityScheduleRepository implements HospitalityScheduleRepository
     this.substitutePayload = params;
     return this.substituteResult;
   }
+
+  async assignPublishedAssignment(): Promise<{ itemId: string; meetingSynced: boolean }> {
+    return { itemId: 'new-item', meetingSynced: true };
+  }
 }
 
 describe('hospitality-microphones-service repository port', () => {
@@ -299,8 +303,8 @@ describe('hospitality-microphones-service repository port', () => {
         congregationId: 'cong-1',
         scheduleId: 'sch-1',
         title: ' Enero ',
-        startDate: '2026-01-01',
-        endDate: '2026-02-28',
+        startDate: '2026-10-01',
+        endDate: '2026-11-30',
         optionalRoles: { microphoneThree: false, attendantExtra: false },
         items: draftItems,
       });
@@ -309,8 +313,8 @@ describe('hospitality-microphones-service repository port', () => {
         congregationId: 'cong-1',
         scheduleId: 'sch-1',
         title: 'Enero',
-        startDate: '2026-01-01',
-        endDate: '2026-02-28',
+        startDate: '2026-10-01',
+        endDate: '2026-11-30',
         optionalRoles: { microphoneThree: false, attendantExtra: false },
         items: draftItems,
       });

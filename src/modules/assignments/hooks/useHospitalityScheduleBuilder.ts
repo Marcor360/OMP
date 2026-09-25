@@ -5,6 +5,7 @@ import { useI18n } from '@/src/i18n';
 import { getScheduledOutgoingTalksInRange } from '@/src/modules/assignments/services/outgoing-talks.service';
 import {
   archiveHospitalitySchedule,
+  assignPublishedHospitalityAssignment,
   ensurePlanningMeetings,
   getHospitalityScheduleItems,
   getHospitalitySchedules,
@@ -45,6 +46,8 @@ export type HospitalityPlanningRow = {
   meetingDate: string;
   meetingType: HospitalityMeetingType;
   assignments: Partial<Record<HospitalityRoleKey, string>>;
+  // Conserva el doc.id de Firestore; nunca se deriva de la celda renderizada.
+  assignmentItemIds: Partial<Record<HospitalityRoleKey, string>>;
 };
 
 export type HospitalityWeekGroup = {
@@ -152,7 +155,7 @@ export const buildRowsFromMeetings = (
       item.meetingId
         ? `${item.meetingId}-${item.roleKey}`
         : `${item.meetingDate}-${item.meetingType}-${item.roleKey}`,
-      item.userId,
+      { userId: item.userId, itemId: item.id },
     ])
   );
 
@@ -160,10 +163,13 @@ export const buildRowsFromMeetings = (
     const meetingType = getMeetingType(meeting);
     const meetingDate = formatDateKey(toDate(meeting.meetingDate ?? meeting.startDate));
     const assignments: Partial<Record<HospitalityRoleKey, string>> = {};
+    const assignmentItemIds: Partial<Record<HospitalityRoleKey, string>> = {};
 
     rolesForMeetingType(meetingType, optionalRoles).forEach((roleKey) => {
-      assignments[roleKey] = selectedByKey.get(`${meeting.id}-${roleKey}`)
+      const selected = selectedByKey.get(`${meeting.id}-${roleKey}`)
         ?? selectedByKey.get(`${meetingDate}-${meetingType}-${roleKey}`);
+      assignments[roleKey] = selected?.userId;
+      assignmentItemIds[roleKey] = selected?.itemId;
     });
 
     return {
@@ -172,6 +178,7 @@ export const buildRowsFromMeetings = (
       meetingDate,
       meetingType,
       assignments,
+      assignmentItemIds,
     };
   });
 };
@@ -194,6 +201,11 @@ export const buildItemsFromRows = (params: {
       }];
     })
   );
+
+export const publishedAssignmentAction = (
+  row: HospitalityPlanningRow,
+  roleKey: HospitalityRoleKey
+): 'assign' | 'substitute' => row.assignmentItemIds[roleKey] ? 'substitute' : 'assign';
 
 export const selectInitialHospitalitySchedule = (
   schedules: HospitalitySchedule[],
@@ -331,7 +343,8 @@ export function useHospitalityScheduleBuilder() {
           : Promise.resolve([]),
         getScheduledOutgoingTalksInRange(congregationId, rangeStart, rangeEnd),
       ]);
-      const nextRows = buildRowsFromMeetings(loadedMeetings, loadedItems, effectiveOptionalRoles);
+      const nextRows = buildRowsFromMeetings(loadedMeetings, loadedItems, effectiveOptionalRoles)
+        .filter((row) => row.meetingDate >= todayKey());
       const nextOutgoing: Record<string, Set<string>> = {};
       nextRows.filter((row) => row.meetingType === 'weekend').forEach((row) => {
         nextOutgoing[row.meetingDate] = new Set(
@@ -624,6 +637,7 @@ export function useHospitalityScheduleBuilder() {
 
   const confirmSubstitution = useCallback(async (row: HospitalityPlanningRow, roleKey: HospitalityRoleKey, nextUser: ActiveCongregationUser) => {
     if (!congregationId || !selectedSchedule) return;
+    const itemId = row.assignmentItemIds[roleKey];
     const currentUserId = row.assignments[roleKey];
     const confirmed = await confirmAlert({
       title: t('hospitality.substituteConfirmTitle'),
@@ -639,12 +653,14 @@ export function useHospitalityScheduleBuilder() {
     if (!confirmed) return;
     setSubstituting(true);
     try {
-      await substituteHospitalityAssignment({
-        congregationId,
-        scheduleId: selectedSchedule.id,
-        itemId: `${row.meetingId}-${roleKey}`,
-        newUserId: nextUser.uid,
-      });
+      if (publishedAssignmentAction(row, roleKey) === 'substitute' && itemId) {
+        await substituteHospitalityAssignment({ congregationId, scheduleId: selectedSchedule.id, itemId, newUserId: nextUser.uid });
+      } else {
+        await assignPublishedHospitalityAssignment({
+          congregationId, scheduleId: selectedSchedule.id, meetingId: row.meetingId,
+          meetingDate: row.meetingDate, meetingType: row.meetingType, roleKey, newUserId: nextUser.uid,
+        });
+      }
       await loadRows({
         rangeStart: selectedSchedule.startDate,
         rangeEnd: selectedSchedule.endDate,

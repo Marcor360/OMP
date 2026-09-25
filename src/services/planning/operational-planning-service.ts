@@ -86,6 +86,7 @@ export const validatePlanningWindow = (params: {
   }
 
   const window = buildPlanningWindow(params.startDate, params.endDate);
+  const today = formatDateKey(startOfLocalDay(new Date()));
 
   if (window.totalDays <= 0) {
     errors.push('La lista debe cubrir al menos un dia.');
@@ -93,6 +94,10 @@ export const validatePlanningWindow = (params: {
 
   if (window.startDate > window.endDate) {
     errors.push('La fecha final no puede ser menor que la fecha inicial.');
+  }
+
+  if (window.endDate < today) {
+    errors.push('La lista no puede cubrir un rango completamente anterior a hoy.');
   }
 
   if (window.totalDays > MAX_PLANNING_DAYS) {
@@ -115,4 +120,3 @@ export const validatePlanningWindow = (params: {
     warnings,
   };
 };
-

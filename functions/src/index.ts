@@ -101,6 +101,7 @@ export {
 
 export {
   archiveHospitalityScheduleByManager,
+  assignHospitalityAssignmentByManager,
   ensurePlanningMeetingsByManager,
   publishCleaningScheduleByManager,
   publishHospitalityScheduleByManager,

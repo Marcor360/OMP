@@ -200,3 +200,9 @@ export const substituteHospitalityAssignment = async (params: {
 
   return hospitalityScheduleRepository.substituteAssignment(params);
 };
+
+export const assignPublishedHospitalityAssignment = async (params: {
+  congregationId: string; scheduleId: string; meetingId: string; meetingDate: string;
+  meetingType: 'midweek' | 'weekend'; roleKey: import('@/src/types/hospitality-microphones').HospitalityRoleKey; newUserId: string;
+}): Promise<{ itemId: string; meetingSynced: boolean }> =>
+  hospitalityScheduleRepository.assignPublishedAssignment(params);

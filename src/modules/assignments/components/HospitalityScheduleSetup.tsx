@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/src/components/themed-text';
+import { DatePickerModal } from '@/src/components/forms/DatePickerModal';
 import { WEEKDAYS } from '@/src/modules/assignments/hooks/useHospitalityScheduleBuilder';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import type { HospitalityOptionalRoles, HospitalitySchedule } from '@/src/types/hospitality-microphones';
@@ -25,6 +27,7 @@ type Props = {
     published: string; draft: string; archive: string; archiveConfirmTitle: string;
     archiveDraftConfirm: string; archivePublishedConfirm: string; archiveConfirmAction: string;
     cancel: string;
+    startDate: string; endDate: string;
   };
   weekdayLabel: (weekday: typeof WEEKDAYS[number]) => string;
   onTitleChange: (value: string) => void;
@@ -51,6 +54,10 @@ export const canArchiveHospitalitySchedule = (
 export function HospitalityScheduleSetup(props: Props) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const [datePickerTarget, setDatePickerTarget] = useState<'start' | 'end' | null>(null);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const requestArchive = async (schedule: HospitalitySchedule) => {
     const confirmed = await confirmAlert({
       title: props.labels.archiveConfirmTitle,
@@ -90,8 +97,14 @@ export function HospitalityScheduleSetup(props: Props) {
         <ThemedText style={styles.title}>{props.labels.workList}</ThemedText>
         <TextInput style={styles.input} value={props.title} onChangeText={props.onTitleChange} placeholder={props.labels.titlePlaceholder} placeholderTextColor={colors.textDisabled} />
         <View style={styles.dateRow}>
-          <TextInput style={[styles.input, styles.dateInput]} value={props.startDate} onChangeText={props.onStartDateChange} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textDisabled} autoCapitalize="none" />
-          <TextInput style={[styles.input, styles.dateInput]} value={props.endDate} onChangeText={props.onEndDateChange} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textDisabled} autoCapitalize="none" />
+          <TouchableOpacity style={[styles.input, styles.dateInput]} onPress={() => setDatePickerTarget('start')}>
+            <ThemedText style={styles.dateLabel}>{props.labels.startDate}</ThemedText>
+            <ThemedText style={styles.dateValue}>{props.startDate}</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.input, styles.dateInput]} onPress={() => setDatePickerTarget('end')}>
+            <ThemedText style={styles.dateLabel}>{props.labels.endDate}</ThemedText>
+            <ThemedText style={styles.dateValue}>{props.endDate}</ThemedText>
+          </TouchableOpacity>
         </View>
         <View style={styles.switches}>
           <View style={styles.switchRow}>
@@ -115,6 +128,22 @@ export function HospitalityScheduleSetup(props: Props) {
           </TouchableOpacity>
         </View>
       </View>
+
+      <DatePickerModal
+        visible={datePickerTarget !== null}
+        selectedDate={datePickerTarget === 'start' ? props.startDate : props.endDate}
+        title={datePickerTarget === 'start' ? props.labels.startDate : props.labels.endDate}
+        minDate={datePickerTarget === 'end' ? (props.startDate > todayKey ? props.startDate : todayKey) : todayKey}
+        onSelectDate={(date) => {
+          if (datePickerTarget === 'start') {
+            props.onStartDateChange(date);
+            if (props.endDate < date) props.onEndDateChange(date);
+          } else {
+            props.onEndDateChange(date);
+          }
+        }}
+        onClose={() => setDatePickerTarget(null)}
+      />
 
       {props.schedules.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -156,6 +185,8 @@ const createStyles = (colors: AppColorSet) => StyleSheet.create({
   input: { minHeight: 44, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, color: colors.textPrimary, backgroundColor: colors.backgroundLight, outlineStyle: 'none' } as never,
   dateRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   dateInput: { flex: 1, minWidth: 150 },
+  dateLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
+  dateValue: { color: colors.textPrimary, fontSize: 13, fontWeight: '800' },
   switches: { gap: 8 },
   switchRow: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   label: { color: colors.textSecondary, fontSize: 12, fontWeight: '700' },

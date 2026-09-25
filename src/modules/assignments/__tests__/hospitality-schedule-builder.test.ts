@@ -2,6 +2,7 @@ import {
   DEFAULT_OPTIONAL_ROLES,
   buildItemsFromRows,
   buildRowsFromMeetings,
+  publishedAssignmentAction,
   selectInitialHospitalitySchedule,
 } from '@/src/modules/assignments/hooks/useHospitalityScheduleBuilder';
 import { canArchiveHospitalitySchedule } from '@/src/modules/assignments/components/HospitalityScheduleSetup';
@@ -57,14 +58,16 @@ describe('hospitality schedule builder helpers', () => {
       { id: 'meeting-2', title: 'Second', type: 'weekend', meetingCategory: 'weekend', meetingDate: '2026-08-15' },
     ] as unknown as Meeting[];
     const items = [
-      { meetingId: 'meeting-1', meetingDate: '2026-08-15', meetingType: 'weekend', roleKey: 'microphoneOne', userId: 'user-1', status: 'scheduled' },
-      { meetingId: 'meeting-2', meetingDate: '2026-08-15', meetingType: 'weekend', roleKey: 'microphoneOne', userId: 'user-2', status: 'scheduled' },
+      { id: 'firestore-item-a', meetingId: 'meeting-1', meetingDate: '2026-08-15', meetingType: 'weekend', roleKey: 'microphoneOne', userId: 'user-1', status: 'scheduled' },
+      { id: 'firestore-item-b', meetingId: 'meeting-2', meetingDate: '2026-08-15', meetingType: 'weekend', roleKey: 'microphoneOne', userId: 'user-2', status: 'scheduled' },
     ] as HospitalityScheduleItem[];
 
     const rows = buildRowsFromMeetings(meetings, items, DEFAULT_OPTIONAL_ROLES);
 
     expect(rows[0].assignments.microphoneOne).toBe('user-1');
     expect(rows[1].assignments.microphoneOne).toBe('user-2');
+    expect(rows[0].assignmentItemIds.microphoneOne).toBe('firestore-item-a');
+    expect(rows[1].assignmentItemIds.microphoneOne).toBe('firestore-item-b');
   });
 
   it('includes meeting ids and leaves user validation to the callable', () => {
@@ -75,6 +78,7 @@ describe('hospitality schedule builder helpers', () => {
         meetingDate: '2026-08-12',
         meetingType: 'midweek',
         assignments: { microphoneOne: 'inactive-user' },
+        assignmentItemIds: {},
       }],
       optionalRoles: DEFAULT_OPTIONAL_ROLES,
     });
@@ -86,6 +90,16 @@ describe('hospitality schedule builder helpers', () => {
       roleKey: 'microphoneOne',
       userId: 'inactive-user',
     }]);
+  });
+
+  it('keeps a missing published cell on the assign flow and a persisted cell on substitute', () => {
+    const base = {
+      meetingId: 'meeting-1', meetingTitle: 'Meeting', meetingDate: '2026-10-12',
+      meetingType: 'midweek' as const, assignments: {}, assignmentItemIds: {},
+    };
+    expect(publishedAssignmentAction(base, 'microphoneOne')).toBe('assign');
+    expect(publishedAssignmentAction({ ...base, assignmentItemIds: { microphoneOne: 'real-doc-id' } }, 'microphoneOne'))
+      .toBe('substitute');
   });
 
   it('lets editors archive drafts but reserves published schedules for managers', () => {

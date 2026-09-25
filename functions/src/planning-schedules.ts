@@ -48,6 +48,13 @@ type SubstituteHospitalityAssignmentPayload = {
   newUserId?: unknown;
 };
 
+type AssignHospitalityAssignmentPayload = SubstituteHospitalityAssignmentPayload & {
+  meetingId?: unknown;
+  meetingDate?: unknown;
+  meetingType?: unknown;
+  roleKey?: unknown;
+};
+
 type EnsurePlanningMeetingsResult = {
   ok: true;
   createdMidweek: number;
@@ -167,6 +174,24 @@ const parseSubstitutePayload = (
   }
 
   return { congregationId, scheduleId, itemId, newUserId };
+};
+
+const parseAssignPayload = (raw: unknown): {
+  congregationId: string; scheduleId: string; meetingId: string; meetingDate: string;
+  meetingType: HospitalityMeetingType; roleKey: HospitalityRoleKey; newUserId: string;
+} => {
+  const data = raw as AssignHospitalityAssignmentPayload;
+  const congregationId = normalizeText(data?.congregationId);
+  const scheduleId = normalizeText(data?.scheduleId);
+  const meetingId = normalizeText(data?.meetingId);
+  const meetingDate = normalizeText(data?.meetingDate);
+  const newUserId = normalizeText(data?.newUserId);
+  const meetingType = data?.meetingType === 'midweek' || data?.meetingType === 'weekend' ? data.meetingType : undefined;
+  const roleKey = normalizeText(data?.roleKey) as HospitalityRoleKey | undefined;
+  if (!congregationId || !scheduleId || !meetingId || !meetingDate || !parseDateKey(meetingDate) || !newUserId || !meetingType || !roleKey || !(roleKey in HOSPITALITY_ROLE_LABELS)) {
+    throw new HttpsError('invalid-argument', 'Los datos de la nueva asignacion no son validos.');
+  }
+  return { congregationId, scheduleId, meetingId, meetingDate, meetingType, roleKey, newUserId };
 };
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -364,6 +389,10 @@ export const parsePlanningWindow = (
   const endDate = parseDateKey(endDateKey);
   if (!startDate || !endDate || startDate > endDate) {
     throw new HttpsError('invalid-argument', 'El rango de fechas no es valido.');
+  }
+
+  if (formatDateKey(endDate) < formatDateKey(new Date())) {
+    throw new HttpsError('invalid-argument', 'La lista no puede cubrir un rango completamente anterior a hoy.');
   }
 
   const totalDays = Math.floor((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1;
@@ -1239,11 +1268,17 @@ export const buildPlanningMeetingCandidates = (params: {
   endDate: Date;
   midweekDay: number;
   weekendDay: number;
+  today?: Date;
 }): PlanningMeetingCandidate[] => {
   const candidates: PlanningMeetingCandidate[] = [];
   const cursor = new Date(params.startDate);
+  const todayKey = formatDateKey(params.today ?? new Date());
   while (cursor <= params.endDate) {
     const dateKey = formatDateKey(cursor);
+    if (dateKey < todayKey) {
+      cursor.setDate(cursor.getDate() + 1);
+      continue;
+    }
     if (cursor.getDay() === params.midweekDay) {
       candidates.push({ dateKey, meetingType: 'midweek' });
     }
@@ -1346,7 +1381,7 @@ export const ensurePlanningMeetingsByManager = onCall(
         .collection('meetings')
         .doc(planningMeetingDocId(candidate.dateKey, candidate.meetingType));
 
-      batch.set(
+      batch.create(
         ref,
         buildPlanningMeetingSkeleton({
           dateKey: candidate.dateKey,
@@ -1588,6 +1623,58 @@ export const substituteHospitalityAssignmentByManager = onCall(
     await batch.commit();
 
     return { ok: true, meetingSynced: syncResult.synced };
+  }
+);
+
+// Camino separado para una celda publicada que no tenia item persistido (listas
+// heredadas). No se reutiliza substitute: ahi itemId debe existir por contrato.
+export const assignHospitalityAssignmentByManager = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<{ ok: true; itemId: string; meetingSynced: boolean }> => {
+    if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    const payload = parseAssignPayload(request.data);
+    const requester = await getRequesterProfile(request.auth.uid);
+    await assertAdministrativeBillingAccess(payload.congregationId);
+    assertHospitalityManager(requester, payload.congregationId);
+    const scheduleRef = adminDb.collection('congregations').doc(payload.congregationId)
+      .collection('hospitalitySchedules').doc(payload.scheduleId);
+    const schedule = await scheduleRef.get();
+    if (!schedule.exists) throw new HttpsError('not-found', 'Lista no encontrada.');
+    const scheduleData = schedule.data() as FirestoreRecord;
+    if (normalizeText(scheduleData.congregationId) !== payload.congregationId || scheduleData.status !== 'published') {
+      throw new HttpsError('failed-precondition', 'La lista publicada no es valida para esta asignacion.');
+    }
+    if (payload.meetingDate < normalizeText(scheduleData.startDate)! || payload.meetingDate > normalizeText(scheduleData.endDate)!) {
+      throw new HttpsError('failed-precondition', 'La fecha no pertenece al rango de la lista.');
+    }
+    const meeting = await adminDb.collection('congregations').doc(payload.congregationId)
+      .collection('meetings').doc(payload.meetingId).get();
+    if (!meeting.exists || !isPreferredMeetingMatch({ data: meeting.data() as FirestoreRecord, requestedDateRange: dayRange(payload.meetingDate), meetingType: payload.meetingType })) {
+      throw new HttpsError('failed-precondition', 'La reunion no coincide con la asignacion.');
+    }
+    const user = await adminDb.collection('users').doc(payload.newUserId).get();
+    const userData = user.data() as FirestoreRecord | undefined;
+    if (!user.exists || !userData || normalizeText(userData.congregationId) !== payload.congregationId || !resolveIsActive(userData) || !isHospitalityEligible(userData)) {
+      throw new HttpsError('failed-precondition', 'El usuario no es elegible para esta asignacion.');
+    }
+    const itemId = hospitalityScheduleItemDocId(payload.meetingId, payload.roleKey);
+    const itemRef = scheduleRef.collection('items').doc(itemId);
+    if ((await itemRef.get()).exists) throw new HttpsError('already-exists', 'La asignacion ya existe; actualiza la lista antes de sustituirla.');
+    const item: HospitalityScheduleItem = {
+      meetingId: payload.meetingId, meetingDate: payload.meetingDate, meetingType: payload.meetingType,
+      roleKey: payload.roleKey, roleLabel: HOSPITALITY_ROLE_LABELS[payload.roleKey], userId: payload.newUserId,
+      userNameSnapshot: normalizeText(userData.displayName) ?? normalizeText(userData.email) ?? 'Usuario',
+    };
+    const siblings = await scheduleRef.collection('items').where('meetingDate', '==', item.meetingDate)
+      .where('meetingType', '==', item.meetingType).where('status', '==', 'scheduled').get();
+    if (siblings.docs.some((doc) => normalizeText((doc.data() as FirestoreRecord).userId) === payload.newUserId)) {
+      throw new HttpsError('failed-precondition', 'El usuario ya tiene una asignacion en esta reunion.');
+    }
+    const batch = adminDb.batch();
+    batch.create(itemRef, { ...item, congregationId: payload.congregationId, scheduleId: payload.scheduleId, status: 'scheduled', createdBy: request.auth.uid, updatedBy: request.auth.uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    const sync = await syncSingleMeetingFromItems({ congregationId: payload.congregationId, meetingDate: item.meetingDate, meetingType: item.meetingType, items: [...siblings.docs.map((doc) => normalizeHospitalityItem(doc.data() as FirestoreRecord)).filter((value): value is HospitalityScheduleItem => value !== null), item], requesterUid: request.auth.uid, batch });
+    await batch.commit();
+    return { ok: true, itemId, meetingSynced: sync.synced };
   }
 );
 
