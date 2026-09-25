@@ -228,6 +228,43 @@ service cloud.firestore {
             && user.serviceDepartment == 'acomodadores_microfonos'
           )
           || userHasServiceAssignmentKey(user, 'auxiliar', 'acomodadores_microfonos')
+      );
+    }
+
+    // Regla compacta para schedules: carga una vez el perfil y la congregacion
+    // y evalua una sola rama de permiso. Evita ejecutar en paralelo
+    // canAccessCongregationData + editor/manager + el otro permiso durante una
+    // misma escritura, combinacion que agotaba las 1,000 expresiones.
+    function canEditHospitalitySchedule(congregationId) {
+      let user = currentUserData();
+      let congregation = get(congregationPath(congregationId)).data;
+      return isAuthenticated()
+        && hasCurrentUserDoc()
+        && isActiveUserData(user)
+        && user.congregationId == congregationId
+        && !congregationDataAccessBlocked(congregation)
+        && !congregationBillingDataAdministrativeRestricted(congregation)
+        && !systemMaintenanceBlocked()
+        && isHospitalityMicrophonesEditorData(user);
+    }
+
+    function canUpdateHospitalitySchedule(congregationId, oldStatus, newStatus) {
+      let user = currentUserData();
+      let congregation = get(congregationPath(congregationId)).data;
+      return isAuthenticated()
+        && hasCurrentUserDoc()
+        && isActiveUserData(user)
+        && user.congregationId == congregationId
+        && !congregationDataAccessBlocked(congregation)
+        && !congregationBillingDataAdministrativeRestricted(congregation)
+        && !systemMaintenanceBlocked()
+        && (
+          isHospitalityMicrophonesManagerData(user)
+          || (
+            isHospitalityMicrophonesEditorData(user)
+            && oldStatus == 'draft'
+            && newStatus in ['draft', 'archived']
+          )
         );
     }
 
@@ -2816,41 +2853,30 @@ service cloud.firestore {
       match /hospitalitySchedules/{scheduleId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canAccessCongregationData(congregationId)
-          && isHospitalityMicrophonesEditor()
+        allow create: if canEditHospitalitySchedule(congregationId)
           && request.resource.data.status == 'draft'
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == currentUid()
           && request.resource.data.updatedBy == currentUid();
 
-        allow update: if canAccessCongregationData(congregationId)
-          && resource.data.congregationId == congregationId
+        allow update: if resource.data.congregationId == congregationId
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == resource.data.createdBy
           && request.resource.data.createdAt == resource.data.createdAt
           && request.resource.data.updatedBy == currentUid()
-          && (
-            isHospitalityMicrophonesManager()
-            || (
-              isHospitalityMicrophonesEditor()
-              && resource.data.status == 'draft'
-              && request.resource.data.status in ['draft', 'archived']
-            )
-          );
+          && canUpdateHospitalitySchedule(congregationId, resource.data.status, request.resource.data.status);
 
         allow delete: if false;
 
         match /items/{itemId} {
           allow get, list: if canAccessCongregationData(congregationId);
 
-          allow create: if canAccessCongregationData(congregationId)
-            && isHospitalityMicrophonesEditor()
+          allow create: if canEditHospitalitySchedule(congregationId)
             && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == currentUid()
             && request.resource.data.updatedBy == currentUid();
 
-          allow update: if canAccessCongregationData(congregationId)
-            && isHospitalityMicrophonesEditor()
+          allow update: if canEditHospitalitySchedule(congregationId)
             && resource.data.congregationId == congregationId
             && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == resource.data.createdBy

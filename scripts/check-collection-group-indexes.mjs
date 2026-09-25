@@ -17,6 +17,7 @@ const REQUIRED_FIELDS = {
   pushReceipts: ['status', 'nextCheckAt'],
   pushDispatches: ['status', 'nextAttemptAt', 'leaseUntil'],
   private: ['stripeSubscriptionId'],
+  items: ['congregationId', 'meetingId', 'status'],
 };
 const DYNAMIC_ALLOWLIST = new Map([
   ['functions/src/maintenance/scheduled-data-cleanup.ts::params.collectionId',

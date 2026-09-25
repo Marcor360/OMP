@@ -797,19 +797,6 @@ const isHospitalityEligible = (data: Record<string, unknown>): boolean => {
   return isElder || isMinisterialServant;
 };
 
-const assertNotMeetingChairman = async (params: {
-  congregationId: string;
-  meetingId?: string;
-  userId: string;
-}): Promise<void> => {
-  if (!params.meetingId) return; // Compatibilidad con items historicos sin meetingId.
-  const meeting = await adminDb.collection('congregations').doc(params.congregationId)
-    .collection('meetings').doc(params.meetingId).get();
-  if (meeting.exists && normalizeText((meeting.data() as FirestoreRecord).chairmanUserId) === params.userId) {
-    throw new HttpsError('failed-precondition', 'La persona dirige esta reunion y no puede recibir una asignacion operativa.');
-  }
-};
-
 const assertHospitalityRoleEligibility = async (params: {
   congregationId: string;
   scheduleId: string;
@@ -826,6 +813,16 @@ const assertHospitalityRoleEligibility = async (params: {
   const items = itemsSnap.docs
     .map((itemDoc) => normalizeHospitalityItem(itemDoc.data() as FirestoreRecord))
     .filter((item): item is HospitalityScheduleItem => item !== null);
+
+  const meetingIds = Array.from(new Set(items.map((item) => item.meetingId).filter((id): id is string => Boolean(id))));
+  const meetingSnaps = await Promise.all(meetingIds.map((meetingId) => adminDb.collection('congregations')
+    .doc(params.congregationId).collection('meetings').doc(meetingId).get()));
+  const chairmanByMeetingId = new Map<string, string | undefined>();
+  meetingIds.forEach((meetingId, index) => chairmanByMeetingId.set(
+    meetingId,
+    meetingSnaps[index].exists ? normalizeText((meetingSnaps[index].data() as FirestoreRecord).chairmanUserId) : undefined
+  ));
+  assertNoDuplicateHospitalityAssignees(items, chairmanByMeetingId);
 
   const userIds = Array.from(new Set(items.map((item) => item.userId)));
   const userSnaps = await Promise.all(
@@ -1575,37 +1572,8 @@ export const substituteHospitalityAssignmentByManager = onCall(
       );
     }
 
-    await assertNotMeetingChairman({
-      congregationId: payload.congregationId,
-      meetingId: item.meetingId,
-      userId: payload.newUserId,
-    });
-
     const newUserName =
       normalizeText(newUserData.displayName) ?? normalizeText(newUserData.email) ?? 'Usuario';
-
-    const siblingItemsSnap = await scheduleRef
-      .collection('items')
-      .where('meetingDate', '==', item.meetingDate)
-      .where('meetingType', '==', item.meetingType)
-      .where('status', '==', 'scheduled')
-      .get();
-
-    const siblingItems = siblingItemsSnap.docs
-      .map((doc) => ({ id: doc.id, item: normalizeHospitalityItem(doc.data() as FirestoreRecord) }))
-      .filter(
-        (entry): entry is { id: string; item: HospitalityScheduleItem } => entry.item !== null
-      );
-
-    const duplicateRole = siblingItems.find(
-      (entry) => entry.id !== payload.itemId && entry.item.userId === payload.newUserId
-    );
-    if (duplicateRole) {
-      throw new HttpsError(
-        'failed-precondition',
-        `${newUserName} ya tiene una asignacion (${duplicateRole.item.roleLabel}) en esa reunion.`
-      );
-    }
 
     if (item.meetingType === 'weekend') {
       await assertNoSingleHospitalitySubstitutionConflict({
@@ -1616,32 +1584,85 @@ export const substituteHospitalityAssignmentByManager = onCall(
       });
     }
 
-    const batch = adminDb.batch();
-    batch.update(itemRef, {
-      userId: payload.newUserId,
-      userNameSnapshot: newUserName,
-      updatedBy: request.auth.uid,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    const updatedItems: HospitalityScheduleItem[] = siblingItems.map((entry) =>
-      entry.id === payload.itemId
-        ? { ...entry.item, userId: payload.newUserId, userNameSnapshot: newUserName }
-        : entry.item
-    );
-
-    const syncResult = await syncSingleMeetingFromItems({
+    let meetingDoc = await findMeetingForDateAndType({
       congregationId: payload.congregationId,
       meetingDate: item.meetingDate,
       meetingType: item.meetingType,
-      items: updatedItems,
-      requesterUid: request.auth.uid,
-      batch,
+      preferredMeetingId: item.meetingId,
+    });
+    if (!meetingDoc && item.meetingId) {
+      const preferredRef = adminDb.collection('congregations').doc(payload.congregationId)
+        .collection('meetings').doc(item.meetingId);
+      const preferred = await preferredRef.get();
+      if (preferred.exists) meetingDoc = preferred;
+    }
+    const meetingRef = meetingDoc?.ref;
+    const lockRef = hospitalityMeetingLockRef(
+      payload.congregationId, item.meetingId ?? '', item.meetingDate, item.meetingType
+    );
+    const meetingSynced = await adminDb.runTransaction(async (transaction) => {
+      const [lockSnapshot, scheduleCurrent, itemCurrent, siblingSnapshot, userCurrent, meetingCurrent, occupiedSnapshot] = await Promise.all([
+        transaction.get(lockRef), transaction.get(scheduleRef), transaction.get(itemRef),
+        transaction.get(scheduleRef.collection('items')
+          .where('meetingDate', '==', item.meetingDate)
+          .where('meetingType', '==', item.meetingType)
+          .where('status', '==', 'scheduled')),
+        transaction.get(adminDb.collection('users').doc(payload.newUserId)),
+        meetingRef ? transaction.get(meetingRef) : Promise.resolve(undefined),
+        item.meetingId ? transaction.get(scheduledHospitalityItemsForMeeting(payload.congregationId, item.meetingId)) : Promise.resolve(undefined),
+      ]);
+      if (!scheduleCurrent.exists || scheduleCurrent.get('status') !== 'published') {
+        throw new HttpsError('failed-precondition', 'La lista ya no esta publicada.');
+      }
+      if (!itemCurrent.exists || itemCurrent.get('status') !== 'scheduled') {
+        throw new HttpsError('not-found', 'Asignacion no encontrada.');
+      }
+      if (!userCurrent.exists || normalizeText(userCurrent.get('congregationId')) !== payload.congregationId
+          || !resolveIsActive(userCurrent.data() as FirestoreRecord)
+          || !isHospitalityEligible(userCurrent.data() as FirestoreRecord)) {
+        throw new HttpsError('failed-precondition', 'El usuario sustituto ya no es elegible.');
+      }
+      if (meetingCurrent?.exists && normalizeText((meetingCurrent.data() as FirestoreRecord).chairmanUserId) === payload.newUserId) {
+        throw new HttpsError('failed-precondition', 'La persona dirige esta reunion y no puede recibir otra asignacion operativa.');
+      }
+      const siblings = siblingSnapshot.docs.map((doc) => ({
+        id: doc.id, item: normalizeHospitalityItem(doc.data() as FirestoreRecord),
+      })).filter((entry): entry is { id: string; item: HospitalityScheduleItem } => entry.item !== null);
+      const conflict = siblings.find((entry) => entry.id !== payload.itemId && entry.item.userId === payload.newUserId);
+      if (conflict) throw new HttpsError('failed-precondition', 'La persona ya tiene una asignacion incompatible en esta reunion.');
+      const otherScheduleConflict = occupiedSnapshot?.docs.some((doc) =>
+        normalizeText((doc.data() as FirestoreRecord).scheduleId) !== payload.scheduleId
+        && normalizeText((doc.data() as FirestoreRecord).userId) === payload.newUserId
+      );
+      if (otherScheduleConflict) throw new HttpsError('failed-precondition', 'La persona ya tiene una asignacion incompatible en esta reunion.');
+
+      const updatedItems = siblings.map((entry) => entry.id === payload.itemId
+        ? { ...entry.item, userId: payload.newUserId, userNameSnapshot: newUserName }
+        : entry.item);
+      transaction.update(itemRef, {
+        userId: payload.newUserId, userNameSnapshot: newUserName,
+        updatedBy: request.auth!.uid, updatedAt: FieldValue.serverTimestamp(),
+      });
+      transaction.set(lockRef, {
+        revision: lockSnapshot.exists && typeof lockSnapshot.get('revision') === 'number'
+          ? (lockSnapshot.get('revision') as number) + 1 : 1,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      if (meetingRef && meetingCurrent?.exists) {
+        const meetingData = meetingCurrent.data() as FirestoreRecord;
+        const sections = applyHospitalityItemsToMeetingSections(meetingData, updatedItems, item.meetingType);
+        const isPlanningSkeleton = normalizeText(meetingData.origin) === 'hospitalityPlanning' || meetingRef.id.startsWith('planning-');
+        const updatePayload: FirestoreRecord = {
+          sections, assignedUserIds: collectAssignedUserIdsFromSections(sections),
+          updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth!.uid,
+        };
+        if (isPlanningSkeleton) updatePayload.publicationStatus = 'awaiting_assignments';
+        transaction.update(meetingRef, updatePayload);
+      }
+      return Boolean(meetingRef && meetingCurrent?.exists);
     });
 
-    await batch.commit();
-
-    return { ok: true, meetingSynced: syncResult.synced };
+    return { ok: true, meetingSynced };
   }
 );
 
@@ -1677,25 +1698,57 @@ export const assignHospitalityAssignmentByManager = onCall(
     if (!user.exists || !userData || normalizeText(userData.congregationId) !== payload.congregationId || !resolveIsActive(userData) || !isHospitalityEligible(userData)) {
       throw new HttpsError('failed-precondition', 'El usuario no es elegible para esta asignacion.');
     }
-    await assertNotMeetingChairman({ congregationId: payload.congregationId, meetingId: payload.meetingId, userId: payload.newUserId });
     const itemId = hospitalityScheduleItemDocId(payload.meetingId, payload.roleKey);
     const itemRef = scheduleRef.collection('items').doc(itemId);
-    if ((await itemRef.get()).exists) throw new HttpsError('already-exists', 'La asignacion ya existe; actualiza la lista antes de sustituirla.');
+    const meetingRef = adminDb.collection('congregations').doc(payload.congregationId)
+      .collection('meetings').doc(payload.meetingId);
+    const lockRef = hospitalityMeetingLockRef(payload.congregationId, payload.meetingId, payload.meetingDate, payload.meetingType);
     const item: HospitalityScheduleItem = {
       meetingId: payload.meetingId, meetingDate: payload.meetingDate, meetingType: payload.meetingType,
       roleKey: payload.roleKey, roleLabel: HOSPITALITY_ROLE_LABELS[payload.roleKey], userId: payload.newUserId,
       userNameSnapshot: normalizeText(userData.displayName) ?? normalizeText(userData.email) ?? 'Usuario',
     };
-    const siblings = await scheduleRef.collection('items').where('meetingDate', '==', item.meetingDate)
-      .where('meetingType', '==', item.meetingType).where('status', '==', 'scheduled').get();
-    if (siblings.docs.some((doc) => normalizeText((doc.data() as FirestoreRecord).userId) === payload.newUserId)) {
-      throw new HttpsError('failed-precondition', 'El usuario ya tiene una asignacion en esta reunion.');
-    }
-    const batch = adminDb.batch();
-    batch.create(itemRef, { ...item, congregationId: payload.congregationId, scheduleId: payload.scheduleId, status: 'scheduled', createdBy: request.auth.uid, updatedBy: request.auth.uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-    const sync = await syncSingleMeetingFromItems({ congregationId: payload.congregationId, meetingDate: item.meetingDate, meetingType: item.meetingType, items: [...siblings.docs.map((doc) => normalizeHospitalityItem(doc.data() as FirestoreRecord)).filter((value): value is HospitalityScheduleItem => value !== null), item], requesterUid: request.auth.uid, batch });
-    await batch.commit();
-    return { ok: true, itemId, meetingSynced: sync.synced };
+    const meetingSynced = await adminDb.runTransaction(async (transaction) => {
+      const [lockSnapshot, scheduleCurrent, itemCurrent, meetingCurrent, userCurrent, siblings, occupied] = await Promise.all([
+        transaction.get(lockRef), transaction.get(scheduleRef), transaction.get(itemRef),
+        transaction.get(meetingRef), transaction.get(adminDb.collection('users').doc(payload.newUserId)),
+        transaction.get(scheduleRef.collection('items').where('meetingDate', '==', item.meetingDate)
+          .where('meetingType', '==', item.meetingType).where('status', '==', 'scheduled')),
+        transaction.get(scheduledHospitalityItemsForMeeting(payload.congregationId, payload.meetingId)),
+      ]);
+      if (!scheduleCurrent.exists || scheduleCurrent.get('status') !== 'published') {
+        throw new HttpsError('failed-precondition', 'La lista ya no esta publicada.');
+      }
+      if (itemCurrent.exists) throw new HttpsError('already-exists', 'La asignacion ya existe; actualiza la lista antes de sustituirla.');
+      if (!meetingCurrent.exists || !isPreferredMeetingMatch({ data: meetingCurrent.data() as FirestoreRecord, requestedDateRange: dayRange(payload.meetingDate), meetingType: payload.meetingType })) {
+        throw new HttpsError('failed-precondition', 'La reunion ya no coincide con la asignacion.');
+      }
+      if (!userCurrent.exists || normalizeText(userCurrent.get('congregationId')) !== payload.congregationId
+          || !resolveIsActive(userCurrent.data() as FirestoreRecord) || !isHospitalityEligible(userCurrent.data() as FirestoreRecord)) {
+        throw new HttpsError('failed-precondition', 'El usuario ya no es elegible para esta asignacion.');
+      }
+      if (normalizeText((meetingCurrent.data() as FirestoreRecord).chairmanUserId) === payload.newUserId) {
+        throw new HttpsError('failed-precondition', 'La persona dirige esta reunion y no puede recibir otra asignacion operativa.');
+      }
+      if (siblings.docs.some((doc) => normalizeText((doc.data() as FirestoreRecord).userId) === payload.newUserId)) {
+        throw new HttpsError('failed-precondition', 'La persona ya tiene una asignacion incompatible en esta reunion.');
+      }
+      if (occupied.docs.some((doc) => normalizeText((doc.data() as FirestoreRecord).scheduleId) !== payload.scheduleId
+          && normalizeText((doc.data() as FirestoreRecord).userId) === payload.newUserId)) {
+        throw new HttpsError('failed-precondition', 'La persona ya tiene una asignacion incompatible en esta reunion.');
+      }
+      const existingItems = siblings.docs.map((doc) => normalizeHospitalityItem(doc.data() as FirestoreRecord))
+        .filter((value): value is HospitalityScheduleItem => value !== null);
+      const sections = applyHospitalityItemsToMeetingSections(meetingCurrent.data() as FirestoreRecord, [...existingItems, item], item.meetingType);
+      const isPlanningSkeleton = normalizeText((meetingCurrent.data() as FirestoreRecord).origin) === 'hospitalityPlanning' || meetingRef.id.startsWith('planning-');
+      const meetingUpdate: FirestoreRecord = { sections, assignedUserIds: collectAssignedUserIdsFromSections(sections), updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth!.uid };
+      if (isPlanningSkeleton) meetingUpdate.publicationStatus = 'awaiting_assignments';
+      transaction.create(itemRef, { ...item, congregationId: payload.congregationId, scheduleId: payload.scheduleId, status: 'scheduled', createdBy: request.auth!.uid, updatedBy: request.auth!.uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+      transaction.update(meetingRef, meetingUpdate);
+      transaction.set(lockRef, { revision: lockSnapshot.exists && typeof lockSnapshot.get('revision') === 'number' ? (lockSnapshot.get('revision') as number) + 1 : 1, updatedAt: FieldValue.serverTimestamp() });
+      return true;
+    });
+    return { ok: true, itemId, meetingSynced };
   }
 );
 
@@ -1816,6 +1869,36 @@ const parseSaveHospitalityScheduleDraftPayload = (
 export const hospitalityScheduleItemDocId = (meetingId: string, roleKey: string): string =>
   `${meetingId}-${roleKey}`;
 
+const hospitalityMeetingLockRef = (congregationId: string, meetingId: string, dateKey: string, type: HospitalityMeetingType) =>
+  adminDb.collection('congregations').doc(congregationId)
+    .collection('hospitalityPlanningLocks').doc(`${meetingId || dateKey}-${type}`);
+
+const scheduledHospitalityItemsForMeeting = (congregationId: string, meetingId: string) =>
+  adminDb.collectionGroup('items')
+    .where('congregationId', '==', congregationId)
+    .where('meetingId', '==', meetingId)
+    .where('status', '==', 'scheduled');
+
+const assertNoDuplicateHospitalityAssignees = (
+  items: Array<Pick<HospitalityScheduleItem, 'meetingId' | 'meetingDate' | 'meetingType' | 'roleKey' | 'userId'>>,
+  chairmanByMeetingId: Map<string, string | undefined>
+): void => {
+  const seen = new Map<string, Map<string, HospitalityRoleKey>>();
+  for (const item of items) {
+    const meetingKey = item.meetingId || `${item.meetingDate}::${item.meetingType}`;
+    const assignments = seen.get(meetingKey) ?? new Map<string, HospitalityRoleKey>();
+    const previousRole = assignments.get(item.userId);
+    if (previousRole) {
+      throw new HttpsError('failed-precondition', 'La persona ya tiene una asignacion incompatible en esta reunion.');
+    }
+    if (chairmanByMeetingId.get(meetingKey) === item.userId && item.roleKey !== 'chairman') {
+      throw new HttpsError('failed-precondition', 'La persona dirige esta reunion y no puede recibir otra asignacion operativa.');
+    }
+    assignments.set(item.userId, item.roleKey);
+    seen.set(meetingKey, assignments);
+  }
+};
+
 // Unica puerta de escritura para borradores de hospitalidad: crea o reutiliza el
 // borrador del rango solicitado (evita duplicados cuando el cliente guarda varias
 // veces seguidas sin recargar), valida cada asignacion contra el usuario real
@@ -1930,66 +2013,106 @@ export const saveHospitalityScheduleDraftByManager = onCall(
       throw new HttpsError('failed-precondition', 'Ningun elemento de la lista es valido.');
     }
 
-    // --- Escritura atomica ---
+    const meetingIds = Array.from(new Set(validItems.map((item) => item.meetingId)));
+    const meetingRefs = meetingIds.map((meetingId) => adminDb.collection('congregations')
+      .doc(payload.congregationId).collection('meetings').doc(meetingId));
+    const lockRefs = Array.from(new Map(validItems.map((item) => [
+      item.meetingId,
+      hospitalityMeetingLockRef(payload.congregationId, item.meetingId, item.meetingDate, item.meetingType),
+    ])).values());
+    const validUserIds = Array.from(new Set(validItems.map((item) => item.userId)));
+
+    // La transaccion comparte un lock por reunion con altas/sustituciones
+    // publicadas. Esto serializa escritores concurrentes; cada reintento vuelve
+    // a comprobar el documento de lista y los ocupantes bajo el lock.
     const itemsRef = scheduleRef.collection('items');
-    const existingItemsSnap = created ? null : await itemsRef.get();
-    const existingItemsById = new Map(
-      (existingItemsSnap?.docs ?? []).map((doc) => [doc.id, doc.data() as FirestoreRecord])
-    );
-
-    const batch = adminDb.batch();
-    const nextItemIds = new Set<string>();
-
-    for (const item of validItems) {
-      const itemId = hospitalityScheduleItemDocId(item.meetingId, item.roleKey);
-      nextItemIds.add(itemId);
-      const existingItem = existingItemsById.get(itemId);
-
-      batch.set(itemsRef.doc(itemId), {
-        congregationId: payload.congregationId,
-        scheduleId: scheduleRef.id,
-        meetingId: item.meetingId,
-        meetingDate: item.meetingDate,
-        meetingType: item.meetingType,
-        roleKey: item.roleKey,
-        roleLabel: HOSPITALITY_ROLE_LABELS[item.roleKey],
-        userId: item.userId,
-        userNameSnapshot: item.userNameSnapshot,
-        status: 'scheduled',
-        createdBy: normalizeText(existingItem?.createdBy) ?? requesterUid,
-        updatedBy: requesterUid,
-        createdAt: existingItem?.createdAt ?? FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    }
-
-    // Items previos en 'scheduled' que ya no vienen en el payload -> 'cancelled'.
-    existingItemsById.forEach((data, itemId) => {
-      if (nextItemIds.has(itemId) || data.status !== 'scheduled') return;
-      batch.update(itemsRef.doc(itemId), {
-        status: 'cancelled',
-        updatedBy: requesterUid,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    });
-
     const totalMeetings = new Set(validItems.map((item) => item.meetingId)).size;
-    batch.set(scheduleRef, {
-      congregationId: payload.congregationId,
-      title: payload.title,
-      startDate: payload.startDateKey,
-      endDate: payload.endDateKey,
-      monthIds: window.monthIds,
-      totalMeetings,
-      status: 'draft',
-      optionalRoles: payload.optionalRoles,
-      createdBy: created ? requesterUid : (normalizeText(existingScheduleData?.createdBy) ?? requesterUid),
-      createdAt: created ? FieldValue.serverTimestamp() : (existingScheduleData?.createdAt ?? FieldValue.serverTimestamp()),
-      updatedBy: requesterUid,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    await adminDb.runTransaction(async (transaction) => {
+      const scheduleSnapshot = created ? null : await transaction.get(scheduleRef);
+      if (scheduleSnapshot && (!scheduleSnapshot.exists || scheduleSnapshot.get('status') !== 'draft')) {
+        throw new HttpsError('failed-precondition', 'Solo se pueden guardar borradores.');
+      }
+      const existingItemsSnapshot = created ? null : await transaction.get(itemsRef);
+      const currentItems = existingItemsSnapshot?.docs ?? [];
+      const [lockSnapshots, meetingSnapshots, occupiedSnapshots, currentUserSnapshots] = await Promise.all([
+        Promise.all(lockRefs.map((ref) => transaction.get(ref))),
+        Promise.all(meetingRefs.map((ref) => transaction.get(ref))),
+        Promise.all(meetingIds.map((meetingId) => transaction.get(
+          scheduledHospitalityItemsForMeeting(payload.congregationId, meetingId)
+        ))),
+        Promise.all(validUserIds.map((userId) => transaction.get(adminDb.collection('users').doc(userId)))),
+      ]);
+      const currentUsersById = new Map(currentUserSnapshots.filter((snapshot) => snapshot.exists)
+        .map((snapshot) => [snapshot.id, snapshot.data() as FirestoreRecord]));
+      for (const item of validItems) {
+        const user = currentUsersById.get(item.userId);
+        if (!user || normalizeText(user.congregationId) !== payload.congregationId
+            || !resolveIsActive(user) || !isHospitalityEligible(user)) {
+          throw new HttpsError('failed-precondition', 'Una persona asignada ya no es elegible.');
+        }
+      }
+      const chairByMeetingId = new Map<string, string | undefined>();
+      meetingIds.forEach((id, index) => chairByMeetingId.set(
+        id,
+        meetingSnapshots[index].exists
+          ? normalizeText((meetingSnapshots[index].data() as FirestoreRecord).chairmanUserId)
+          : undefined
+      ));
+      const assignmentsFromOtherSchedules = occupiedSnapshots.flatMap((snapshot) => snapshot.docs
+        .filter((doc) => normalizeText((doc.data() as FirestoreRecord).scheduleId) !== scheduleRef.id)
+        .map((doc) => normalizeHospitalityItem(doc.data() as FirestoreRecord))
+        .filter((item): item is HospitalityScheduleItem => item !== null));
+      assertNoDuplicateHospitalityAssignees([...assignmentsFromOtherSchedules, ...validItems], chairByMeetingId);
 
-    await batch.commit();
+      const existingItemsById = new Map(currentItems.map((doc) => [doc.id, doc.data() as FirestoreRecord]));
+      const nextItemIds = new Set<string>();
+      for (const item of validItems) {
+        const itemId = hospitalityScheduleItemDocId(item.meetingId, item.roleKey);
+        nextItemIds.add(itemId);
+        const existingItem = existingItemsById.get(itemId);
+        transaction.set(itemsRef.doc(itemId), {
+          congregationId: payload.congregationId,
+          scheduleId: scheduleRef.id,
+          meetingId: item.meetingId,
+          meetingDate: item.meetingDate,
+          meetingType: item.meetingType,
+          roleKey: item.roleKey,
+          roleLabel: HOSPITALITY_ROLE_LABELS[item.roleKey],
+          userId: item.userId,
+          userNameSnapshot: item.userNameSnapshot,
+          status: 'scheduled',
+          createdBy: normalizeText(existingItem?.createdBy) ?? requesterUid,
+          updatedBy: requesterUid,
+          createdAt: existingItem?.createdAt ?? FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+      existingItemsById.forEach((data, itemId) => {
+        if (nextItemIds.has(itemId) || data.status !== 'scheduled') return;
+        transaction.update(itemsRef.doc(itemId), {
+          status: 'cancelled', updatedBy: requesterUid, updatedAt: FieldValue.serverTimestamp(),
+        });
+      });
+      lockRefs.forEach((ref, index) => transaction.set(ref, {
+        revision: lockSnapshots[index].exists && typeof lockSnapshots[index].get('revision') === 'number'
+          ? (lockSnapshots[index].get('revision') as number) + 1 : 1,
+        updatedAt: FieldValue.serverTimestamp(),
+      }));
+      transaction.set(scheduleRef, {
+        congregationId: payload.congregationId,
+        title: payload.title,
+        startDate: payload.startDateKey,
+        endDate: payload.endDateKey,
+        monthIds: window.monthIds,
+        totalMeetings,
+        status: 'draft',
+        optionalRoles: payload.optionalRoles,
+        createdBy: created ? requesterUid : (normalizeText(existingScheduleData?.createdBy) ?? requesterUid),
+        createdAt: created ? FieldValue.serverTimestamp() : (existingScheduleData?.createdAt ?? FieldValue.serverTimestamp()),
+        updatedBy: requesterUid,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
 
     return {
       ok: true,

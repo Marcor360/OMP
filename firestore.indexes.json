@@ -1,6 +1,15 @@
 {
   "indexes": [
     {
+      "collectionGroup": "items",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "congregationId", "order": "ASCENDING" },
+        { "fieldPath": "meetingId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "pushReceipts",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

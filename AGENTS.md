@@ -263,9 +263,9 @@ Rules:
 
 Plan limits are based on active users:
 
-- OMP Basic: 80 active users.
-- OMP Intermediate: 120 active users.
-- OMP Complete: 200 active users.
+- OMP 80: 80 active users.
+- OMP 150: 150 active users.
+- OMP 250: 250 active users.
 
 Rules:
 
@@ -330,7 +330,7 @@ Rules:
 
 ## Versioning, Builds, And Android Permissions
 
-Current detected app version is `1.36.1` in `package.json` and `app.json`. Verify the intended release version before release changes.
+Current detected app version is `1.50.0` in `package.json` and `app.json`. Verify the intended release version before release changes.
 
 Rules:
 

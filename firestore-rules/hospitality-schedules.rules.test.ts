@@ -286,7 +286,7 @@ test('auxiliar cannot update an already published schedule', async () => {
 });
 
 // h. encargado PUEDE update draft -> published -> allow
-test.skip('encargado can publish a draft', async () => {
+test('encargado can publish a draft', async () => {
   await assertSucceeds(updateDoc(
     scheduleDoc('encargado', 'draft1'),
     { status: 'published', updatedBy: 'encargado', publishedAt: Timestamp.now() }
