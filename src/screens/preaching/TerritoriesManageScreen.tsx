@@ -126,6 +126,7 @@ export function TerritoriesManageScreen() {
               };
               if (draft.id) await mutations.updateTerritory(draft.id, input);
               else await mutations.createTerritory(input);
+              await catalog.refresh();
               showAlert(
                 t('territoriesManagement.tabs.territories'),
                 t('territoriesManagement.territorySaved')
@@ -137,6 +138,7 @@ export function TerritoriesManageScreen() {
           onDeactivate={async (territoryId) => {
             try {
               await mutations.deactivateTerritory(territoryId);
+              await catalog.refresh();
             } catch (saveError) {
               showAlert(t('common.error'), formatFirestoreError(saveError));
             }
@@ -167,6 +169,7 @@ export function TerritoriesManageScreen() {
               };
               if (draft.id) await mutations.updatePreachingGroup(draft.id, input);
               else await mutations.createPreachingGroup(input);
+              await groups.refresh();
               showAlert(
                 t('territoriesManagement.tabs.groups'),
                 t('territoriesManagement.groupSaved')
@@ -180,6 +183,7 @@ export function TerritoriesManageScreen() {
           onDeactivate={async (groupId) => {
             try {
               await mutations.deactivatePreachingGroup(groupId);
+              await groups.refresh();
             } catch (saveError) {
               showAlert(t('common.error'), formatFirestoreError(saveError));
             }

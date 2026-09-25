@@ -7,8 +7,8 @@ import {
   deactivateTerritory,
   getActiveCongregationUsersForGroups,
   getMonthlyTerritoryAssignment,
-  subscribePreachingGroups,
-  subscribeTerritories,
+  getPreachingGroups,
+  getTerritories,
   subscribeVisibleMonthlyTerritories,
   updatePreachingGroup,
   updateTerritory,
@@ -41,30 +41,28 @@ export function useTerritoriesCatalog(congregationId: string | null) {
     error: null,
   });
 
-  useEffect(() => {
+  const load = useCallback(async (isCurrent: () => boolean = () => true) => {
     if (!congregationId) return;
-
-    let active = true;
-    const unsubscribe = subscribeTerritories(
-      congregationId,
-      (next) => {
-        if (active) setState({ key: congregationId, data: next, error: null });
-      },
-      (snapshotError) => {
-        if (active) setState({ key: congregationId, data: [], error: getErrorMessage(snapshotError) });
-      }
-    );
-    return () => {
-      active = false;
-      unsubscribe();
-    };
+    try {
+      const territories = await getTerritories(congregationId);
+      if (isCurrent()) setState({ key: congregationId, data: territories, error: null });
+    } catch (error) {
+      if (isCurrent()) setState({ key: congregationId, data: [], error: getErrorMessage(error) });
+    }
   }, [congregationId]);
+
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
+    return () => { active = false; };
+  }, [load]);
 
   const current = state.key === congregationId;
   return {
     territories: current ? state.data : [],
     loading: Boolean(congregationId && !current),
     error: current ? state.error : null,
+    refresh: load,
   };
 }
 
@@ -75,30 +73,28 @@ export function usePreachingGroups(congregationId: string | null) {
     error: null,
   });
 
-  useEffect(() => {
+  const load = useCallback(async (isCurrent: () => boolean = () => true) => {
     if (!congregationId) return;
-
-    let active = true;
-    const unsubscribe = subscribePreachingGroups(
-      congregationId,
-      (next) => {
-        if (active) setState({ key: congregationId, data: next, error: null });
-      },
-      (snapshotError) => {
-        if (active) setState({ key: congregationId, data: [], error: getErrorMessage(snapshotError) });
-      }
-    );
-    return () => {
-      active = false;
-      unsubscribe();
-    };
+    try {
+      const groups = await getPreachingGroups(congregationId);
+      if (isCurrent()) setState({ key: congregationId, data: groups, error: null });
+    } catch (error) {
+      if (isCurrent()) setState({ key: congregationId, data: [], error: getErrorMessage(error) });
+    }
   }, [congregationId]);
+
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
+    return () => { active = false; };
+  }, [load]);
 
   const current = state.key === congregationId;
   return {
     groups: current ? state.data : [],
     loading: Boolean(congregationId && !current),
     error: current ? state.error : null,
+    refresh: load,
   };
 }
 

@@ -266,7 +266,7 @@ export const SERVICE_DEPARTMENT_PERMISSION_DECISIONS: Record<UserServiceDepartme
 // que un auxiliar/encargado deberia poder hacer. Si esta tabla cambia, cambiar
 // tambien alla en el mismo PR -- la divergencia entre ambas copias es
 // exactamente el bug que Fase 0 cierra.
-const assignmentToPermissions = (assignment: Pick<UserServiceAssignment, 'position' | 'department'>): UserPermissions => {
+export const assignmentToPermissions = (assignment: Pick<UserServiceAssignment, 'position' | 'department'>): UserPermissions => {
   if (assignment.position === 'encargado' && assignment.department === 'limpieza') {
     return {
       limpieza: { view: true, create: true, edit: true, delete: true, manage: true },

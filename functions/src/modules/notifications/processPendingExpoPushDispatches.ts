@@ -4,6 +4,7 @@ import { logger } from 'firebase-functions/v2';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { adminDb } from '../../config/firebaseAdmin.js';
+import { logOperationalMetric } from '../../shared/observability.js';
 import {
   MAX_DURABLE_PUSH_ATTEMPTS,
   PUSH_DISPATCH_LEASE_MS,
@@ -173,6 +174,12 @@ export const processPendingExpoPushDispatches = onSchedule(
     ]);
     const jobs = new Map([...pending.docs, ...expired.docs].map((doc) => [doc.ref.path, doc]));
     await Promise.allSettled(Array.from(jobs.values()).map(processDispatch));
-    logger.info('push_dispatch_worker_completed', { batchSize: jobs.size, durationMs: Date.now() - startedAt });
+    const durationMs = Date.now() - startedAt;
+    logger.info('push_dispatch_worker_completed', { batchSize: jobs.size, durationMs });
+    logOperationalMetric('notifications.push_dispatch_worker', {
+      processed: jobs.size,
+      recovered: expired.size,
+      durationMs,
+    });
   }
 );

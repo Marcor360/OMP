@@ -23,7 +23,6 @@ import { useUser } from '@/src/context/user-context';
 import { useMeetingsManagementPermission } from '@/src/hooks/use-meetings-management-permission';
 import { useI18n } from '@/src/i18n/index';
 import {
-  MidweekMeeting,
   MidweekMeetingPayload,
   createMidweekMeeting,
   getMidweekMeetingById,
@@ -40,7 +39,6 @@ import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import {
   MIDWEEK_REQUIRED_SECTION_IDS,
   MidweekMeetingSection,
-  createMidweekMeetingTemplate,
   normalizeSectionOrder,
 } from '@/src/types/midweek-meeting';
 import {
@@ -52,140 +50,20 @@ import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { showAlert } from '@/src/utils/ui/alerts';
 import { getOperationalDateBounds } from '@/src/utils/dates/operational-window';
 import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
+import {
+  type DatePickerTarget,
+  type MidweekMeetingFormErrors,
+  type MidweekMeetingFormState,
+  getDatePart,
+  getTimePart,
+  initialMidweekMeetingFormState,
+  mapMidweekMeetingToFormState,
+  parseInputDateTime,
+  replaceDatePart,
+  replaceTimePart,
+} from '@/src/screens/meetings/meeting-form/midweek-meeting-form.utils';
 
 type Mode = 'create' | 'edit';
-type DatePickerTarget = 'start' | 'end' | null;
-
-interface MidweekMeetingFormState {
-  title: string;
-  description: string;
-  weekLabel: string;
-  bibleReading: string;
-  startDateInput: string;
-  endDateInput: string;
-  location: string;
-  meetingUrl: string;
-  notes: string;
-  openingSong: string;
-  openingPrayer: string;
-  openingPrayerUserId: string;
-  middleSong: string;
-  closingSong: string;
-  closingPrayer: string;
-  closingPrayerUserId: string;
-  chairmanUserId: string;
-  chairmanName: string;
-  sections: MidweekMeetingSection[];
-}
-
-interface MidweekMeetingFormErrors {
-  title?: string;
-  weekLabel?: string;
-  bibleReading?: string;
-  startDateInput?: string;
-  endDateInput?: string;
-  sections?: string;
-  chairmanUserId?: string;
-  assignments: Record<string, AssignmentCardEditorErrors>;
-}
-
-const pad = (value: number): string => String(value).padStart(2, '0');
-
-const toInputDateTime = (value: Timestamp): string => {
-  const date = value.toDate();
-
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
-
-const parseInputDateTime = (value: string): Date | null => {
-  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
-  if (!match) return null;
-
-  const [, yearRaw, monthRaw, dayRaw, hourRaw, minuteRaw] = match;
-  const year = Number(yearRaw);
-  const month = Number(monthRaw);
-  const day = Number(dayRaw);
-  const hour = Number(hourRaw);
-  const minute = Number(minuteRaw);
-
-  const parsed = new Date(year, month - 1, day, hour, minute, 0, 0);
-
-  if (
-    parsed.getFullYear() !== year ||
-    parsed.getMonth() !== month - 1 ||
-    parsed.getDate() !== day ||
-    parsed.getHours() !== hour ||
-    parsed.getMinutes() !== minute
-  ) {
-    return null;
-  }
-
-  return parsed;
-};
-
-const getDatePart = (value: string): string => {
-  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
-  return match?.[1] ?? '';
-};
-
-const getTimePart = (value: string): string => {
-  const match = value.match(/(\d{2}:\d{2})$/);
-  return match?.[1] ?? '';
-};
-
-const replaceDatePart = (value: string, date: string, fallbackTime: string): string =>
-  `${date} ${getTimePart(value) || fallbackTime}`;
-
-const replaceTimePart = (value: string, time: string): string =>
-  `${getDatePart(value)} ${time}`;
-
-const initialFormState = (): MidweekMeetingFormState => {
-  const template = createMidweekMeetingTemplate();
-
-  return {
-    title: template.title,
-    description: template.description ?? '',
-    weekLabel: template.weekLabel,
-    bibleReading: template.bibleReading,
-    startDateInput: toInputDateTime(template.startDate),
-    endDateInput: toInputDateTime(template.endDate),
-    location: template.location ?? '',
-    meetingUrl: template.meetingUrl ?? '',
-    notes: '',
-    openingSong: template.openingSong ?? '',
-    openingPrayer: template.openingPrayer ?? '',
-    openingPrayerUserId: '',
-    middleSong: '',
-    closingSong: template.closingSong ?? '',
-    closingPrayer: template.closingPrayer ?? '',
-    closingPrayerUserId: '',
-    chairmanUserId: '',
-    chairmanName: '',
-    sections: normalizeSectionOrder(template.sections),
-  };
-};
-
-const mapMeetingToFormState = (meeting: MidweekMeeting): MidweekMeetingFormState => ({
-  title: meeting.title,
-  description: meeting.description ?? '',
-  weekLabel: meeting.weekLabel,
-  bibleReading: meeting.bibleReading,
-  startDateInput: toInputDateTime(meeting.startDate),
-  endDateInput: toInputDateTime(meeting.endDate),
-  location: meeting.location ?? '',
-  meetingUrl: meeting.meetingUrl ?? '',
-  notes: meeting.notes ?? '',
-  openingSong: meeting.openingSong ?? '',
-  openingPrayer: meeting.openingPrayer ?? '',
-  openingPrayerUserId: '',
-  middleSong: meeting.middleSong ?? '',
-  closingSong: meeting.closingSong ?? '',
-  closingPrayer: meeting.closingPrayer ?? '',
-  closingPrayerUserId: '',
-  chairmanUserId: meeting.chairmanUserId ?? '',
-  chairmanName: meeting.chairman ?? '',
-  sections: normalizeSectionOrder(meeting.midweekSections),
-});
 
 export function MidweekMeetingFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -204,7 +82,7 @@ export function MidweekMeetingFormScreen() {
   const mode: Mode = id ? 'edit' : 'create';
   const operationalBounds = React.useMemo(() => getOperationalDateBounds(), []);
 
-  const [form, setForm] = useState<MidweekMeetingFormState>(initialFormState);
+  const [form, setForm] = useState<MidweekMeetingFormState>(initialMidweekMeetingFormState);
   const [publicationStatus, setPublicationStatus] = useState<MeetingPublicationStatus | undefined>(undefined);
   const [availableUsers, setAvailableUsers] = useState<ActiveCongregationUser[]>([]);
   const [errors, setErrors] = useState<MidweekMeetingFormErrors>({ assignments: {} });
@@ -242,10 +120,10 @@ export function MidweekMeetingFormScreen() {
             return;
           }
 
-          setForm(mapMeetingToFormState(meeting));
+          setForm(mapMidweekMeetingToFormState(meeting));
           setPublicationStatus(meeting.publicationStatus);
         } else {
-          setForm(initialFormState());
+          setForm(initialMidweekMeetingFormState());
         }
       } catch (requestError) {
         if (!cancelled) {

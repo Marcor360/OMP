@@ -4,6 +4,7 @@ import { logger } from 'firebase-functions/v2';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { adminDb } from '../../config/firebaseAdmin.js';
+import { logOperationalMetric } from '../../shared/observability.js';
 import { durableBackoffMs, expoErrorCode, isPermanentExpoResult } from './push-dispatch.helpers.js';
 
 const expo = new Expo();
@@ -22,7 +23,13 @@ export const processPendingExpoPushReceipts = onSchedule(
       .where('nextCheckAt', '<=', Timestamp.now())
       .orderBy('nextCheckAt')
       .limit(PAGE_SIZE).get();
-    if (pending.empty) return;
+    if (pending.empty) {
+      logOperationalMetric('notifications.push_receipts_worker', {
+        processed: 0,
+        durationMs: Date.now() - startedAt,
+      });
+      return;
+    }
     const receipts = await expo.getPushNotificationReceiptsAsync(pending.docs.map((doc) => doc.id));
     await Promise.all(pending.docs.map(async (doc) => {
       const receipt = receipts[doc.id];
@@ -46,6 +53,8 @@ export const processPendingExpoPushReceipts = onSchedule(
       }
       await doc.ref.set({ status: receipt.status === 'ok' ? 'accepted' : 'error', receiptError: code, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     }));
-    logger.info('Expo pending push receipts processed', { pending: pending.size, durationMs: Date.now() - startedAt });
+    const durationMs = Date.now() - startedAt;
+    logger.info('Expo pending push receipts processed', { pending: pending.size, durationMs });
+    logOperationalMetric('notifications.push_receipts_worker', { processed: pending.size, durationMs });
   }
 );
