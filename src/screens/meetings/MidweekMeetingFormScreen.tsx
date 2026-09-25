@@ -182,7 +182,7 @@ const mapMeetingToFormState = (meeting: MidweekMeeting): MidweekMeetingFormState
   closingSong: meeting.closingSong ?? '',
   closingPrayer: meeting.closingPrayer ?? '',
   closingPrayerUserId: '',
-  chairmanUserId: '',
+  chairmanUserId: meeting.chairmanUserId ?? '',
   chairmanName: meeting.chairman ?? '',
   sections: normalizeSectionOrder(meeting.midweekSections),
 });

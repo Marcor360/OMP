@@ -62,8 +62,7 @@ Cobertura inicial agregada:
 
 ### Bloqueador actual de Rules permitidas
 
-Ocho pruebas de casos **permitidos** permanecen en `skip` (cinco de hospitality
-y tres de limpieza) porque la evaluación
+Tres pruebas de casos **permitidos** de limpieza permanecen en `skip` porque la evaluación
 de Rules supera el máximo real de 1,000 expresiones. No deben habilitarse hasta
 reducir el coste de las Rules; hacerlas pasar ignorando ese error ocultaría una
 denegación real en producción.

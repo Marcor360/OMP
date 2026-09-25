@@ -121,6 +121,7 @@ export const normalizeMeeting = (id: string, data: Record<string, unknown>): Mee
     closingPrayer:
       typeof data.closingPrayer === 'string' ? data.closingPrayer : undefined,
     chairman: typeof data.chairman === 'string' ? data.chairman : undefined,
+    chairmanUserId: typeof data.chairmanUserId === 'string' ? data.chairmanUserId : undefined,
     sections: normalizedSections,
     midweekSections: Array.isArray(data.midweekSections)
       ? (data.midweekSections as Meeting['midweekSections'])

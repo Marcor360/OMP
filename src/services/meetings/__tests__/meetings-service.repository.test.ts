@@ -268,6 +268,21 @@ describe('meetings-service repository port', () => {
     });
   });
 
+  it('persists the canonical chairman user id alongside the legacy name', async () => {
+    repo.mergedError = { code: 'permission-denied' };
+    await createMeeting(
+      'cong-1',
+      makeCreateDto({ chairman: 'José Martínez', chairmanUserId: 'chair-user-1' }),
+      'user-1',
+      'User One'
+    );
+
+    expect(repo.createCalls[0].payload).toMatchObject({
+      chairman: 'José Martínez',
+      chairmanUserId: 'chair-user-1',
+    });
+  });
+
   it('throws AppError when createMeeting finds an overlapping conflict of the same kind', async () => {
     repo.mergedMeetings = [
       makeMeeting({

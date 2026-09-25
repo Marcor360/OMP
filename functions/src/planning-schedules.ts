@@ -817,10 +817,15 @@ const assertHospitalityRoleEligibility = async (params: {
   const meetingIds = Array.from(new Set(items.map((item) => item.meetingId).filter((id): id is string => Boolean(id))));
   const meetingSnaps = await Promise.all(meetingIds.map((meetingId) => adminDb.collection('congregations')
     .doc(params.congregationId).collection('meetings').doc(meetingId).get()));
-  const chairmanByMeetingId = new Map<string, string | undefined>();
+  const chairmanByMeetingId = new Map<string, { userId?: string; name?: string }>();
   meetingIds.forEach((meetingId, index) => chairmanByMeetingId.set(
     meetingId,
-    meetingSnaps[index].exists ? normalizeText((meetingSnaps[index].data() as FirestoreRecord).chairmanUserId) : undefined
+    meetingSnaps[index].exists
+      ? {
+          userId: normalizeText((meetingSnaps[index].data() as FirestoreRecord).chairmanUserId),
+          name: normalizeText((meetingSnaps[index].data() as FirestoreRecord).chairman),
+        }
+      : {}
   ));
   assertNoDuplicateHospitalityAssignees(items, chairmanByMeetingId);
 
@@ -1622,7 +1627,12 @@ export const substituteHospitalityAssignmentByManager = onCall(
           || !isHospitalityEligible(userCurrent.data() as FirestoreRecord)) {
         throw new HttpsError('failed-precondition', 'El usuario sustituto ya no es elegible.');
       }
-      if (meetingCurrent?.exists && normalizeText((meetingCurrent.data() as FirestoreRecord).chairmanUserId) === payload.newUserId) {
+      const meetingData = meetingCurrent?.exists ? meetingCurrent.data() as FirestoreRecord : undefined;
+      const isLegacyChairman = !normalizeText(meetingData?.chairmanUserId)
+        && normalizeComparableText(meetingData?.chairman) === normalizeComparableText(newUserName);
+      if (meetingCurrent?.exists && (
+        normalizeText(meetingData?.chairmanUserId) === payload.newUserId || isLegacyChairman
+      )) {
         throw new HttpsError('failed-precondition', 'La persona dirige esta reunion y no puede recibir otra asignacion operativa.');
       }
       const siblings = siblingSnapshot.docs.map((doc) => ({
@@ -1727,7 +1737,10 @@ export const assignHospitalityAssignmentByManager = onCall(
           || !resolveIsActive(userCurrent.data() as FirestoreRecord) || !isHospitalityEligible(userCurrent.data() as FirestoreRecord)) {
         throw new HttpsError('failed-precondition', 'El usuario ya no es elegible para esta asignacion.');
       }
-      if (normalizeText((meetingCurrent.data() as FirestoreRecord).chairmanUserId) === payload.newUserId) {
+      const meetingData = meetingCurrent.data() as FirestoreRecord;
+      const isLegacyChairman = !normalizeText(meetingData.chairmanUserId)
+        && normalizeComparableText(meetingData.chairman) === normalizeComparableText(userCurrent.get('displayName'));
+      if (normalizeText(meetingData.chairmanUserId) === payload.newUserId || isLegacyChairman) {
         throw new HttpsError('failed-precondition', 'La persona dirige esta reunion y no puede recibir otra asignacion operativa.');
       }
       if (siblings.docs.some((doc) => normalizeText((doc.data() as FirestoreRecord).userId) === payload.newUserId)) {
@@ -1880,8 +1893,8 @@ const scheduledHospitalityItemsForMeeting = (congregationId: string, meetingId: 
     .where('status', '==', 'scheduled');
 
 const assertNoDuplicateHospitalityAssignees = (
-  items: Array<Pick<HospitalityScheduleItem, 'meetingId' | 'meetingDate' | 'meetingType' | 'roleKey' | 'userId'>>,
-  chairmanByMeetingId: Map<string, string | undefined>
+  items: Array<Pick<HospitalityScheduleItem, 'meetingId' | 'meetingDate' | 'meetingType' | 'roleKey' | 'userId' | 'userNameSnapshot'>>,
+  chairmanByMeetingId: Map<string, { userId?: string; name?: string }>
 ): void => {
   const seen = new Map<string, Map<string, HospitalityRoleKey>>();
   for (const item of items) {
@@ -1891,7 +1904,11 @@ const assertNoDuplicateHospitalityAssignees = (
     if (previousRole) {
       throw new HttpsError('failed-precondition', 'La persona ya tiene una asignacion incompatible en esta reunion.');
     }
-    if (chairmanByMeetingId.get(meetingKey) === item.userId && item.roleKey !== 'chairman') {
+    const chairman = chairmanByMeetingId.get(meetingKey);
+    const legacyNameMatch = !chairman?.userId
+      && Boolean(chairman?.name)
+      && normalizeComparableText(chairman?.name) === normalizeComparableText(item.userNameSnapshot);
+    if ((chairman?.userId === item.userId || legacyNameMatch) && item.roleKey !== 'chairman') {
       throw new HttpsError('failed-precondition', 'La persona dirige esta reunion y no puede recibir otra asignacion operativa.');
     }
     assignments.set(item.userId, item.roleKey);
@@ -2051,12 +2068,15 @@ export const saveHospitalityScheduleDraftByManager = onCall(
           throw new HttpsError('failed-precondition', 'Una persona asignada ya no es elegible.');
         }
       }
-      const chairByMeetingId = new Map<string, string | undefined>();
+      const chairByMeetingId = new Map<string, { userId?: string; name?: string }>();
       meetingIds.forEach((id, index) => chairByMeetingId.set(
         id,
         meetingSnapshots[index].exists
-          ? normalizeText((meetingSnapshots[index].data() as FirestoreRecord).chairmanUserId)
-          : undefined
+          ? {
+              userId: normalizeText((meetingSnapshots[index].data() as FirestoreRecord).chairmanUserId),
+              name: normalizeText((meetingSnapshots[index].data() as FirestoreRecord).chairman),
+            }
+          : {}
       ));
       const assignmentsFromOtherSchedules = occupiedSnapshots.flatMap((snapshot) => snapshot.docs
         .filter((doc) => normalizeText((doc.data() as FirestoreRecord).scheduleId) !== scheduleRef.id)

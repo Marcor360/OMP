@@ -2853,35 +2853,17 @@ service cloud.firestore {
       match /hospitalitySchedules/{scheduleId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canEditHospitalitySchedule(congregationId)
-          && request.resource.data.status == 'draft'
-          && validPlanningScheduleData(request.resource.data, congregationId)
-          && request.resource.data.createdBy == currentUid()
-          && request.resource.data.updatedBy == currentUid();
-
-        allow update: if resource.data.congregationId == congregationId
-          && validPlanningScheduleData(request.resource.data, congregationId)
-          && request.resource.data.createdBy == resource.data.createdBy
-          && request.resource.data.createdAt == resource.data.createdAt
-          && request.resource.data.updatedBy == currentUid()
-          && canUpdateHospitalitySchedule(congregationId, resource.data.status, request.resource.data.status);
+        // Todas las mutaciones pasan por callables con validacion transaccional.
+        // Evita bypass de las invariantes entre listas y evita evaluaciones de
+        // Rules costosas en escrituras cliente que la app no utiliza.
+        allow create, update: if false;
 
         allow delete: if false;
 
         match /items/{itemId} {
           allow get, list: if canAccessCongregationData(congregationId);
 
-          allow create: if canEditHospitalitySchedule(congregationId)
-            && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
-            && request.resource.data.createdBy == currentUid()
-            && request.resource.data.updatedBy == currentUid();
-
-          allow update: if canEditHospitalitySchedule(congregationId)
-            && resource.data.congregationId == congregationId
-            && validHospitalityScheduleItemData(request.resource.data, congregationId, scheduleId)
-            && request.resource.data.createdBy == resource.data.createdBy
-            && request.resource.data.createdAt == resource.data.createdAt
-            && request.resource.data.updatedBy == currentUid();
+          allow create, update: if false;
 
           allow delete: if false;
         }

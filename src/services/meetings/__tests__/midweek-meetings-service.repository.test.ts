@@ -188,7 +188,7 @@ describe('midweek-meetings-service repository port', () => {
   });
 
   it('routes creation through the guarded meeting service', async () => {
-    await createMidweekMeeting('cong-1', makePayload(), {
+    await createMidweekMeeting('cong-1', makePayload({ chairman: 'José Martínez', chairmanUserId: 'chair-user-1' }), {
       uid: 'user-1',
       displayName: 'User One',
     });
@@ -196,7 +196,10 @@ describe('midweek-meetings-service repository port', () => {
     expect(repo.createCalls).toHaveLength(0);
     expect(mockCreateMeeting).toHaveBeenCalledWith(
       'cong-1',
-      expect.objectContaining({ type: 'midweek', meetingCategory: 'midweek' }),
+      expect.objectContaining({
+        type: 'midweek', meetingCategory: 'midweek',
+        chairman: 'José Martínez', chairmanUserId: 'chair-user-1',
+      }),
       'user-1',
       'User One'
     );

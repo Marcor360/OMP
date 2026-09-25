@@ -211,9 +211,11 @@ const itemData = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-// BLOQUEADO (no introducido por esta ronda): las 6 aserciones assertSucceeds de
-// este archivo estan en test.skip porque el emulador de Firestore (probado en
-// v1.19.8 y v1.22.0, via firebase-tools 14.27.0 y 15.25.1) deniega la escritura
+// Las mutaciones directas de schedules/items se rechazan intencionalmente:
+// el cliente usa callables, que validan invariantes entre listas en el servidor.
+// El historial de limite de expresiones que motivó este cambio era:
+// El contexto sobre el limite que sigue es historico y quedo resuelto al mover
+// estas escrituras a callables; las pruebas actuales estan debajo.
 // con "Unable to evaluate the expression as the maximum of 1000 expressions to
 // evaluate has been reached." Se verifico que esto ES REPRODUCIBLE contra
 // firestore.rules SIN MODIFICAR (git show HEAD), con un encargado haciendo
@@ -224,22 +226,26 @@ const itemData = (overrides: Record<string, unknown> = {}) => ({
 // (no solo del emulador): https://firebase.google.com/docs/firestore/quotas
 // Los asserts assertFails (deny) SI corren y pasan de forma confiable, porque
 // las rutas de denegacion cortocircuitan antes de agotar el presupuesto.
-// No se intento resolver aqui: arreglarlo de raiz implica revisar el costo de
+// El cambio aplicado evita evaluar esta ruta de escritura desde Rules; los
+// handlers positivos se prueban en emulador de Functions/Firestore.
 // canAccessCongregationData()/administrativeWritesAllowed(), que se usa en
 // TODAS las colecciones de /congregations/{congregationId}/**, muy por fuera
 // del alcance de habilitar al auxiliar en hospitalitySchedules.
 
-// a. auxiliar:acomodadores_microfonos PUEDE create de un item -> allow
-test.skip('auxiliar can create an item on a draft schedule', async () => {
-  await assertSucceeds(setDoc(
+// Nota: el bloque de contexto anterior describe la incidencia histórica; las
+// escrituras directas se cierran aquí porque el cliente ya usa callables. Los
+// flujos permitidos se validan con el emulador en functions/__tests__.
+// a. La persona elegible usa un callable; la escritura cliente debe fallar.
+test('hospitality item writes are restricted to callable functions', async () => {
+  await assertFails(setDoc(
     itemDoc('auxiliar', 'draft1', 'item1'),
     itemData()
   ));
 });
 
-// b. auxiliar PUEDE create de schedule con status draft -> allow
-test.skip('auxiliar can create a schedule with status draft', async () => {
-  await assertSucceeds(setDoc(
+// b. El alta cliente directa debe fallar.
+test('hospitality schedule creation is restricted to callable functions', async () => {
+  await assertFails(setDoc(
     scheduleDoc('auxiliar', 'newDraft'),
     scheduleData({ status: 'draft' })
   ));
@@ -253,17 +259,17 @@ test('auxiliar cannot create a schedule with status published', async () => {
   ));
 });
 
-// d. auxiliar PUEDE update draft -> draft -> allow
-test.skip('auxiliar can update a draft keeping it as draft', async () => {
-  await assertSucceeds(updateDoc(
+// d. La edicion cliente directa debe fallar.
+test('hospitality schedule updates are restricted to callable functions', async () => {
+  await assertFails(updateDoc(
     scheduleDoc('auxiliar', 'draft1'),
     { title: 'Borrador editado', updatedBy: 'auxiliar' }
   ));
 });
 
 // e. auxiliar PUEDE update draft -> archived -> allow
-test.skip('auxiliar can archive a draft', async () => {
-  await assertSucceeds(updateDoc(
+test('hospitality draft archiving is restricted to callable functions', async () => {
+  await assertFails(updateDoc(
     scheduleDoc('auxiliar', 'draft1'),
     { status: 'archived', updatedBy: 'auxiliar' }
   ));
@@ -286,8 +292,8 @@ test('auxiliar cannot update an already published schedule', async () => {
 });
 
 // h. encargado PUEDE update draft -> published -> allow
-test('encargado can publish a draft', async () => {
-  await assertSucceeds(updateDoc(
+test('hospitality publishing is restricted to callable functions', async () => {
+  await assertFails(updateDoc(
     scheduleDoc('encargado', 'draft1'),
     { status: 'published', updatedBy: 'encargado', publishedAt: Timestamp.now() }
   ));
@@ -318,8 +324,8 @@ test('auxiliar under billing restriction cannot create a draft', async () => {
 });
 
 // R1.C: techo de totalMeetings sube de 20 a 30.
-test.skip('encargado can create a schedule with totalMeetings = 30', async () => {
-  await assertSucceeds(setDoc(
+test('hospitality schedule writes cannot bypass callable validation', async () => {
+  await assertFails(setDoc(
     scheduleDoc('encargado', 'maxMeetings'),
     scheduleData({
       totalMeetings: 30,

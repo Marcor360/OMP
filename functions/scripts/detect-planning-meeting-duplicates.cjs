@@ -3,10 +3,11 @@
  * Report-only administrative utility. It never writes or deletes data.
  * Run from functions/: node scripts/detect-planning-meeting-duplicates.cjs
  */
-const admin = require('firebase-admin');
+const { getApps, initializeApp } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
-if (!admin.apps.length) admin.initializeApp();
-const db = admin.firestore();
+if (!getApps().length) initializeApp({ projectId: process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT });
+const db = getFirestore();
 const keyFor = (timestamp) => {
   const date = timestamp.toDate();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
