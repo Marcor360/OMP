@@ -5,17 +5,12 @@ import { useToast } from '@/src/context/toast-context';
 import { useUser } from '@/src/context/user-context';
 import { useI18n } from '@/src/i18n/index';
 import {
-  getCongregationEmailDomain,
-  getCongregationPlanUsage,
-} from '@/src/services/congregations/congregations-service';
-import {
   createUserByAdmin,
   updateUserByAdmin,
   updateUserPasswordByAdmin,
 } from '@/src/services/users/admin-users-service';
-import { getAllUsers, getUserById } from '@/src/services/users/users-service';
+import { getUserById } from '@/src/services/users/users-service';
 import type {
-  AppUser,
   PermissionAction,
   PermissionDepartment,
   TerritoryPermissionAction,
@@ -60,6 +55,7 @@ import {
   hasUserFormErrors,
   validateUserForm,
 } from '@/src/screens/users/user-form/user-form.validators';
+import { useUserFormDirectoryData } from '@/src/screens/users/user-form/use-user-form-directory-data';
 
 export const useUserForm = (): UserFormController => {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -82,94 +78,18 @@ export const useUserForm = (): UserFormController => {
   const [role, setRole] = useState<UserRole>('user');
   const [gender, setGender] = useState<UserGender | null>(null);
   const [phone, setPhone] = useState('');
-  const [activeUsersState, setActiveUsersState] = useState({
-    congregationId: null as string | null,
-    users: [] as AppUser[],
-  });
   const [servicePositionDraft, setServicePositionDraft] = useState<ServiceSelection>('none');
   const [serviceDepartmentDraft, setServiceDepartmentDraft] = useState<UserServiceDepartment | ''>('');
   const [serviceAssignments, setServiceAssignments] = useState<UserServiceAssignment[]>([]);
   const [privileges, setPrivileges] = useState<UserPrivileges>({});
   const [responsibilities, setResponsibilities] = useState<UserResponsibilities>({});
   const [permissions, setPermissions] = useState<UserPermissions>({});
-  const [emailDomainState, setEmailDomainState] = useState({
-    congregationId: null as string | null,
-    domain: 'congregacion.com',
-  });
-  const [planUsageState, setPlanUsageState] = useState<{
-    congregationId: string | null;
-    usage: UserFormController['state']['planUsage'];
-  }>({ congregationId: null, usage: null });
   const [errors, setErrors] = useState<UserFormErrors>({});
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
 
-  useEffect(() => {
-    if (!congregationId) return;
-
-    let active = true;
-    void getCongregationEmailDomain(congregationId)
-      .then((domain) => {
-        if (active) setEmailDomainState({ congregationId, domain });
-      })
-      .catch(() => {
-        if (active) setEmailDomainState({ congregationId, domain: 'congregacion.com' });
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [congregationId]);
-
-  useEffect(() => {
-    if (!congregationId || !isAdmin) return;
-
-    let active = true;
-    void getCongregationPlanUsage(congregationId, { forceServer: true })
-      .then((usage) => {
-        if (active) setPlanUsageState({ congregationId, usage });
-      })
-      .catch(() => {
-        if (active) setPlanUsageState({ congregationId, usage: null });
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [congregationId, isAdmin]);
-
-  useEffect(() => {
-    if (!congregationId) return;
-
-    let active = true;
-
-    void getAllUsers(congregationId)
-      .then((users) => {
-        if (active) setActiveUsersState({
-          congregationId,
-          users: users.filter((user) => user.isActive),
-        });
-      })
-      .catch(() => {
-        if (active) setActiveUsersState({ congregationId, users: [] });
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [congregationId]);
-
-  const allowedEmailDomain = emailDomainState.congregationId === congregationId
-    ? emailDomainState.domain
-    : 'congregacion.com';
-  const planUsage = isAdmin && planUsageState.congregationId === congregationId
-    ? planUsageState.usage
-    : null;
-  const activeUsers = useMemo(
-    () => (activeUsersState.congregationId === congregationId ? activeUsersState.users : []),
-    [activeUsersState, congregationId]
-  );
+  const { activeUsers, allowedEmailDomain, planUsage } = useUserFormDirectoryData(congregationId, isAdmin);
 
   useEffect(() => {
     if (mode !== 'edit') {

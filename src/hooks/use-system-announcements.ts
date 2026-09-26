@@ -4,7 +4,6 @@ import {
   collection,
   doc,
   getDocs,
-  onSnapshot,
   query,
   serverTimestamp,
   setDoc,
@@ -164,9 +163,8 @@ export function useSystemAnnouncements() {
       where('active', '==', true)
     );
 
-    const unsubscribe = onSnapshot(
-      announcementsQuery,
-      (snapshot) => {
+    void getDocs(announcementsQuery)
+      .then((snapshot) => {
         const nextAnnouncements = snapshot.docs
           .map((announcementDoc) =>
             normalizeAnnouncement(
@@ -182,20 +180,18 @@ export function useSystemAnnouncements() {
           loading: false,
           error: null,
         });
-      },
-      (snapshotError) => {
+      })
+      .catch((snapshotError: unknown) => {
         if (active) setAnnouncementState({
           ownerUid: uid,
           announcements: [],
           loading: false,
-          error: snapshotError.message,
+          error: snapshotError instanceof Error ? snapshotError.message : 'No se pudieron cargar avisos.',
         });
-      }
-    );
+      });
 
     return () => {
       active = false;
-      unsubscribe();
     };
   }, [isSessionValid, uid]);
 

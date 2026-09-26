@@ -10,6 +10,9 @@
     },
     "firestore": {
       "port": 9085
+    },
+    "functions": {
+      "port": 5001
     }
   },
   "functions": [

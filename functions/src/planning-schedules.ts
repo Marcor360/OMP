@@ -9,23 +9,24 @@ import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { adminDb } from './config/firebaseAdmin.js';
-import { UserPermissions } from './shared/derived-permissions.js';
-import { hasPermission } from './shared/permissions.js';
+import {
+  assertCleaningManager,
+  assertHospitalityEditor,
+  assertHospitalityManager,
+  getRequesterProfile,
+} from './planning-schedules/permissions.js';
+import { dayRange, formatDateKey, parseDateKey } from './planning-schedules/date-utils.js';
+import {
+  buildPlanningMeetingCandidates,
+  buildPlanningMeetingSkeleton,
+  planningMeetingDocId,
+  reconcilePlanningMeetingCandidates,
+  type HospitalityMeetingType,
+} from './planning-schedules/generation.js';
 import { assertAdministrativeBillingAccess } from './users/authorization.js';
 
-type UserRole = 'admin' | 'supervisor' | 'user';
-export type RequesterProfile = {
-  role: UserRole;
-  isActive: boolean;
-  congregationId: string;
-  displayName?: string;
-  email?: string;
-  servicePosition?: string;
-  serviceDepartment?: string;
-  serviceAssignments?: { position?: string; department?: string }[];
-  permissions?: UserPermissions;
-  derivedPermissions?: UserPermissions;
-};
+export type { RequesterProfile } from './planning-schedules/permissions.js';
+export { assertHospitalityEditor, assertHospitalityManager } from './planning-schedules/permissions.js';
 
 type PublishSchedulePayload = {
   congregationId?: unknown;
@@ -62,7 +63,6 @@ type EnsurePlanningMeetingsResult = {
   existing: number;
 };
 
-type HospitalityMeetingType = 'midweek' | 'weekend';
 type HospitalityRoleKey =
   | 'chairman'
   | 'microphoneOne'
@@ -116,14 +116,13 @@ const HOSPITALITY_ROLE_ORDER: Record<HospitalityRoleKey, number> = {
   midweekBibleStudyReader: 8,
 };
 
-// Titulos por defecto de los esqueletos de reunion creados por
-// ensurePlanningMeetingsByManager. Espejo de los defaults de titulo en
-// functions/src/meetings-management.ts:buildMeetingWritePayload; si cambian
-// alla, revisar aqui tambien.
-export const PLANNING_MEETING_TITLES: Record<HospitalityMeetingType, string> = {
-  midweek: 'Reunion Vida y Ministerio Cristianos',
-  weekend: 'Reunion del fin de semana',
-};
+export {
+  buildPlanningMeetingCandidates,
+  buildPlanningMeetingSkeleton,
+  planningMeetingDocId,
+  reconcilePlanningMeetingCandidates,
+} from './planning-schedules/generation.js';
+export { PLANNING_MEETING_TITLES } from './planning-schedules/generation.js';
 
 const PLANNING_MEETING_WRITE_CHUNK_SIZE = 400;
 
@@ -140,6 +139,14 @@ const normalizeComparableText = (value: unknown): string =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' ? value as Record<string, unknown> : null;
+
+const resolveIsActive = (data: Record<string, unknown>): boolean => {
+  if (typeof data.isActive === 'boolean') return data.isActive;
+  return data.status === 'active';
+};
 
 const parsePayload = (raw: unknown): { congregationId: string; scheduleId: string; syncMeetings: boolean } => {
   const data = raw as PublishSchedulePayload;
@@ -194,179 +201,8 @@ const parseAssignPayload = (raw: unknown): {
   return { congregationId, scheduleId, meetingId, meetingDate, meetingType, roleKey, newUserId };
 };
 
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === 'object' ? value as Record<string, unknown> : null;
-
-const normalizeRole = (value: unknown): UserRole | undefined => {
-  if (value === 'admin' || value === 'supervisor' || value === 'user') return value;
-  if (value === 'administrador') return 'admin';
-  if (value === 'usuario') return 'user';
-  return undefined;
-};
-
-const resolveIsActive = (data: Record<string, unknown>): boolean => {
-  if (typeof data.isActive === 'boolean') return data.isActive;
-  if (data.status === 'active') return true;
-  return false;
-};
-
-const toServiceAssignments = (value: unknown): { position?: string; department?: string }[] => {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item) => asRecord(item))
-    .filter((item): item is Record<string, unknown> => item !== null)
-    .map((item) => ({
-      position: normalizeText(item.position),
-      department: normalizeText(item.department),
-    }));
-};
-
-const getRequesterProfile = async (uid: string): Promise<RequesterProfile> => {
-  const snap = await adminDb.collection('users').doc(uid).get();
-
-  if (!snap.exists) {
-    throw new HttpsError('permission-denied', 'No existe perfil del usuario autenticado.');
-  }
-
-  const data = snap.data() as Record<string, unknown>;
-  const role = normalizeRole(data.role) ?? 'user';
-  const congregationId = normalizeText(data.congregationId);
-
-  if (!congregationId || !resolveIsActive(data)) {
-    throw new HttpsError('permission-denied', 'Perfil de usuario invalido o inactivo.');
-  }
-
-  return {
-    role,
-    isActive: true,
-    congregationId,
-    displayName: normalizeText(data.displayName),
-    email: normalizeText(data.email),
-    servicePosition: normalizeText(data.servicePosition),
-    serviceDepartment: normalizeText(data.serviceDepartment),
-    serviceAssignments: toServiceAssignments(data.serviceAssignments),
-    permissions: asRecord(data.permissions) as RequesterProfile['permissions'],
-    derivedPermissions: asRecord(data.derivedPermissions) as RequesterProfile['derivedPermissions'],
-  };
-};
-
-const hasServiceAssignment = (
-  requester: RequesterProfile,
-  position: string,
-  department: string
-): boolean =>
-  (
-    requester.servicePosition === position &&
-    requester.serviceDepartment === department
-  ) ||
-  requester.serviceAssignments?.some(
-    (assignment) => assignment.position === position && assignment.department === department
-  ) === true;
-
-const assertCleaningManager = (requester: RequesterProfile, congregationId: string): void => {
-  if (requester.congregationId !== congregationId) {
-    throw new HttpsError('permission-denied', 'No puedes gestionar otra congregacion.');
-  }
-
-  if (
-    requester.role !== 'admin' &&
-    !hasPermission(requester, 'limpieza', 'manage') &&
-    !(hasPermission(requester, 'limpieza', 'create') && hasPermission(requester, 'limpieza', 'edit')) &&
-    !hasServiceAssignment(requester, 'encargado', 'limpieza')
-  ) {
-    throw new HttpsError('permission-denied', 'No tienes permisos para publicar limpieza.');
-  }
-};
-
-// Frontera del contrato de permisos del modulo (ver OMP-AUDIT-hospitality-asignaciones
-// §0.2): Manager = puede publicar y tocar listas ya publicadas. Espejo de
-// isHospitalityMicrophonesManager() en rules_src/03-roles-and-managers.rules; si
-// cambia alla, cambia aqui. El auxiliar NO pasa este gate -- esa es la correccion
-// de esta ronda: antes incluia hasServiceAssignment(requester, 'auxiliar', ...),
-// dandole permiso de publicar, que es lo opuesto de lo decidido.
-export const assertHospitalityManager = (requester: RequesterProfile, congregationId: string): void => {
-  if (requester.congregationId !== congregationId) {
-    throw new HttpsError('permission-denied', 'No puedes gestionar otra congregacion.');
-  }
-
-  if (
-    requester.role !== 'admin' &&
-    !hasPermission(requester, 'acomodadores_microfonos', 'manage') &&
-    !(hasPermission(requester, 'acomodadores_microfonos', 'create') && hasPermission(requester, 'acomodadores_microfonos', 'edit')) &&
-    !hasServiceAssignment(requester, 'encargado', 'acomodadores_microfonos')
-  ) {
-    throw new HttpsError('permission-denied', 'No tienes permisos para publicar acomodadores y microfonos.');
-  }
-};
-
-// Editor del modulo: trabaja borradores (crear, llenar, cancelar asignaciones,
-// archivar el borrador). NO publica ni toca listas publicadas -- esa frontera la
-// marca assertHospitalityManager de arriba. Espejo de
-// isHospitalityMicrophonesEditor() en rules_src/03-roles-and-managers.rules; si
-// cambia alla, cambia aqui. El auxiliar necesita rama explicita por cargo porque
-// los permisos derivados de assignmentToPermissions() (src/utils/permissions/
-// permissions.ts) viven solo en el frontend y nunca se materializan en el
-// documento del usuario.
-export const assertHospitalityEditor = (requester: RequesterProfile, congregationId: string): void => {
-  if (requester.congregationId !== congregationId) {
-    throw new HttpsError('permission-denied', 'No puedes gestionar otra congregacion.');
-  }
-
-  if (
-    requester.role !== 'admin' &&
-    !hasPermission(requester, 'acomodadores_microfonos', 'manage') &&
-    !(hasPermission(requester, 'acomodadores_microfonos', 'create') && hasPermission(requester, 'acomodadores_microfonos', 'edit')) &&
-    !hasPermission(requester, 'acomodadores_microfonos', 'edit') &&
-    !hasServiceAssignment(requester, 'encargado', 'acomodadores_microfonos') &&
-    !hasServiceAssignment(requester, 'auxiliar', 'acomodadores_microfonos')
-  ) {
-    throw new HttpsError('permission-denied', 'No tienes permisos para editar acomodadores y microfonos.');
-  }
-};
-
-const parseDateKey = (value: string): Date | null => {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return null;
-  const [, yearRaw, monthRaw, dayRaw] = match;
-  const year = Number(yearRaw);
-  const month = Number(monthRaw);
-  const day = Number(dayRaw);
-  const parsed = new Date(year, month - 1, day);
-  parsed.setHours(0, 0, 0, 0);
-
-  if (
-    parsed.getFullYear() !== year ||
-    parsed.getMonth() !== month - 1 ||
-    parsed.getDate() !== day
-  ) {
-    return null;
-  }
-
-  return parsed;
-};
-
-const dayRange = (dateKey: string): { start: Timestamp; end: Timestamp } => {
-  const start = parseDateKey(dateKey);
-  if (!start) {
-    throw new HttpsError('invalid-argument', 'Fecha de schedule invalida.');
-  }
-
-  const end = new Date(start);
-  end.setHours(23, 59, 59, 999);
-  return {
-    start: Timestamp.fromDate(start),
-    end: Timestamp.fromDate(end),
-  };
-};
-
 const MAX_PLANNING_DAYS = 62;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-const formatDateKey = (date: Date): string =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
-    date.getDate()
-  ).padStart(2, '0')}`;
 
 const parsePlanningDay = (value: unknown, fieldName: string): number => {
   if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 6) {
@@ -1250,93 +1086,6 @@ const syncHospitalityScheduleToMeetings = async (params: {
 // NO incluye un campo `origin`: no esta en allowedMeetingKeys(). La deteccion de
 // "esqueleto del planificador" en syncSingleMeetingFromItems usa el prefijo del
 // docId ('planning-...') en su lugar.
-export const buildPlanningMeetingSkeleton = (params: {
-  dateKey: string;
-  meetingType: HospitalityMeetingType;
-  requesterUid: string;
-}): FirestoreRecord => {
-  const range = dayRange(params.dateKey);
-  return {
-    type: params.meetingType,
-    meetingCategory: params.meetingType,
-    title: PLANNING_MEETING_TITLES[params.meetingType],
-    publicationStatus: 'awaiting_assignments',
-    startDate: range.start,
-    endDate: range.end,
-    meetingDate: range.start,
-    assignedUserIds: [],
-    sections: [],
-    createdBy: params.requesterUid,
-    updatedBy: params.requesterUid,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-  };
-};
-
-export const planningMeetingDocId = (dateKey: string, meetingType: HospitalityMeetingType): string =>
-  `planning-${dateKey}-${meetingType}`;
-
-type PlanningMeetingCandidate = { dateKey: string; meetingType: HospitalityMeetingType };
-
-export const buildPlanningMeetingCandidates = (params: {
-  startDate: Date;
-  endDate: Date;
-  midweekDay: number;
-  weekendDay: number;
-  today?: Date;
-}): PlanningMeetingCandidate[] => {
-  const candidates: PlanningMeetingCandidate[] = [];
-  const cursor = new Date(params.startDate);
-  const todayKey = formatDateKey(params.today ?? new Date());
-  while (cursor <= params.endDate) {
-    const dateKey = formatDateKey(cursor);
-    if (dateKey < todayKey) {
-      cursor.setDate(cursor.getDate() + 1);
-      continue;
-    }
-    if (cursor.getDay() === params.midweekDay) {
-      candidates.push({ dateKey, meetingType: 'midweek' });
-    }
-    if (cursor.getDay() === params.weekendDay) {
-      candidates.push({ dateKey, meetingType: 'weekend' });
-    }
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return candidates;
-};
-
-// Separa los candidatos de la ventana solicitada entre los que ya tienen reunion
-// (existingKeys, indexada por `${dateKey}::${meetingType}`) y los que hay que
-// crear, contando por tipo. Extraida como funcion pura para poder probar el
-// conteo (incluida la idempotencia de una segunda invocacion) sin mockear
-// Firestore, siguiendo la convencion de pruebas del resto de functions/src.
-export const reconcilePlanningMeetingCandidates = (
-  candidates: PlanningMeetingCandidate[],
-  existingKeys: Set<string>
-): {
-  toCreate: PlanningMeetingCandidate[];
-  createdMidweek: number;
-  createdWeekend: number;
-  existing: number;
-} => {
-  let createdMidweek = 0;
-  let createdWeekend = 0;
-  let existing = 0;
-  const toCreate: PlanningMeetingCandidate[] = [];
-
-  for (const candidate of candidates) {
-    if (existingKeys.has(`${candidate.dateKey}::${candidate.meetingType}`)) {
-      existing += 1;
-      continue;
-    }
-    toCreate.push(candidate);
-    if (candidate.meetingType === 'midweek') createdMidweek += 1;
-    else createdWeekend += 1;
-  }
-
-  return { toCreate, createdMidweek, createdWeekend, existing };
-};
-
 export const ensurePlanningMeetingsByManager = onCall(
   { region: 'us-central1' },
   async (request): Promise<EnsurePlanningMeetingsResult> => {

@@ -1,15 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import * as FirebaseAuth from 'firebase/auth';
-import { getAuth, initializeAuth } from 'firebase/auth';
+import { connectAuthEmulator, getAuth, initializeAuth } from 'firebase/auth';
 import {
   getFirestore,
+  connectFirestoreEmulator,
   initializeFirestore,
   persistentLocalCache,
   persistentSingleTabManager,
   type Firestore,
 } from 'firebase/firestore';
-import { getFunctions } from 'firebase/functions';
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 import { Platform } from 'react-native';
 
 import { logFirestoreConfig } from '@/src/services/firebase/firestore-debug';
@@ -134,6 +135,12 @@ if (Platform.OS === 'web') {
 
 export const auth = authInstance;
 
+const firebaseEmulatorHost = process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST?.trim();
+const shouldUseFirebaseEmulators = isDevelopment && process.env.EXPO_PUBLIC_USE_FIREBASE_EMULATORS === '1';
+if (shouldUseFirebaseEmulators && firebaseEmulatorHost) {
+  connectAuthEmulator(auth, `http://${firebaseEmulatorHost}:9099`, { disableWarnings: true });
+}
+
 const isWebBrowserEnvironment =
   Platform.OS === 'web' &&
   typeof window !== 'undefined' &&
@@ -166,3 +173,8 @@ const initializeDb = (): Firestore => {
 
 export const db = initializeDb();
 export const functions = getFunctions(app);
+
+if (shouldUseFirebaseEmulators && firebaseEmulatorHost) {
+  connectFirestoreEmulator(db, firebaseEmulatorHost, 9085);
+  connectFunctionsEmulator(functions, firebaseEmulatorHost, 5001);
+}
