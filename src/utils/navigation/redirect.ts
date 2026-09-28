@@ -2,6 +2,22 @@ import { type UnknownOutputParams } from 'expo-router';
 
 const AUTH_PATHS = new Set(['/login', '/(auth)/login']);
 const DEFAULT_PROTECTED_ROUTE = '/(protected)/(tabs)/';
+const PROTECTED_ROUTE_ROOTS = new Set([
+  'assignments',
+  'billing',
+  'cleaning',
+  'dashboard',
+  'events',
+  'field-service',
+  'meetings',
+  'notifications',
+  'organization-chart',
+  'preaching',
+  'settings',
+  'territories',
+  'unauthorized',
+  'users',
+]);
 
 const NOTIFICATION_HREF_ALLOWED_PREFIXES = [
   '/(protected)/(tabs)',
@@ -54,7 +70,26 @@ export function getSafeRedirectPath(redirectTo: unknown): string {
 
   const trimmed = value.trim();
 
-  if (!trimmed.startsWith('/') || AUTH_PATHS.has(trimmed.split('?')[0])) {
+  const pathOnly = trimmed.split(/[?#]/, 1)[0];
+  const segments = pathOnly.split('/').filter(Boolean);
+  const normalizedSegments = segments.filter(
+    (segment) => segment !== '(protected)' && segment !== '(tabs)'
+  );
+  const hasOnlyInternalSegments = segments.every(
+    (segment) => segment !== '.' && segment !== '..' && !/[\\\u0000-\u001f\u007f]/.test(segment)
+  );
+  const routeRoot = normalizedSegments[0];
+  const isProtectedRoute =
+    typeof routeRoot === 'string' && PROTECTED_ROUTE_ROOTS.has(routeRoot);
+
+  if (
+    !trimmed.startsWith('/') ||
+    trimmed.startsWith('//') ||
+    trimmed.includes('\\') ||
+    !hasOnlyInternalSegments ||
+    !isProtectedRoute ||
+    AUTH_PATHS.has(pathOnly)
+  ) {
     return DEFAULT_PROTECTED_ROUTE;
   }
 

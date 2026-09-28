@@ -8,11 +8,11 @@ Aplicación multiplataforma para la organización interna, administración y coo
 
 `Web` · `Android` · `iOS` · `Expo` · `React Native` · `Firebase` · `Stripe`
 
-**Versión actual:** `1.50.0`
+**Versión actual:** `1.54.0`
 
 **Estado:** beta avanzada en estabilización
 
-**Última actualización:** 23 de septiembre de 2026
+**Última actualización:** 27 de septiembre de 2026
 
 </div>
 
@@ -53,10 +53,10 @@ El producto administra información por congregación. Toda operación congregac
 | Dato | Valor |
 | --- | --- |
 | Nombre | OMP Suite |
-| Versión pública | `1.50.0` |
-| Android `versionCode` | `15000` |
-| iOS `buildNumber` | `1.50.0` |
-| Referencia de release EAS | Android `15000` · iOS `1.50.0` |
+| Versión pública | `1.54.0` |
+| Android `versionCode` | `15400` |
+| iOS `buildNumber` | `1.54.0` |
+| Referencia de release EAS | Android `15400` · iOS `1.54.0` |
 | Android package | `com.marcor360.omp` |
 | iOS bundle identifier | `com.marcor360.omp` |
 | Plataformas | Web, Android e iOS |
@@ -71,6 +71,13 @@ El producto administra información por congregación. Toda operación congregac
 La versión visible proviene de `app.json → expo.version`. `package.json`, `package-lock.json`, `app.json` y la configuración nativa Android deben actualizarse juntos en cada release. EAS usa números remotos para builds de tienda.
 
 ### Cambios recientes
+
+### Novedades de la versión 1.54.0
+
+- se endureció la validación de redirecciones hacia rutas internas protegidas;
+- se retiró un efecto de inicio sin acciones;
+- se hizo explícito que la lectura de usuarios es de una sola consulta;
+- se sincronizaron los metadatos de versión para Android, iOS y el proyecto.
 
 ### Novedades de la versión 1.50.0
 
@@ -541,7 +548,7 @@ Perfiles disponibles:
 - `preview`: distribución interna y APK Android;
 - `production`: build de tienda con incremento remoto automático.
 
-`eas.json` usa `appVersionSource: remote`. La referencia local de la versión 1.50.0 es Android `15000` e iOS `1.50.0`; el perfil `production` incrementa el número de build remoto automáticamente. Antes de publicar, confirma el número que EAS asignará.
+`eas.json` usa `appVersionSource: remote`. La referencia local de la versión 1.54.0 es Android `15400` e iOS `1.54.0`; el perfil `production` incrementa el número de build remoto automáticamente. Antes de publicar, confirma el número que EAS asignará.
 
 ### Web
 
@@ -564,19 +571,19 @@ MAJOR.MINOR.PATCH
 - `MINOR`: funciones nuevas compatibles;
 - `PATCH`: correcciones compatibles.
 
-Estado de la versión `1.50.0`:
+Estado de la versión `1.54.0`:
 
 ```text
-package.json:                    1.50.0
-package-lock.json:               1.50.0
-app.json → expo.version:         1.50.0
-app.json → ios.buildNumber:      1.50.0
-app.json → android.versionCode:  15000
-android versionName:             1.50.0
-android versionCode:             15000
+package.json:                    1.54.0
+package-lock.json:               1.54.0
+app.json → expo.version:         1.54.0
+app.json → ios.buildNumber:      1.54.0
+app.json → android.versionCode:  15400
+android versionName:             1.54.0
+android versionCode:             15400
 ```
 
-Los nombres de lanzamiento son opcionales y no reemplazan la versión técnica. Pueden usarse en notas de release con el formato `OMP 1.50.0 — Nombre`.
+Los nombres de lanzamiento son opcionales y no reemplazan la versión técnica. Pueden usarse en notas de release con el formato `OMP 1.54.0 — Nombre`.
 
 ## Notificaciones
 

@@ -9,11 +9,8 @@ import type {
   CreateUserDTO,
   UpdateUserDTO,
 } from '@/src/types/user';
-import { createLogger } from '@/src/utils/logger';
 
 export { normalizeUser, isIncompleteProfile } from './user.mapper';
-
-const log = createLogger('users-service');
 
 const USER_PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -139,35 +136,13 @@ export const getUsersCount = async (congregationId: string): Promise<number> => 
   return userRepository.count(congregationId);
 };
 
-/** Suscripcion en tiempo real a usuarios por congregacion */
-export const subscribeToUsers = (
-  congregationId: string,
-  callback: (users: AppUser[]) => void,
-  onError?: (error: unknown) => void
-): Unsubscribe => {
+/** Lee una vez los usuarios de la congregacion desde el servidor. */
+export const getUsersOnce = async (congregationId: string): Promise<AppUser[]> => {
   if (!congregationId || typeof congregationId !== 'string') {
-    onError?.(new Error('No existe congregationId para cargar usuarios.'));
-    return () => {};
+    return [];
   }
 
-  let cancelled = false;
-
-  void userRepository.getAllByCongregation(congregationId, { forceServer: true })
-    .then((users) => {
-      if (!cancelled) {
-        callback(users);
-      }
-    })
-    .catch((error) => {
-      if (!cancelled) {
-        log.error('subscribeToUsers error:', error);
-        onError?.(error);
-      }
-    });
-
-  return () => {
-    cancelled = true;
-  };
+  return userRepository.getAllByCongregation(congregationId, { forceServer: true });
 };
 
 /** Suscripcion en tiempo real a un usuario especifico */

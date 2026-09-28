@@ -101,20 +101,6 @@ function RootLayoutNav() {
   useCacheControlCleanup();
 
 
-  // Determinar si la app está lista para navegar
-  useEffect(() => {
-    if (!i18nReady) return;
-
-    // Si ya completó onboarding de idioma y auth terminó de cargar (o timeout)
-    if (hasCompletedLanguageOnboarding && !loading) {
-    } else if (hasCompletedLanguageOnboarding && loading) {
-      // Auth aún cargando, esperar
-      return;
-    } else if (!hasCompletedLanguageOnboarding) {
-      // Ir a language-setup inmediatamente
-    }
-  }, [i18nReady, loading, hasCompletedLanguageOnboarding]);
-
   // Ocultar splash cuando appReady sea true
   useEffect(() => {
     if (appReady && !splashHidden && Platform.OS !== 'web') {
