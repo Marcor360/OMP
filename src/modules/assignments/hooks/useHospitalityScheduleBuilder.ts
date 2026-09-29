@@ -303,7 +303,9 @@ export function useHospitalityScheduleBuilder() {
   const loadedScopeRef = useRef<string | null>(null);
 
   const usersById = useMemo(() => new Map(users.map((user) => [user.uid, user])), [users]);
-  const isPublishedView = selectedSchedule?.status === 'published';
+  const isPublishedView = selectedSchedule?.status === 'published'
+    && selectedSchedule.startDate === startDate
+    && selectedSchedule.endDate === endDate;
 
   const loadSchedules = useCallback(async (): Promise<HospitalitySchedule[]> => {
     if (!congregationId) return [];
@@ -367,6 +369,25 @@ export function useHospitalityScheduleBuilder() {
       setLoading(false);
     }
   }, [congregationId, endDate, optionalRoles, startDate, t]);
+
+  const loadCurrentRange = useCallback(async () => {
+    const scheduleForRange = selectedSchedule
+      && selectedSchedule.startDate === startDate
+      && selectedSchedule.endDate === endDate
+      ? selectedSchedule
+      : null;
+
+    if (!scheduleForRange && selectedSchedule?.status === 'published') {
+      setSelectedSchedule(null);
+    }
+
+    await loadRows({
+      rangeStart: startDate,
+      rangeEnd: endDate,
+      schedule: scheduleForRange,
+      optionalRoles,
+    });
+  }, [endDate, loadRows, optionalRoles, selectedSchedule, startDate]);
 
   const openSchedule = useCallback(async (schedule: HospitalitySchedule) => {
     const restoredOptionalRoles = schedule.optionalRoles ?? DEFAULT_OPTIONAL_ROLES;
@@ -504,7 +525,7 @@ export function useHospitalityScheduleBuilder() {
     setGeneratingMeetings(true);
     try {
       const result = await ensurePlanningMeetings({ congregationId, startDate, endDate, midweekDay, weekendDay });
-      await loadRows();
+      await loadCurrentRange();
       showAlert(t('hospitality.scheduleGeneratedTitle'), t('hospitality.scheduleGeneratedMsg', {
         created: result.createdMidweek + result.createdWeekend,
         existing: result.existing,
@@ -514,7 +535,7 @@ export function useHospitalityScheduleBuilder() {
     } finally {
       setGeneratingMeetings(false);
     }
-  }, [congregationId, endDate, loadRows, midweekDay, startDate, t, weekendDay]);
+  }, [congregationId, endDate, loadCurrentRange, midweekDay, startDate, t, weekendDay]);
 
   const publishNow = useCallback(async () => {
     if (!congregationId || !uid) return;
@@ -641,6 +662,10 @@ export function useHospitalityScheduleBuilder() {
 
   const confirmSubstitution = useCallback(async (row: HospitalityPlanningRow, roleKey: HospitalityRoleKey, nextUser: ActiveCongregationUser) => {
     if (!congregationId || !selectedSchedule) return;
+    if (row.meetingDate < selectedSchedule.startDate || row.meetingDate > selectedSchedule.endDate) {
+      showAlert(t('hospitality.substituteFailed'), t('hospitality.substituteDateOutsideSchedule'));
+      return;
+    }
     const itemId = row.assignmentItemIds[roleKey];
     const currentUserId = row.assignments[roleKey];
     const confirmed = await confirmAlert({
@@ -749,6 +774,7 @@ export function useHospitalityScheduleBuilder() {
     actions: {
       reload: loadInitial,
       loadRows,
+      loadCurrentRange,
       openSchedule,
       save: handleSave,
       publish: () => void requestPublish(),

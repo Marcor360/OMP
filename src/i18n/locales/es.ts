@@ -1014,6 +1014,7 @@ export const es = {
     substituteSuccessTitle: 'Sustitución aplicada',
     substituteSuccessMsg: 'Sustitución aplicada y reunión actualizada.',
     substituteFailed: 'No se pudo sustituir',
+    substituteDateOutsideSchedule: 'La reunión visible no pertenece a la lista publicada seleccionada. Recarga la lista correspondiente.',
     substituteOutgoingSpeaker: 'Sale a discursar esta semana',
     weekdays: {
       sunday: 'Dom',

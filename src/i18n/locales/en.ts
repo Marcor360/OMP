@@ -1014,6 +1014,7 @@ export const en = {
     substituteSuccessTitle: 'Substitution applied',
     substituteSuccessMsg: 'Substitution applied and the meeting was updated.',
     substituteFailed: 'Could not substitute',
+    substituteDateOutsideSchedule: 'The visible meeting is outside the selected published schedule. Reload the matching schedule.',
     substituteOutgoingSpeaker: 'Giving an outgoing talk this week',
     weekdays: {
       sunday: 'Sun',

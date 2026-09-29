@@ -96,7 +96,7 @@ export function HospitalityMicrophonesScheduleScreen() {
             onWeekendDayChange={setup.setWeekendDay}
             onOptionalRolesChange={setup.setOptionalRoles}
             onGenerate={actions.generateMeetings}
-            onLoad={() => void actions.loadRows()}
+            onLoad={() => void actions.loadCurrentRange()}
             onOpenSchedule={(schedule) => void actions.openSchedule(schedule)}
             onArchiveSchedule={actions.archiveSchedule}
           />
