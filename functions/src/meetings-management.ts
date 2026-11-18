@@ -597,44 +597,41 @@ const assertNoMeetingConflict = async (params: {
   congregationId: string;
   range: { meetingType: MeetingProgramKind; startDate: Timestamp; endDate: Timestamp };
   excludeMeetingId?: string;
+  transaction?: FirebaseFirestore.Transaction;
 }) => {
   const meetingsRef = adminDb
     .collection('congregations')
     .doc(params.congregationId)
     .collection('meetings');
 
-  const fallbackQueryPromise = Promise.all([
-    meetingsRef
+  const read = (query: FirebaseFirestore.Query) =>
+    params.transaction ? params.transaction.get(query) : query.get();
+
+  const [byMeetingDate, byStartDate, overlapSnapshot] = await Promise.all([
+    read(meetingsRef
       .where('meetingDate', '>=', params.range.startDate)
       .where('meetingDate', '<=', params.range.endDate)
-      .limit(120)
-      .get(),
-    meetingsRef
+      .limit(120)),
+    read(meetingsRef
       .where('startDate', '>=', params.range.startDate)
       .where('startDate', '<=', params.range.endDate)
-      .limit(120)
-      .get(),
-  ]);
-
-  let overlapSnapshot: FirebaseFirestore.QuerySnapshot | null = null;
-
-  try {
-    overlapSnapshot = await meetingsRef
+      .limit(120)),
+    read(meetingsRef
       .where('startDate', '<=', params.range.endDate)
       .where('endDate', '>=', params.range.startDate)
-      .limit(120)
-      .get();
-  } catch (error) {
-    logger.warn(
-      'No se pudo ejecutar consulta de traslape por rango; usando validacion de compatibilidad.',
-      {
-        congregationId: params.congregationId,
-        error: resolveErrorMessage(error),
-      }
-    );
-  }
-
-  const [byMeetingDate, byStartDate] = await fallbackQueryPromise;
+      .limit(120)).catch((error: unknown) => {
+        // FAILED_PRECONDITION is returned when the optional composite index is missing.
+        // Leave transaction contention errors visible so Firestore can retry.
+        if (params.transaction && (error as { code?: unknown } | null)?.code !== 9) {
+          throw error;
+        }
+        logger.warn(
+          'No se pudo ejecutar consulta de traslape por rango; usando validacion de compatibilidad.',
+          { congregationId: params.congregationId, error: resolveErrorMessage(error) }
+        );
+        return null;
+      }),
+  ]);
 
   const byId = new Map<string, Record<string, unknown>>();
   const candidateDocs = overlapSnapshot
@@ -879,11 +876,6 @@ export const createMeetingByManager = onCall(
 
     assertWithinOperationalWindow(meetingRange);
 
-    await assertNoMeetingConflict({
-      congregationId,
-      range: meetingRange,
-    });
-
     await assertNoOutgoingTalkAssignmentConflict({
       congregationId,
       meetingData,
@@ -914,6 +906,7 @@ export const createMeetingByManager = onCall(
           } para esa fecha.`
         );
       }
+      await assertNoMeetingConflict({ congregationId, range: meetingRange, transaction });
       transaction.create(ref, meetingPayload);
     });
 

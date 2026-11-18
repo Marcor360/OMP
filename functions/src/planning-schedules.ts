@@ -124,8 +124,6 @@ export {
 } from './planning-schedules/generation.js';
 export { PLANNING_MEETING_TITLES } from './planning-schedules/generation.js';
 
-const PLANNING_MEETING_WRITE_CHUNK_SIZE = 400;
-
 const normalizeText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -1111,64 +1109,38 @@ export const ensurePlanningMeetingsByManager = onCall(
     // que findMeetingForDateAndType.
     const rangeStart = dayRange(formatDateKey(payload.startDate)).start;
     const rangeEnd = dayRange(formatDateKey(payload.endDate)).end;
-    const existingMeetingsSnap = await adminDb
-      .collection('congregations')
+    const meetings = adminDb.collection('congregations')
       .doc(payload.congregationId)
-      .collection('meetings')
+      .collection('meetings');
+    const meetingsInRange = meetings
       .where('meetingDate', '>=', rangeStart)
-      .where('meetingDate', '<=', rangeEnd)
-      .get();
+      .where('meetingDate', '<=', rangeEnd);
+    const requesterUid = request.auth.uid;
 
-    const existingKeys = new Set<string>();
-    existingMeetingsSnap.docs.forEach((doc) => {
-      const data = doc.data() as FirestoreRecord;
-      const meetingDateValue = data.meetingDate;
-      if (!(meetingDateValue instanceof Timestamp)) return;
-      const kind = classifyMeetingKind(data);
-      if (!kind) return;
-      existingKeys.add(`${formatDateKey(meetingDateValue.toDate())}::${kind}`);
-    });
+    return adminDb.runTransaction(async (transaction) => {
+      const existingMeetingsSnap = await transaction.get(meetingsInRange);
+      const existingKeys = new Set<string>();
+      existingMeetingsSnap.docs.forEach((doc) => {
+        const data = doc.data() as FirestoreRecord;
+        const meetingDateValue = data.meetingDate;
+        if (!(meetingDateValue instanceof Timestamp)) return;
+        const kind = classifyMeetingKind(data);
+        if (!kind) return;
+        existingKeys.add(`${formatDateKey(meetingDateValue.toDate())}::${kind}`);
+      });
 
-    const { toCreate, createdMidweek, createdWeekend, existing } = reconcilePlanningMeetingCandidates(
-      candidates,
-      existingKeys
-    );
+      const { toCreate, createdMidweek, createdWeekend, existing } =
+        reconcilePlanningMeetingCandidates(candidates, existingKeys);
 
-    let batch = adminDb.batch();
-    let opsInBatch = 0;
-    const pendingCommits: Promise<unknown>[] = [];
-
-    for (const candidate of toCreate) {
-      const ref = adminDb
-        .collection('congregations')
-        .doc(payload.congregationId)
-        .collection('meetings')
-        .doc(planningMeetingDocId(candidate.dateKey, candidate.meetingType));
-
-      batch.create(
-        ref,
-        buildPlanningMeetingSkeleton({
-          dateKey: candidate.dateKey,
-          meetingType: candidate.meetingType,
-          requesterUid: request.auth.uid,
-        })
-      );
-
-      opsInBatch += 1;
-      if (opsInBatch >= PLANNING_MEETING_WRITE_CHUNK_SIZE) {
-        pendingCommits.push(batch.commit());
-        batch = adminDb.batch();
-        opsInBatch = 0;
+      for (const candidate of toCreate) {
+        transaction.create(
+          meetings.doc(planningMeetingDocId(candidate.dateKey, candidate.meetingType)),
+          buildPlanningMeetingSkeleton({ ...candidate, requesterUid })
+        );
       }
-    }
 
-    if (opsInBatch > 0) {
-      pendingCommits.push(batch.commit());
-    }
-
-    await Promise.all(pendingCommits);
-
-    return { ok: true, createdMidweek, createdWeekend, existing };
+      return { ok: true, createdMidweek, createdWeekend, existing };
+    });
   }
 );
 
