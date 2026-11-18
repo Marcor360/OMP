@@ -619,6 +619,8 @@ const assertNoMeetingConflict = async (params: {
     read(meetingsRef
       .where('startDate', '<=', params.range.endDate)
       .where('endDate', '>=', params.range.startDate)
+      .orderBy('endDate', 'asc')
+      .orderBy('startDate', 'asc')
       .limit(120)).catch((error: unknown) => {
         // FAILED_PRECONDITION is returned when the optional composite index is missing.
         // Leave transaction contention errors visible so Firestore can retry.

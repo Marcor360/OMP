@@ -365,9 +365,9 @@ App (root), 19 moderate:
 
 Review monthly whether Google has published `@google-cloud/storage@8`; if so, re-run the audit and re-evaluate.
 
-`expo-doctor`, unavailable SDK 57 patch targets:
+Expo SDK 57:
 
-- Expo's compatibility catalog references `expo@~57.0.24`, `expo-constants@~57.0.19`, `expo-notifications@~57.0.20`, and `expo-router@~57.0.22`, but those releases are not published in npm. The project uses the latest published compatible versions (`57.0.22`, `57.0.18`, `57.0.18`, and `57.0.21`) and lists only these packages in `expo.install.exclude` so `expo-doctor` and CI validate all other dependencies. Remove each exclusion as soon as its matching published version is available.
+- The formerly excluded Expo SDK 57 packages now have published compatible patches. Keep the Expo dependency validation enabled and update SDK packages against the SDK 57 compatibility catalog.
 
 ## Never Do These Things
 

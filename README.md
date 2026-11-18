@@ -53,9 +53,9 @@ El producto administra información por congregación. Toda operación congregac
 | Dato | Valor |
 | --- | --- |
 | Nombre | OMP Suite |
-| Versión pública | `1.54.0` |
-| Android `versionCode` | `15400` |
-| iOS `buildNumber` | `1.54.0` |
+| Versión en el repositorio | `1.54.3` |
+| Android `versionCode` | `15403` |
+| iOS `buildNumber` | `1.54.3` |
 | Referencia de release EAS | Android `15400` · iOS `1.54.0` |
 | Android package | `com.marcor360.omp` |
 | iOS bundle identifier | `com.marcor360.omp` |
@@ -209,11 +209,11 @@ Las versiones siguientes se obtienen de los manifiestos actuales del repositorio
 
 | Tecnología | Versión |
 | --- | --- |
-| Expo | SDK `57` (`~57.0.22`) |
+| Expo | SDK `57` (`~57.0.33`) |
 | React | `19.2.3` |
 | React Native | `0.86.3` |
 | React Native Web | `~0.21.0` |
-| Expo Router | `~57.0.21` |
+| Expo Router | `~57.0.31` |
 | TypeScript | `~6.0.3` |
 | Firebase Web SDK | `^12.19.0` |
 | NativeWind | `^4.2.6` |
@@ -571,16 +571,16 @@ MAJOR.MINOR.PATCH
 - `MINOR`: funciones nuevas compatibles;
 - `PATCH`: correcciones compatibles.
 
-Estado de la versión `1.54.0`:
+Estado de la versión `1.54.3`:
 
 ```text
-package.json:                    1.54.0
-package-lock.json:               1.54.0
-app.json → expo.version:         1.54.0
-app.json → ios.buildNumber:      1.54.0
-app.json → android.versionCode:  15400
-android versionName:             1.54.0
-android versionCode:             15400
+package.json:                    1.54.3
+package-lock.json:               1.54.3
+app.json → expo.version:         1.54.3
+app.json → ios.buildNumber:      1.54.3
+app.json → android.versionCode:  15403
+android versionName:             1.54.3
+android versionCode:             15403
 ```
 
 Los nombres de lanzamiento son opcionales y no reemplazan la versión técnica. Pueden usarse en notas de release con el formato `OMP 1.54.0 — Nombre`.

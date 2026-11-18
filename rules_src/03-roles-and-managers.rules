@@ -80,6 +80,19 @@
         && isCleaningManagerData(currentUserData());
     }
 
+    function canManageCleaningSchedule(congregationId) {
+      return hasCurrentUserDoc()
+        && cleaningManagerHasScheduleAccess(currentUserData(), congregationId);
+    }
+
+    function cleaningManagerHasScheduleAccess(user, congregationId) {
+      return isCleaningManagerData(user)
+        && user.congregationId == congregationId
+        && !congregationAccessBlocked(congregationId)
+        && !systemMaintenanceBlocked()
+        && administrativeWritesAllowed(congregationId);
+    }
+
     function isCleaningManagerData(user) {
       return isActiveUserData(user)
         && (

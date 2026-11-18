@@ -161,19 +161,8 @@ const scheduleData = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-// BLOQUEADO (no introducido por esta ronda, ver el mismo comentario en
-// hospitality-schedules.rules.test.ts): las aserciones assertSucceeds de este
-// archivo estan en test.skip porque el emulador de Firestore deniega la
-// escritura con "Unable to evaluate the expression as the maximum of 1000
-// expressions to evaluate has been reached." Reproducible tambien contra
-// firestore.rules previo a este cambio (isCleaningManager solo se acorto, no
-// se hizo mas caro) -- el presupuesto de canAccessCongregationData() +
-// administrativeWritesAllowed() + validPlanningScheduleData() ya estaba en el
-// limite. Los asserts assertFails (deny) SI corren y pasan de forma
-// confiable, y son los que verifican el cierre del hueco de seguridad.
-
 // a. encargado con serviceDepartment 'limpieza' -> allow create cleaningSchedules.
-test.skip('encargado de limpieza can create a cleaning schedule', async () => {
+test('encargado de limpieza can create a cleaning schedule', async () => {
   await assertSucceeds(setDoc(
     scheduleDoc('encargadoLimpieza', 'schedule1'),
     scheduleData()
@@ -197,7 +186,7 @@ test('encargado without serviceDepartment field cannot create a cleaning schedul
 });
 
 // d. serviceAssignmentKeys ['encargado:limpieza'] -> allow, via no afectada.
-test.skip('user with serviceAssignmentKeys encargado:limpieza can create a cleaning schedule', async () => {
+test('user with serviceAssignmentKeys encargado:limpieza can create a cleaning schedule', async () => {
   await assertSucceeds(setDoc(
     scheduleDoc('viaAssignmentKey', 'schedule4'),
     scheduleData({ createdBy: 'viaAssignmentKey', updatedBy: 'viaAssignmentKey' })
@@ -205,9 +194,112 @@ test.skip('user with serviceAssignmentKeys encargado:limpieza can create a clean
 });
 
 // e. usuario con permissions.limpieza.manage -> allow, via no afectada.
-test.skip('user with permissions.limpieza.manage can create a cleaning schedule', async () => {
+test('user with permissions.limpieza.manage can create a cleaning schedule', async () => {
   await assertSucceeds(setDoc(
     scheduleDoc('viaPermissions', 'schedule5'),
     scheduleData({ createdBy: 'viaPermissions', updatedBy: 'viaPermissions' })
   ));
+});
+
+
+const seed = async (path: string, data: Record<string, unknown>, merge = false) => {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), path), data, { merge });
+  });
+};
+
+test('preserves access with active billing and nonblocking system documents', async () => {
+  const systemStatus = {
+    maintenanceMode: false,
+    systemMaintenance: false,
+    disableCongregations: false,
+    allCongregationsDisabled: false,
+    congregationsDisabled: false,
+    enabled: true,
+    isActive: true,
+  };
+  await Promise.all([
+    seed('system/maintenance', systemStatus),
+    seed('system/platform', systemStatus),
+    seed('system/congregationAccess', systemStatus),
+    seed('congregations/c1', {
+      billing: { provider: 'stripe', status: 'active', adminRestricted: false },
+    }, true),
+  ]);
+  await assertSucceeds(setDoc(
+    scheduleDoc('viaAssignmentKey', 'active-billing'),
+    scheduleData({ createdBy: 'viaAssignmentKey', updatedBy: 'viaAssignmentKey' })
+  ));
+});
+
+test('denies an inactive cleaning manager', async () => {
+  await seed('users/encargadoLimpieza', { isActive: false }, true);
+  await assertFails(setDoc(scheduleDoc('encargadoLimpieza', 'inactive'), scheduleData()));
+});
+
+test('denies a cleaning manager in a different congregation', async () => {
+  await assertFails(setDoc(
+    scheduleDoc('encargadoLimpieza', 'wrong-congregation', 'c2'),
+    scheduleData({ congregationId: 'c2' })
+  ));
+});
+
+test('denies creation when billing restricts administrative writes', async () => {
+  await seed('congregations/c1', {
+    billing: { provider: 'stripe', status: 'active', adminRestricted: true },
+  }, true);
+  await assertFails(setDoc(scheduleDoc('encargadoLimpieza', 'billing'), scheduleData()));
+});
+
+test('denies creation when maintenance blocks access', async () => {
+  await seed('system/maintenance', { maintenanceMode: true });
+  await assertFails(setDoc(scheduleDoc('encargadoLimpieza', 'maintenance'), scheduleData()));
+});
+
+test('allows an expired congregation block but rejects an active block', async () => {
+  await seed('congregations/c1', {
+    disabled: true,
+    blockedUntil: Timestamp.fromMillis(Date.now() + 3600000),
+  }, true);
+  await assertFails(setDoc(scheduleDoc('encargadoLimpieza', 'blocked'), scheduleData()));
+  await seed('congregations/c1', {
+    blockedUntil: Timestamp.fromMillis(Date.now() - 3600000),
+  }, true);
+  await assertSucceeds(setDoc(scheduleDoc('encargadoLimpieza', 'expired'), scheduleData()));
+});
+
+test('validates document ownership and preserves creation metadata on update', async () => {
+  const ref = scheduleDoc('encargadoLimpieza', 'ownership');
+  const data = scheduleData();
+  await assertFails(setDoc(ref, { ...data, createdBy: 'another-user' }));
+  await assertSucceeds(setDoc(ref, data));
+  await assertFails(setDoc(ref, { ...data, createdAt: Timestamp.fromMillis(0) }));
+  await assertSucceeds(setDoc(ref, { ...data, title: 'Lista corregida' }));
+});
+
+test('validates cleaning schedule items with the same access and ownership checks', async () => {
+  const scheduleId = 'schedule-with-items';
+  const ref = doc(authedDb('encargadoLimpieza'),
+    `congregations/c1/cleaningSchedules/${scheduleId}/items/item1`);
+  const item = {
+    congregationId: 'c1',
+    scheduleId,
+    meetingDate: '2026-10-01',
+    meetingType: 'midweek',
+    cleaningGroupId: 'group1',
+    cleaningGroupName: 'Grupo uno',
+    status: 'scheduled',
+    createdBy: 'encargadoLimpieza',
+    updatedBy: 'encargadoLimpieza',
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  };
+  await assertSucceeds(setDoc(scheduleDoc('encargadoLimpieza', scheduleId), scheduleData()));
+  await assertFails(setDoc(ref, { ...item, scheduleId: 'other-schedule' }));
+  await assertSucceeds(setDoc(ref, item));
+  await assertSucceeds(setDoc(ref, { ...item, status: 'completed' }));
+  await seed('congregations/c1', {
+    billing: { provider: 'stripe', status: 'active', adminRestricted: true },
+  }, true);
+  await assertFails(setDoc(ref, { ...item, status: 'cancelled' }));
 });

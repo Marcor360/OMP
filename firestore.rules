@@ -142,6 +142,19 @@ service cloud.firestore {
         && isCleaningManagerData(currentUserData());
     }
 
+    function canManageCleaningSchedule(congregationId) {
+      return hasCurrentUserDoc()
+        && cleaningManagerHasScheduleAccess(currentUserData(), congregationId);
+    }
+
+    function cleaningManagerHasScheduleAccess(user, congregationId) {
+      return isCleaningManagerData(user)
+        && user.congregationId == congregationId
+        && !congregationAccessBlocked(congregationId)
+        && !systemMaintenanceBlocked()
+        && administrativeWritesAllowed(congregationId);
+    }
+
     function isCleaningManagerData(user) {
       return isActiveUserData(user)
         && (
@@ -669,8 +682,7 @@ service cloud.firestore {
     // repeated get() expressions, this preserves the short-circuit for a
     // congregation that does not exist.
     function congregationDataAccessBlocked(data) {
-      return !accessBlockExpired(data)
-        && (
+      return (
           data.disabled == true
           || data.deactivated == true
           || data.accessDisabled == true
@@ -687,7 +699,8 @@ service cloud.firestore {
             'maintenance',
             'mantenimiento'
           ]
-        );
+        )
+        && !accessBlockExpired(data);
     }
 
     function billingExemptionActive(data) {
@@ -758,8 +771,7 @@ service cloud.firestore {
     }
 
     function systemMaintenanceDataBlocked(data) {
-      return !accessBlockExpired(data)
-        && (
+      return (
           data.maintenanceMode == true
           || data.systemMaintenance == true
           || data.disableCongregations == true
@@ -767,7 +779,8 @@ service cloud.firestore {
           || data.congregationsDisabled == true
           || data.enabled == false
           || data.isActive == false
-        );
+        )
+        && !accessBlockExpired(data);
     }
 
     function accessBlockExpired(data) {
@@ -2810,14 +2823,12 @@ service cloud.firestore {
       match /cleaningSchedules/{scheduleId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canAccessCongregationData(congregationId)
-          && isCleaningManager()
+        allow create: if canManageCleaningSchedule(congregationId)
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == currentUid()
           && request.resource.data.updatedBy == currentUid();
 
-        allow update: if canAccessCongregationData(congregationId)
-          && isCleaningManager()
+        allow update: if canManageCleaningSchedule(congregationId)
           && resource.data.congregationId == congregationId
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == resource.data.createdBy
@@ -2829,14 +2840,12 @@ service cloud.firestore {
         match /items/{itemId} {
           allow get, list: if canAccessCongregationData(congregationId);
 
-          allow create: if canAccessCongregationData(congregationId)
-            && isCleaningManager()
+          allow create: if canManageCleaningSchedule(congregationId)
             && validCleaningScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == currentUid()
             && request.resource.data.updatedBy == currentUid();
 
-          allow update: if canAccessCongregationData(congregationId)
-            && isCleaningManager()
+          allow update: if canManageCleaningSchedule(congregationId)
             && resource.data.congregationId == congregationId
             && validCleaningScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == resource.data.createdBy

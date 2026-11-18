@@ -60,14 +60,12 @@
       match /cleaningSchedules/{scheduleId} {
         allow get, list: if canAccessCongregationData(congregationId);
 
-        allow create: if canAccessCongregationData(congregationId)
-          && isCleaningManager()
+        allow create: if canManageCleaningSchedule(congregationId)
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == currentUid()
           && request.resource.data.updatedBy == currentUid();
 
-        allow update: if canAccessCongregationData(congregationId)
-          && isCleaningManager()
+        allow update: if canManageCleaningSchedule(congregationId)
           && resource.data.congregationId == congregationId
           && validPlanningScheduleData(request.resource.data, congregationId)
           && request.resource.data.createdBy == resource.data.createdBy
@@ -79,14 +77,12 @@
         match /items/{itemId} {
           allow get, list: if canAccessCongregationData(congregationId);
 
-          allow create: if canAccessCongregationData(congregationId)
-            && isCleaningManager()
+          allow create: if canManageCleaningSchedule(congregationId)
             && validCleaningScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == currentUid()
             && request.resource.data.updatedBy == currentUid();
 
-          allow update: if canAccessCongregationData(congregationId)
-            && isCleaningManager()
+          allow update: if canManageCleaningSchedule(congregationId)
             && resource.data.congregationId == congregationId
             && validCleaningScheduleItemData(request.resource.data, congregationId, scheduleId)
             && request.resource.data.createdBy == resource.data.createdBy

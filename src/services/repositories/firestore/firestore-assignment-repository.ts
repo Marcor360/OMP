@@ -13,6 +13,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 
 import { db, functions } from '@/src/lib/firebase/app';
+import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import {
   assignmentDocRef,
   congregationMeetingsCollectionRef,
@@ -382,7 +383,9 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
           `range/${rangeKey}/limit/${maxPerMeeting}${userKey}${statusKey}`,
           options?.forceServer
         );
-      } catch {
+      } catch (error) {
+        if (!isFirebaseErrorCode(error, 'failed-precondition')) throw error;
+
         const fallbackConstraints: QueryConstraint[] = [limit(maxPerMeeting * 2)];
 
         if (options?.userUid) {
@@ -397,7 +400,7 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
           congregationId,
           meetingId,
           fallbackConstraints,
-          `range-fallback/${rangeKey}/limit/${maxPerMeeting * 2}${userKey}${statusKey}`,
+          `range-fallback/limit/${maxPerMeeting * 2}${userKey}${statusKey}`,
           options?.forceServer
         );
       }

@@ -60,27 +60,14 @@ Cobertura inicial agregada:
 - Congregacion suspendida bloquea acceso a datos de esa congregacion.
 - Push token solo puede escribirse por el usuario dueno.
 
-### Bloqueador actual de Rules permitidas
+### Reglas de horarios de limpieza
 
-Tres pruebas de casos **permitidos** de limpieza permanecen en `skip` porque la evaluación
-de Rules supera el máximo real de 1,000 expresiones. No deben habilitarse hasta
-reducir el coste de las Rules; hacerlas pasar ignorando ese error ocultaría una
-denegación real en producción.
-
-Plan obligatorio antes de retirar los `skip`:
-
-1. Medir cada operación permitida con un fixture mínimo en el emulador.
-2. Simplificar predicados compartidos de acceso y escritura administrativa,
-   evitando reevaluar el mismo documento/permisos en cada validación.
-3. Mantener sin cambios la semántica de aislamiento por `congregationId` y los
-   denies existentes.
-4. Volver a activar una prueba permitida por vez y ejecutar `npm run test:rules`.
-5. Desplegar Rules e índices juntos sólo después de que todas las pruebas de
-   allow y deny estén verdes.
-
-También queda pendiente:
-
-- Crear/editar/eliminar por rol y por módulo.
+La suite cubre creación por cargo de encargado de limpieza, por clave de
+asignación y por permiso explícito. También verifica el aislamiento por
+congregación, los perfiles inactivos, los bloqueos de facturación y
+mantenimiento, y la conservación de los metadatos de creación. Ejecuta
+`npm run test:rules` después de cambiar los predicados de acceso o los
+validadores de horarios.
 
 El dry-run de roles y planes legacy realizado el 23 de septiembre de 2026 no
 encontro documentos que requirieran migracion. Las Rules ya rechazan roles

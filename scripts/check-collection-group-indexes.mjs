@@ -19,6 +19,13 @@ const REQUIRED_FIELDS = {
   private: ['stripeSubscriptionId'],
   items: ['congregationId', 'meetingId', 'status'],
 };
+// Scoped compound queries that cannot be covered by single-field indexes alone.
+const REQUIRED_COLLECTION_COMPOSITES = [
+  ['meetings', ['endDate', 'startDate']],
+  ['assignments', ['assignedToUid', 'dueDate']],
+  ['assignments', ['status', 'dueDate']],
+  ['assignments', ['assignedToUid', 'status', 'dueDate']],
+];
 const DYNAMIC_ALLOWLIST = new Map([
   ['functions/src/maintenance/scheduled-data-cleanup.ts::params.collectionId',
     Object.entries(REQUIRED_FIELDS).filter(([name]) => !['notifications', 'billingHistory'].includes(name))],
@@ -70,6 +77,15 @@ const audit = ({files, indexes}) => {
       }
     }
   }
+  for (const [collection, fields] of REQUIRED_COLLECTION_COMPOSITES) {
+    const present = indexes.indexes.some((index) =>
+      index.queryScope === 'COLLECTION' &&
+      index.collectionGroup === collection &&
+      index.fields.length === fields.length &&
+      index.fields.every((field, i) => field.fieldPath === fields[i] && field.order === 'ASCENDING')
+    );
+    if (!present) failures.push(`Missing COLLECTION index: ${collection} [${fields.join(', ')}] ASC`);
+  }
   const covered = coverage(indexes);
   for (const group of used) {
     const fields = REQUIRED_FIELDS[group];
@@ -92,6 +108,6 @@ const main = () => {
     console.error(failures.map((failure) => `- ${failure}`).join('\n'));
     process.exit(1);
   }
-  console.log(`OK: ${Object.values(REQUIRED_FIELDS).flat().length} audited collectionGroup field shapes are covered.`);
+  console.log(`OK: ${Object.values(REQUIRED_FIELDS).flat().length} audited collectionGroup field shapes and ${REQUIRED_COLLECTION_COMPOSITES.length} collection composites are covered.`);
 };
 main();

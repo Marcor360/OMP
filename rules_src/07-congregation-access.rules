@@ -25,8 +25,7 @@
     // repeated get() expressions, this preserves the short-circuit for a
     // congregation that does not exist.
     function congregationDataAccessBlocked(data) {
-      return !accessBlockExpired(data)
-        && (
+      return (
           data.disabled == true
           || data.deactivated == true
           || data.accessDisabled == true
@@ -43,7 +42,8 @@
             'maintenance',
             'mantenimiento'
           ]
-        );
+        )
+        && !accessBlockExpired(data);
     }
 
     function billingExemptionActive(data) {
@@ -114,8 +114,7 @@
     }
 
     function systemMaintenanceDataBlocked(data) {
-      return !accessBlockExpired(data)
-        && (
+      return (
           data.maintenanceMode == true
           || data.systemMaintenance == true
           || data.disableCongregations == true
@@ -123,7 +122,8 @@
           || data.congregationsDisabled == true
           || data.enabled == false
           || data.isActive == false
-        );
+        )
+        && !accessBlockExpired(data);
     }
 
     function accessBlockExpired(data) {
