@@ -57,9 +57,9 @@ export const getSecret = (secret: { name: string; value: () => string }): string
 // comportamiento silenciosos si la version por defecto de la cuenta Stripe cambia.
 // Si un upgrade del SDK retira este literal, el typecheck fallara en `new Stripe(...)`
 // de abajo, forzando revisar el pin de forma consciente.
-// 2026-08-26.dahlia es la version publicada por Stripe SDK 22.6.2.
+// 2026-10-28.endive es la version publicada por Stripe SDK 23.1.0.
 // El pin mantiene estable la forma de las respuestas hasta que revisemos otro upgrade.
-const STRIPE_API_VERSION = '2026-08-26.dahlia';
+const STRIPE_API_VERSION = '2026-10-28.endive';
 
 export const getStripe = () =>
   new Stripe(getSecret(STRIPE_SECRET_KEY), { apiVersion: STRIPE_API_VERSION });

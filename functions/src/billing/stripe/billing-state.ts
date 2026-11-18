@@ -230,11 +230,19 @@ export const getBillingAccessUpdate = (
 };
 
 export const resolveSubscriptionId = (value: unknown): string | null => {
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return asTrimmedString(value);
   if (typeof value === 'object' && value !== null && 'id' in value) {
     return asTrimmedString((value as { id?: unknown }).id);
   }
   return null;
+};
+
+export const getInvoiceSubscriptionId = (invoice: Record<string, unknown>): string | null => {
+  const parent = invoice.parent as {
+    subscription_details?: { subscription?: unknown } | null;
+  } | null | undefined;
+  return resolveSubscriptionId(invoice.subscription) ??
+    resolveSubscriptionId(parent?.subscription_details?.subscription);
 };
 
 export const resolveCustomerId = (value: unknown): string | null => {

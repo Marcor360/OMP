@@ -1,0 +1,6 @@
+---
+description: "OMP architecture, quality, security and end-to-end review workflows"
+alwaysApply: true
+---
+
+Read `AGENTS.md` first. Use `.github/skills/omp-quality-checks/SKILL.md` for validation and review. Load the relevant workflow alongside it when editing Expo/React, Firebase/Stripe, or Playwright tasks. The workflow paths are listed in `AGENTS.md`.

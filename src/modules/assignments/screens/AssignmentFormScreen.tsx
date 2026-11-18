@@ -598,6 +598,9 @@ export function AssignmentFormScreen() {
           <TouchableOpacity
             style={styles.selectTrigger}
             onPress={() => setDatePickerVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.datePickerDefaultTitle')}
+            accessibilityHint={formatDateLabel(selectedDueDate)}
             disabled={!canEditForm}
             activeOpacity={0.8}
           >
@@ -803,6 +806,11 @@ export function AssignmentFormScreen() {
         <TouchableOpacity
           style={[styles.saveButton, (saving || !canSave) && styles.disabled]}
           onPress={handleSave}
+          accessibilityRole="button"
+          accessibilityLabel={mode === 'create'
+            ? t('forms.assignment.createAction')
+            : t('forms.saveChanges')}
+          accessibilityState={{ busy: saving, disabled: saving || !canSave }}
           disabled={saving || !canSave}
           activeOpacity={0.8}
         >

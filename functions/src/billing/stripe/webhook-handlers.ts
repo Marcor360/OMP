@@ -23,6 +23,7 @@ import {
   readPrivateBilling,
   resolveCustomerId,
   resolveSubscriptionId,
+  getInvoiceSubscriptionId,
   timestampFromSeconds,
   updateCongregationFromSubscription,
   type BillingState,
@@ -79,8 +80,7 @@ const handleInvoiceStatus = async (
   lastPaymentStatus: 'paid' | 'payment_failed' | 'action_required',
   event?: Pick<StripeWebhookEvent, 'id' | 'created'>
 ): Promise<string | null> => {
-  const rawInvoice = invoice as unknown as Record<string, unknown>;
-  const subscriptionId = resolveSubscriptionId(rawInvoice.subscription);
+  const subscriptionId = getInvoiceSubscriptionId(invoice);
   if (!subscriptionId) return null;
   const congregationId = await findCongregationBySubscription(subscriptionId);
   if (!congregationId) return null;
@@ -144,10 +144,6 @@ const getStripeObjectAmount = (value: Record<string, unknown>): number | null =>
     : null;
 };
 
-const getInvoiceSubscriptionId = (value: Record<string, unknown>): string | null =>
-  resolveSubscriptionId(value.subscription) ??
-  resolveSubscriptionId((value.parent as Record<string, unknown> | undefined)?.subscription_details);
-
 const getInvoiceCustomerId = (value: Record<string, unknown>): string | null =>
   resolveCustomerId(value.customer);
 
@@ -191,9 +187,8 @@ const writeBillingHistory = async (
     : undefined;
 
   const subscriptionId =
-    resolveSubscriptionId(object.subscription) ??
-    resolveSubscriptionId(object.id) ??
     getInvoiceSubscriptionId(object) ??
+    (event.type.startsWith('customer.subscription.') ? resolveSubscriptionId(object.id) : null) ??
     currentPrivateBilling?.stripeSubscriptionId ??
     null;
 

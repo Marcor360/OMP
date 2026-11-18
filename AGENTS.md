@@ -2,6 +2,13 @@
 
 These instructions apply to all AI agents working in this repository.
 
+## Review And Validation Workflows
+
+- [Quality checks and review](.github/skills/omp-quality-checks/SKILL.md)
+- [Expo and React architecture](.github/skills/omp-react-architecture/SKILL.md)
+- [Firebase and billing security review](.github/skills/omp-firebase-security/SKILL.md)
+- [Playwright and accessibility](.github/skills/omp-playwright-qa/SKILL.md)
+
 ## Project Identity
 
 OMP - Organization, Ministry & Programs is a multiplatform app for internal congregation organization. It helps manage users, meetings, assignments, cleaning, hospitality, preaching, territories, notifications, and congregation-level administration.
@@ -330,7 +337,7 @@ Rules:
 
 ## Versioning, Builds, And Android Permissions
 
-Current detected app version is `1.50.0` in `package.json` and `app.json`. Verify the intended release version before release changes.
+Verify the latest Git release branch and the versions in the manifests before choosing the next release number.
 
 Rules:
 

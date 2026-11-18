@@ -53,9 +53,9 @@ El producto administra información por congregación. Toda operación congregac
 | Dato | Valor |
 | --- | --- |
 | Nombre | OMP Suite |
-| Versión en el repositorio | `1.54.3` |
-| Android `versionCode` | `15403` |
-| iOS `buildNumber` | `1.54.3` |
+| Versión en el repositorio | `1.54.4` |
+| Android `versionCode` | `15404` |
+| iOS `buildNumber` | `1.54.4` |
 | Referencia de release EAS | Android `15400` · iOS `1.54.0` |
 | Android package | `com.marcor360.omp` |
 | iOS bundle identifier | `com.marcor360.omp` |
@@ -215,7 +215,7 @@ Las versiones siguientes se obtienen de los manifiestos actuales del repositorio
 | React Native Web | `~0.21.0` |
 | Expo Router | `~57.0.31` |
 | TypeScript | `~6.0.3` |
-| Firebase Web SDK | `^12.19.0` |
+| Firebase Web SDK | `^13.4.0` |
 | NativeWind | `^4.2.6` |
 | Tailwind CSS | `^3.4.17` |
 | React Navigation | `^7.3.18` |
@@ -231,9 +231,9 @@ La aplicación tiene activados `typedRoutes` y React Compiler.
 | Node.js | `22` |
 | Firebase Functions | `^7.3.2` |
 | Firebase Admin | `^14.2.0` |
-| Stripe SDK | `^22.4.0` |
-| Expo Server SDK | `^6.1.0` |
-| TypeScript de Functions | `~5.9.2` |
+| Stripe SDK | `^23.1.0` |
+| Expo Server SDK | `^8.0.0` |
+| TypeScript de Functions | `~6.0.3` |
 
 ### Infraestructura
 
@@ -375,7 +375,7 @@ eas.json                     Perfiles de EAS
 
 ### Requisitos
 
-- Node.js 22;
+- Node.js 24.12 o superior dentro de la rama 24 para la app y las pruebas de reglas. Functions usa el runtime Node.js 22, con un mínimo local de 22.13 para sus herramientas;
 - npm;
 - Java 21 para pruebas del emulador y builds Android;
 - Android Studio/SDK para compilación Android local;
@@ -385,10 +385,16 @@ eas.json                     Perfiles de EAS
 
 ### Dependencias
 
+Con Node 24 activo en la raíz y `OMP_FUNCTIONS_NODE` apuntando al binario de
+Node 22, instala ambos paquetes:
+
 ```bash
 npm ci
-npm ci --prefix functions
+PATH="$(dirname "$OMP_FUNCTIONS_NODE"):$PATH" npm ci --prefix functions
 ```
+
+Consulta [la guía de pruebas](docs/testing.md) para ejecutar las validaciones
+con ambos runtimes.
 
 ### Desarrollo
 
@@ -571,16 +577,16 @@ MAJOR.MINOR.PATCH
 - `MINOR`: funciones nuevas compatibles;
 - `PATCH`: correcciones compatibles.
 
-Estado de la versión `1.54.3`:
+Estado de la versión `1.54.4`:
 
 ```text
-package.json:                    1.54.3
-package-lock.json:               1.54.3
-app.json → expo.version:         1.54.3
-app.json → ios.buildNumber:      1.54.3
-app.json → android.versionCode:  15403
-android versionName:             1.54.3
-android versionCode:             15403
+package.json:                    1.54.4
+package-lock.json:               1.54.4
+app.json → expo.version:         1.54.4
+app.json → ios.buildNumber:      1.54.4
+app.json → android.versionCode:  15404
+android versionName:             1.54.4
+android versionCode:             15404
 ```
 
 Los nombres de lanzamiento son opcionales y no reemplazan la versión técnica. Pueden usarse en notas de release con el formato `OMP 1.54.0 — Nombre`.

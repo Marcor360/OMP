@@ -40,6 +40,33 @@ Prioridad para ampliar pruebas:
 - Navegacion.
 - Visibilidad de modulos.
 
+## Validación con Node 24 y Node 22
+
+La raíz usa Node 24.12 o posterior de la línea 24. Para probar la misma versión
+del runtime de Functions, ten disponible Node 22.13 o posterior de la línea 22.
+Instala dependencias con el Node correspondiente a cada paquete. Ejecuta la
+validación desde la raíz con Node 24 activo y Java 21 disponible:
+
+```bash
+export OMP_FUNCTIONS_NODE=/ruta/a/node22/bin/node
+npm run quality:check
+```
+
+Para Playwright, instala Chromium con `npm exec -- playwright install chromium`
+y compila Functions con Node 22. Mantén Node 24 en el PATH para Expo y Playwright.
+Invoca la CLI de Firebase con el binario de Node 22 para que los workers de
+Functions también usen ese runtime:
+
+```bash
+"$OMP_FUNCTIONS_NODE" ./node_modules/.bin/firebase emulators:exec \
+  --only auth,firestore,functions --project demo-omp \
+  'npm exec -- playwright test -c e2e/playwright.config.ts --workers=1'
+```
+
+Si ya existe un archivo local de Functions, respétalo. El emulador puede
+solicitar el valor del parámetro de App Check al descubrir las funciones.
+Usa exclusivamente configuración de prueba en esta ejecución.
+
 ## Firestore Rules
 
 Comando:

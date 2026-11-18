@@ -1,6 +1,6 @@
 # Copilot Instructions For OMP
 
-Follow `AGENTS.md` in the repository root.
+Follow `AGENTS.md` in the repository root. Use the [OMP quality checks](skills/omp-quality-checks/SKILL.md) and the scoped workflows linked from `AGENTS.md`.
 
 OMP is built with Expo SDK 57, React 19, React Native 0.86, TypeScript, Expo Router, NativeWind, Firebase Auth, Firestore, Cloud Functions, Expo Notifications, and React Native Web.
 

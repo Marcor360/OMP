@@ -1,7 +1,7 @@
 {
   "name": "omp",
   "main": "expo-router/entry",
-  "version": "1.54.3",
+  "version": "1.54.4",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -22,6 +22,7 @@
     "check:rules": "node build-rules.js --check",
     "test:rules": "npm run build:rules && firebase emulators:exec --only firestore --project demo-omp \"jest --config jest.rules.config.js --runInBand --detectOpenHandles --forceExit\"",
     "check:indexes": "node scripts/check-collection-group-indexes.mjs",
+    "quality:check": "bash scripts/quality-checks.sh",
     "validate": "npm run check:indexes && npm run lint && npm run typecheck && npm test -- --runInBand && npm --prefix functions run lint && npm --prefix functions run build && npm --prefix functions test -- --runInBand && npx expo-doctor",
     "deploy:rules": "npm run build:rules && node scripts/firebase-deploy-retry.js --only firestore:rules,firestore:indexes",
     "deploy:functions": "node scripts/firebase-deploy-retry.js --only functions",
@@ -47,7 +48,7 @@
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
     "expo-web-browser": "~57.0.3",
-    "firebase": "^12.19.0",
+    "firebase": "^13.4.0",
     "nativewind": "^4.2.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -63,7 +64,7 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
-    "@firebase/rules-unit-testing": "^5.0.2",
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@playwright/test": "^1.63.0",
     "@react-native/jest-preset": "0.86.3",
     "@testing-library/react-native": "^14.0.1",
@@ -87,5 +88,8 @@
   "overrides": {
     "brace-expansion@<1.1.18": "^1.1.18",
     "postcss@<8.5.25": "^8.5.25"
+  },
+  "engines": {
+    "node": "^24.12.0"
   }
 }

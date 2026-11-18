@@ -9,6 +9,7 @@ import {
   getDocsFromServer,
 } from 'firebase/firestore';
 
+import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import { logFirestoreRead } from '@/src/services/firebase/firestore-debug';
 import {
   getPersistentCachedValue,
@@ -227,6 +228,7 @@ export const getQueryCacheFirst = async <T>(
       fallbackMemoryValue !== undefined && !isValueIncomplete(fallbackMemoryValue, isIncomplete)
         ? fallbackMemoryValue
         : CACHE_MISS;
+    let emptyLocalValue: T | CacheMiss = CACHE_MISS;
 
     if (persist) {
       try {
@@ -253,11 +255,16 @@ export const getQueryCacheFirst = async <T>(
         logFirestoreRead(cacheKey, 'cache');
 
         if (!isValueIncomplete(localValue, isIncomplete)) {
-          cachedValue = localValue;
-          await setCacheLayers(memoryCacheKey, localValue, persist);
+          // An empty SDK cache can mean the query has never reached the server.
+          if (cacheSnapshot.empty) {
+            emptyLocalValue = localValue;
+          } else {
+            cachedValue = localValue;
+            await setCacheLayers(memoryCacheKey, localValue, persist);
 
-          if (!forceServer) {
-            return localValue;
+            if (!forceServer) {
+              return localValue;
+            }
           }
         }
       } catch {
@@ -275,6 +282,14 @@ export const getQueryCacheFirst = async <T>(
       if (cachedValue !== CACHE_MISS) {
         logFirestoreRead(cacheKey, 'server-fallback');
         return cachedValue;
+      }
+
+      if (
+        emptyLocalValue !== CACHE_MISS &&
+        (isFirebaseErrorCode(error, 'unavailable') || isFirebaseErrorCode(error, 'deadline-exceeded'))
+      ) {
+        logFirestoreRead(cacheKey, 'server-fallback');
+        return emptyLocalValue;
       }
 
       throw error;

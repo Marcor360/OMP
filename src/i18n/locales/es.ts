@@ -26,6 +26,8 @@ export const es = {
     permissionA11yLabel: '{{action}} permiso de {{title}}',
     datePickerDefaultTitle: 'Seleccionar fecha',
     datePickerNoSelection: 'Selecciona una fecha',
+    datePickerPreviousMonth: 'Mes anterior',
+    datePickerNextMonth: 'Mes siguiente',
     removePersonA11y: 'Quitar a {{name}}',
   },
   'forms.user.createTitle': 'Nuevo usuario',

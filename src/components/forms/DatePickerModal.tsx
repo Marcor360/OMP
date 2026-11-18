@@ -171,8 +171,8 @@ export function DatePickerModal({
       onRequestClose={onClose}
       onShow={resetVisibleMonth}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.panel}>
+      <Pressable style={styles.overlay} onPress={onClose} accessible={false} focusable={false}>
+        <Pressable style={styles.panel} accessible={false} focusable={false}>
           <View style={styles.topRow}>
             <View>
               <ThemedText style={styles.title}>{resolvedTitle}</ThemedText>
@@ -180,7 +180,13 @@ export function DatePickerModal({
                 {formatSelectedDate(selectedDate, i18n)}
               </ThemedText>
             </View>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={i18n?.t('common.close') ?? 'Cerrar'}
+              hitSlop={6}
+            >
               <Ionicons name="close" size={20} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
@@ -190,6 +196,10 @@ export function DatePickerModal({
               style={[styles.navButton, !canGoPreviousMonth && styles.navButtonDisabled]}
               onPress={() => moveMonth(-1)}
               disabled={!canGoPreviousMonth}
+              accessibilityRole="button"
+              accessibilityLabel={i18n?.t('common.datePickerPreviousMonth') ?? 'Mes anterior'}
+              accessibilityState={{ disabled: !canGoPreviousMonth }}
+              hitSlop={6}
             >
               <Ionicons name="chevron-back" size={19} color={colors.textPrimary} />
             </TouchableOpacity>
@@ -198,6 +208,10 @@ export function DatePickerModal({
               style={[styles.navButton, !canGoNextMonth && styles.navButtonDisabled]}
               onPress={() => moveMonth(1)}
               disabled={!canGoNextMonth}
+              accessibilityRole="button"
+              accessibilityLabel={i18n?.t('common.datePickerNextMonth') ?? 'Mes siguiente'}
+              accessibilityState={{ disabled: !canGoNextMonth }}
+              hitSlop={6}
             >
               <Ionicons name="chevron-forward" size={19} color={colors.textPrimary} />
             </TouchableOpacity>
@@ -229,6 +243,11 @@ export function DatePickerModal({
                     onPress={() => handleSelect(cell.date)}
                     activeOpacity={disabled ? 1 : 0.75}
                     disabled={disabled}
+                    accessibilityRole="button"
+                    accessibilityLabel={formatCalendarDate(parseDateInput(cell.date), {
+                      dateStyle: 'full',
+                    }, i18n)}
+                    accessibilityState={{ selected, disabled }}
                   >
                     <ThemedText
                       style={[
