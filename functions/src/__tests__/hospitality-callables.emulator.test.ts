@@ -6,6 +6,7 @@ import {
   saveHospitalityScheduleDraftByManager,
   substituteHospitalityAssignmentByManager,
 } from '../planning-schedules.js';
+import { formatDateKey } from '../planning-schedules/date-utils.js';
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 const congregationId = `hospitality-emulator-${Date.now().toString(36)}`;
@@ -19,8 +20,11 @@ const replacementTwoId = userId('replacement-2');
 const db = getFirestore();
 const congregationRef = db.collection('congregations').doc(congregationId);
 const meetingDate = '2026-10-03';
-const draftPublishDate = '2026-10-10';
-const draftArchiveDate = '2026-10-17';
+const upcomingSaturday = new Date();
+upcomingSaturday.setDate(upcomingSaturday.getDate() + ((6 - upcomingSaturday.getDay() + 7) % 7 || 7));
+const draftPublishDate = formatDateKey(upcomingSaturday);
+upcomingSaturday.setDate(upcomingSaturday.getDate() + 7);
+const draftArchiveDate = formatDateKey(upcomingSaturday);
 const legacyChairDate = '2026-10-24';
 const meetingTimestamp = Timestamp.fromDate(new Date(`${meetingDate}T12:00:00.000Z`));
 jest.setTimeout(30_000);
@@ -32,12 +36,12 @@ type CallableLike = {
 const invoke = (callable: unknown, uid: string, data: Record<string, unknown>) =>
   (callable as CallableLike).run({ data, auth: { uid, token: { uid } } });
 
-const scheduleData = (scheduleId: string) => ({
+const scheduleData = (scheduleId: string, date = meetingDate) => ({
   congregationId,
   title: scheduleId,
-  startDate: meetingDate,
-  endDate: meetingDate,
-  monthIds: ['2026-10'],
+  startDate: date,
+  endDate: date,
+  monthIds: [date.slice(0, 7)],
   totalMeetings: 1,
   status: 'published',
   createdBy: 'manager',
@@ -114,9 +118,9 @@ describeEmulator('hospitality callables with Firestore emulator', () => {
     ]);
     await Promise.all(scheduleIds.map((id) => congregationRef.collection('hospitalitySchedules').doc(id).set(scheduleData(id))));
     await Promise.all([
-      congregationRef.collection('hospitalitySchedules').doc('draft-publish').set({ ...scheduleData('draft-publish'), startDate: draftPublishDate, endDate: draftPublishDate, status: 'draft' }),
-      congregationRef.collection('hospitalitySchedules').doc('draft-archive').set({ ...scheduleData('draft-archive'), startDate: draftArchiveDate, endDate: draftArchiveDate, status: 'draft' }),
-      congregationRef.collection('hospitalitySchedules').doc('legacy-chair').set({ ...scheduleData('legacy-chair'), startDate: legacyChairDate, endDate: legacyChairDate }),
+      congregationRef.collection('hospitalitySchedules').doc('draft-publish').set({ ...scheduleData('draft-publish', draftPublishDate), status: 'draft' }),
+      congregationRef.collection('hospitalitySchedules').doc('draft-archive').set({ ...scheduleData('draft-archive', draftArchiveDate), status: 'draft' }),
+      congregationRef.collection('hospitalitySchedules').doc('legacy-chair').set({ ...scheduleData('legacy-chair', legacyChairDate) }),
     ]);
     await Promise.all([
       congregationRef.collection('hospitalitySchedules').doc('race-a').collection('items').doc('a-item')

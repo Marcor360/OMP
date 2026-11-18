@@ -41,7 +41,7 @@ export const setSessionCachedValue = <T>(key: string, value: T): void => {
 
 export const clearSessionCachedValue = (key: string): void => {
   valueCache.delete(key);
-  inFlightCache.delete(key);
+  inFlightCache.delete(`request:${key}`);
   void clearPersistentCachedValue(key);
 };
 
@@ -55,7 +55,7 @@ export const clearSessionCacheByPrefix = (prefix: string): void => {
   });
 
   inFlightCache.forEach((_, key) => {
-    if (key.startsWith(prefix)) {
+    if (key.startsWith(`request:${prefix}`)) {
       inFlightCache.delete(key);
     }
   });
@@ -78,10 +78,12 @@ export const runSingleFlight = <T>(
   if (existing) return existing as Promise<T>;
 
   const request = factory().finally(() => {
-    inFlightCache.delete(key);
+    if (inFlightCache.get(key) === request) {
+      inFlightCache.delete(key);
+    }
   });
 
-  inFlightCache.set(key, request as Promise<unknown>);
+  inFlightCache.set(key, request);
   return request;
 };
 
