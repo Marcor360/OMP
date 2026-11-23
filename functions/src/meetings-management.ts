@@ -1,6 +1,7 @@
-import { DocumentReference, FieldValue, GeoPoint, Timestamp } from 'firebase-admin/firestore';
+import { createHash } from 'node:crypto';
+import { DocumentReference, FieldValue, GeoPoint, Timestamp, type Transaction } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 
 import { adminDb } from './config/firebaseAdmin.js';
 import {
@@ -14,6 +15,7 @@ import {
   meetingAssignmentDeletionOperationId,
   meetingDeletionOperationId,
 } from './modules/meetings/meeting-deletion.js';
+import { assertMeetingVersion, updateMeetingFromSnapshot } from './modules/meetings/meeting-version.js';
 import { assertAdministrativeBillingAccess } from './users/authorization.js';
 import { parsePermissions } from './users/parsers.js';
 import { hasPermission } from './shared/permissions.js';
@@ -50,6 +52,7 @@ type UpdateMeetingByManagerPayload = {
   meetingId?: unknown;
   meetingData?: unknown;
   scope?: unknown;
+  expectedUpdatedAt?: unknown;
 };
 
 type DeleteMeetingByManagerPayload = {
@@ -72,6 +75,8 @@ type CreateMeetingAssignmentPayload = {
   meetingId?: unknown;
   assignmentData?: unknown;
   assignedByName?: unknown;
+  requestId?: unknown;
+  expectedActorUid?: unknown;
 };
 
 type UpdateMeetingAssignmentPayload = {
@@ -88,11 +93,27 @@ type DeleteMeetingAssignmentPayload = {
 };
 
 const ASSIGNMENT_PROTECTED_FIELDS = new Set([
-  'createdBy', 'createdAt', 'updatedBy', 'updatedAt', 'congregationId', 'meetingId',
+  'createdBy', 'createdAt', 'updatedBy', 'updatedAt', 'congregationId', 'meetingId', 'creationFingerprint',
 ]);
 
 const sanitizeAssignmentInput = (data: Record<string, unknown>): Record<string, unknown> =>
-  Object.fromEntries(Object.entries(data).filter(([key]) => !ASSIGNMENT_PROTECTED_FIELDS.has(key)));
+  Object.fromEntries(Object.entries(data).filter(([key]) => !ASSIGNMENT_PROTECTED_FIELDS.has(key.split('.')[0])));
+
+const assignmentCreationFingerprint = (data: Record<string, unknown>, assignedByName: string) =>
+  createHash('sha256').update(JSON.stringify({ data, assignedByName }, (_key, value: unknown) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+    return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)));
+  })).digest('hex');
+
+const parseAssignmentRequestId = (value: unknown): string => {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9]{20}$/.test(value)) {
+    throw new HttpsError('invalid-argument', 'El identificador de la solicitud no es válido.');
+  }
+  return value;
+};
+
+const assignmentRequestKey = (uid: string, requestId: string): string =>
+  createHash('sha256').update(JSON.stringify([uid, requestId])).digest('hex');
 
 const normalizeText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -392,7 +413,7 @@ const buildMeetingSearchableText = (params: {
 
 const parseCongregationId = (value: unknown): string => {
   const congregationId = normalizeText(value);
-  if (!congregationId) {
+  if (!congregationId || congregationId.includes('/')) {
     throw new HttpsError('invalid-argument', 'congregationId es obligatorio.');
   }
 
@@ -401,7 +422,7 @@ const parseCongregationId = (value: unknown): string => {
 
 const parseMeetingId = (value: unknown): string => {
   const meetingId = normalizeText(value);
-  if (!meetingId) {
+  if (!meetingId || meetingId.includes('/')) {
     throw new HttpsError('invalid-argument', 'meetingId es obligatorio.');
   }
 
@@ -510,20 +531,21 @@ const assertNoOutgoingTalkConflictForUser = async (params: {
   congregationId: string;
   userId?: string;
   assignmentDate?: Timestamp;
+  transaction?: Transaction;
 }) => {
   const userId = normalizeText(params.userId);
   if (!userId || userId.startsWith('manual:') || !params.assignmentDate) return;
 
   const weekStartDate = getWeekStartKeyFromTimestamp(params.assignmentDate);
-  const snapshot = await adminDb
+  const query = adminDb
     .collection('congregations')
     .doc(params.congregationId)
     .collection('outgoingTalks')
     .where('speakerUserId', '==', userId)
     .where('status', '==', 'scheduled')
     .where('weekStartDate', '==', weekStartDate)
-    .limit(1)
-    .get();
+    .limit(1);
+  const snapshot = await (params.transaction ? params.transaction.get(query) : query.get());
 
   if (!snapshot.empty) {
     const data = snapshot.docs[0].data() as Record<string, unknown>;
@@ -814,6 +836,7 @@ const buildMeetingWritePayload = (params: {
   if (params.isCreate) {
     return {
       ...basePayload,
+      cleaningSyncPending: basePayload.cleaningAssignmentMode !== 'none',
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     };
@@ -948,6 +971,7 @@ export const updateMeetingByManager = onCall(
       throw new HttpsError('not-found', 'Reunion no encontrada.');
     }
 
+    assertMeetingVersion(meetingSnap, payload.expectedUpdatedAt);
     const currentMeetingData = meetingSnap.data() as Record<string, unknown>;
 
     if (scope === 'assignments') {
@@ -975,7 +999,7 @@ export const updateMeetingByManager = onCall(
         meetingData: assignmentMeetingData,
       });
 
-      await meetingRef.update({
+      await updateMeetingFromSnapshot(meetingSnap, {
         sections: toFirestoreSectionsPayload(sections),
         assignedUserIds: buildAssignedUserIdsFromSections(sections),
         searchableText: buildMeetingSearchableText({
@@ -1036,20 +1060,31 @@ export const updateMeetingByManager = onCall(
       isCreate: false,
     });
 
-    await meetingRef.update(updatePayload);
+    const cleaningChanged = ['cleaningAssignmentMode', 'cleaningGroupIds', 'cleaningGroupNames']
+      .some((key) => JSON.stringify(currentMeetingData[key]) !== JSON.stringify(updatePayload[key]));
+    const hasCleaningPlan = updatePayload.cleaningAssignmentMode !== 'none';
+    const cleaningDetailsChanged = ['title', 'meetingDate'].some(
+      (key) => JSON.stringify(currentMeetingData[key]) !== JSON.stringify(updatePayload[key])
+    );
+    await updateMeetingFromSnapshot(meetingSnap, {
+      ...updatePayload,
+      cleaningSyncPending: currentMeetingData.cleaningSyncPending === true ||
+        cleaningChanged || (hasCleaningPlan && cleaningDetailsChanged),
+    });
 
     return { ok: true };
   }
 );
 
-export const syncMeetingCleaningAssignmentsByManager = onCall(
-  { region: 'us-central1' },
-  async (request): Promise<{ ok: true }> => {
+const syncMeetingCleaning = async (
+  request: CallableRequest<SyncMeetingCleaningAssignmentsPayload>,
+  useSavedPlan: boolean,
+): Promise<{ ok: true }> => {
     if (!request.auth?.uid) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
     }
 
-    const payload = request.data as SyncMeetingCleaningAssignmentsPayload;
+    const payload = request.data;
     const congregationId = parseCongregationId(payload.congregationId);
     const meetingId = parseMeetingId(payload.meetingId);
     const requesterUid = request.auth.uid;
@@ -1063,89 +1098,102 @@ export const syncMeetingCleaningAssignmentsByManager = onCall(
       .doc(congregationId)
       .collection('meetings')
       .doc(meetingId);
-    const meetingSnap = await meetingRef.get();
-    if (!meetingSnap.exists) {
-      throw new HttpsError('not-found', 'Reunion no encontrada.');
-    }
-
-    const mode = toCleaningMode(payload.mode);
-    const groups = mode === 'none' ? [] : toCleaningGroups(payload.groups);
-    const meetingData = (meetingSnap.data() ?? {}) as Record<string, unknown>;
-    const meetingDate = toTimestamp(payload.meetingDate) ?? resolveMeetingDate(meetingData);
-    const meetingTitle =
-      normalizeText(payload.meetingTitle) ??
-      normalizeText(meetingData.title) ??
-      'Reunion';
-    const assignedByName =
-      normalizeText(payload.assignedByName) ??
-      requester.displayName ??
-      requester.email ??
-      'Usuario';
-
-    const assignmentsRef = meetingRef.collection('assignments');
-    const existingSnap = await assignmentsRef
-      .where('source', '==', 'meeting-cleaning')
-      .get();
-    const existingIds = new Set(existingSnap.docs.map((doc) => doc.id));
-    const targetIds = new Set(groups.map((group) => `cleaning-${group.id}`));
-    const batch = adminDb.batch();
-
-    existingSnap.docs.forEach((docSnap) => {
-      if (!targetIds.has(docSnap.id)) {
-        batch.delete(docSnap.ref);
+    await adminDb.runTransaction(async (transaction) => {
+      const meetingSnap = await transaction.get(meetingRef);
+      if (!meetingSnap.exists) {
+        throw new HttpsError('not-found', 'Reunion no encontrada.');
       }
-    });
 
-    groups.forEach((group) => {
-      const assignmentId = `cleaning-${group.id}`;
-      const ref = assignmentsRef.doc(assignmentId);
-      const isExisting = existingIds.has(assignmentId);
+      const meetingData = meetingSnap.data() ?? {};
+      if (useSavedPlan && meetingData.cleaningSyncPending !== true) return;
 
-      batch.set(
-        ref,
+      const mode = toCleaningMode(useSavedPlan ? meetingData.cleaningAssignmentMode : payload.mode);
+      const groupIds = toStringArray(meetingData.cleaningGroupIds);
+      const groupNames = toStringArray(meetingData.cleaningGroupNames);
+      const groups = mode === 'none' ? [] : toCleaningGroups(useSavedPlan
+        ? groupIds.map((id, index) => ({ id, name: groupNames[index] ?? id }))
+        : payload.groups);
+      const meetingDate = (useSavedPlan ? undefined : toTimestamp(payload.meetingDate)) ?? resolveMeetingDate(meetingData);
+      const meetingTitle = (useSavedPlan ? undefined : normalizeText(payload.meetingTitle)) ??
+        normalizeText(meetingData.title) ?? 'Reunion';
+      const assignedByName =
+        normalizeText(payload.assignedByName) ??
+        requester.displayName ??
+        requester.email ??
+        'Usuario';
+
+      const assignmentsRef = meetingRef.collection('assignments');
+      const existingSnap = await transaction.get(assignmentsRef.where('source', '==', 'meeting-cleaning'));
+      const existingIds = new Set(existingSnap.docs.map((doc) => doc.id));
+      const targetIds = new Set(groups.map((group) => `cleaning-${group.id}`));
+
+      existingSnap.docs.forEach((docSnap) => {
+        if (!targetIds.has(docSnap.id)) {
+          transaction.delete(docSnap.ref);
+        }
+      });
+
+      groups.forEach((group) => {
+        const assignmentId = `cleaning-${group.id}`;
+        const ref = assignmentsRef.doc(assignmentId);
+        const isExisting = existingIds.has(assignmentId);
+
+        transaction.set(
+          ref,
+          sanitizeForFirestore({
+            congregationId,
+            meetingId,
+            source: 'meeting-cleaning',
+            category: 'cleaning',
+            type: 'cleaning',
+            title: mode === 'all' ? `Limpieza general - ${group.name}` : `Limpieza - ${group.name}`,
+            description: meetingTitle,
+            notes: meetingTitle,
+            priority: 'medium',
+            cleaningGroupId: group.id,
+            cleaningGroupName: group.name,
+            assignedToGroupId: group.id,
+            assignedToName: group.name,
+            assignedByUid: requesterUid,
+            assignedByName,
+            updatedBy: requesterUid,
+            dueDate: meetingDate,
+            date: meetingDate,
+            ...(isExisting ? {} : {
+              createdBy: requesterUid,
+              createdAt: FieldValue.serverTimestamp(),
+              status: 'pending',
+              assignedUsers: [],
+            }),
+            updatedAt: FieldValue.serverTimestamp(),
+          }) as Record<string, unknown>,
+          { merge: true }
+        );
+      });
+
+      transaction.update(
+        meetingRef,
         sanitizeForFirestore({
-          congregationId,
-          meetingId,
-          source: 'meeting-cleaning',
-          category: 'cleaning',
-          type: 'cleaning',
-          title: mode === 'all' ? `Limpieza general - ${group.name}` : `Limpieza - ${group.name}`,
-          description: meetingTitle,
-          notes: meetingTitle,
-          priority: 'medium',
-          cleaningGroupId: group.id,
-          cleaningGroupName: group.name,
-          assignedToGroupId: group.id,
-          assignedToName: group.name,
-          assignedByUid: requesterUid,
-          assignedByName,
-          createdBy: requesterUid,
-          updatedBy: requesterUid,
-          dueDate: meetingDate,
-          date: meetingDate,
-          status: 'pending',
-          assignedUsers: [],
-          ...(isExisting ? {} : { createdAt: FieldValue.serverTimestamp() }),
+          cleaningAssignmentMode: mode,
+          cleaningSyncPending: false,
+          cleaningGroupIds: groups.map((group) => group.id),
+          cleaningGroupNames: groups.map((group) => group.name),
           updatedAt: FieldValue.serverTimestamp(),
-        }) as Record<string, unknown>,
-        { merge: true }
+          updatedBy: requesterUid,
+        }) as Record<string, unknown>
       );
     });
-
-    batch.update(
-      meetingRef,
-      sanitizeForFirestore({
-        cleaningAssignmentMode: mode,
-        cleaningGroupIds: groups.map((group) => group.id),
-        cleaningGroupNames: groups.map((group) => group.name),
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: requesterUid,
-      }) as Record<string, unknown>
-    );
-
-    await batch.commit();
     return { ok: true };
-  }
+};
+
+export const syncMeetingCleaningAssignmentsByManager = onCall(
+  { region: 'us-central1' },
+  (request: CallableRequest<SyncMeetingCleaningAssignmentsPayload>) => syncMeetingCleaning(request, false)
+);
+
+export const retryMeetingCleaningSync = onCall(
+  { region: 'us-central1' },
+  (request: CallableRequest<SyncMeetingCleaningAssignmentsPayload>) => syncMeetingCleaning(request, true)
 );
 
 export const createMeetingAssignmentByManager = onCall(
@@ -1156,49 +1204,151 @@ export const createMeetingAssignmentByManager = onCall(
     }
 
     const payload = request.data as CreateMeetingAssignmentPayload;
+    if (payload.expectedActorUid !== undefined && payload.expectedActorUid !== request.auth.uid) {
+      throw new HttpsError('permission-denied', 'La cuenta activa cambió.');
+    }
     const congregationId = parseCongregationId(payload.congregationId);
     const meetingId = parseMeetingId(payload.meetingId);
     const assignmentData = sanitizeAssignmentInput(parseAssignmentData(payload.assignmentData));
-    const requester = await getRequesterProfile(request.auth.uid);
+    const uid = request.auth.uid;
+    const requester = await getRequesterProfile(uid);
     await assertAdministrativeBillingAccess(congregationId);
     assertAssignmentsManager({ requester, congregationId });
 
     const meetingRef = adminDb.collection('congregations').doc(congregationId)
       .collection('meetings').doc(meetingId);
-    const meetingSnap = await meetingRef.get();
-    if (!meetingSnap.exists) {
-      throw new HttpsError('not-found', 'Reunion no encontrada.');
-    }
-    assertMeetingReadyForAssignments(meetingSnap.data() as Record<string, unknown>);
-
+    const assignments = meetingRef.collection('assignments');
+    const requestId = payload.requestId === undefined ? undefined : parseAssignmentRequestId(payload.requestId);
+    const assignedByName = normalizeText(payload.assignedByName) ?? requester.displayName ?? requester.email ?? 'Usuario';
+    const ref = requestId ? assignments.doc(assignmentRequestKey(uid, requestId)) : assignments.doc();
+    const receiptRef = requestId ? meetingRef.collection('assignmentRequests').doc(ref.id) : undefined;
+    const fingerprint = requestId ? assignmentCreationFingerprint(assignmentData, assignedByName) : undefined;
     const dueDate = toTimestamp(assignmentData.dueDate) ?? toTimestamp(assignmentData.date);
-    await assertNoOutgoingTalkConflictForUser({
-      congregationId,
-      userId: normalizeText(assignmentData.assignedToUid),
-      assignmentDate: dueDate,
+
+    await adminDb.runTransaction(async (transaction) => {
+      if (fingerprint && receiptRef) {
+        const receipt = await transaction.get(receiptRef);
+        const existing = receipt.exists ? receipt : await transaction.get(ref);
+        if (existing.exists) {
+          if (existing.get('createdBy') !== uid || existing.get('creationFingerprint') !== fingerprint) {
+            throw new HttpsError('already-exists', 'La solicitud ya guardó una asignación con otros datos.');
+          }
+          return;
+        }
+      }
+
+      const meetingSnap = await transaction.get(meetingRef);
+      if (!meetingSnap.exists) {
+        throw new HttpsError('not-found', 'Reunion no encontrada.');
+      }
+      assertMeetingReadyForAssignments(meetingSnap.data() as Record<string, unknown>);
+      await assertNoOutgoingTalkConflictForUser({
+        congregationId,
+        userId: normalizeText(assignmentData.assignedToUid),
+        assignmentDate: dueDate,
+        transaction,
+      });
+
+      transaction.create(ref, sanitizeForFirestore({
+        ...assignmentData,
+        congregationId,
+        meetingId,
+        assignedByUid: uid,
+        assignedByName,
+        status: normalizeText(assignmentData.status) ?? 'pending',
+        createdBy: uid,
+        updatedBy: uid,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        ...(fingerprint ? { creationFingerprint: fingerprint } : {}),
+      }) as Record<string, unknown>);
+      if (receiptRef && fingerprint) {
+        transaction.create(receiptRef, { createdBy: uid, creationFingerprint: fingerprint, createdAt: FieldValue.serverTimestamp() });
+      }
     });
 
-    const ref = await meetingRef.collection('assignments')
-      .add(
-        sanitizeForFirestore({
-          ...assignmentData,
-          congregationId,
-          meetingId,
-          assignedByUid: request.auth.uid,
-          assignedByName:
-            normalizeText(payload.assignedByName) ??
-            requester.displayName ??
-            requester.email ??
-            'Usuario',
-          status: normalizeText(assignmentData.status) ?? 'pending',
-          createdBy: request.auth.uid,
-          updatedBy: request.auth.uid,
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        }) as Record<string, unknown>
-      );
-
     return { assignmentId: ref.id };
+  }
+);
+
+export const getMeetingAssignmentSaveStatus = onCall(
+  { region: 'us-central1' },
+  async (request): Promise<{ saved: boolean; assignmentId?: string }> => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    const data = asRecord(request.data) ?? {};
+    if (data.expectedActorUid !== undefined && data.expectedActorUid !== uid) {
+      throw new HttpsError('permission-denied', 'La cuenta activa cambió.');
+    }
+    const congregationId = parseCongregationId(data.congregationId);
+    const meetingId = parseMeetingId(data.meetingId);
+    const requestId = parseAssignmentRequestId(data.requestId);
+    assertAssignmentsManager({ requester: await getRequesterProfile(uid), congregationId });
+    const meeting = adminDb.collection('congregations').doc(congregationId).collection('meetings').doc(meetingId);
+    const assignmentId = assignmentRequestKey(uid, requestId);
+    const receipt = await meeting.collection('assignmentRequests').doc(assignmentId).get();
+    const original = receipt.exists ? receipt : await meeting.collection('assignments').doc(assignmentId).get();
+    return original.get('createdBy') === uid ? { saved: true, assignmentId } : { saved: false };
+  }
+);
+
+export const getMeetingWorkReview = onCall(
+  { region: 'us-central1' },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
+    const data = asRecord(request.data) ?? {};
+    const congregationId = parseCongregationId(data.congregationId);
+    const meetingId = parseMeetingId(data.meetingId);
+    const requester = await getRequesterProfile(uid);
+    const reviewDuplicates = data.review === 'duplicates';
+    if (reviewDuplicates || isAssignmentsManager(requester)) {
+      assertAssignmentsManager({ requester, congregationId });
+    } else {
+      assertMeetingManager({ requester, congregationId });
+    }
+
+    const meeting = adminDb.collection('congregations').doc(congregationId).collection('meetings').doc(meetingId);
+    const [logs, assignments] = await Promise.all([
+      reviewDuplicates ? null : meeting.collection('changeLogs').orderBy('createdAt', 'desc').limit(20).get(),
+      reviewDuplicates ? meeting.collection('assignments').limit(201).get() : null,
+    ]);
+    const matches = new Map<string, { id: string; title: string; target: string; day: string; status: string }[]>();
+    const comparable = (value: string) => value.normalize('NFD').toLowerCase()
+      .replace(/\p{M}/gu, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    for (const assignment of assignments?.docs.slice(0, 200) ?? []) {
+      const record = assignment.data();
+      const title = normalizeText(record.title);
+      const day = (toTimestamp(record.dueDate) ?? toTimestamp(record.date))?.toDate().toISOString().slice(0, 10);
+      const groupId = normalizeText(record.assignedToGroupId) ?? normalizeText(record.cleaningGroupId);
+      const personId = normalizeText(record.assignedToUid);
+      const people = Array.isArray(record.assignedUsers) ? record.assignedUsers : [];
+      const target = normalizeText(record.assignedToName) ?? normalizeText(record.cleaningGroupName) ??
+        people.map((person) => normalizeText(asRecord(person)?.name)).filter(Boolean).join(', ');
+      const identity = groupId ? ['group', groupId] : personId && !personId.startsWith('manual:') ? ['person', personId] :
+        ['name', comparable(target)];
+      if (!title || !comparable(title) || !day || !identity[1] || record.status === 'cancelled') continue;
+      const key = JSON.stringify([comparable(title), comparable(normalizeText(record.category) ?? ''), day, identity]);
+      const row = { id: assignment.id, title, target, day, status: normalizeText(record.status) ?? 'pending' };
+      const group = matches.get(key);
+      if (group) group.push(row);
+      else matches.set(key, [row]);
+    }
+
+    return {
+      history: (logs?.docs ?? []).map((log) => ({
+        id: log.id,
+        changedSections: log.get('changedSections'),
+        sectionsTruncated: log.get('sectionsTruncated') === true,
+        publicationChanged: log.get('publicationChanged') === true,
+        detailsChanged: log.get('detailsChanged') === true,
+        ownChange: log.get('changedBy') === uid,
+        createdAt: (log.get('createdAt') as Timestamp).toMillis(),
+      })),
+      duplicates: Array.from(matches.values()).filter((group) => group.length > 1),
+      assignmentsReviewed: Math.min(assignments?.size ?? 0, 200),
+      assignmentsTruncated: (assignments?.size ?? 0) > 200,
+    };
   }
 );
 

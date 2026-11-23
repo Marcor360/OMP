@@ -1,3 +1,4 @@
+import { invalidateMatchingPushToken, pushPreview } from './push-token-version.js';
 import { Expo, ExpoPushMessage, ExpoPushReceipt, ExpoPushTicket } from 'expo-server-sdk';
 import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
@@ -48,28 +49,6 @@ const getActivePushTokenDocs = async (
     .get();
 
   return snap.docs;
-};
-
-const deactivateTokenDoc = async (
-  userId: string,
-  tokenDocId: string,
-  token: string
-): Promise<void> => {
-  await adminDb
-    .collection('users')
-    .doc(userId)
-    .collection('pushTokens')
-    .doc(tokenDocId)
-    .set(
-      {
-        token,
-        isActive: false,
-        invalidatedAt: FieldValue.serverTimestamp(),
-        lastError: 'DeviceNotRegistered',
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
 };
 
 const isDeviceNotRegisteredReceipt = (receipt: ExpoPushReceipt): boolean =>
@@ -132,7 +111,7 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
 
     const tokenDocsByToken = new Map<
       string,
-      { userId: string; tokenDocId: string }
+      { userId: string; tokenDocId: string; version: Timestamp; locale: unknown }
     >();
     const tokenLookupFailedUsers: string[] = [];
 
@@ -151,6 +130,8 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
             tokenDocsByToken.set(token, {
               userId,
               tokenDocId: tokenDoc.id,
+              version: tokenDoc.updateTime,
+              locale: tokenDoc.get('locale'),
             });
           });
 
@@ -203,8 +184,7 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
     const messages: ExpoPushMessage[] = claimedTokens.map(
       (token) => ({
         to: token,
-        title,
-        body,
+        ...pushPreview(tokenDocsByToken.get(token)?.locale),
         sound: 'default',
         channelId: DEFAULT_CHANNEL_ID,
         data: {
@@ -245,11 +225,7 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
               const tokenDoc = tokenDocsByToken.get(tokenValue);
 
               if (tokenDoc?.tokenDocId) {
-                await deactivateTokenDoc(
-                  tokenDoc.userId,
-                  tokenDoc.tokenDocId,
-                  tokenValue
-                );
+                await invalidateMatchingPushToken(tokenDoc.userId, tokenDoc.tokenDocId, tokenDoc.version);
               }
               await dispatchRefsByToken.get(tokenValue)?.set({ status: 'permanent_error', leaseUntil: FieldValue.delete(), lastErrorClass: 'DeviceNotRegistered', updatedAt: FieldValue.serverTimestamp() }, { merge: true });
               return;
@@ -283,6 +259,7 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
                 await snapshot.ref.collection('pushReceipts').doc(ticket.id).set({
                   userId: tokenDoc.userId,
                   tokenDocId: tokenDoc.tokenDocId,
+                  tokenVersion: tokenDoc.version,
                   congregationId,
                   notificationId,
                   dispatchId: tokenDoc.tokenDocId,
@@ -304,7 +281,7 @@ export const sendExpoPushOnNotificationCreated = onDocumentCreated(
             const tokenValue = receiptToToken.get(receiptId);
             const tokenDoc = tokenValue ? tokenDocsByToken.get(tokenValue) : null;
             if (isDeviceNotRegisteredReceipt(receipt) && tokenValue && tokenDoc?.tokenDocId) {
-              await deactivateTokenDoc(tokenDoc.userId, tokenDoc.tokenDocId, tokenValue);
+              await invalidateMatchingPushToken(tokenDoc.userId, tokenDoc.tokenDocId, tokenDoc.version);
             }
             if (receipt.status === 'error' && !isPermanentExpoResult(receipt) && tokenDoc) {
               await snapshot.ref.collection('pushDispatches').doc(tokenDoc.tokenDocId).set({

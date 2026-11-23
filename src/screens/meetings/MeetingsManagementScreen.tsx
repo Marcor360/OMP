@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Timestamp } from 'firebase/firestore';
 
 import { MeetingCard } from '@/src/components/cards/MeetingCard';
 import { EmptyState } from '@/src/components/common/EmptyState';
@@ -12,7 +13,9 @@ import { ScreenContainer } from '@/src/components/layout/ScreenContainer';
 import { ThemedText } from '@/src/components/themed-text';
 import { useMeetingsManagementPermission } from '@/src/hooks/use-meetings-management-permission';
 import { useI18n } from '@/src/i18n/index';
+import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import { setMeetingPublicationStatus } from '@/src/services/meetings/meeting-publish-service';
+import { retryMeetingCleaningSync } from '@/src/services/meetings/manager-meetings-service';
 import { deleteMeeting, getAllMeetings } from '@/src/services/meetings/meetings-service';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { Meeting } from '@/src/types/meeting';
@@ -112,7 +115,7 @@ export function MeetingsManagementScreen() {
       items.push({
         kind: 'section',
         id: 'section-active',
-        title: 'Actuales y proximas',
+        title: t('meetings.management.upcoming'),
       });
       activeMeetings.forEach((meeting) => {
         items.push({ kind: 'meeting', id: meeting.id, meeting, isPast: false });
@@ -123,8 +126,8 @@ export function MeetingsManagementScreen() {
       items.push({
         kind: 'section',
         id: 'section-past',
-        title: 'Pasadas',
-        description: 'Se muestran apagadas y la limpieza automatica las borra despues de 6 meses.',
+        title: t('meetings.management.past'),
+        description: t('meetings.management.pastRetention'),
       });
       pastMeetings.forEach((meeting) => {
         items.push({ kind: 'meeting', id: meeting.id, meeting, isPast: true });
@@ -132,16 +135,30 @@ export function MeetingsManagementScreen() {
     }
 
     return items;
-  }, [filteredMeetings]);
+  }, [filteredMeetings, t]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!canManage) return;
     void loadMeetings(false);
-  }, [canManage, loadMeetings]);
+  }, [canManage, loadMeetings]));
 
   const onRefresh = async () => {
     setRefreshing(true);
     await loadMeetings(true);
+  };
+
+  const [retryingCleaning, setRetryingCleaning] = useState<string | null>(null);
+  const retryCleaning = async (meetingId: string) => {
+    if (!congregationId || retryingCleaning) return;
+    setRetryingCleaning(meetingId);
+    try {
+      await retryMeetingCleaningSync(congregationId, meetingId);
+      await onRefresh();
+    } catch (requestError) {
+      showAlert(t('meetings.cleaningSync.title'), formatFirestoreError(requestError));
+    } finally {
+      setRetryingCleaning(null);
+    }
   };
 
   const togglePublication = async (meeting: Meeting) => {
@@ -157,6 +174,12 @@ export function MeetingsManagementScreen() {
         congregationId,
         meetingId: meeting.id,
         publicationStatus: nextStatus,
+        ...(meeting.updatedAt instanceof Timestamp ? {
+          expectedUpdatedAt: {
+            seconds: meeting.updatedAt.seconds,
+            nanoseconds: meeting.updatedAt.nanoseconds,
+          },
+        } : {}),
       });
 
       if (!result.ok) {
@@ -172,7 +195,9 @@ export function MeetingsManagementScreen() {
       );
       await onRefresh();
     } catch (requestError) {
-      showAlert(t('common.error'), formatFirestoreError(requestError));
+      showAlert(t('common.error'), isFirebaseErrorCode(requestError, 'aborted')
+        ? t('meetings.management.alert.conflict')
+        : formatFirestoreError(requestError));
     }
   };
 
@@ -246,6 +271,8 @@ export function MeetingsManagementScreen() {
                   key={filterOption}
                   style={[styles.filterChip, publicationFilter === filterOption && styles.filterChipActive]}
                   onPress={() => setPublicationFilter(filterOption)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: publicationFilter === filterOption }}
                 >
                   <ThemedText style={[styles.filterChipText, publicationFilter === filterOption && styles.filterChipTextActive]}>
                     {filterOption === 'all'
@@ -278,6 +305,17 @@ export function MeetingsManagementScreen() {
           return (
             <View style={[styles.meetingWrap, item.isPast && styles.pastMeetingWrap]}>
               <MeetingCard meeting={meeting} muted={item.isPast} />
+              {meeting.cleaningSyncPending ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityState={{ busy: retryingCleaning === meeting.id, disabled: retryingCleaning !== null }}
+                  disabled={retryingCleaning !== null}
+                  style={styles.smallAction}
+                  onPress={() => void retryCleaning(meeting.id)}
+                >
+                  <ThemedText style={styles.smallActionText}>{t('meetings.cleaningSync.retry')}</ThemedText>
+                </TouchableOpacity>
+              ) : null}
               <View style={[styles.meetingActions, item.isPast && styles.pastMeetingActions]}>
               <TouchableOpacity style={styles.smallAction} onPress={() => router.push(`/(protected)/meetings/${meeting.id}` as never)}>
                 <Ionicons name="eye-outline" size={15} color={colors.textPrimary} />

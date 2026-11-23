@@ -1,6 +1,6 @@
 import { Stack, useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import { AppLockProvider, useAppLock } from '@/src/context/app-lock-context';
 import { useAuth } from '@/src/context/auth-context';
@@ -20,9 +20,28 @@ import { SystemAnnouncementGate } from '@/src/components/announcements/SystemAnn
 import { InactivityWarningModal } from '@/src/components/session/InactivityWarningModal';
 import { buildPathWithParams } from '@/src/utils/navigation/redirect';
 import { CleaningCacheProvider } from '@/src/modules/cleaning/context/CleaningCacheContext';
+import { reconcileAssignmentIntents } from '@/src/services/assignments/pending-assignment-service';
+import { canManageAssignments } from '@/src/utils/permissions/permissions';
 
-function ProtectedNotificationSetup() {
-  const { uid, congregationId, isSessionValid } = useUser();
+function ProtectedSessionSetup() {
+  const { uid, congregationId, isSessionValid, appUser } = useUser();
+  const canRecoverAssignments = isSessionValid && canManageAssignments(appUser);
+  useEffect(() => {
+    if (!uid || !congregationId || !canRecoverAssignments) return;
+
+    const reconcile = () => {
+      void reconcileAssignmentIntents({ uid, congregationId }).catch(() => undefined);
+    };
+    reconcile();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') reconcile();
+    });
+    if (Platform.OS === 'web') globalThis.addEventListener?.('online', reconcile);
+    return () => {
+      subscription.remove();
+      if (Platform.OS === 'web') globalThis.removeEventListener?.('online', reconcile);
+    };
+  }, [uid, congregationId, canRecoverAssignments]);
 
   useNotificationSetup({
     uid,
@@ -130,7 +149,7 @@ function ProtectedContent() {
 
   return (
     <>
-      <ProtectedNotificationSetup />
+      <ProtectedSessionSetup />
       <SystemAnnouncementGate />
       <InactivityWarningModal
         visible={showInactivityWarning}
@@ -156,6 +175,7 @@ function ProtectedContent() {
         <Stack.Screen name="assignments/outgoing-talks" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/hospitality-microphones" options={{ headerShown: false }} />
         <Stack.Screen name="assignments/readers" options={{ headerShown: false }} />
+        <Stack.Screen name="assignments/review" options={{ headerShown: false }} />
         <Stack.Screen name="events/create" options={{ headerShown: false }} />
         <Stack.Screen name="events/edit/[id]" options={{ headerShown: false }} />
         {/* Módulo de limpieza */}

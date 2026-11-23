@@ -51,13 +51,14 @@ const invalidateMeetingCache = (congregationId: string, id?: string): void => {
 };
 
 export const firestoreMeetingRepository: MeetingRepository = {
-  getById: async (congregationId: string, id: string): Promise<Meeting | null> => {
+  getById: async (congregationId: string, id: string, forceServer?: boolean): Promise<Meeting | null> => {
     return getDocumentCacheFirst<Meeting>({
       cacheKey: `meetings/${congregationId}/doc/${id}`,
       ref: meetingDocRef(congregationId, id),
       mapSnapshot: (snapshot) =>
         normalizeMeeting(snapshot.id, snapshot.data() as Record<string, unknown>),
       maxAgeMs: MEETING_DOC_CACHE_TTL_MS,
+      forceServer,
       persist: false,
     });
   },
@@ -180,7 +181,7 @@ export const firestoreMeetingRepository: MeetingRepository = {
     congregationId: string,
     id: string,
     payload: Record<string, unknown>,
-    _options?: { requiresManager?: boolean }
+    options?: { requiresManager?: boolean; expectedUpdatedAt?: Meeting['updatedAt'] }
   ): Promise<void> => {
     const updateViaFunction = async (): Promise<void> => {
       const managerPayload = { ...payload };
@@ -190,6 +191,7 @@ export const firestoreMeetingRepository: MeetingRepository = {
         congregationId,
         meetingId: id,
         meetingData: managerPayload,
+        expectedUpdatedAt: options?.expectedUpdatedAt,
       });
     };
 

@@ -27,6 +27,7 @@ type UpdateMeetingByManagerRequest = {
   meetingId: string;
   meetingData: Record<string, unknown>;
   scope?: 'meeting' | 'assignments';
+  expectedUpdatedAt?: { seconds: number; nanoseconds: number };
 };
 
 type DeleteMeetingByManagerRequest = {
@@ -219,6 +220,12 @@ export const updateMeetingByManager = async (
       meetingId: params.meetingId,
       meetingData: toCallableSafe(params.meetingData) as Record<string, unknown>,
       scope: params.scope,
+      ...(params.expectedUpdatedAt ? {
+        expectedUpdatedAt: {
+          seconds: params.expectedUpdatedAt.seconds,
+          nanoseconds: params.expectedUpdatedAt.nanoseconds,
+        },
+      } : {}),
     });
   } catch (error) {
     if (isFunctionUnavailable(error)) {
@@ -235,12 +242,14 @@ export const updateMeetingAssignmentsByManager = async (params: {
   congregationId: string;
   meetingId: string;
   sections: MeetingProgramSection[];
+  expectedUpdatedAt?: UpdateMeetingByManagerRequest['expectedUpdatedAt'];
 }): Promise<void> =>
   updateMeetingByManager({
     congregationId: params.congregationId,
     meetingId: params.meetingId,
     meetingData: { sections: params.sections },
     scope: 'assignments',
+    expectedUpdatedAt: params.expectedUpdatedAt,
   });
 
 export const deleteMeetingByManager = async (
@@ -294,4 +303,14 @@ export const syncMeetingCleaningAssignmentsByManager = async (
 
     throw error;
   }
+};
+
+export const retryMeetingCleaningSync = async (
+  congregationId: string,
+  meetingId: string,
+): Promise<void> => {
+  const callable = httpsCallable<{ congregationId: string; meetingId: string }, { ok: true }>(
+    functions, 'retryMeetingCleaningSync'
+  );
+  await callable({ congregationId, meetingId });
 };

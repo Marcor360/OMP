@@ -292,7 +292,8 @@ export const getPersistentCachedValue = async <T>(
 
 export const setPersistentCachedValue = async <T>(
   key: string,
-  value: T
+  value: T,
+  isCurrent?: () => boolean
 ): Promise<void> => {
   try {
     await initializePersistentCacheCycle();
@@ -313,6 +314,7 @@ export const setPersistentCachedValue = async <T>(
       return;
     }
 
+    if (isCurrent && !isCurrent()) return;
     await store.setItem(normalizedKey, serialized);
     await enforcePersistentCacheLimit();
   } catch (error) {

@@ -4,6 +4,10 @@ import { getQueryCacheFirst } from '@/src/services/repositories/firestore-cache-
 import { firestoreAssignmentRepository } from '@/src/services/repositories/firestore/firestore-assignment-repository';
 
 jest.mock('firebase/functions', () => ({ httpsCallable: jest.fn() }));
+jest.mock('@/src/services/assignments/pending-assignment-store', () => ({
+  forgetAssignmentIntent: jest.fn(),
+  rememberAssignmentIntent: jest.fn(),
+}));
 jest.mock('@/src/lib/firebase/app', () => ({ db: {}, functions: {} }));
 jest.mock('@/src/lib/firebase/refs', () => ({
   congregationMeetingsCollectionRef: jest.fn(),

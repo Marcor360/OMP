@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -7,10 +7,9 @@ import { ErrorState } from '@/src/components/common/ErrorState';
 import { StatCard } from '@/src/components/cards/StatCard';
 import { ThemedText } from '@/src/components/themed-text';
 import { usePreachingManagerReports } from '@/src/hooks/usePreachingManagerReports';
-import {
-  getMonthName,
-  shiftMonthId,
-} from '@/src/services/preaching-report.service';
+import { getCurrentMonthId, shiftMonthId } from '@/src/services/preaching-report.service';
+import { buildPreachingReportCsv } from '@/src/services/preaching-report-csv';
+import { downloadPreachingReport } from '@/src/services/preaching-report-download';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { MissingPreachingReportUser, PreachingReportSubmission } from '@/src/types/preaching-report.types';
 import { PRIVILEGE_LABELS, UserPrivileges } from '@/src/types/user';
@@ -25,7 +24,10 @@ interface PreachingManagerPanelProps {
 export function PreachingManagerPanel({ congregationId, enabled }: PreachingManagerPanelProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const { t } = useI18n();
+  const { t, formatDate } = useI18n();
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(false);
+  const exportInProgress = useRef(false);
 
   const formatPioneerType = (submission: PreachingReportSubmission): string => {
     if (submission.pioneerType === 'regular') return t('fieldService.managerPanel.pioneerRegular');
@@ -51,6 +53,7 @@ export function PreachingManagerPanel({ congregationId, enabled }: PreachingMana
     summary,
     loading,
     error,
+    ready,
     refresh,
   } = usePreachingManagerReports({ congregationId, enabled });
 
@@ -60,7 +63,43 @@ export function PreachingManagerPanel({ congregationId, enabled }: PreachingMana
     );
   }
 
-  if (error) return <ErrorState message={error} onRetry={refresh} />;
+  const monthlyName = formatDate(new Date(monthId + '-15T12:00:00'), { month: 'long', year: 'numeric' });
+  const exportCsv = async (mode: 'summary' | 'detail') => {
+    if (!ready || exportInProgress.current) return;
+    exportInProgress.current = true;
+    setExporting(true);
+    setExportError(false);
+    const rows = mode === 'summary' ? [
+      [t('reportExport.metric'), t('reportExport.value')],
+      [t('fieldService.managerPanel.selectedMonth'), monthId],
+      [t('fieldService.managerPanel.publishers'), summary.totalActivePublishers],
+      [t('fieldService.managerPanel.submitted'), summary.totalSubmitted],
+      [t('fieldService.managerPanel.missing'), summary.totalMissing],
+      [t('fieldService.managerPanel.hours'), summary.totalPioneerHours],
+      [t('fieldService.managerPanel.studies'), summary.totalBibleStudies],
+      [t('fieldService.managerPanel.courses'), summary.totalReturnVisits],
+    ] : [
+      [t('fieldService.managerPanel.selectedMonth'), t('reportExport.name'), t('reportExport.status'),
+        t('reportExport.participation'), t('fieldService.managerPanel.pioneerType'),
+        t('fieldService.managerPanel.hours'), t('fieldService.managerPanel.studies'), t('fieldService.managerPanel.courses')],
+      ...submissions.map((report) => [
+        monthId, report.userName, t('reportExport.received'),
+        t(report.participated ? 'fieldService.managerPanel.participated' : 'fieldService.managerPanel.notParticipated'),
+        formatPioneerType(report), report.hours, report.bibleStudies, report.returnVisits,
+      ]),
+      ...missingUsers.map((user) => [
+        monthId, user.displayName, t('reportExport.missing'), '', '', '', '', '',
+      ]),
+    ];
+    try {
+      await downloadPreachingReport(`preaching-${mode}-${monthId}.csv`, buildPreachingReportCsv(rows));
+    } catch {
+      setExportError(true);
+    } finally {
+      exportInProgress.current = false;
+      setExporting(false);
+    }
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -68,23 +107,42 @@ export function PreachingManagerPanel({ congregationId, enabled }: PreachingMana
         <TouchableOpacity
           style={styles.monthButton}
           onPress={() => setMonthId(shiftMonthId(monthId, -1))}
+          accessibilityRole="button"
+          accessibilityLabel={t('reportExport.previousMonth')}
           activeOpacity={0.8}
         >
           <Ionicons name="chevron-back" size={18} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.monthTitleWrap}>
           <ThemedText style={styles.monthLabel}>{t('fieldService.managerPanel.selectedMonth')}</ThemedText>
-          <ThemedText style={styles.monthTitle}>{getMonthName(monthId)}</ThemedText>
+          <ThemedText style={styles.monthTitle}>{monthlyName}</ThemedText>
         </View>
         <TouchableOpacity
           style={styles.monthButton}
           onPress={() => setMonthId(shiftMonthId(monthId, 1))}
+          disabled={monthId >= getCurrentMonthId()}
+          accessibilityRole="button"
+          accessibilityLabel={t('reportExport.nextMonth')}
           activeOpacity={0.8}
         >
           <Ionicons name="chevron-forward" size={18} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
+      {error ? <ErrorState message={error} onRetry={refresh} /> : null}
+      {ready ? (
+        <View style={[styles.statsGrid, { flexWrap: 'wrap' }]}>
+          {(['summary', 'detail', 'refresh'] as const).map((action) => (
+            <TouchableOpacity key={action} accessibilityRole="button"
+              disabled={exporting} style={styles.exportButton}
+              onPress={() => { if (action === 'refresh') void refresh(); else void exportCsv(action); }}
+            >
+              <ThemedText>{t(`reportExport.${action}`)}</ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+      {exportError ? <ThemedText accessibilityRole="alert">{t('reportExport.error')}</ThemedText> : null}
       {loading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator color={colors.primary} />
@@ -92,6 +150,7 @@ export function PreachingManagerPanel({ congregationId, enabled }: PreachingMana
         </View>
       ) : null}
 
+      {ready ? <>
       <View style={styles.statsGrid}>
         <StatCard title={t('fieldService.managerPanel.publishers')} value={summary.totalActivePublishers} icon="people-outline" color={colors.primary} />
         <StatCard title={t('fieldService.managerPanel.submitted')} value={summary.totalSubmitted} icon="checkmark-circle-outline" color={colors.success} />
@@ -151,6 +210,7 @@ export function PreachingManagerPanel({ congregationId, enabled }: PreachingMana
           ))}
         </View>
       )}
+      </> : null}
     </ScrollView>
   );
 }
@@ -201,6 +261,17 @@ const createStyles = (colors: AppColorSet) =>
       padding: 16,
       gap: 14,
       paddingBottom: 32,
+    },
+    exportButton: {
+      flexGrow: 1,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      backgroundColor: colors.surfaceRaised,
     },
     monthBar: {
       flexDirection: 'row',

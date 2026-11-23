@@ -1,6 +1,7 @@
 import {
   Timestamp,
   collectionGroup,
+  doc,
   type DocumentData,
   limit,
   onSnapshot,
@@ -14,6 +15,11 @@ import { httpsCallable } from 'firebase/functions';
 
 import { db, functions } from '@/src/lib/firebase/app';
 import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
+import {
+  forgetAssignmentIntent,
+  rememberAssignmentIntent,
+  type AssignmentSaveIntent,
+} from '@/src/services/assignments/pending-assignment-store';
 import {
   assignmentDocRef,
   congregationMeetingsCollectionRef,
@@ -215,24 +221,29 @@ type CreateCleaningAssignmentViaFunctionInput = CreateCleaningAssignmentDTO & {
   meetingId: string;
 };
 
+export const newAssignmentRequestId = (congregationId: string, meetingId: string): string =>
+  doc(meetingAssignmentsCollectionRef(congregationId, meetingId)).id;
+
+export const submitMeetingAssignment = async (
+  intent: Omit<AssignmentSaveIntent, 'requestId'> & { requestId?: string }
+): Promise<string> => {
+  const callable = httpsCallable<typeof intent, { assignmentId: string }>(
+    functions, 'createMeetingAssignmentByManager'
+  );
+  const { data } = await callable(intent);
+  invalidateAssignmentCache(intent.congregationId, intent.meetingId, data.assignmentId);
+  return data.assignmentId;
+};
+
 const createAssignmentViaFunction = async (
   congregationId: string,
   meetingId: string,
   data: CreateAssignmentDTO | CreateCleaningAssignmentViaFunctionInput,
   assignedByUid: string,
-  assignedByName: string
+  assignedByName: string,
+  requestId?: string
 ): Promise<string> => {
-  const callable = httpsCallable<
-    {
-      congregationId: string;
-      meetingId: string;
-      assignmentData: Record<string, unknown>;
-      assignedByName: string;
-    },
-    { assignmentId: string }
-  >(functions, 'createMeetingAssignmentByManager');
-
-  const result = await callable({
+  const intent = {
     congregationId,
     meetingId,
     assignmentData: toCallableSafe({
@@ -243,10 +254,15 @@ const createAssignmentViaFunction = async (
       status: 'pending' as AssignmentStatus,
     }) as Record<string, unknown>,
     assignedByName,
-  });
+    ...(requestId ? { requestId, expectedActorUid: assignedByUid } : {}),
+  };
+  if (!requestId) return submitMeetingAssignment(intent);
 
-  invalidateAssignmentCache(congregationId, meetingId, result.data.assignmentId);
-  return result.data.assignmentId;
+  await rememberAssignmentIntent(assignedByUid, { ...intent, requestId });
+  const assignmentId = await submitMeetingAssignment(intent);
+  // A local cleanup failure cannot turn an acknowledged server write into an error.
+  await forgetAssignmentIntent({ uid: assignedByUid, congregationId }, requestId).catch(() => undefined);
+  return assignmentId;
 };
 
 const updateAssignmentViaFunction = async (
@@ -449,10 +465,11 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     meetingId: string,
     data: CreateAssignmentDTO,
     assignedByUid: string,
-    assignedByName: string
+    assignedByName: string,
+    requestId?: string
   ): Promise<string> => {
     return createAssignmentViaFunction(
-      congregationId, meetingId, data, assignedByUid, assignedByName
+      congregationId, meetingId, data, assignedByUid, assignedByName, requestId
     );
   },
 
@@ -461,7 +478,8 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
     meetingId: string,
     data: CreateCleaningAssignmentDTO,
     assignedByUid: string,
-    assignedByName: string
+    assignedByName: string,
+    requestId?: string
   ): Promise<string> => {
     return createAssignmentViaFunction(
       congregationId,
@@ -474,7 +492,8 @@ export const firestoreAssignmentRepository: AssignmentRepository = {
         meetingId,
       },
       assignedByUid,
-      assignedByName
+      assignedByName,
+      requestId
     );
   },
 

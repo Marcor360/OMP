@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
-import { LogBox, Platform, Pressable, Text, View } from 'react-native';
+import { AppState, LogBox, Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '@/src/context/auth-context';
@@ -16,6 +16,8 @@ import { getAppColors } from '@/src/styles';
 import { useInitialPermissions } from '@/src/hooks/use-initial-permissions';
 import { useCacheControlCleanup } from '@/src/hooks/use-cache-control-cleanup';
 import { configureGlobalNotificationHandler } from '@/src/services/notifications/push-notifications.service';
+import { reconcilePushInstallationOwner, retryPushInstallationRevocations } from '@/src/services/notifications/push-installation-client';
+import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 import { initializePersistentCacheCycle } from '@/src/services/repositories/persistent-cache';
 import { buildPathWithParams, getSafeRedirectPath } from '@/src/utils/navigation/redirect';
 import { firebaseConfigMissingKeys, isFirebaseConfigValid } from '@/src/lib/firebase/app';
@@ -95,6 +97,25 @@ function RootLayoutNav() {
 
   useEffect(() => {
     configureGlobalNotificationHandler();
+  }, []);
+
+  const uid = user?.uid ?? null;
+  useEffect(() => {
+    if (!loading) void reconcilePushInstallationOwner(uid).catch(() => undefined);
+  }, [loading, uid]);
+
+  useEffect(() => {
+    if (!canUseRemotePushNotifications) return;
+    const retry = () => {
+      if (AppState.currentState === 'active') void retryPushInstallationRevocations().catch(() => undefined);
+    };
+    retry();
+    const subscription = AppState.addEventListener('change', retry);
+    const interval = setInterval(retry, 30_000);
+    return () => {
+      subscription.remove();
+      clearInterval(interval);
+    };
   }, []);
 
   // Controlled cleanup for temporary cache.

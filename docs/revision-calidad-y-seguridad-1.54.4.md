@@ -2,6 +2,8 @@
 
 Esta versión parte de `release/1.54.3` y reúne las correcciones del calendario, la caché de Firestore y la revalidación web. Incluye Firebase JS 13.4.0, Stripe 23.1.0 y los flujos de revisión para Copilot, Codex y Cursor. Android usa el código local `15404` e iOS el número local `1.54.4`. El entorno de verificación fue `demo-omp`.
 
+El [seguimiento del 19 de noviembre de 2026](seguimiento-node24-y-calidad-2026-11-19.md) recoge la migración a Node 24 y el avance de los pendientes de esta revisión. Las versiones y resultados de abajo corresponden a la entrega original de `1.54.4`.
+
 ## Integración de las cuatro referencias
 
 - **GitHub Awesome Copilot.** Se aplicaron la priorización de revisión, las pruebas Arrange–Act–Assert y el ejemplo de automatización del taller. OMP tiene su propia implementación de `quality-checks` sobre comandos y configuraciones reales. [Instrucciones QA](https://github.com/github/awesome-copilot/blob/74b98979877d209fb6277a9364f7b21e2f3fe222/instructions/qa-engineering-best-practices.instructions.md) · [Revisión genérica](https://github.com/github/awesome-copilot/blob/74b98979877d209fb6277a9364f7b21e2f3fe222/instructions/code-review-generic.instructions.md) · [Taller](https://awesome-copilot.github.com/learning-hub/copilot-workshops/app/5-agent-skills/)

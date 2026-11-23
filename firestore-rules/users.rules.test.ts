@@ -9,6 +9,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   Timestamp,
+  deleteDoc,
   doc,
   getDoc,
   setDoc,
@@ -194,6 +195,26 @@ describe('users rules', () => {
 });
 
 describe('push token rules', () => {
+  it('keeps managed registrations and installation metadata under server control', async () => {
+    const path = 'users/member/pushTokens/managed';
+    const data = {
+      token: 'ExpoPushToken[synthetic]', userId: 'member', congregationId: 'c1',
+      platform: 'android', deviceName: null, isActive: true, updatedAt: Timestamp.now(),
+    };
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, path), { ...data, serverManaged: true, locale: 'en' });
+      await setDoc(doc(db, 'pushInstallations/synthetic'), { uid: 'member' });
+    });
+    const db = authedDb('member');
+    await assertSucceeds(getDoc(doc(db, path)));
+    await assertFails(setDoc(doc(db, path), data));
+    await assertFails(deleteDoc(doc(db, path)));
+    await assertFails(setDoc(doc(db, 'users/member/pushTokens/forged'), { ...data, serverManaged: true }));
+    await assertFails(getDoc(doc(db, 'pushInstallations/synthetic')));
+    await assertFails(setDoc(doc(db, 'pushInstallationRevocations/synthetic'), { revoked: true }));
+  });
+
   it('allows only the authenticated user to write their push token document', async () => {
     const ownTokenRef = doc(authedDb('member'), 'users/member/pushTokens/token-1');
     const otherTokenRef = doc(authedDb('admin'), 'users/member/pushTokens/token-2');

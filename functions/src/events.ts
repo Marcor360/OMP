@@ -1,10 +1,11 @@
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { adminDb } from './config/firebaseAdmin.js';
+import { deleteNotificationPage } from './maintenance/delete-notification-page.js';
 import { buildNotificationUrl } from './modules/notifications/notification-routes.js';
 import { canManageEvents } from './shared/events-access.js';
 import type { EventsAvisosAction } from './shared/events-access.js';
@@ -617,38 +618,22 @@ export const notifyEventChanges = onDocumentWritten(
   }
 );
 
-const deleteQueryPage = async (
-  snapshot: FirebaseFirestore.QuerySnapshot
-): Promise<number> => {
-  if (snapshot.empty) return 0;
-
-  const batch = adminDb.batch();
-  snapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
-  await batch.commit();
-
-  return snapshot.size;
-};
-
 const deleteRelatedNotifications = async (
   congregationId: string,
   eventId: string
 ): Promise<number> => {
   let deleted = 0;
-
+  let cursor: QueryDocumentSnapshot | undefined;
+  const query = adminDb.collection('congregations').doc(congregationId)
+    .collection(NOTIFICATIONS_COLLECTION).where('eventId', '==', eventId).limit(PAGE_SIZE);
   while (true) {
-    const snap = await adminDb
-      .collection('congregations')
-      .doc(congregationId)
-      .collection(NOTIFICATIONS_COLLECTION)
-      .where('eventId', '==', eventId)
-      .limit(PAGE_SIZE)
-      .get();
-
-    if (snap.empty) break;
-    deleted += await deleteQueryPage(snap);
+    const snapshot = await (cursor ? query.startAfter(cursor) : query).get();
+    if (snapshot.empty) return deleted;
+    cursor = snapshot.docs[snapshot.docs.length - 1];
+    const result = await deleteNotificationPage(snapshot.docs);
+    deleted += result.deleted;
+    if (result.errors) logger.warn('Some event notifications remain pending cleanup', { eventId, errors: result.errors });
   }
-
-  return deleted;
 };
 
 export const scheduledEventsCleanup = onSchedule(
@@ -665,31 +650,32 @@ export const scheduledEventsCleanup = onSchedule(
     let deletedEvents = 0;
     let deletedNotifications = 0;
 
+    let cursor: QueryDocumentSnapshot | undefined;
     while (true) {
-      const snap = await adminDb
-        .collection(EVENTS_COLLECTION)
+      const query = adminDb.collection(EVENTS_COLLECTION)
         .where('deleteAt', '<=', now)
         .orderBy('deleteAt', 'asc')
-        .limit(PAGE_SIZE)
-        .get();
-
+        .limit(PAGE_SIZE);
+      const snap = await (cursor ? query.startAfter(cursor) : query).get();
       if (snap.empty) break;
+      cursor = snap.docs[snap.docs.length - 1];
 
       for (const docSnap of snap.docs) {
         const data = docSnap.data() as Record<string, unknown>;
         const congregationId = asNonEmptyString(data.congregationId);
-        if (!congregationId) {
-          logger.warn('Skipping event cleanup without congregationId', {
+        if (!congregationId || congregationId.includes('/')) {
+          logger.warn('Skipping event cleanup without valid congregationId', {
             eventId: docSnap.id,
           });
           continue;
         }
-        deletedNotifications += await deleteRelatedNotifications(
-          congregationId,
-          docSnap.id
-        );
-        await docSnap.ref.delete();
-        deletedEvents += 1;
+        try {
+          await docSnap.ref.delete({ lastUpdateTime: docSnap.updateTime });
+          deletedEvents += 1;
+          deletedNotifications += await deleteRelatedNotifications(congregationId, docSnap.id);
+        } catch (error) {
+          logger.warn('Event cleanup skipped or incomplete', { eventId: docSnap.id, error });
+        }
       }
     }
 

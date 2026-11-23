@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { getAssignments } from '@/src/modules/assignments/services/assignments.service';
+import {
+  getMeetingPanelAssignments,
+  listStandaloneAssignments,
+  mergePanelAssignments,
+} from '@/src/modules/assignments/services/assignments.service';
 import {
   Assignment,
   AssignmentFilters,
@@ -21,6 +25,16 @@ interface UseAssignmentsParams {
   cleaningGroupName?: string | null;
 }
 
+type AssignmentLoadResult = {
+  scope: string;
+  pending: boolean;
+  meetings?: Assignment[];
+  standalone?: Assignment[];
+  meetingsFailed?: boolean;
+  standaloneFailed?: boolean;
+  error?: string;
+};
+
 const EMPTY_SUMMARY: AssignmentSummary = {
   midweek: 0,
   weekend: 0,
@@ -35,10 +49,17 @@ export const useAssignments = ({
   cleaningGroupId,
   cleaningGroupName,
 }: UseAssignmentsParams) => {
-  const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<AssignmentLoadResult>();
+  const scope = JSON.stringify([uid, congregationId, filters.exactDate, filters.rangeStart, filters.rangeEnd]);
+  const current = result?.scope === scope ? result : undefined;
+  const allAssignments = useMemo(
+    () => current ? mergePanelAssignments(current.meetings ?? [], current.standalone ?? []) : [],
+    [current],
+  );
+  const loading = congregationId !== null && (!current || (!current.meetings && !current.standalone && current.pending));
+  const refreshing = Boolean(current?.pending && !loading);
+  const error = current && !current.meetings && !current.standalone ? current.error : undefined;
+  const partialError = Boolean(current?.error && (current.meetings || current.standalone));
 
   const boundsFilters = useMemo(
     () => ({
@@ -59,58 +80,52 @@ export const useAssignments = ({
     ]
   );
 
-  const loadingRef = useRef(false);
+  const inFlight = useRef<{ scope: string; request: Promise<void> } | null>(null);
 
-  const loadAssignments = useCallback(
-    async (forceServer = false) => {
-      // Evitar llamadas concurrentes
-      if (loadingRef.current) return;
-      loadingRef.current = true;
+  const load = useCallback((forceServer: boolean, retry?: { meetings?: boolean; standalone?: boolean }): Promise<void> => {
+    if (!congregationId) return Promise.resolve();
+    if (inFlight.current?.scope === scope) return inFlight.current.request;
 
-      if (!congregationId) {
-        setAllAssignments([]);
-        setError('No se encontro congregacion para cargar asignaciones.');
-        setLoading(false);
-        setRefreshing(false);
-        loadingRef.current = false;
-        return;
-      }
+    const update = (patch: Partial<AssignmentLoadResult>) => {
+      if (inFlight.current?.request !== request) return;
+      setResult((previous) => previous?.scope === scope ? { ...previous, ...patch } : previous);
+    };
+    setResult((previous) => previous?.scope === scope
+      ? { ...previous, pending: true, ...(retry ? {} : { error: undefined }) }
+      : { scope, pending: true });
 
-      if (!forceServer) {
-        setLoading(true);
-      }
+    const jobs: Promise<void>[] = [];
+    const run = (source: 'meetings' | 'standalone', query: () => Promise<Assignment[]>) => {
+      jobs.push(query().then(
+        (data) => update({ [source]: data, [`${source}Failed`]: false }),
+        (requestError: unknown) => update({ [`${source}Failed`]: true, error: formatFirestoreError(requestError) }),
+      ));
+    };
+    if (!retry || retry.meetings) {
+      run('meetings', () => getMeetingPanelAssignments({ congregationId, filters: boundsFilters, forceServer }));
+    }
+    if (!retry || retry.standalone) {
+      run('standalone', () => listStandaloneAssignments(congregationId, forceServer));
+    }
+    const request = Promise.all(jobs).then(() => {
+      if (inFlight.current?.request !== request) return;
+      inFlight.current = null;
+      setResult((previous) => {
+        if (previous?.scope !== scope) return previous;
+        return {
+          ...previous, pending: false,
+          error: previous.meetingsFailed || previous.standaloneFailed ? previous.error : undefined,
+        };
+      });
+    });
+    inFlight.current = { scope, request };
+    return request;
+  }, [boundsFilters, congregationId, scope]);
 
-      try {
-        const data = await getAssignments({
-          congregationId,
-          filters: boundsFilters,
-          forceServer,
-        });
-
-        setAllAssignments(data);
-        setError(null);
-      } catch (requestError) {
-        setAllAssignments([]);
-        setError(formatFirestoreError(requestError));
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-        loadingRef.current = false;
-      }
-    },
-    [boundsFilters, congregationId]
-  );
-
-  useEffect(() => {
-    void loadAssignments(true);
-  }, [loadAssignments]);
-
-  // Refresca asignaciones cuando el usuario regresa a esta tab o la app vuelve al primer plano.
-  const handleFocusRefresh = useCallback(() => {
-    void loadAssignments(true);
-  }, [loadAssignments]);
-
-  useRefreshOnFocus(handleFocusRefresh, true, {
+  const reload = useCallback((forceServer = true) => load(forceServer), [load]);
+  const retryFailed = () => load(true, { meetings: current?.meetingsFailed, standalone: current?.standaloneFailed });
+  const refreshOnFocus = useCallback(() => { void reload(); }, [reload]);
+  useRefreshOnFocus(refreshOnFocus, true, {
     refreshOnAppActive: false,
     skipInitialFocus: false,
   });
@@ -167,11 +182,6 @@ export const useAssignments = ({
     [filters, userAssignments]
   );
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadAssignments(true);
-  }, [loadAssignments]);
-
   return {
     assignments,
     allAssignments: userAssignments,
@@ -179,8 +189,10 @@ export const useAssignments = ({
     loading,
     refreshing,
     error,
-    onRefresh,
-    reload: loadAssignments,
+    partialError,
+    onRefresh: reload,
+    retryFailed,
+    reload,
   };
 };
 

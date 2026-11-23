@@ -11,7 +11,8 @@ export interface PreachingReportRepository {
   ): Promise<PreachingReportSubmissionRecord | null>;
   listMonthlySubmissions(
     congregationId: string,
-    monthId: string
+    monthId: string,
+    forceServer?: boolean
   ): Promise<PreachingReportSubmissionRecord[]>;
   upsertSubmission(
     congregationId: string,

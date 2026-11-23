@@ -19,6 +19,7 @@ import type {
 import { AppError } from '@/src/utils/errors/errors';
 
 export type { SubscribeToAssignmentsOptions };
+export { newAssignmentRequestId } from '@/src/services/repositories/firestore/firestore-assignment-repository';
 
 type AssignmentRepositoryWithSubscribeOptions = Omit<
   AssignmentRepository,
@@ -181,7 +182,8 @@ export const createAssignment = async (
   meetingId: string,
   data: CreateAssignmentDTO,
   assignedByUid: string,
-  assignedByName: string
+  assignedByName: string,
+  requestId?: string
 ): Promise<string> => {
   assertCreateAssignmentInput(congregationId, meetingId, data);
 
@@ -190,7 +192,8 @@ export const createAssignment = async (
     meetingId,
     data,
     assignedByUid,
-    assignedByName
+    assignedByName,
+    requestId
   );
 };
 
@@ -200,7 +203,8 @@ export const createCleaningGroupAssignment = async (
   meetingId: string,
   data: CreateCleaningAssignmentDTO,
   assignedByUid: string,
-  assignedByName: string
+  assignedByName: string,
+  requestId?: string
 ): Promise<string> => {
   assertCleaningAssignmentInput(congregationId, data);
   if (isBlank(meetingId)) {
@@ -212,7 +216,8 @@ export const createCleaningGroupAssignment = async (
     meetingId,
     data,
     assignedByUid,
-    assignedByName
+    assignedByName,
+    requestId
   );
 };
 

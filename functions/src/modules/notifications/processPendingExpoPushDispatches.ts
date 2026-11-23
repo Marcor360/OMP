@@ -1,3 +1,4 @@
+import { invalidateMatchingPushToken, pushPreview } from './push-token-version.js';
 import { Expo, type ExpoPushMessage, type ExpoPushTicket } from 'expo-server-sdk';
 import { FieldValue, Timestamp, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
@@ -121,7 +122,7 @@ const processDispatch = async (doc: QueryDocumentSnapshot): Promise<void> => {
   }
   const payloadData = notification.data && typeof notification.data === 'object' ? notification.data as Record<string, unknown> : {};
   const message: ExpoPushMessage = {
-    to: token, title: notification.title, body: notification.body,
+    to: token, ...pushPreview(tokenData.locale),
     sound: 'default', channelId: 'default',
     data: {
       ...payloadData,
@@ -138,6 +139,7 @@ const processDispatch = async (doc: QueryDocumentSnapshot): Promise<void> => {
         notificationRef?.collection('pushReceipts').doc(ticket.id).set({
           congregationId: dispatch.congregationId, notificationId: dispatch.notificationId,
           userId: dispatch.userId, tokenDocId: dispatch.tokenDocId,
+          tokenVersion: tokenSnap.updateTime,
           dispatchId: doc.id, status: 'pending', attempts: 0,
           nextCheckAt: Timestamp.fromMillis(Date.now() + 60_000),
           createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
@@ -148,7 +150,7 @@ const processDispatch = async (doc: QueryDocumentSnapshot): Promise<void> => {
     const code = expoErrorCode(ticket) ?? 'unknown';
     if (isPermanentExpoResult(ticket)) {
       if (code === 'DeviceNotRegistered') {
-        await tokenSnap.ref.set({ isActive: false, invalidatedAt: FieldValue.serverTimestamp(), lastError: code, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        await invalidateMatchingPushToken(dispatch.userId, dispatch.tokenDocId, tokenSnap.updateTime);
       }
       await doc.ref.set({ status: 'permanent_error', leaseUntil: FieldValue.delete(), lastErrorClass: code, lastErrorMessage: sanitizePushError(ticket.message), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       return;

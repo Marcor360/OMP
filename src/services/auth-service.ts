@@ -2,6 +2,8 @@ import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 
 import { auth } from '@/src/config/firebase/firebase';
+import { detachCurrentPushInstallation, resumePushInstallation } from '@/src/services/notifications/push-installation-client';
+import { clearDeliveredNotificationsAndBadge } from '@/src/services/notifications/notifications-service';
 import { LoginCredentials } from '@/src/types/auth.types';
 
 /**
@@ -15,6 +17,7 @@ export const loginWithEmail = async (credentials: LoginCredentials): Promise<Use
     credentials.email,
     credentials.password
   );
+  resumePushInstallation(userCredential.user.uid);
   return userCredential.user;
 };
 
@@ -22,5 +25,10 @@ export const loginWithEmail = async (credentials: LoginCredentials): Promise<Use
  * Cierra sesión del usuario actual.
  */
 export const logout = async (): Promise<void> => {
+  const uid = auth.currentUser?.uid;
+  if (uid) {
+    await detachCurrentPushInstallation(uid).catch(() => undefined);
+    void clearDeliveredNotificationsAndBadge().catch(() => undefined);
+  }
   await signOut(auth);
 };

@@ -56,6 +56,7 @@ export interface Meeting {
   updatedBy?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  cleaningSyncPending?: boolean;
 }
 
 export interface CreateMeetingDTO {

@@ -2,7 +2,7 @@
  * Pruebas unitarias — Limpieza en cascada de subcolecciones de reuniones
  *
  * Firestore no borra subcolecciones al eliminar un documento. Este trigger
- * llama recursiveDelete() sobre la reunion borrada para que sus asignaciones
+ * llama recursiveDelete() sobre las subcolecciones para que sus asignaciones
  * (y cualquier otra subcoleccion) no queden huerfanas.
  */
 
@@ -30,7 +30,12 @@ const buildEvent = (congregationId: string, meetingId: string): CleanupEvent =>
   ({ params: { congregationId, meetingId } }) as unknown as CleanupEvent;
 
 function buildMockDb() {
-  const meetingRef: FakeRef = { delete: jest.fn() };
+  const child = { id: 'assignments' };
+  const meetingRef = {
+    delete: jest.fn(),
+    get: jest.fn().mockResolvedValue({ exists: false }),
+    listCollections: jest.fn().mockResolvedValue([child]),
+  };
   const meetingsCollection: FakeCollection = { doc: jest.fn(() => meetingRef) };
   const congregationRef: FakeRef & { collection: jest.Mock } = {
     delete: jest.fn(),
@@ -42,7 +47,7 @@ function buildMockDb() {
     recursiveDelete: jest.fn().mockResolvedValue(undefined),
   };
 
-  return { db, congregationsCollection, congregationRef, meetingsCollection, meetingRef };
+  return { db, congregationsCollection, congregationRef, meetingsCollection, meetingRef, child };
 }
 
 beforeEach(() => {
@@ -50,8 +55,8 @@ beforeEach(() => {
 });
 
 describe('cleanupMeetingSubcollectionsOnDelete', () => {
-  it('llama recursiveDelete con el DocumentReference de la reunion construido desde event.params', async () => {
-    const { db, congregationsCollection, congregationRef, meetingsCollection, meetingRef } = buildMockDb();
+  it('limpia solo las subcolecciones de la reunion identificada por event.params', async () => {
+    const { db, congregationsCollection, congregationRef, meetingsCollection, child } = buildMockDb();
     mockGetFirestore.mockReturnValue(db);
 
     await cleanupMeetingSubcollectionsOnDelete.run(buildEvent('cong-1', 'meeting-1'));
@@ -61,7 +66,15 @@ describe('cleanupMeetingSubcollectionsOnDelete', () => {
     expect(congregationRef.collection).toHaveBeenCalledWith('meetings');
     expect(meetingsCollection.doc).toHaveBeenCalledWith('meeting-1');
     expect(db.recursiveDelete).toHaveBeenCalledTimes(1);
-    expect(db.recursiveDelete).toHaveBeenCalledWith(meetingRef);
+    expect(db.recursiveDelete).toHaveBeenCalledWith(child);
+  });
+
+  it('conserva una reunion recreada antes de recibir el evento', async () => {
+    const { db, meetingRef } = buildMockDb();
+    meetingRef.get.mockResolvedValue({ exists: true });
+    mockGetFirestore.mockReturnValue(db);
+    await cleanupMeetingSubcollectionsOnDelete.run(buildEvent('cong-1', 'meeting-1'));
+    expect(db.recursiveDelete).not.toHaveBeenCalled();
   });
 
   it('relanza el error si recursiveDelete rechaza, para permitir reintento', async () => {

@@ -32,6 +32,7 @@ export {
 } from './modules/notifications/sendExpoPushOnNotificationCreated.js';
 export { processPendingExpoPushReceipts } from './modules/notifications/processExpoPushReceipts.js';
 export { processPendingExpoPushDispatches } from './modules/notifications/processPendingExpoPushDispatches.js';
+export { bindPushInstallation, revokePushInstallation } from './modules/notifications/push-installation.js';
 
 export { setMeetingPublicationStatus } from './meetings-publication.js';
 export {
@@ -39,7 +40,10 @@ export {
   updateMeetingByManager,
   deleteMeetingByManager,
   syncMeetingCleaningAssignmentsByManager,
+  retryMeetingCleaningSync,
   createMeetingAssignmentByManager,
+  getMeetingAssignmentSaveStatus,
+  getMeetingWorkReview,
   updateMeetingAssignmentByManager,
   deleteMeetingAssignmentByManager,
 } from './meetings-management.js';

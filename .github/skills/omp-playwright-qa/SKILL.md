@@ -5,7 +5,7 @@ description: Validate OMP user journeys, deterministic Playwright tests and acce
 
 # OMP Playwright QA
 
-Read [AGENTS.md](../../../AGENTS.md), `e2e/playwright.config.ts` and the flow's existing tests. Build Functions using Node 22. Run the app, Playwright and Expo with Node 24. Start Auth, Firestore and Functions for `demo-omp`, as documented in [testing](../../../docs/testing.md).
+Read [AGENTS.md](../../../AGENTS.md), `e2e/playwright.config.ts` and the flow's existing tests. Use Node 24 for Functions, Expo and Playwright. Start Auth, Firestore and Functions for `demo-omp`, as documented in [testing](../../../docs/testing.md).
 
 Use independent synthetic users and records. Prefer role and accessible-name locators. Wait on observable state and assert both the UI and persistence for writes. Simulate time and outages explicitly. Scope mocks to the boundary. Keep failure traces local or share them only after checking for private data.
 

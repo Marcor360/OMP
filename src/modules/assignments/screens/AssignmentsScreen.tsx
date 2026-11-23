@@ -13,6 +13,7 @@ import { useI18n } from '@/src/i18n/index';
 import { AssignmentCard } from '@/src/modules/assignments/components/AssignmentCard';
 import { AssignmentSummaryCards } from '@/src/modules/assignments/components/AssignmentSummaryCards';
 import { AssignmentTabs } from '@/src/modules/assignments/components/AssignmentTabs';
+import { PendingAssignmentPanel } from '@/src/modules/assignments/components/PendingAssignmentPanel';
 import { useAssignmentFilters } from '@/src/modules/assignments/hooks/useAssignmentFilters';
 import { useAssignments } from '@/src/modules/assignments/hooks/useAssignments';
 import {
@@ -49,6 +50,8 @@ export function AssignmentsScreen() {
     loading,
     refreshing,
     error,
+    partialError,
+    retryFailed,
     onRefresh,
     reload,
   } = useAssignments({
@@ -68,7 +71,7 @@ export function AssignmentsScreen() {
       }
 
       const query = queryParts.join('&');
-      router.push(`/(protected)/assignments/${assignment.id}?${query}` as never);
+      router.push(`/(protected)/assignments/${encodeURIComponent(assignment.id)}?${query}` as never);
     },
     [router]
   );
@@ -92,10 +95,6 @@ export function AssignmentsScreen() {
 
   if (loading) {
     return <LoadingState message={t('assignments.loadingAssignments')} />;
-  }
-
-  if (error) {
-    return <ErrorState message={error} onRetry={() => void reload(true)} />;
   }
 
   return (
@@ -136,6 +135,16 @@ export function AssignmentsScreen() {
             </TouchableOpacity>
             {canCreateAssignments ? (
               <TouchableOpacity
+                accessibilityRole="button"
+                style={styles.createButton}
+                onPress={() => router.push('/(protected)/assignments/review' as never)}
+              >
+                <Ionicons name="search-outline" size={16} color={colors.primary} />
+                <ThemedText style={styles.createButtonText}>{t('meetings.workReview.duplicates')}</ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            {canCreateAssignments ? (
+              <TouchableOpacity
                 style={styles.createButton}
                 onPress={() => router.push('/(protected)/assignments/create' as never)}
                 activeOpacity={0.8}
@@ -156,6 +165,20 @@ export function AssignmentsScreen() {
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListHeaderComponent={
           <>
+            {canCreateAssignments && uid ? <PendingAssignmentPanel
+              key={JSON.stringify([uid, congregationId])}
+              uid={uid}
+              congregationId={congregationId}
+              onSaved={() => void reload(true)}
+            /> : null}
+            {partialError ? (
+              <View style={styles.counterRow}>
+                <ThemedText accessibilityRole="alert">{t('assignments.partialLoad')}</ThemedText>
+                <TouchableOpacity accessibilityRole="button" disabled={refreshing} onPress={() => void retryFailed()}>
+                  <ThemedText style={styles.createButtonText}>{t('assignments.retryPartialLoad')}</ThemedText>
+                </TouchableOpacity>
+              </View>
+            ) : null}
             <AssignmentSummaryCards
               summary={summary}
               activeTab={activeTab}
@@ -174,7 +197,7 @@ export function AssignmentsScreen() {
             </View>
           </>
         }
-        ListEmptyComponent={
+        ListEmptyComponent={error ? <ErrorState message={error} onRetry={() => void reload(true)} /> : partialError ? null :
           <View style={styles.emptyWrap}>
             <EmptyState
               icon="list-outline"
@@ -184,7 +207,7 @@ export function AssignmentsScreen() {
           </View>
         }
         refreshing={refreshing}
-        onRefresh={onRefresh}
+        onRefresh={() => void onRefresh()}
         showsVerticalScrollIndicator={false}
         initialNumToRender={12}
         maxToRenderPerBatch={10}

@@ -3,6 +3,8 @@
  * It configures the foreground handler and only registers token if permission was granted.
  */
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
+import { useI18n } from '@/src/i18n/index';
 
 import {
   clearDeliveredNotificationsAndBadge,
@@ -27,6 +29,7 @@ export function useNotificationSetup({
   congregationId,
   isAuthenticated,
 }: UseNotificationSetupOptions): void {
+  const { language } = useI18n();
   useEffect(() => {
     configureNotificationHandler();
   }, []);
@@ -42,26 +45,32 @@ export function useNotificationSetup({
     }
 
     let cancelled = false;
-    let unsubscribeUnread = () => {};
+    let registering = false;
+    let failures = 0;
+    let retry: ReturnType<typeof setTimeout> | undefined;
 
     const tryRegisterPushToken = async () => {
-      if (cancelled) {
-        return;
+      if (cancelled || registering || AppState.currentState === 'background') return;
+      clearTimeout(retry);
+      registering = true;
+      try {
+        const result = await registerExpoPushTokenForUser({ userId: uid, congregationId });
+        if (result.ok) failures = 0;
+        else if (!cancelled && result.reason === 'UNKNOWN_ERROR') {
+          failures += 1;
+          retry = setTimeout(() => void tryRegisterPushToken(), Math.min(60_000, 2_000 * 2 ** Math.min(failures, 5)));
+        }
+      } finally {
+        registering = false;
       }
-
-      await registerExpoPushTokenForUser({
-        userId: uid,
-        congregationId,
-      });
     };
 
     void tryRegisterPushToken();
-    const unsubscribeTokenRotation = startExpoPushTokenListener(async () => {
-      if (!cancelled) {
-        await tryRegisterPushToken();
-      }
+    const unsubscribeTokenRotation = startExpoPushTokenListener(tryRegisterPushToken);
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void tryRegisterPushToken();
     });
-    unsubscribeUnread = subscribeToUnreadNotificationsCount(
+    const unsubscribeUnread = subscribeToUnreadNotificationsCount(
       uid,
       congregationId,
       (unreadCount) => {
@@ -74,8 +83,10 @@ export function useNotificationSetup({
 
     return () => {
       cancelled = true;
+      clearTimeout(retry);
+      appState.remove();
       unsubscribeUnread();
       unsubscribeTokenRotation();
     };
-  }, [congregationId, isAuthenticated, uid]);
+  }, [congregationId, isAuthenticated, language, uid]);
 }

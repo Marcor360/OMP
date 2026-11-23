@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -19,10 +19,12 @@ import { ThemedText } from '@/src/components/themed-text';
 import { useAuth } from '@/src/context/auth-context';
 import { useUser } from '@/src/context/user-context';
 import { useI18n } from '@/src/i18n/index';
+import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
 import {
   createAssignment,
   createCleaningGroupAssignment,
   getAssignmentById,
+  newAssignmentRequestId,
   updateAssignment,
 } from '@/src/services/assignments/assignments-service';
 import { getMeetingsByWeek } from '@/src/services/meetings/meetings-service';
@@ -30,14 +32,13 @@ import { getAllUsers } from '@/src/services/users/users-service';
 import { getCleaningGroups } from '@/src/modules/cleaning/services/cleaning-service';
 import { getScheduledOutgoingTalksForWeek } from '@/src/modules/assignments/services/outgoing-talks.service';
 import {
-  OUTGOING_TALK_BLOCK_MESSAGE,
   getBlockedOutgoingTalkUserIds,
 } from '@/src/modules/assignments/utils/outgoing-talks';
 import { OutgoingTalk } from '@/src/modules/assignments/types/outgoing-talks.types';
 import { CleaningGroup } from '@/src/modules/cleaning/types/cleaning-group.types';
 import { type AppColors as AppColorSet, useAppColors } from '@/src/styles';
 import { AssignmentPriority, UpdateAssignmentDTO } from '@/src/types/assignment';
-import { Meeting, MEETING_PUBLICATION_STATUS_LABELS } from '@/src/types/meeting';
+import { Meeting } from '@/src/types/meeting';
 import { AppUser } from '@/src/types/user';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
 import { showAlert } from '@/src/utils/ui/alerts';
@@ -47,7 +48,7 @@ import {
   getOperationalWindow,
 } from '@/src/utils/dates/operational-window';
 import { canManageAssignments } from '@/src/utils/permissions/permissions';
-import { hasErrors, validateRequired } from '@/src/utils/validation/validation';
+import { hasErrors } from '@/src/utils/validation/validation';
 
 type Mode = 'create' | 'edit';
 type AssignmentTargetMode = 'person' | 'cleaningGroup';
@@ -63,35 +64,17 @@ type FormErrors = {
 };
 
 const PRESET_ASSIGNMENT_TITLES = [
-  'Limpieza general',
-  'Hospitalidad',
-  'Limpieza',
-  'Capitan de predicacion',
+  { value: 'Limpieza general', label: 'forms.assignment.preset.general' },
+  { value: 'Hospitalidad', label: 'forms.assignment.preset.hospitality' },
+  { value: 'Limpieza', label: 'forms.assignment.preset.cleaning' },
+  { value: 'Capitan de predicacion', label: 'forms.assignment.preset.preaching' },
 ] as const;
-
-const MONTH_NAMES = [
-  'Enero',
-  'Febrero',
-  'Marzo',
-  'Abril',
-  'Mayo',
-  'Junio',
-  'Julio',
-  'Agosto',
-  'Septiembre',
-  'Octubre',
-  'Noviembre',
-  'Diciembre',
-];
 
 const startOfDay = (value: Date): Date => {
   const next = new Date(value);
   next.setHours(0, 0, 0, 0);
   return next;
 };
-
-const formatDateLabel = (value: Date): string =>
-  `${value.getDate()} ${MONTH_NAMES[value.getMonth()].toLowerCase()} ${value.getFullYear()}`;
 
 const normalizeManualId = (value: string): string =>
   `manual:${value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
@@ -111,14 +94,15 @@ export function AssignmentFormScreen() {
 
   const { user } = useAuth();
   const { appUser, congregationId, loadingProfile, profileError } = useUser();
-  const { t } = useI18n();
+  const { t, formatDate } = useI18n();
+  const formatDateLabel = (date: Date) => formatDate(date, { day: 'numeric', month: 'long', year: 'numeric' });
   const canManage = canManageAssignments(appUser);
 
   const mode: Mode = id ? 'edit' : 'create';
   const today = useMemo(() => startOfDay(new Date()), []);
   const operationalBounds = useMemo(() => getOperationalDateBounds(), []);
 
-  const [title, setTitle] = useState<string>(PRESET_ASSIGNMENT_TITLES[0]);
+  const [title, setTitle] = useState<string>(PRESET_ASSIGNMENT_TITLES[0].value);
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<AssignmentPriority>('medium');
   const [targetMode, setTargetMode] = useState<AssignmentTargetMode>('person');
@@ -140,6 +124,8 @@ export function AssignmentFormScreen() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const saveInProgress = useRef(false);
+  const createRequest = useRef<{ congregationId: string; meetingId: string; uid?: string; id: string } | null>(null);
 
   useEffect(() => {
     if (loadingProfile) return;
@@ -214,7 +200,7 @@ export function AssignmentFormScreen() {
         }
 
         if (!assignmentDoc) {
-          showAlert('Error', 'No se encontro la asignacion.');
+          showAlert(t('common.error'), t('assignments.errorNotFound'));
           router.back();
           return;
         }
@@ -234,7 +220,7 @@ export function AssignmentFormScreen() {
         setSelectedDueDate(safeDueDate);
         setMeetingId(assignmentDoc.meetingId ?? '');
       } catch (requestError) {
-        showAlert('Error', formatFirestoreError(requestError));
+        showAlert(t('common.error'), formatFirestoreError(requestError));
         router.back();
       } finally {
         setLoading(false);
@@ -252,6 +238,7 @@ export function AssignmentFormScreen() {
     mode,
     router,
     today,
+    t,
     user?.uid,
   ]);
 
@@ -282,31 +269,31 @@ export function AssignmentFormScreen() {
 
   const validate = (): boolean => {
     const nextErrors: FormErrors = {
-      title: validateRequired(title, 'El titulo'),
+      title: (title.trim() ? undefined : t('forms.assignment.required')),
       dueDate:
         selectedDueDate < today
-          ? 'Selecciona una fecha de hoy en adelante.'
+          ? t('forms.assignment.datePast')
           : formatDateKey(selectedDueDate) > operationalBounds.maxDate
             ? t('assignments.errorDateOutOfWindow')
           : undefined,
-      meetingId: validateRequired(meetingId, 'La reunion'),
+      meetingId: (meetingId.trim() ? undefined : t('forms.assignment.required')),
       assignedTo:
-        targetMode === 'person' && personAssignmentMode === 'user'
-          ? validateRequired(assignedToUid, 'La persona asignada') ??
-            (blockedOutgoingTalkUserIds.has(assignedToUid) ? OUTGOING_TALK_BLOCK_MESSAGE : undefined)
+        mode === 'create' && targetMode === 'person' && personAssignmentMode === 'user'
+          ? (assignedToUid.trim() ? undefined : t('forms.assignment.required')) ??
+            (blockedOutgoingTalkUserIds.has(assignedToUid) ? t('forms.assignment.outgoingTalk') : undefined)
           : undefined,
       manualAssigneeName:
         mode === 'create' && targetMode === 'person' && personAssignmentMode === 'manual'
-          ? validateRequired(manualAssigneeName, 'El nombre manual')
+          ? (manualAssigneeName.trim() ? undefined : t('forms.assignment.required'))
           : undefined,
       cleaningGroupId:
         mode === 'create' && targetMode === 'cleaningGroup'
-          ? validateRequired(cleaningGroupId, 'El grupo o familia de aseo') ??
+          ? (cleaningGroupId.trim() ? undefined : t('forms.assignment.required')) ??
             (
               cleaningGroups
                 .find((group) => group.id === cleaningGroupId)
                 ?.memberIds.some((memberId) => blockedOutgoingTalkUserIds.has(memberId))
-                ? OUTGOING_TALK_BLOCK_MESSAGE
+                ? t('forms.assignment.outgoingTalk')
                 : undefined
             )
           : undefined,
@@ -317,18 +304,20 @@ export function AssignmentFormScreen() {
   };
 
   const handleSave = async () => {
+    if (saveInProgress.current) return;
     if (!canManage) {
-      showAlert('Permisos insuficientes', 'No tienes permisos para crear o editar asignaciones.');
+      showAlert(t('common.error'), t('forms.assignment.denied'));
       return;
     }
 
     if (!congregationId) {
-      showAlert('Error', profileError ?? 'No se encontro la congregacion del usuario actual.');
+      showAlert(t('common.error'), profileError ?? t('forms.assignment.missingCongregation'));
       return;
     }
 
     if (!validate()) return;
 
+    saveInProgress.current = true;
     setSaving(true);
 
     try {
@@ -336,11 +325,19 @@ export function AssignmentFormScreen() {
       const selectedCategory = resolveCategoryFromTitle(title);
 
       if (mode === 'create') {
+        const pending = createRequest.current;
+        if (pending && (pending.congregationId !== congregationId || pending.meetingId !== meetingId || pending.uid !== user?.uid)) {
+          showAlert(t('common.error'), t('assignments.retryOriginalMeeting'));
+          return;
+        }
+        const requestId = pending?.id ?? newAssignmentRequestId(congregationId, meetingId);
+        createRequest.current = { congregationId, meetingId, uid: user?.uid, id: requestId };
+
         if (targetMode === 'cleaningGroup') {
           const selectedGroup = cleaningGroups.find((group) => group.id === cleaningGroupId);
 
           if (!selectedGroup) {
-            showAlert('Error', 'Selecciona un grupo o familia de aseo.');
+            showAlert(t('common.error'), t('forms.assignment.selectGroup'));
             setSaving(false);
             return;
           }
@@ -357,7 +354,8 @@ export function AssignmentFormScreen() {
               dueDate,
             },
             user?.uid ?? '',
-            appUser?.displayName ?? user?.email ?? 'Sistema'
+            appUser?.displayName ?? user?.email ?? t('forms.assignment.system'),
+            requestId
           );
         } else {
           const manualName = manualAssigneeName.trim();
@@ -368,7 +366,7 @@ export function AssignmentFormScreen() {
           const finalAssignedToName =
             personAssignmentMode === 'manual'
               ? manualName
-              : assignedToName || (appUser?.displayName ?? 'Sin asignar');
+              : assignedToName || (appUser?.displayName ?? t('forms.assignment.unassigned'));
 
           await createAssignment(
             congregationId,
@@ -384,34 +382,31 @@ export function AssignmentFormScreen() {
               meetingId,
             },
             user?.uid ?? '',
-            appUser?.displayName ?? user?.email ?? 'Sistema'
+            appUser?.displayName ?? user?.email ?? t('forms.assignment.system'),
+            requestId
           );
         }
 
-        showAlert('Exito', 'Asignacion creada correctamente.');
+        showAlert(t('forms.assignment.success'), t('forms.assignment.created'));
       } else if (id) {
         const payload: UpdateAssignmentDTO = {
           title,
           description,
           priority,
           dueDate,
-          assignedToUid:
-            personAssignmentMode === 'manual'
-              ? normalizeManualId(manualAssigneeName)
-              : assignedToUid,
-          assignedToName:
-            personAssignmentMode === 'manual'
-              ? manualAssigneeName.trim()
-              : assignedToName,
         };
         await updateAssignment(congregationId, meetingId, id, payload);
-        showAlert('Exito', 'Asignacion actualizada.');
+        showAlert(t('forms.assignment.success'), t('forms.assignment.updated'));
       }
 
       router.back();
     } catch (requestError) {
-      showAlert('Error', formatFirestoreError(requestError));
+      const message = mode === 'create' && isFirebaseErrorCode(requestError, 'already-exists')
+        ? t('assignments.retryAlreadySaved')
+        : formatFirestoreError(requestError);
+      showAlert(t('common.error'), message);
     } finally {
+      saveInProgress.current = false;
       setSaving(false);
     }
   };
@@ -456,14 +451,11 @@ export function AssignmentFormScreen() {
   if (!canManage) {
     return (
       <ScreenContainer scrollable={false} padded={false}>
-        <PageHeader title={mode === 'create' ? 'Nueva asignacion' : 'Editar asignacion'} showBack />
+        <PageHeader title={mode === 'create' ? t('forms.assignment.createTitle') : t('forms.assignment.editTitle')} showBack />
         <View style={styles.form}>
           <View style={styles.permissionNotice}>
             <ThemedText style={styles.permissionText}>
-              No tienes permisos para crear o editar asignaciones.
-            </ThemedText>
-            <ThemedText style={styles.hintText}>
-              Esta accion solo esta disponible para quienes tienen permiso de asignaciones.
+              {t('forms.assignment.denied')}
             </ThemedText>
           </View>
         </View>
@@ -493,7 +485,7 @@ export function AssignmentFormScreen() {
     cleaningGroups.length === 0;
   return (
     <ScreenContainer scrollable={false} padded={false}>
-      <PageHeader title={mode === 'create' ? 'Nueva asignacion' : 'Editar asignacion'} showBack />
+      <PageHeader title={mode === 'create' ? t('forms.assignment.createTitle') : t('forms.assignment.editTitle')} showBack />
       <ScrollView
         contentContainerStyle={styles.form}
         showsVerticalScrollIndicator={false}
@@ -515,7 +507,7 @@ export function AssignmentFormScreen() {
         {noAssignableUsers ? (
           <View style={styles.permissionNotice}>
             <ThemedText style={styles.permissionText}>
-              No hay usuarios activos en tu congregacion para asignar.
+              {t('forms.assignment.noUsers')}
             </ThemedText>
           </View>
         ) : null}
@@ -523,17 +515,19 @@ export function AssignmentFormScreen() {
         {noCleaningGroups ? (
           <View style={styles.permissionNotice}>
             <ThemedText style={styles.permissionText}>
-              Crea primero un grupo o familia de aseo para asignarle esta tarea.
+              {t('forms.assignment.noGroups')}
             </ThemedText>
           </View>
         ) : null}
 
         {mode === 'create' ? (
-          <Field label="Tipo de asignacion">
+          <Field label={t('forms.assignment.targetType')}>
             <View style={styles.chipRow}>
               <TouchableOpacity
                 style={[styles.chip, targetMode === 'person' && styles.chipActive]}
                 onPress={() => setTargetMode('person')}
+                accessibilityRole="button"
+                accessibilityState={{ selected: targetMode === 'person' }}
                 activeOpacity={0.8}
               >
                 <ThemedText
@@ -542,12 +536,14 @@ export function AssignmentFormScreen() {
                     targetMode === 'person' && styles.chipTextActive,
                   ]}
                 >
-                  Reunion / persona
+                  {t('forms.assignment.person')}
                 </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.chip, targetMode === 'cleaningGroup' && styles.chipActive]}
                 onPress={() => setTargetMode('cleaningGroup')}
+                accessibilityRole="button"
+                accessibilityState={{ selected: targetMode === 'cleaningGroup' }}
                 activeOpacity={0.8}
               >
                 <ThemedText
@@ -556,37 +552,39 @@ export function AssignmentFormScreen() {
                     targetMode === 'cleaningGroup' && styles.chipTextActive,
                   ]}
                 >
-                  Aseo grupo/familia
+                  {t('forms.assignment.group')}
                 </ThemedText>
               </TouchableOpacity>
             </View>
           </Field>
         ) : null}
 
-        <Field label="Titulo *" error={errors.title}>
+        <Field label={t('forms.assignment.title')} error={errors.title}>
           <View style={styles.chipRow}>
             {PRESET_ASSIGNMENT_TITLES.map((item) => (
               <TouchableOpacity
-                key={item}
-                style={[styles.chip, title === item && styles.chipActive]}
-                onPress={() => setTitle(item)}
+                key={item.value}
+                style={[styles.chip, title === item.value && styles.chipActive]}
+                onPress={() => setTitle(item.value)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: title === item.value }}
                 activeOpacity={0.8}
                 disabled={!canEditForm}
               >
-                <ThemedText style={[styles.chipText, title === item && styles.chipTextActive]}>
-                  {item}
+                <ThemedText style={[styles.chipText, title === item.value && styles.chipTextActive]}>
+                  {t(item.label)}
                 </ThemedText>
               </TouchableOpacity>
             ))}
           </View>
         </Field>
 
-        <Field label="Descripcion">
+        <Field label={t('forms.assignment.description')}>
           <TextInput
             style={[styles.input, styles.textarea]}
             value={description}
             onChangeText={setDescription}
-            placeholder="Detalles de la tarea..."
+            placeholder={t('forms.assignment.descriptionHint')}
             placeholderTextColor={colors.textDisabled}
             multiline
             numberOfLines={4}
@@ -594,7 +592,7 @@ export function AssignmentFormScreen() {
           />
         </Field>
 
-        <Field label="Dia que toca *" error={errors.dueDate}>
+        <Field label={t('forms.assignment.date')} error={errors.dueDate}>
           <TouchableOpacity
             style={styles.selectTrigger}
             onPress={() => setDatePickerVisible(true)}
@@ -609,36 +607,41 @@ export function AssignmentFormScreen() {
             </ThemedText>
             <Ionicons name="calendar-outline" size={18} color={colors.primary} />
           </TouchableOpacity>
-          <ThemedText style={styles.hintText}>Seleccionado: {formatDateLabel(selectedDueDate)}</ThemedText>
         </Field>
 
-        <Field label="Reunion *" error={errors.meetingId}>
+        <Field label={t('forms.assignment.meeting')} error={errors.meetingId}>
             <View style={styles.chipRow}>
               {sortedMeetings.map((meeting) => (
                 <TouchableOpacity
                   key={meeting.id}
                   style={[styles.chip, meetingId === meeting.id && styles.chipActive]}
                   onPress={() => setMeetingId(meeting.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: meetingId === meeting.id }}
                   activeOpacity={0.8}
                   disabled={!canEditForm || mode === 'edit'}
                 >
                   <ThemedText style={[styles.chipText, meetingId === meeting.id && styles.chipTextActive]}>
-                    {meeting.title} · {MEETING_PUBLICATION_STATUS_LABELS[meeting.publicationStatus ?? 'draft']}
+                    {meeting.title} · {t(meeting.publicationStatus === 'published' ? 'meetings.management.filter.published'
+                      : meeting.publicationStatus === 'awaiting_assignments' ? 'meetings.management.filter.awaitingAssignments'
+                        : 'meetings.management.filter.draft')}
                   </ThemedText>
                 </TouchableOpacity>
               ))}
             </View>
-            {mode === 'edit' ? <ThemedText style={styles.hintText}>La reunion vinculada no se puede cambiar.</ThemedText> : null}
+            {mode === 'edit' ? <ThemedText style={styles.hintText}>{t('forms.assignment.linkedMeeting')}</ThemedText> : null}
         </Field>
 
         {targetMode === 'cleaningGroup' && mode === 'create' ? (
-          <Field label="Grupo o familia de aseo *" error={errors.cleaningGroupId}>
+          <Field label={t('forms.assignment.group')} error={errors.cleaningGroupId}>
             <View style={styles.chipRow}>
               {cleaningGroups.map((group) => (
                 <TouchableOpacity
                   key={group.id}
                   style={[styles.chip, cleaningGroupId === group.id && styles.chipActive]}
                   onPress={() => setCleaningGroupId(group.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: cleaningGroupId === group.id }}
                   activeOpacity={0.8}
                   disabled={!canEditForm}
                 >
@@ -648,24 +651,25 @@ export function AssignmentFormScreen() {
                       cleaningGroupId === group.id && styles.chipTextActive,
                     ]}
                   >
-                    {group.groupType === 'family' ? 'Familia: ' : 'Grupo: '}
-                    {group.name}
+                    {t(group.groupType === 'family' ? 'forms.assignment.familyName' : 'forms.assignment.groupName', { name: group.name })}
                   </ThemedText>
                 </TouchableOpacity>
               ))}
             </View>
             <ThemedText style={styles.hintText}>
-              Se notificara a todos los integrantes del grupo seleccionado.
+              {t('forms.assignment.groupHint')}
             </ThemedText>
           </Field>
         ) : null}
 
         {mode === 'create' && canManage && targetMode === 'person' && (
-          <Field label="Asignar a (usuarios de la congregacion)" error={errors.assignedTo}>
+          <Field label={t('forms.assignment.assignee')} error={errors.assignedTo}>
             <View style={styles.chipRow}>
               <TouchableOpacity
                 style={[styles.chip, personAssignmentMode === 'user' && styles.chipActive]}
                 onPress={() => setPersonAssignmentMode('user')}
+                accessibilityRole="button"
+                accessibilityState={{ selected: personAssignmentMode === 'user' }}
                 activeOpacity={0.8}
                 disabled={!canEditForm}
               >
@@ -675,7 +679,7 @@ export function AssignmentFormScreen() {
                     personAssignmentMode === 'user' && styles.chipTextActive,
                   ]}
                 >
-                  Usuario
+                  {t('forms.assignment.user')}
                 </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
@@ -693,7 +697,7 @@ export function AssignmentFormScreen() {
                     personAssignmentMode === 'manual' && styles.chipTextActive,
                   ]}
                 >
-                  Manual
+                  {t('forms.assignment.manual')}
                 </ThemedText>
               </TouchableOpacity>
             </View>
@@ -708,7 +712,7 @@ export function AssignmentFormScreen() {
                     setAssignedToName(value);
                     setAssignedToUid(value.trim() ? normalizeManualId(value) : '');
                   }}
-                  placeholder="Nombre de la persona"
+                  placeholder={t('forms.assignment.manualName')}
                   placeholderTextColor={colors.textDisabled}
                   editable={canEditForm}
                 />
@@ -716,7 +720,7 @@ export function AssignmentFormScreen() {
                   <ThemedText style={styles.errorText}>{errors.manualAssigneeName}</ThemedText>
                 ) : null}
                 <ThemedText style={styles.hintText}>
-                  La opcion manual guarda el nombre en la asignacion; no envia push directo si no existe usuario.
+                  {t('forms.assignment.manualHint')}
                 </ThemedText>
               </>
             ) : (
@@ -728,7 +732,7 @@ export function AssignmentFormScreen() {
               disabled={!canEditForm}
             >
               <ThemedText style={assignedToUid ? styles.selectTriggerText : styles.selectPlaceholderText}>
-                {assignedToUid ? assignedToName : 'Seleccionar usuario'}
+                {assignedToUid ? assignedToName : t('forms.assignment.selectUser')}
               </ThemedText>
               <Ionicons
                 name={isUserDropdownOpen ? 'chevron-up' : 'chevron-down'}
@@ -743,7 +747,7 @@ export function AssignmentFormScreen() {
                   style={styles.input}
                   value={userSearch}
                   onChangeText={setUserSearch}
-                  placeholder="Escribe nombre o correo"
+                  placeholder={t('forms.assignment.search')}
                   placeholderTextColor={colors.textDisabled}
                   editable={canEditForm}
                 />
@@ -777,7 +781,7 @@ export function AssignmentFormScreen() {
                           <ThemedText style={styles.userEmail}>{item.email}</ThemedText>
                           {isBlocked ? (
                             <ThemedText style={styles.userBlockedText}>
-                              {OUTGOING_TALK_BLOCK_MESSAGE}
+                              {t('forms.assignment.outgoingTalk')}
                             </ThemedText>
                           ) : null}
                         </View>
@@ -792,16 +796,22 @@ export function AssignmentFormScreen() {
             ) : null}
 
             {isUserDropdownOpen && users.length > 0 && filteredUsers.length === 0 ? (
-              <ThemedText style={styles.hintText}>No hay coincidencias para tu busqueda.</ThemedText>
+              <ThemedText style={styles.hintText}>{t('forms.assignment.noMatches')}</ThemedText>
             ) : null}
 
             {assignedToUid ? (
-              <ThemedText style={styles.hintText}>Seleccionado: {assignedToName}</ThemedText>
+              <ThemedText style={styles.hintText}>{t('forms.assignment.selected', { name: assignedToName })}</ThemedText>
             ) : null}
               </>
             )}
           </Field>
         )}
+
+        {mode === 'edit' && assignedToName ? (
+          <Field label={t('forms.assignment.assignee')}>
+            <ThemedText>{assignedToName}</ThemedText>
+          </Field>
+        ) : null}
 
         <TouchableOpacity
           style={[styles.saveButton, (saving || !canSave) && styles.disabled]}

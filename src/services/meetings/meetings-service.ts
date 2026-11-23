@@ -131,13 +131,14 @@ const findMeetingConflictByRange = async (params: {
 /** Obtiene una reunion por ID */
 export const getMeetingById = async (
   congregationId: string,
-  id: string
+  id: string,
+  forceServer?: boolean
 ): Promise<Meeting | null> => {
   if (!congregationId || typeof congregationId !== 'string' || !id) {
     return null;
   }
 
-  return meetingRepository.getById(congregationId, id);
+  return meetingRepository.getById(congregationId, id, forceServer);
 };
 
 /** Obtiene todas las reuniones ordenadas por fecha */
@@ -331,7 +332,8 @@ export const createMeeting = async (
 export const updateMeeting = async (
   congregationId: string,
   id: string,
-  data: UpdateMeetingDTO
+  data: UpdateMeetingDTO,
+  expectedUpdatedAt?: Meeting['updatedAt'],
 ): Promise<void> => {
   const inferredType =
     data.type === 'midweek' || data.meetingCategory === 'midweek' ? 'midweek' : 'weekend';
@@ -451,6 +453,7 @@ export const updateMeeting = async (
 
   await meetingRepository.update(congregationId, id, rawPayload, {
     requiresManager: shouldUseManagerFunction,
+    ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
   });
 };
 

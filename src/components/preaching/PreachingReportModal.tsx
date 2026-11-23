@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -38,7 +38,7 @@ const parseIntegerField = (value: string): number | null => {
 
 const parseHoursField = (value: string): number | null => {
   if (value.trim() === '') return 0;
-  const parsed = Number(value);
+  const parsed = Number(value.trim().replace(',', '.'));
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 };
 
@@ -63,6 +63,7 @@ export function PreachingReportModal({
   const colors = useAppColors();
   const styles = createStyles(colors);
   const userIsPioneer = isPioneer(user);
+  const submitInProgress = useRef(false);
 
   const [participated, setParticipated] = useState(existingReport?.participated ?? false);
   const [bibleStudies, setBibleStudies] = useState(String(existingReport?.bibleStudies ?? 0));
@@ -81,6 +82,7 @@ export function PreachingReportModal({
   };
 
   const handleSubmit = async () => {
+    if (submitInProgress.current || saving) return;
     const normalizedBibleStudies = parseIntegerField(bibleStudies);
     const normalizedReturnVisits = parseIntegerField(returnVisits);
     const normalizedHours = parseHoursField(hours);
@@ -102,13 +104,20 @@ export function PreachingReportModal({
 
     setError(null);
 
-    await onSubmit({
-      participated,
-      bibleStudies: normalizedBibleStudies,
-      returnVisits: normalizedReturnVisits,
-      comments,
-      hours: userIsPioneer ? normalizedHours : null,
-    });
+    submitInProgress.current = true;
+    try {
+      await onSubmit({
+        participated,
+        bibleStudies: normalizedBibleStudies,
+        returnVisits: normalizedReturnVisits,
+        comments,
+        hours: userIsPioneer ? normalizedHours : null,
+      });
+    } catch {
+      setError(t('reportExport.submitError'));
+    } finally {
+      submitInProgress.current = false;
+    }
   };
 
   return (
@@ -116,7 +125,7 @@ export function PreachingReportModal({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={() => { if (!saving && !submitInProgress.current) onClose(); }}
       onShow={resetForm}
     >
       <View style={styles.overlay}>

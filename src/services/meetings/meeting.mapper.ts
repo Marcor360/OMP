@@ -105,6 +105,7 @@ export const normalizeMeeting = (id: string, data: Record<string, unknown>): Mee
       : 'none',
     cleaningGroupIds: toStringArray(data.cleaningGroupIds),
     cleaningGroupNames: toStringArray(data.cleaningGroupNames),
+    cleaningSyncPending: data.cleaningSyncPending === true,
     searchableText:
       typeof data.searchableText === 'string'
         ? data.searchableText

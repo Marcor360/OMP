@@ -18,6 +18,7 @@ import { fr } from '@/src/i18n/locales/fr';
 import { hi } from '@/src/i18n/locales/hi';
 import { zh } from '@/src/i18n/locales/zh';
 import { getLocaleForLanguage, setActiveLocale } from '@/src/i18n/active-locale';
+import { interpolate } from '@/src/i18n/interpolate';
 
 export type SupportedLanguage = 'es' | 'en' | 'fr' | 'ar' | 'hi' | 'zh';
 
@@ -172,15 +173,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         return key;
       }
 
-      // Interpolate {{variable}} placeholders
-      if (vars) {
-        resolved = resolved.replace(/\{\{(\w+)\}\}/g, (_match, varName) => {
-          const val = vars[varName];
-          return val !== undefined ? String(val) : `{{${varName}}}`;
-        });
-      }
-
-      return resolved;
+      return vars ? interpolate(resolved, vars) : resolved;
     },
     [language]
   );

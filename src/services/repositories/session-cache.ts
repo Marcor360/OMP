@@ -72,13 +72,16 @@ export const clearAllSessionCache = (): void => {
 
 export const runSingleFlight = <T>(
   key: string,
-  factory: () => Promise<T>
+  factory: (isCurrent: () => boolean) => Promise<T>
 ): Promise<T> => {
   const existing = inFlightCache.get(key);
   if (existing) return existing as Promise<T>;
 
-  const request = factory().finally(() => {
-    if (inFlightCache.get(key) === request) {
+  let request: Promise<T> | undefined;
+  const isCurrent = () => request !== undefined && inFlightCache.get(key) === request;
+
+  request = factory(isCurrent).finally(() => {
+    if (isCurrent()) {
       inFlightCache.delete(key);
     }
   });

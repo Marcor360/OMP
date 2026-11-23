@@ -43,14 +43,16 @@ export interface AssignmentRepository {
     meetingId: string,
     data: CreateAssignmentDTO,
     assignedByUid: string,
-    assignedByName: string
+    assignedByName: string,
+    requestId?: string
   ): Promise<string>;
   createCleaningGroup(
     congregationId: string,
     meetingId: string,
     data: CreateCleaningAssignmentDTO,
     assignedByUid: string,
-    assignedByName: string
+    assignedByName: string,
+    requestId?: string
   ): Promise<string>;
   update(
     congregationId: string,

@@ -56,6 +56,8 @@ interface CacheFirstQueryOptions<T> {
   forceServer?: boolean;
   isIncomplete?: (value: T) => boolean;
   persist?: boolean;
+  allowUnverifiedEmpty?: boolean;
+  requireServerOnCacheMiss?: boolean;
 }
 
 const isValueIncomplete = <T>(
@@ -77,12 +79,14 @@ const isUsableDocumentValue = <T>(
 const setCacheLayers = async <T>(
   layerCacheKey: string,
   value: T,
-  persist: boolean
+  persist: boolean,
+  isCurrent: () => boolean
 ): Promise<void> => {
+  if (!isCurrent()) return;
   setSessionCachedValue(layerCacheKey, value);
 
   if (persist) {
-    await setPersistentCachedValue(layerCacheKey, value);
+    await setPersistentCachedValue(layerCacheKey, value, isCurrent);
   }
 };
 
@@ -90,10 +94,11 @@ const setValidCacheLayers = async <T>(
   layerCacheKey: string,
   value: T,
   persist: boolean,
+  isCurrent: () => boolean,
   isIncomplete?: (candidate: T) => boolean
 ): Promise<void> => {
   if (!isValueIncomplete(value, isIncomplete)) {
-    await setCacheLayers(layerCacheKey, value, persist);
+    await setCacheLayers(layerCacheKey, value, persist, isCurrent);
   }
 };
 
@@ -124,7 +129,7 @@ export const getDocumentCacheFirst = async <T>(
     }
   }
 
-  return runSingleFlight<T | null>(requestKey, async () => {
+  return runSingleFlight<T | null>(requestKey, async (isCurrent) => {
     let cachedValue: T | null | CacheMiss = isUsableDocumentValue(
       fallbackMemoryValue,
       isIncomplete
@@ -141,7 +146,7 @@ export const getDocumentCacheFirst = async <T>(
 
         if (isUsableDocumentValue(persistentValue, isIncomplete)) {
           cachedValue = persistentValue;
-          setSessionCachedValue(memoryCacheKey, persistentValue);
+          if (isCurrent()) setSessionCachedValue(memoryCacheKey, persistentValue);
 
           if (!forceServer) {
             logFirestoreRead(cacheKey, 'persistent');
@@ -161,7 +166,7 @@ export const getDocumentCacheFirst = async <T>(
 
         if (isUsableDocumentValue(localValue, isIncomplete)) {
           cachedValue = localValue;
-          await setCacheLayers(memoryCacheKey, localValue, persist);
+          await setCacheLayers(memoryCacheKey, localValue, persist, isCurrent);
 
           if (!forceServer) {
             return localValue;
@@ -176,13 +181,13 @@ export const getDocumentCacheFirst = async <T>(
       const serverSnapshot = await getDocFromServer(ref);
 
       if (!serverSnapshot.exists()) {
-        await setCacheLayers(memoryCacheKey, null, persist);
+        await setCacheLayers(memoryCacheKey, null, persist, isCurrent);
         logFirestoreRead(cacheKey, 'server', 'exists=false');
         return null;
       }
 
       const mappedValue = mapSnapshot(serverSnapshot);
-      await setValidCacheLayers(memoryCacheKey, mappedValue, persist, isIncomplete);
+      await setValidCacheLayers(memoryCacheKey, mappedValue, persist, isCurrent, isIncomplete);
       logFirestoreRead(cacheKey, 'server');
       return mappedValue;
     } catch (error) {
@@ -207,6 +212,8 @@ export const getQueryCacheFirst = async <T>(
     forceServer: requestedForceServer = false,
     isIncomplete,
     persist = true,
+    allowUnverifiedEmpty = true,
+    requireServerOnCacheMiss = false,
   } = options;
   const skipLocalCacheRead = shouldBypassLocalCache();
   const forceServer = requestedForceServer || skipLocalCacheRead;
@@ -223,7 +230,7 @@ export const getQueryCacheFirst = async <T>(
     }
   }
 
-  return runSingleFlight<T>(requestKey, async () => {
+  return runSingleFlight<T>(requestKey, async (isCurrent) => {
     let cachedValue: T | CacheMiss =
       fallbackMemoryValue !== undefined && !isValueIncomplete(fallbackMemoryValue, isIncomplete)
         ? fallbackMemoryValue
@@ -236,7 +243,7 @@ export const getQueryCacheFirst = async <T>(
 
         if (persistentValue !== undefined && !isValueIncomplete(persistentValue, isIncomplete)) {
           cachedValue = persistentValue;
-          setSessionCachedValue(memoryCacheKey, persistentValue);
+          if (isCurrent()) setSessionCachedValue(memoryCacheKey, persistentValue);
 
           if (!forceServer) {
             logFirestoreRead(cacheKey, 'persistent');
@@ -248,7 +255,7 @@ export const getQueryCacheFirst = async <T>(
       }
     }
 
-    if (!skipLocalCacheRead && (!forceServer || cachedValue === CACHE_MISS)) {
+    if (!requireServerOnCacheMiss && !skipLocalCacheRead && (!forceServer || cachedValue === CACHE_MISS)) {
       try {
         const cacheSnapshot = await getDocsFromCache(query);
         const localValue = mapSnapshot(cacheSnapshot);
@@ -260,7 +267,7 @@ export const getQueryCacheFirst = async <T>(
             emptyLocalValue = localValue;
           } else {
             cachedValue = localValue;
-            await setCacheLayers(memoryCacheKey, localValue, persist);
+            await setCacheLayers(memoryCacheKey, localValue, persist, isCurrent);
 
             if (!forceServer) {
               return localValue;
@@ -275,17 +282,18 @@ export const getQueryCacheFirst = async <T>(
     try {
       const serverSnapshot = await getDocsFromServer(query);
       const mappedValue = mapSnapshot(serverSnapshot);
-      await setValidCacheLayers(memoryCacheKey, mappedValue, persist, isIncomplete);
+      await setValidCacheLayers(memoryCacheKey, mappedValue, persist, isCurrent, isIncomplete);
       logFirestoreRead(cacheKey, 'server');
       return mappedValue;
     } catch (error) {
+      if (requireServerOnCacheMiss) throw error;
       if (cachedValue !== CACHE_MISS) {
         logFirestoreRead(cacheKey, 'server-fallback');
         return cachedValue;
       }
 
       if (
-        emptyLocalValue !== CACHE_MISS &&
+        allowUnverifiedEmpty && emptyLocalValue !== CACHE_MISS &&
         (isFirebaseErrorCode(error, 'unavailable') || isFirebaseErrorCode(error, 'deadline-exceeded'))
       ) {
         logFirestoreRead(cacheKey, 'server-fallback');

@@ -1,3 +1,4 @@
+import { invalidateMatchingPushToken } from './push-token-version.js';
 import { Expo, ExpoPushReceipt } from 'expo-server-sdk';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
@@ -40,9 +41,7 @@ export const processPendingExpoPushReceipts = onSchedule(
         return;
       }
       if (isDeviceNotRegistered(receipt) && typeof data.userId === 'string' && typeof data.tokenDocId === 'string') {
-        await adminDb.collection('users').doc(data.userId).collection('pushTokens').doc(data.tokenDocId).set({
-          isActive: false, invalidatedAt: FieldValue.serverTimestamp(), lastError: 'DeviceNotRegistered', updatedAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
+        await invalidateMatchingPushToken(data.userId, data.tokenDocId, data.tokenVersion);
       }
       const code = expoErrorCode(receipt);
       const dispatchId = typeof data.dispatchId === 'string' ? data.dispatchId : null;

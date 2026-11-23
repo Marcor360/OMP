@@ -1,14 +1,14 @@
-import { Timestamp } from 'firebase/firestore';
-
-import { syncMeetingCleaningAssignmentsByManager } from '@/src/services/meetings/manager-meetings-service';
+import { useI18n } from '@/src/i18n/index';
+import { isFirebaseErrorCode } from '@/src/lib/firebase/errors';
+import { retryMeetingCleaningSync } from '@/src/services/meetings/manager-meetings-service';
 import { createMeeting, updateMeeting } from '@/src/services/meetings/meetings-service';
-import { UpdateMeetingDTO } from '@/src/types/meeting';
+import { Meeting, UpdateMeetingDTO } from '@/src/types/meeting';
 import { MeetingProgramSection, MeetingProgramType } from '@/src/types/meeting/program';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
+import { showAlert } from '@/src/utils/ui/alerts';
 
 import {
   CleaningSelectionMode,
-  DEFAULT_TITLE_BY_TYPE,
   FormStepKey,
   Mode,
   SaveIntent,
@@ -20,6 +20,8 @@ import { MeetingFormErrors } from './meeting-form.validators';
 type MeetingPublishFlowProps = {
   mode: Mode;
   id?: string;
+  expectedUpdatedAt?: Meeting['updatedAt'];
+  onConflict: () => void;
   congregationId: string | null;
   uid: string | null;
   authUid?: string | null;
@@ -55,6 +57,8 @@ type MeetingPublishFlowProps = {
 export const useMeetingPublishFlow = ({
   mode,
   id,
+  expectedUpdatedAt,
+  onConflict,
   congregationId,
   uid,
   authUid,
@@ -81,6 +85,7 @@ export const useMeetingPublishFlow = ({
   scrollToTop,
   replaceRoute,
 }: MeetingPublishFlowProps) => {
+  const { t } = useI18n();
   const persistMeeting = async (intent: SaveIntent): Promise<string | null> => {
     if (!congregationId) {
       showPanelErrors(['No se encontro la congregacion del usuario actual.']);
@@ -133,7 +138,7 @@ export const useMeetingPublishFlow = ({
     if (!id) return null;
 
     const updatePayload: UpdateMeetingDTO = { ...payload, updatedBy: actorUid };
-    await updateMeeting(congregationId, id, updatePayload);
+    await updateMeeting(congregationId, id, updatePayload, expectedUpdatedAt);
     return id;
   };
 
@@ -151,20 +156,20 @@ export const useMeetingPublishFlow = ({
         return;
       }
 
-      await syncMeetingCleaningAssignmentsByManager({
-        congregationId,
-        meetingId,
-        mode: cleaningSelectionMode,
-        groups: selectedCleaningGroups.map((group) => ({ id: group.id, name: group.name })),
-        meetingTitle: normalizeText(title) ?? DEFAULT_TITLE_BY_TYPE[meetingType],
-        meetingDate: Timestamp.fromDate(resolvedMeetingDate),
-        assignedByName: appUserDisplayName ?? authEmail ?? 'Usuario',
-      });
+      if (mode === 'edit' || cleaningSelectionMode !== 'none') {
+        try {
+          await retryMeetingCleaningSync(congregationId, meetingId);
+        } catch {
+          showAlert(t('meetings.cleaningSync.title'), t('meetings.cleaningSync.savedPending'));
+        }
+      }
 
       clearPanelErrors();
       replaceRoute('/(protected)/meetings/manage');
     } catch (requestError) {
-      const message = formatFirestoreError(requestError);
+      const conflict = isFirebaseErrorCode(requestError, 'aborted');
+      if (conflict) onConflict();
+      const message = conflict ? t('meetings.management.alert.conflict') : formatFirestoreError(requestError);
       setSaveError(message);
       showPanelErrors([message]);
     } finally {

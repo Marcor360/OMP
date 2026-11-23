@@ -2,7 +2,7 @@
  * Hook centralizado para gestion de permisos del dispositivo.
  * No dispara registro remoto en Expo Go y no entra en bucles de re-render.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, AppStateStatus, Linking } from 'react-native';
 
 import { useUser } from '@/src/context/user-context';
@@ -11,6 +11,7 @@ import {
   requestNotificationPermission,
 } from '@/src/services/notifications/notifications-service';
 import { registerExpoPushTokenForUser } from '@/src/services/notifications/push-notifications.service';
+import { getPushRegistrationStatus, subscribePushRegistration } from '@/src/services/notifications/push-installation-client';
 import { PermissionState, PermissionStatus } from '@/src/types/permissions.types';
 import { canUseRemotePushNotifications } from '@/src/utils/runtime';
 
@@ -20,6 +21,8 @@ interface UsePermissionsResult {
   requestNotifications: () => Promise<PermissionStatus>;
   openSettings: () => Promise<void>;
   refresh: () => Promise<void>;
+  pushRegistration: ReturnType<typeof getPushRegistrationStatus>;
+  retryPushRegistration: () => void;
 }
 
 export function usePermissions(): UsePermissionsResult {
@@ -28,6 +31,13 @@ export function usePermissions(): UsePermissionsResult {
     notifications: 'undetermined',
   });
   const [loading, setLoading] = useState(true);
+  const getRegistration = useCallback(() => getPushRegistrationStatus(uid, congregationId), [uid, congregationId]);
+  const pushRegistration = useSyncExternalStore(subscribePushRegistration, getRegistration, getRegistration);
+  const retryPushRegistration = useCallback(() => {
+    if (canUseRemotePushNotifications && uid && congregationId) {
+      void registerExpoPushTokenForUser({ userId: uid, congregationId });
+    }
+  }, [congregationId, uid]);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const fetchAll = useCallback(async () => {
@@ -101,5 +111,7 @@ export function usePermissions(): UsePermissionsResult {
     requestNotifications,
     openSettings,
     refresh: fetchAll,
+    pushRegistration,
+    retryPushRegistration,
   };
 }

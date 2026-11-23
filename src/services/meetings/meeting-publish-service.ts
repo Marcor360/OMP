@@ -9,6 +9,7 @@ export interface SetMeetingPublicationStatusPayload {
   congregationId: string;
   meetingId: string;
   publicationStatus: MeetingPublicationStatus;
+  expectedUpdatedAt?: { seconds: number; nanoseconds: number };
 }
 
 export interface SetMeetingPublicationStatusResult {

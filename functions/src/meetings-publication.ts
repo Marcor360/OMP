@@ -12,6 +12,7 @@ import {
   toFirestoreSectionsPayload,
   type MeetingPublicationStatus,
 } from './modules/meetings/meeting-sections.js';
+import { assertMeetingVersion, updateMeetingFromSnapshot } from './modules/meetings/meeting-version.js';
 import { assertAdministrativeBillingAccess } from './users/authorization.js';
 import { parsePermissions } from './users/parsers.js';
 import { hasPermission } from './shared/permissions.js';
@@ -38,6 +39,7 @@ type SetMeetingPublicationStatusPayload = {
   congregationId?: unknown;
   meetingId?: unknown;
   publicationStatus?: unknown;
+  expectedUpdatedAt?: unknown;
 };
 
 type SetMeetingPublicationStatusResult = {
@@ -537,7 +539,8 @@ export const setMeetingPublicationStatus = onCall(
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
     }
 
-    const parsed = parsePayload(request.data as SetMeetingPublicationStatusPayload);
+    const payload = request.data as SetMeetingPublicationStatusPayload;
+    const parsed = parsePayload(payload);
     const requester = await getRequesterProfile(request.auth.uid);
 
     if (!requester.isActive) {
@@ -572,6 +575,7 @@ export const setMeetingPublicationStatus = onCall(
       throw new HttpsError('not-found', 'Reunion no encontrada.');
     }
 
+    assertMeetingVersion(meetingSnap, payload.expectedUpdatedAt);
     const meetingData = meetingSnap.data() as Record<string, unknown>;
     const currentStatus: MeetingPublicationStatus =
       meetingData.publicationStatus === 'awaiting_assignments' ||
@@ -596,7 +600,7 @@ export const setMeetingPublicationStatus = onCall(
         );
       }
 
-      await meetingRef.update({
+      await updateMeetingFromSnapshot(meetingSnap, {
         publicationStatus: parsed.publicationStatus,
         sections: toFirestoreSectionsPayload(sections),
         assignedUserIds: buildAssignedUserIdsFromSections(sections),
@@ -642,7 +646,7 @@ export const setMeetingPublicationStatus = onCall(
       updatePayload.publishedAt = FieldValue.serverTimestamp();
     }
 
-    await meetingRef.update(updatePayload);
+    await updateMeetingFromSnapshot(meetingSnap, updatePayload);
 
     return {
       ok: true,

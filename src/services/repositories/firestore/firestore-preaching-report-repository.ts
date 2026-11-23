@@ -1,6 +1,7 @@
+import { getQueryCacheFirst, invalidateCacheEntry } from '@/src/services/repositories/firestore-cache-first';
 import {
   getDoc,
-  getDocs,
+  query,
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
@@ -14,6 +15,8 @@ import type {
   PreachingReportSubmissionRecord,
 } from '@/src/services/repositories/ports/preaching-report-repository.port';
 
+const monthlyKey = (congregationId: string, monthId: string) => `preaching-reports/${congregationId}/${monthId}`;
+
 export const firestorePreachingReportRepository: PreachingReportRepository = {
   getSubmission: async (
     congregationId: string,
@@ -24,16 +27,15 @@ export const firestorePreachingReportRepository: PreachingReportRepository = {
     return snap.exists() ? { id: snap.id, data: snap.data() as Record<string, unknown> } : null;
   },
 
-  listMonthlySubmissions: async (
-    congregationId: string,
-    monthId: string
-  ): Promise<PreachingReportSubmissionRecord[]> => {
-    const snap = await getDocs(preachingReportSubmissionsCollectionRef(congregationId, monthId));
-    return snap.docs.map((docSnap) => ({
-      id: docSnap.id,
-      data: docSnap.data() as Record<string, unknown>,
-    }));
-  },
+  listMonthlySubmissions: (congregationId, monthId, forceServer) => getQueryCacheFirst({
+    cacheKey: monthlyKey(congregationId, monthId),
+    query: query(preachingReportSubmissionsCollectionRef(congregationId, monthId)),
+    maxAgeMs: 60_000,
+    persist: false,
+    forceServer,
+    requireServerOnCacheMiss: true,
+    mapSnapshot: (snapshot) => snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
+  }),
 
   upsertSubmission: async (
     congregationId: string,
@@ -51,5 +53,6 @@ export const firestorePreachingReportRepository: PreachingReportRepository = {
       },
       { merge: true }
     );
+    await invalidateCacheEntry(monthlyKey(congregationId, monthId));
   },
 };

@@ -15,7 +15,7 @@ import { getAssignmentById } from '@/src/modules/assignments/services/assignment
 import { Assignment } from '@/src/modules/assignments/types/assignment.types';
 import { useAppColors } from '@/src/styles';
 import { formatFirestoreError } from '@/src/utils/errors/errors';
-import { canManageAssignments, canManageMeetings } from '@/src/utils/permissions/permissions';
+import { canManageAssignments } from '@/src/utils/permissions/permissions';
 
 export function AssignmentDetailScreen() {
   const { id, meetingId, source } = useLocalSearchParams<{
@@ -27,8 +27,7 @@ export function AssignmentDetailScreen() {
   const colors = useAppColors();
   const { appUser, congregationId, loadingProfile, profileError } = useUser();
   const { t } = useI18n();
-  const canEditMeetingAssignment =
-    canManageAssignments(appUser) && canManageMeetings(appUser);
+  const canEditMeetingAssignment = canManageAssignments(appUser);
 
   const requestKey = congregationId && id ? [congregationId, id, meetingId ?? '', source ?? ''].join(':') : null;
   const [assignmentState, setAssignmentState] = useState<{

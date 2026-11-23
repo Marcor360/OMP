@@ -1,8 +1,10 @@
-import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp, type QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { logger } from "firebase-functions/v2";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 
 import { adminDb } from "../config/firebaseAdmin.js";
+import { deleteNotificationPage } from "./delete-notification-page.js";
+import { canSweepPath, retentionCutoff } from "./retention-policy.js";
 
 const NOTIFICATIONS_COLLECTION_ID = "notifications";
 const CLEANUP_SCHEDULE = "0 1 1 * *";
@@ -21,25 +23,6 @@ type NotificationCleanupSummary = {
   errors: number;
 };
 
-const getNotificationCutoff = (now: Date): Date => {
-  const cutoff = new Date(now);
-  cutoff.setMonth(cutoff.getMonth() - RETENTION_MONTHS);
-  cutoff.setHours(0, 0, 0, 0);
-  return cutoff;
-};
-
-const deleteSnapshot = async (
-  snapshot: FirebaseFirestore.QuerySnapshot
-): Promise<number> => {
-  if (snapshot.empty) return 0;
-
-  const batch = adminDb.batch();
-  snapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
-  await batch.commit();
-
-  return snapshot.size;
-};
-
 export const scheduledNotificationsCleanup = onSchedule(
   {
     schedule: CLEANUP_SCHEDULE,
@@ -50,7 +33,7 @@ export const scheduledNotificationsCleanup = onSchedule(
   },
   async () => {
     const startedAt = new Date();
-    const cutoffAt = getNotificationCutoff(startedAt);
+    const cutoffAt = retentionCutoff(startedAt, RETENTION_MONTHS);
     const cutoffTimestamp = Timestamp.fromDate(cutoffAt);
     let scanned = 0;
     let deleted = 0;
@@ -63,29 +46,32 @@ export const scheduledNotificationsCleanup = onSchedule(
       collectionId: NOTIFICATIONS_COLLECTION_ID,
     });
 
+    let cursor: QueryDocumentSnapshot | undefined;
     while (true) {
-      const snapshot = await adminDb
+      const query = adminDb
         .collectionGroup(NOTIFICATIONS_COLLECTION_ID)
         .where("createdAt", "<", cutoffTimestamp)
         .orderBy("createdAt", "asc")
-        .limit(QUERY_PAGE_SIZE)
-        .get();
+        .limit(QUERY_PAGE_SIZE);
+      const snapshot = await (cursor ? query.startAfter(cursor) : query).get();
 
       if (snapshot.empty) {
         break;
       }
 
       scanned += snapshot.size;
+      cursor = snapshot.docs[snapshot.docs.length - 1];
 
       try {
-        deleted += await deleteSnapshot(snapshot);
+        const result = await deleteNotificationPage(snapshot.docs.filter((doc) => canSweepPath(doc.ref.path, NOTIFICATIONS_COLLECTION_ID)));
+        deleted += result.deleted;
+        errors += result.errors;
       } catch (error) {
         errors += snapshot.size;
         logger.error("[scheduledNotificationsCleanup] Error eliminando lote", {
           batchSize: snapshot.size,
           error: error instanceof Error ? error.message : String(error),
         });
-        break;
       }
     }
 
@@ -107,68 +93,57 @@ export const scheduledNotificationsCleanup = onSchedule(
   }
 );
 
-const migrateLegacyRootNotificationsPage = async (): Promise<{
+export const migrateLegacyRootNotificationsPage = async (cursor?: QueryDocumentSnapshot): Promise<{
   scanned: number;
   migrated: number;
   skipped: number;
+  cursor?: QueryDocumentSnapshot;
 }> => {
-  const snapshot = await adminDb
+  const query = adminDb
     .collection(NOTIFICATIONS_COLLECTION_ID)
-    .limit(LEGACY_MIGRATION_PAGE_SIZE)
-    .get();
+    .limit(LEGACY_MIGRATION_PAGE_SIZE);
+  const snapshot = await (cursor ? query.startAfter(cursor) : query).get();
 
   if (snapshot.empty) {
     return { scanned: 0, migrated: 0, skipped: 0 };
   }
 
-  const batch = adminDb.batch();
   let migrated = 0;
   let skipped = 0;
+  for (let offset = 0; offset < snapshot.size; offset += 8) {
+    const results = await Promise.allSettled(snapshot.docs.slice(offset, offset + 8).map(async (docSnap) => {
+      const data = docSnap.data();
+      const congregationId = typeof data.congregationId === 'string' ? data.congregationId.trim() : '';
+      const userId = typeof data.userId === 'string' ? data.userId.trim() : '';
+      if (!congregationId || !userId || congregationId.includes('/') || userId.includes('/')) return false;
 
-  snapshot.docs.forEach((docSnap) => {
-    const data = docSnap.data() as Record<string, unknown>;
-    const congregationId =
-      typeof data.congregationId === "string" ? data.congregationId.trim() : "";
-    const userId = typeof data.userId === "string" ? data.userId.trim() : "";
+      const destination = adminDb.collection('congregations').doc(congregationId)
+        .collection(NOTIFICATIONS_COLLECTION_ID).doc(docSnap.id);
+      return adminDb.runTransaction(async (transaction) => {
+        const [source, existing] = await transaction.getAll(docSnap.ref, destination);
+        if (!source.updateTime?.isEqual(docSnap.updateTime) || existing.exists) return false;
 
-    if (!congregationId || !userId) {
-      batch.delete(docSnap.ref);
-      skipped += 1;
-      return;
+        transaction.create(destination, {
+          ...data,
+          notificationId: typeof data.notificationId === 'string' && data.notificationId.trim()
+            ? data.notificationId : docSnap.id,
+          congregationId, userId, userIds: [userId],
+        });
+        transaction.delete(docSnap.ref);
+        return true;
+      });
+    }));
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) migrated += 1;
+      else skipped += 1;
     }
-
-    const scopedRef = adminDb
-      .collection("congregations")
-      .doc(congregationId)
-      .collection(NOTIFICATIONS_COLLECTION_ID)
-      .doc(docSnap.id);
-
-    batch.set(
-      scopedRef,
-      {
-        ...data,
-        notificationId:
-          typeof data.notificationId === "string" && data.notificationId.trim().length > 0
-            ? data.notificationId
-            : docSnap.id,
-        congregationId,
-        userId,
-        userIds: [userId],
-      },
-      { merge: true }
-    );
-    batch.delete(docSnap.ref);
-    migrated += 1;
-  });
-
-  if (migrated > 0 || skipped > 0) {
-    await batch.commit();
   }
 
   return {
     scanned: snapshot.size,
     migrated,
     skipped,
+    cursor: snapshot.docs[snapshot.docs.length - 1],
   };
 };
 
@@ -186,13 +161,15 @@ export const scheduledLegacyRootNotificationsMigration = onSchedule(
     let migrated = 0;
     let skipped = 0;
 
+    let cursor: QueryDocumentSnapshot | undefined;
     while (true) {
-      const page = await migrateLegacyRootNotificationsPage();
+      const page = await migrateLegacyRootNotificationsPage(cursor);
       scanned += page.scanned;
       migrated += page.migrated;
       skipped += page.skipped;
 
-      if (page.scanned === 0 || page.migrated === 0) {
+      cursor = page.cursor;
+      if (!cursor || page.scanned < LEGACY_MIGRATION_PAGE_SIZE) {
         break;
       }
     }

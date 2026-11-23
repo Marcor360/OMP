@@ -7,10 +7,10 @@ description: Run OMP's local quality checks and review the change for correctnes
 
 Read [AGENTS.md](../../../AGENTS.md) and inspect the changed files. Review authorization, data integrity, races and breaking contracts before performance and maintainability. Ground findings in file and line references and state the impact, severity and evidence.
 
-Use Node 24.12+ on the Node 24 line for the app and Node 22.13+ on the Node 22 line for Functions. In an environment with both versions installed, run from the repository root:
+Use Node 24.12+ on the Node 24 line for the app and Functions. Run from the repository root:
 
 ```bash
-OMP_FUNCTIONS_NODE=/path/to/node22/bin/node npm run quality:check
+npm run quality:check
 ```
 
 The workflow runs lint, TypeScript, Jest, Functions build and integration tests, Firestore rules and index checks, the web export and Expo checks. Java 21 and Firebase emulators are required. Check the working directory, versions, and exit status. Exercise browser workflows using [omp-playwright-qa](../omp-playwright-qa/SKILL.md). Use the other OMP skills for React and Firebase reviews.

@@ -182,12 +182,15 @@ export const getMyPreachingReport = async (
 
 export const getMonthlyPreachingReportsForManager = async (
   congregationId: string,
-  monthId: string
+  monthId: string,
+  forceServer?: boolean
 ): Promise<PreachingReportSubmission[]> => {
   if (!congregationId || !monthId) return [];
   assertValidMonthId(monthId);
 
-  const submissions = await preachingReportRepository.listMonthlySubmissions(congregationId, monthId);
+  const submissions = forceServer
+    ? await preachingReportRepository.listMonthlySubmissions(congregationId, monthId, true)
+    : await preachingReportRepository.listMonthlySubmissions(congregationId, monthId);
   return submissions
     .map((submission) => normalizeSubmission(submission.id, submission.data))
     .sort((left, right) => left.userName.localeCompare(right.userName, 'es'));

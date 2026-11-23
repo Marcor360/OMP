@@ -5,7 +5,7 @@ import type { Meeting } from '@/src/types/meeting';
 export type { Unsubscribe };
 
 export interface MeetingRepository {
-  getById(congregationId: string, id: string): Promise<Meeting | null>;
+  getById(congregationId: string, id: string, forceServer?: boolean): Promise<Meeting | null>;
   getAllByCongregation(congregationId: string): Promise<Meeting[]>;
   getByRange(
     congregationId: string,
@@ -28,7 +28,7 @@ export interface MeetingRepository {
     congregationId: string,
     id: string,
     payload: Record<string, unknown>,
-    options?: { requiresManager?: boolean }
+    options?: { requiresManager?: boolean; expectedUpdatedAt?: Meeting['updatedAt'] }
   ): Promise<void>;
   delete(congregationId: string, id: string): Promise<void>;
   subscribeToMeetings(

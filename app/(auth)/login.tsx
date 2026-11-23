@@ -117,7 +117,9 @@ export default function LoginScreen() {
                 <ThemedText style={styles.label}>{t('auth.login.email')}</ThemedText>
                 <TextInput
                   style={[styles.input, errors.email && styles.inputError]}
-                  placeholder="tu@email.com"
+                  placeholder={t('auth.login.emailExample')}
+                  accessibilityLabel={t('auth.login.email')}
+                  autoComplete="email"
                   placeholderTextColor={colors.textDisabled}
                   value={email}
                   onChangeText={handleEmailChange}
@@ -140,6 +142,8 @@ export default function LoginScreen() {
                   <TextInput
                     style={styles.passwordInput}
                     placeholder="********"
+                    accessibilityLabel={t('auth.login.password')}
+                    autoComplete="current-password"
                     placeholderTextColor={colors.textDisabled}
                     value={password}
                     onChangeText={handlePasswordChange}
@@ -154,6 +158,7 @@ export default function LoginScreen() {
                     style={styles.eyeButton}
                     onPress={() => setShowPassword((prev) => !prev)}
                     activeOpacity={0.7}
+                    accessibilityRole="button"
                     accessibilityLabel={showPassword ? t('auth.password.hide') : t('auth.password.show')}
                   >
                     <Ionicons

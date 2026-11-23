@@ -160,103 +160,59 @@ const normalizeName = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const listMeetingProgramAssignments = (meetings: MeetingLite[], congregationId: string): Assignment[] => {
-  const assignments: Assignment[] = [];
-
-  meetings.forEach((meeting) => {
-    const meetingType = meeting.type === 'midweek' ? 'midweek' : 'weekend';
-
-    meeting.sections.forEach((section) => {
-      if (section.isEnabled === false) return;
-
-      section.assignments.forEach((assignment) => {
-        if (assignment.assignmentScope !== 'internal') return;
-
-        const assignedUsers = assignment.assignees
-          .filter((assignee) => assignee.assigneeType === 'registeredUser')
-          .map((assignee) => ({
-            userId: normalizeName(assignee.assigneeUserId),
-            name:
-              normalizeName(assignee.assigneeNameSnapshot) ??
-              normalizeName(assignee.assigneeUserId) ??
-              'Asignado',
-          }))
-          .filter((assignee) => Boolean(assignee.userId));
-
-        if (assignedUsers.length === 0) return;
-
-        const title = assignment.roleLabel
-          ? `${assignment.roleLabel}: ${assignment.title}`
-          : assignment.title;
-        const id = `${meeting.id}-${assignment.assignmentKey}`;
-
-        assignments.push({
-          id,
-          source: 'meeting',
-          sourceKey: `meeting-program:${meeting.id}:${assignment.assignmentKey}`,
-          congregationId,
-          meetingId: meeting.id,
-          category: meetingType,
-          subType: null,
-          meetingType,
-          date: toDate(meeting.startDate)?.toISOString() ?? new Date().toISOString(),
-          assignedUsers,
-          notes: section.title,
-          status: 'pending',
-          title: title || meeting.title || 'Asignacion de reunion',
-        });
-      });
+const mapProgramAssignment = (
+  meeting: MeetingLite,
+  congregationId: string,
+  section: MeetingProgramSection,
+  assignment: MeetingProgramSection['assignments'][number],
+): Assignment | null => {
+  if (section.isEnabled === false || assignment.assignmentScope !== 'internal') return null;
+  const assignedUsers = assignment.assignees
+    .filter((assignee) => assignee.assigneeType === 'registeredUser')
+    .flatMap((assignee) => {
+      const userId = normalizeName(assignee.assigneeUserId);
+      return userId ? [{ userId, name: normalizeName(assignee.assigneeNameSnapshot) ?? userId }] : [];
     });
-  });
+  if (!assignedUsers.length) return null;
 
-  return assignments;
+  const meetingType = meeting.type === 'midweek' ? 'midweek' : 'weekend';
+  const title = assignment.roleLabel ? `${assignment.roleLabel}: ${assignment.title}` : assignment.title;
+  const id = `${meeting.id}:${assignment.assignmentKey}`;
+  return {
+    id,
+    source: 'meeting',
+    sourceKey: `meeting-program:${id}`,
+    congregationId,
+    meetingId: meeting.id,
+    category: meetingType,
+    subType: null,
+    meetingType,
+    date: toDate(meeting.startDate)?.toISOString() ?? new Date().toISOString(),
+    assignedUsers,
+    notes: section.title,
+    status: 'pending',
+    title: title || meeting.title || 'Asignacion de reunion',
+  };
 };
+
+const listMeetingProgramAssignments = (meetings: MeetingLite[], congregationId: string): Assignment[] =>
+  meetings.flatMap((meeting) => meeting.sections.flatMap((section) =>
+    section.assignments.flatMap((assignment) => {
+      const mapped = mapProgramAssignment(meeting, congregationId, section, assignment);
+      return mapped ? [mapped] : [];
+    })
+  ));
 
 const mapMeetingProgramAssignmentByKey = (
   meeting: MeetingLite,
   congregationId: string,
   assignmentKey: string
 ): Assignment | null => {
-  const meetingType = meeting.type === 'midweek' ? 'midweek' : 'weekend';
-
   for (const section of meeting.sections) {
-    if (section.isEnabled === false) continue;
-
     const assignment = section.assignments.find((item) => item.assignmentKey === assignmentKey);
-    if (!assignment || assignment.assignmentScope !== 'internal') continue;
-
-    const assignedUsers = assignment.assignees
-      .filter((assignee) => assignee.assigneeType === 'registeredUser')
-      .map((assignee) => ({
-        userId: normalizeName(assignee.assigneeUserId),
-        name:
-          normalizeName(assignee.assigneeNameSnapshot) ??
-          normalizeName(assignee.assigneeUserId) ??
-          'Asignado',
-      }))
-      .filter((assignee) => Boolean(assignee.userId));
-
-    const title = assignment.roleLabel
-      ? `${assignment.roleLabel}: ${assignment.title}`
-      : assignment.title;
-
-    return {
-      id: assignment.assignmentKey,
-      source: 'meeting',
-      sourceKey: `meeting-program:${meeting.id}:${assignment.assignmentKey}`,
-      congregationId,
-      meetingId: meeting.id,
-      category: meetingType,
-      subType: null,
-      meetingType,
-      date: toDate(meeting.startDate)?.toISOString() ?? new Date().toISOString(),
-      assignedUsers,
-      notes: section.title,
-      status: 'pending',
-      title: title || meeting.title || 'Asignacion de reunion',
-    };
+    const mapped = assignment && mapProgramAssignment(meeting, congregationId, section, assignment);
+    if (mapped) return mapped;
   }
-
   return null;
 };
 
@@ -320,41 +276,48 @@ const listMeetingAssignments = async (
   return assignmentGroups.flat();
 };
 
-const listStandaloneAssignments = async (
+export const listStandaloneAssignments = async (
   congregationId: string,
   forceServer: boolean | undefined
 ): Promise<Assignment[]> => {
   const standaloneCollection = collection(db, 'congregations', congregationId, 'assignments');
 
-  try {
-    return await getQueryCacheFirst<Assignment[]>({
-      cacheKey: `assignments-panel/${congregationId}/standalone/limit/${MAX_STANDALONE_ASSIGNMENTS}`,
-      query: query(standaloneCollection, limit(MAX_STANDALONE_ASSIGNMENTS)),
-      maxAgeMs: ASSIGNMENTS_CACHE_TTL_MS,
-      forceServer,
-      mapSnapshot: (snapshot) =>
-        snapshot.docs.map((assignmentDoc) =>
-          mapAssignmentFromCongregationDoc(
-            assignmentDoc.id,
-            assignmentDoc.data(),
-            congregationId
-          )
-        ),
-    });
-  } catch {
-    // If this collection is not used in the current project, return empty list.
-    return [];
-  }
+  return await getQueryCacheFirst<Assignment[]>({
+    cacheKey: `assignments-panel/${congregationId}/standalone/limit/${MAX_STANDALONE_ASSIGNMENTS}`,
+    query: query(standaloneCollection, limit(MAX_STANDALONE_ASSIGNMENTS)),
+    maxAgeMs: ASSIGNMENTS_CACHE_TTL_MS,
+    forceServer,
+    allowUnverifiedEmpty: false,
+    mapSnapshot: (snapshot) =>
+      snapshot.docs.map((assignmentDoc) =>
+        mapAssignmentFromCongregationDoc(
+          assignmentDoc.id,
+          assignmentDoc.data(),
+          congregationId
+        )
+      ),
+  });
 };
 
-const dedupeAssignments = (assignments: Assignment[]): Assignment[] => {
+export const mergePanelAssignments = (...sources: Assignment[][]): Assignment[] => {
   const bySource = new Map<string, Assignment>();
 
-  assignments.forEach((assignment) => {
+  sources.flat().forEach((assignment) => {
     bySource.set(assignment.sourceKey, assignment);
   });
 
   return Array.from(bySource.values());
+};
+
+export const getMeetingPanelAssignments = async (
+  options: AssignmentQueryOptions & { filters?: AssignmentFilters }
+): Promise<Assignment[]> => {
+  const congregationId = options.congregationId.trim();
+  if (!congregationId) return [];
+  const bounds = options.bounds ?? boundsFromFilters(options.filters);
+  const meetings = await getMeetings(congregationId, bounds, options.forceServer);
+  const assignments = await listMeetingAssignments(congregationId, meetings, options.forceServer);
+  return mergePanelAssignments(assignments, listMeetingProgramAssignments(meetings, congregationId));
 };
 
 export const getAssignments = async (
@@ -362,21 +325,11 @@ export const getAssignments = async (
 ): Promise<Assignment[]> => {
   const congregationId = options.congregationId.trim();
   if (!congregationId) return [];
-
-  const bounds = options.bounds ?? boundsFromFilters(options.filters);
-
-  const meetings = await getMeetings(congregationId, bounds, options.forceServer);
-
-  const [meetingAssignments, standaloneAssignments] = await Promise.all([
-    listMeetingAssignments(congregationId, meetings, options.forceServer),
+  const [meetings, standalone] = await Promise.all([
+    getMeetingPanelAssignments(options),
     listStandaloneAssignments(congregationId, options.forceServer),
   ]);
-
-  return dedupeAssignments([
-    ...meetingAssignments,
-    ...listMeetingProgramAssignments(meetings, congregationId),
-    ...standaloneAssignments,
-  ]);
+  return mergePanelAssignments(meetings, standalone);
 };
 
 const matchBounds = (assignment: Assignment, bounds: DateBounds | undefined): boolean => {
@@ -404,8 +357,11 @@ export const getAssignmentById = async (
 
   if (!congregationId || !assignmentId) return null;
 
-  const [meetingIdFromCompound, assignmentKeyFromCompound] = assignmentId.split(':');
-  if (meetingIdFromCompound && assignmentKeyFromCompound) {
+  const separator = assignmentId.indexOf(':');
+  const meetingIdFromCompound = separator > 0 ? assignmentId.slice(0, separator) : '';
+  const assignmentKeyFromCompound = separator > 0 ? assignmentId.slice(separator + 1) : '';
+  if (params.source !== 'congregation' && meetingIdFromCompound && assignmentKeyFromCompound &&
+    (!params.meetingId || params.meetingId === meetingIdFromCompound)) {
     const programAssignment = await getMeetingProgramAssignmentByKey(
       congregationId,
       meetingIdFromCompound,
@@ -428,6 +384,7 @@ export const getAssignmentById = async (
         congregationId
       );
     }
+    if (params.source === 'congregation') return null;
   }
 
   if (params.meetingId) {
@@ -455,12 +412,13 @@ export const getAssignmentById = async (
     const programAssignment = await getMeetingProgramAssignmentByKey(
       congregationId,
       params.meetingId,
-      assignmentId
+      assignmentId.startsWith(`${params.meetingId}-`) ? assignmentId.slice(params.meetingId.length + 1) : assignmentId
     );
 
     if (programAssignment) {
       return programAssignment;
     }
+    if (params.source === 'meeting') return null;
   }
 
   const all = await getAssignments({

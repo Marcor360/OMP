@@ -356,6 +356,16 @@ export function SettingsScreen() {
                   onOpenSettings={permissions.openSettings}
                   loading={permissions.loading}
                 />
+                {permissions.state.notifications === 'granted' ? (
+                  <View style={styles.infoBox} accessibilityLiveRegion="polite">
+                    <ThemedText style={styles.infoText}>
+                      {t(`settings.push.${permissions.pushRegistration}`)}
+                    </ThemedText>
+                    {permissions.pushRegistration === 'pending' ? (
+                      <SettingRow icon="refresh-outline" label={t('settings.push.retry')} onPress={permissions.retryPushRegistration} />
+                    ) : null}
+                  </View>
+                ) : null}
               </>
             )}
           </Section>

@@ -1,6 +1,4 @@
-import { serverTimestamp, setDoc } from 'firebase/firestore';
-
-import { userPushTokenDocRef } from '@/src/lib/firebase/refs';
+import { bindCurrentPushInstallation, detachCurrentPushInstallation } from '@/src/services/notifications/push-installation-client';
 import type {
   PushTokenDocumentPayload,
   PushTokenRepository,
@@ -18,19 +16,13 @@ export const firestorePushTokenRepository: PushTokenRepository = {
     payload: SavePushTokenPayload
   ): Promise<void> => {
     if (isPushTokenDocumentPayload(payload)) {
-      await setDoc(
-        userPushTokenDocRef(uid, payload.tokenDocId),
-        {
-          token: payload.token,
-          userId: payload.userId,
-          congregationId: payload.congregationId,
-          platform: payload.platform,
-          deviceName: payload.deviceName,
-          isActive: payload.isActive,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      await bindCurrentPushInstallation({
+        uid,
+        token: payload.token,
+        congregationId: payload.congregationId,
+        platform: payload.platform,
+        deviceName: payload.deviceName,
+      });
       return;
     }
 
@@ -44,7 +36,6 @@ export const firestorePushTokenRepository: PushTokenRepository = {
     uid: string,
     payload: { token: string | null }
   ): Promise<void> => {
-    void uid;
-    void payload;
+    if (payload.token) await detachCurrentPushInstallation(uid, payload.token);
   },
 };

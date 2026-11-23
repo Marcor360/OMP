@@ -214,7 +214,7 @@ const getUsersForCurrentCongregationCached = async (
     }
   }
 
-  return runSingleFlight(requestKey, async () => {
+  return runSingleFlight(requestKey, async (isCurrent) => {
     let users: AppUser[];
 
     try {
@@ -232,7 +232,7 @@ const getUsersForCurrentCongregationCached = async (
       });
     }
 
-    setSessionCachedValue(cacheKey, users);
+    if (isCurrent()) setSessionCachedValue(cacheKey, users);
     return users;
   });
 };

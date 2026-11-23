@@ -1,59 +1,4 @@
-/**
- * Pruebas unitarias — Limpieza programada
- *
- * Verifica funciones puras de la limpieza de datos:
- * - normalizeStoragePath: gs://, https://, ruta relativa, vacío, inválido
- * - El cálculo de cutoff (subtractMonths) cruza correctamente año/mes
- *
- * No requiere emulador: se prueban sólo las utilidades puras
- * exportando helpers mediante re-exportación para pruebas.
- */
-
-// ─── Helpers bajo prueba ──────────────────────────────────────────────────────
-// Como estas funciones son internas al módulo, las probamos replicando
-// la lógica aquí para no acoplar las pruebas a la implementación privada.
-// Si en el futuro se exportan, se puede importar directamente.
-
-type NormalizedPath = { bucketName: string; objectPath: string };
-
-function normalizeStoragePath(
-  rawFilePath: string,
-  defaultBucketName: string
-): NormalizedPath | null {
-  const filePath = rawFilePath.trim();
-  if (filePath.length === 0) return null;
-
-  if (filePath.startsWith('gs://')) {
-    const match = filePath.match(/^gs:\/\/([^/]+)\/(.+)$/);
-    if (!match) return null;
-    return { bucketName: match[1], objectPath: match[2] };
-  }
-
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-    try {
-      const parsedUrl = new URL(filePath);
-      const bucketMatch = parsedUrl.pathname.match(/\/b\/([^/]+)\/o\/(.+)$/);
-      if (!bucketMatch) return null;
-      return {
-        bucketName: bucketMatch[1],
-        objectPath: decodeURIComponent(bucketMatch[2]),
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  return {
-    bucketName: defaultBucketName,
-    objectPath: filePath.replace(/^\/+/, ''),
-  };
-}
-
-function subtractMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() - months);
-  return result;
-}
+import { canSweepInactiveProfile, canSweepPath, latestCleanupDate, normalizeStoragePath, retentionCutoff } from '../maintenance/retention-policy.js';
 
 // ─── Tests: normalizeStoragePath ──────────────────────────────────────────────
 
@@ -115,33 +60,25 @@ describe('normalizeStoragePath', () => {
   });
 });
 
-// ─── Tests: subtractMonths ────────────────────────────────────────────────────
-
-describe('subtractMonths', () => {
-  it('resta 2 meses dentro del mismo año', () => {
-    const base = new Date('2025-04-15T00:00:00Z');
-    const result = subtractMonths(base, 2);
-    expect(result.getMonth()).toBe(1); // Febrero (0-indexed)
-    expect(result.getFullYear()).toBe(2025);
+describe('retention policy', () => {
+  it('uses the local calendar and clamps the last day of a shorter month', () => {
+    expect(retentionCutoff(new Date('2026-11-01T07:00:00Z'), 6).toISOString())
+      .toBe('2026-05-01T06:00:00.000Z');
+    expect(retentionCutoff(new Date('2026-08-31T07:00:00Z'), 6).toISOString())
+      .toBe('2026-02-28T06:00:00.000Z');
   });
 
-  it('cruza correctamente el límite de año', () => {
-    const base = new Date('2025-01-20T00:00:00Z');
-    const result = subtractMonths(base, 2);
-    expect(result.getFullYear()).toBe(2024);
-    expect(result.getMonth()).toBe(10); // Noviembre
+  it('uses the newest date and preserves documents in report subtrees', () => {
+    expect(latestCleanupDate({ start: 10, end: 30 }, ['start', 'end'], (value) =>
+      typeof value === 'number' ? value : null)).toBe(30);
+    expect(canSweepPath('congregations/c1/meetings/m1/assignments/a1', 'assignments')).toBe(true);
+    expect(canSweepPath('congregations/c1/preachingReports/m1/assignments/a1', 'assignments')).toBe(false);
+    expect(canSweepPath('unknown/x/notifications/n1', 'notifications')).toBe(false);
   });
 
-  it('no muta la fecha original', () => {
-    const base = new Date('2025-06-01T00:00:00Z');
-    const original = base.toISOString();
-    subtractMonths(base, 3);
-    expect(base.toISOString()).toBe(original);
-  });
-
-  it('restar 0 meses devuelve la misma fecha', () => {
-    const base = new Date('2025-03-10T12:00:00Z');
-    const result = subtractMonths(base, 0);
-    expect(result.toISOString()).toBe(base.toISOString());
+  it('preserves suspended administrators protected from deletion and conflicting active state', () => {
+    expect(canSweepInactiveProfile({ isActive: false, isPrimaryAdmin: true })).toBe(false);
+    expect(canSweepInactiveProfile({ isActive: false, status: 'active' })).toBe(false);
+    expect(canSweepInactiveProfile({ isActive: false })).toBe(true);
   });
 });

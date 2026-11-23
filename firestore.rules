@@ -2575,8 +2575,10 @@ service cloud.firestore {
 
       match /pushTokens/{tokenDocId} {
         allow get, list: if isSameUser(userId);
-        allow create, update: if validExpoPushTokenDoc(userId);
-        allow delete: if isSameUser(userId);
+        allow create: if validExpoPushTokenDoc(userId);
+        allow update: if resource.data.get('serverManaged', false) == false
+          && validExpoPushTokenDoc(userId);
+        allow delete: if isSameUser(userId) && resource.data.get('serverManaged', false) == false;
       }
 
       match /viewedAnnouncements/{announcementId} {

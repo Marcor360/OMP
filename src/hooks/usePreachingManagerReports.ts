@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   getCurrentMonthId,
@@ -12,6 +12,9 @@ import {
 } from '@/src/types/preaching-report.types';
 import type { AppUser } from '@/src/types/user';
 
+const EMPTY_USERS: AppUser[] = [];
+const EMPTY_REPORTS: PreachingReportSubmission[] = [];
+
 export const usePreachingManagerReports = ({
   congregationId,
   enabled,
@@ -22,46 +25,43 @@ export const usePreachingManagerReports = ({
   monthId?: string;
 }) => {
   const [monthId, setMonthId] = useState(initialMonthId);
-  const [activeUsers, setActiveUsers] = useState<AppUser[]>([]);
-  const [submissions, setSubmissions] = useState<PreachingReportSubmission[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const scope = JSON.stringify([congregationId, monthId]);
+  const [result, setResult] = useState<{
+    scope: string; users: AppUser[]; reports: PreachingReportSubmission[];
+  }>();
+  const [failure, setFailure] = useState<{ scope: string; message: string }>();
+  const [pending, setPending] = useState<string>();
+  const request = useRef(0);
+  const current = enabled && result?.scope === scope ? result : undefined;
+  const error = enabled && failure?.scope === scope ? failure.message : null;
+  const loading = Boolean(enabled && congregationId && (pending === scope || (!current && !error)));
+  const activeUsers = current?.users ?? EMPTY_USERS;
+  const submissions = current?.reports ?? EMPTY_REPORTS;
 
-  const load = useCallback(async () => {
-    if (!enabled || !congregationId) {
-      setActiveUsers([]);
-      setSubmissions([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
+  const load = useCallback(async (forceServer = false) => {
+    if (!enabled || !congregationId) return;
+    const id = ++request.current;
+    setPending(scope);
+    setFailure(undefined);
     try {
       const [users, reports] = await Promise.all([
         getActiveUsers(congregationId),
-        getMonthlyPreachingReportsForManager(congregationId, monthId),
+        getMonthlyPreachingReportsForManager(congregationId, monthId, forceServer),
       ]);
-      setActiveUsers(users);
-      setSubmissions(reports);
-    } catch (requestError) {
-      setActiveUsers([]);
-      setSubmissions([]);
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : 'No se pudieron cargar los informes.'
-      );
+      if (id === request.current) setResult({ scope, users, reports });
+    } catch (error) {
+      if (id === request.current) setFailure({ scope, message: error instanceof Error ? error.message : 'No se pudieron cargar los informes.' });
     } finally {
-      setLoading(false);
+      if (id === request.current) setPending(undefined);
     }
-  }, [congregationId, enabled, monthId]);
+  }, [congregationId, enabled, monthId, scope]);
 
   useEffect(() => {
     void load();
+    return () => { request.current += 1; };
   }, [load]);
 
+  const refresh = useCallback(() => load(true), [load]);
   const missingUsers = useMemo<MissingPreachingReportUser[]>(() => {
     const submittedUserIds = new Set(submissions.map((submission) => submission.userId));
     return activeUsers
@@ -86,6 +86,7 @@ export const usePreachingManagerReports = ({
     summary,
     loading,
     error,
-    refresh: load,
+    ready: Boolean(current) && !loading && error === null,
+    refresh,
   };
 };

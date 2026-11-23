@@ -21,7 +21,13 @@ export const cleanupMeetingSubcollectionsOnDelete = onDocumentDeleted(
       .doc(meetingId);
 
     try {
-      await getFirestore().recursiveDelete(meetingRef);
+      // Delete only children. The same meeting ID may have been recreated since the event.
+      const children = await meetingRef.listCollections();
+      if ((await meetingRef.get()).exists) return;
+      for (const child of children) {
+        if ((await meetingRef.get()).exists) return;
+        await getFirestore().recursiveDelete(child);
+      }
       logger.info('Subcolecciones de reunion eliminadas', { congregationId, meetingId });
     } catch (error) {
       logger.error('cleanupMeetingSubcollectionsOnDelete fallo', {

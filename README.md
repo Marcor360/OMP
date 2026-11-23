@@ -53,9 +53,9 @@ El producto administra información por congregación. Toda operación congregac
 | Dato | Valor |
 | --- | --- |
 | Nombre | OMP Suite |
-| Versión en el repositorio | `1.54.4` |
-| Android `versionCode` | `15404` |
-| iOS `buildNumber` | `1.54.4` |
+| Versión en el repositorio | `1.54.5` |
+| Android `versionCode` | `15405` |
+| iOS `buildNumber` | `1.54.5` |
 | Referencia de release EAS | Android `15400` · iOS `1.54.0` |
 | Android package | `com.marcor360.omp` |
 | iOS bundle identifier | `com.marcor360.omp` |
@@ -228,7 +228,7 @@ La aplicación tiene activados `typedRoutes` y React Compiler.
 
 | Tecnología | Versión o uso |
 | --- | --- |
-| Node.js | `22` |
+| Node.js | `24` |
 | Firebase Functions | `^7.3.2` |
 | Firebase Admin | `^14.2.0` |
 | Stripe SDK | `^23.1.0` |
@@ -375,7 +375,7 @@ eas.json                     Perfiles de EAS
 
 ### Requisitos
 
-- Node.js 24.12 o superior dentro de la rama 24 para la app y las pruebas de reglas. Functions usa el runtime Node.js 22, con un mínimo local de 22.13 para sus herramientas;
+- Node.js 24.12 o superior dentro de la rama 24 para la app, Functions y las pruebas de reglas;
 - npm;
 - Java 21 para pruebas del emulador y builds Android;
 - Android Studio/SDK para compilación Android local;
@@ -385,16 +385,14 @@ eas.json                     Perfiles de EAS
 
 ### Dependencias
 
-Con Node 24 activo en la raíz y `OMP_FUNCTIONS_NODE` apuntando al binario de
-Node 22, instala ambos paquetes:
+Con Node 24 activo, instala ambos paquetes:
 
 ```bash
 npm ci
-PATH="$(dirname "$OMP_FUNCTIONS_NODE"):$PATH" npm ci --prefix functions
+npm ci --prefix functions
 ```
 
-Consulta [la guía de pruebas](docs/testing.md) para ejecutar las validaciones
-con ambos runtimes.
+Consulta [la guía de pruebas](docs/testing.md) para ejecutar las validaciones locales.
 
 ### Desarrollo
 
@@ -554,7 +552,7 @@ Perfiles disponibles:
 - `preview`: distribución interna y APK Android;
 - `production`: build de tienda con incremento remoto automático.
 
-`eas.json` usa `appVersionSource: remote`. La referencia local de la versión 1.54.0 es Android `15400` e iOS `1.54.0`; el perfil `production` incrementa el número de build remoto automáticamente. Antes de publicar, confirma el número que EAS asignará.
+`eas.json` usa `appVersionSource: remote`. La referencia local de la versión 1.54.5 es Android `15405` e iOS `1.54.5`; el perfil `production` incrementa el número de build remoto automáticamente. Antes de publicar, confirma el número que EAS asignará.
 
 ### Web
 
@@ -577,16 +575,16 @@ MAJOR.MINOR.PATCH
 - `MINOR`: funciones nuevas compatibles;
 - `PATCH`: correcciones compatibles.
 
-Estado de la versión `1.54.4`:
+Estado de la versión `1.54.5`:
 
 ```text
-package.json:                    1.54.4
-package-lock.json:               1.54.4
-app.json → expo.version:         1.54.4
-app.json → ios.buildNumber:      1.54.4
-app.json → android.versionCode:  15404
-android versionName:             1.54.4
-android versionCode:             15404
+package.json:                    1.54.5
+package-lock.json:               1.54.5
+app.json → expo.version:         1.54.5
+app.json → ios.buildNumber:      1.54.5
+app.json → android.versionCode:  15405
+android versionName:             1.54.5
+android versionCode:             15405
 ```
 
 Los nombres de lanzamiento son opcionales y no reemplazan la versión técnica. Pueden usarse en notas de release con el formato `OMP 1.54.0 — Nombre`.
