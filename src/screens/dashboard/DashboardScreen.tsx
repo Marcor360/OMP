@@ -90,7 +90,8 @@ export function DashboardScreen() {
     loading: eventsLoading,
     error: eventsError,
     refresh: refreshEvents,
-  } = useEvents(congregationId);
+    reload: reloadEvents,
+  } = useEvents(congregationId, user?.uid ?? null);
 
   const loadingRef = React.useRef(false);
 
@@ -167,9 +168,9 @@ export function DashboardScreen() {
     if (!loadingProfile) {
       void loadData(true);
       void refreshCleaningSummary();
-      void refreshEvents();
+      void reloadEvents();
     }
-  }, [loadData, loadingProfile, refreshCleaningSummary, refreshEvents]);
+  }, [loadData, loadingProfile, refreshCleaningSummary, reloadEvents]);
 
   useRefreshOnFocus(handleFocusRefresh, true, {
     refreshOnAppActive: false,

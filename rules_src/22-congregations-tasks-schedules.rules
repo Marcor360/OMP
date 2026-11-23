@@ -14,6 +14,11 @@
         allow delete: if false;
       }
 
+      match /serviceGroups/{groupId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+        allow create, update, delete: if false;
+      }
+
       // -----------------------------------------------------------------------
       // CLEANING GROUPS
       // -----------------------------------------------------------------------

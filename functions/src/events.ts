@@ -1,9 +1,18 @@
-import { FieldValue, Timestamp, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import { FieldValue, Timestamp, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
+import { reserveEventShifts } from './event-shift-reservations.js';
+import { readEventAudience, readEventPeople } from './event-groups.js';
+import { criticalCallableOptions } from './shared/callable-security.js';
+import {
+  EVENT_AUDIENCES, EVENT_CATEGORIES, EVENT_LIMITS, eventDay, isEventDay, isEventId, isEventTeamSize, validateEventSchedules,
+  type EventAudience, type EventCategory, type EventSchedule,
+} from './shared/event-planning.js';
 import { adminDb } from './config/firebaseAdmin.js';
 import { deleteNotificationPage } from './maintenance/delete-notification-page.js';
 import { buildNotificationUrl } from './modules/notifications/notification-routes.js';
@@ -18,6 +27,7 @@ type EventType =
   | 'visita_superintendente'
   | 'reunion_especial'
   | 'capacitacion'
+  | 'personalizado'
   | 'reunion_anual_precursores'
   | 'reunion_precursores_visita_superintendente'
   | 'reunion_ancianos_siervos_ministeriales';
@@ -36,6 +46,7 @@ const EVENT_TYPE_LABELS: Record<EventType, string> = {
   visita_superintendente: 'Visita del Superintendente de Circuito',
   reunion_especial: 'Reunion Especial',
   capacitacion: 'Capacitacion',
+  personalizado: 'Evento personalizado',
   reunion_anual_precursores: 'Reunion Anual de Precursores',
   reunion_precursores_visita_superintendente: 'Reunion con Precursores - Visita del Superintendente',
   reunion_ancianos_siervos_ministeriales: 'Reunion con Ancianos y Siervos Ministeriales',
@@ -48,6 +59,7 @@ const EVENT_TYPE_COLORS: Record<EventType, string> = {
   visita_superintendente: '#16A34A',
   reunion_especial: '#F97316',
   capacitacion: '#0D9488',
+  personalizado: '#7C3AED',
   reunion_anual_precursores: '#6366F1',
   reunion_precursores_visita_superintendente: '#0891B2',
   reunion_ancianos_siervos_ministeriales: '#9333EA',
@@ -64,11 +76,14 @@ const SINGLE_DAY_EVENT_TYPES = new Set<EventType>([
 const OPTIONAL_END_DATE_EVENT_TYPES = new Set<EventType>([
   'reunion_especial',
   'capacitacion',
+  'personalizado',
 ]);
 
 type EventWritePayload = {
   congregationId: unknown;
   eventId?: unknown;
+  requestId?: unknown;
+  expectedRevision?: unknown;
   eventData: {
     type?: unknown;
     title?: unknown;
@@ -77,11 +92,14 @@ type EventWritePayload = {
     startDate?: unknown;
     endDate?: unknown;
     location?: unknown;
+    categories?: unknown;
+    schedules?: unknown;
+    audience?: unknown;
   };
 };
 
 const isEventType = (value: unknown): value is EventType =>
-  typeof value === 'string' && value in EVENT_TYPE_LABELS;
+  typeof value === 'string' && Object.prototype.hasOwnProperty.call(EVENT_TYPE_LABELS, value);
 
 const asNonEmptyString = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
@@ -118,7 +136,7 @@ const parseEventType = (value: unknown): EventType => {
 
 const parseDateInput = (value: unknown, fieldName: string): string => {
   const parsed = parseRequiredString(value, fieldName);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+  if (!isEventDay(parsed)) {
     throw new HttpsError('invalid-argument', `${fieldName} debe usar formato YYYY-MM-DD.`);
   }
 
@@ -140,6 +158,89 @@ const addDays = (timestamp: Timestamp, days: number): Timestamp => {
   return Timestamp.fromDate(date);
 };
 
+const planningErrors = {
+  unappliedHours: 'Aplica los cambios de horario antes de publicar.',
+  invalidSchedule: 'Revisa el nombre, horario, duración y cantidad de personas de cada lista.',
+  scheduleDate: 'La fecha de cada lista debe estar dentro del evento.',
+  incompleteShift: 'Completa todos los turnos con personas distintas en cada turno.',
+  overlappingShifts: 'Una persona tiene dos turnos que se traslapan.',
+  tooManyPeople: 'El evento tiene demasiadas personas asignadas.',
+};
+
+const asRecord = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new HttpsError('invalid-argument', 'Los datos de planificación no son válidos.');
+  }
+  return value as Record<string, unknown>;
+};
+
+function parseSchedules(value: unknown, start: string, end: string): EventSchedule[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > EVENT_LIMITS.schedules) {
+    throw new HttpsError('invalid-argument', planningErrors.invalidSchedule);
+  }
+  const schedules = value.map((entry) => {
+    const schedule = asRecord(entry);
+    const { name, date, startTime, endTime, minutesPerShift, teamSize, teams } = schedule;
+    if (schedule.pendingHours) throw new HttpsError('invalid-argument', planningErrors.unappliedHours);
+    if (typeof name !== 'string' || typeof date !== 'string' || typeof startTime !== 'string'
+      || typeof endTime !== 'string' || typeof minutesPerShift !== 'number' || typeof teamSize !== 'number'
+      || !Array.isArray(teams) || teams.length > EVENT_LIMITS.shifts) {
+      throw new HttpsError('invalid-argument', planningErrors.invalidSchedule);
+    }
+    return {
+      name: name.trim(), date, startTime, endTime, minutesPerShift, teamSize,
+      teams: teams.map((entry) => {
+        const { memberIds, capacity } = asRecord(entry);
+        if (capacity !== undefined && !isEventTeamSize(capacity)) {
+          throw new HttpsError('invalid-argument', planningErrors.invalidSchedule);
+        }
+        if (!Array.isArray(memberIds) || memberIds.length > EVENT_LIMITS.teamSize || !memberIds.every(isEventId)) {
+          throw new HttpsError('invalid-argument', planningErrors.incompleteShift);
+        }
+        return capacity === undefined || capacity === teamSize ? { memberIds } : { memberIds, capacity };
+      }),
+    };
+  });
+  const error = validateEventSchedules(schedules, start, end);
+  if (error) throw new HttpsError('invalid-argument', planningErrors[error]);
+  return schedules;
+}
+
+function parsePlanning(raw: EventWritePayload['eventData'], start: string, end: string) {
+  const categories = raw.categories ?? [];
+  if (!Array.isArray(categories) || (raw.type === 'personalizado' && !categories.length) || categories.length > EVENT_CATEGORIES.length
+    || categories.some((category) => !EVENT_CATEGORIES.includes(category))) {
+    throw new HttpsError('invalid-argument', 'Selecciona categorías válidas.');
+  }
+  const audience = asRecord(raw.audience ?? { kind: 'congregation' });
+  if (!EVENT_AUDIENCES.includes(audience.kind as EventAudience['kind'])
+    || (audience.kind !== 'congregation' && !isEventId(audience.groupId))) {
+    throw new HttpsError('invalid-argument', 'Selecciona un alcance válido para el evento.');
+  }
+  return {
+    categories: EVENT_CATEGORIES.filter((category: EventCategory) => categories.includes(category)),
+    schedules: parseSchedules(raw.schedules, start, end),
+    audience: { kind: audience.kind, groupId: audience.groupId } as EventAudience,
+  };
+}
+
+async function resolvePlanning(transaction: Transaction, congregationId: string, plan: ReturnType<typeof parsePlanning>) {
+  const peopleIds = [...new Set(plan.schedules.flatMap((schedule) => schedule.teams.flatMap((team) => team.memberIds)))];
+  const [people, audience] = await Promise.all([
+    readEventPeople(transaction, congregationId, peopleIds),
+    readEventAudience(transaction, congregationId, plan.audience),
+  ]);
+  return {
+    categories: plan.categories,
+    audience,
+    schedules: plan.schedules.map((schedule) => {
+      const scheduleIds = new Set(schedule.teams.flatMap((team) => team.memberIds));
+      return { ...schedule, people: people.filter((person) => scheduleIds.has(person.uid)) };
+    }),
+  };
+}
+
 const parseEventData = (raw: EventWritePayload['eventData']) => {
   if (!raw || typeof raw !== 'object') {
     throw new HttpsError('invalid-argument', 'Datos de evento invalidos.');
@@ -153,6 +254,10 @@ const parseEventData = (raw: EventWritePayload['eventData']) => {
     : OPTIONAL_END_DATE_EVENT_TYPES.has(type) && !requestedEndDate
       ? startDateInput
       : parseDateInput(requestedEndDate, 'Fecha final');
+  if (startDateInput < eventDay(new Date())) {
+    throw new HttpsError('failed-precondition', 'La fecha inicial no puede estar en el pasado.');
+  }
+  const planning = parsePlanning(raw, startDateInput, endDateInput);
   const startDate = toMexicoCityTimestamp(startDateInput);
   const endDate = toMexicoCityTimestamp(endDateInput);
 
@@ -167,6 +272,9 @@ const parseEventData = (raw: EventWritePayload['eventData']) => {
   const superintendentName = parseOptionalString(raw.superintendentName);
   const superintendentWifeName = parseOptionalString(raw.superintendentWifeName);
   const location = parseOptionalString(raw.location);
+  if ([title, location, superintendentName, superintendentWifeName].some((value) => value && value.length > 200)) {
+    throw new HttpsError('invalid-argument', 'El texto del evento no puede superar 200 caracteres por campo.');
+  }
 
   if (type === 'visita_superintendente') {
     if (!superintendentName) {
@@ -177,6 +285,8 @@ const parseEventData = (raw: EventWritePayload['eventData']) => {
       type,
       superintendentName,
       superintendentWifeName,
+      location,
+      planning,
       startDate,
       endDate,
       deleteAt: addDays(endDate, 1),
@@ -192,6 +302,7 @@ const parseEventData = (raw: EventWritePayload['eventData']) => {
     type,
     title,
     location,
+    planning,
     startDate,
     endDate,
     deleteAt: addDays(endDate, 1),
@@ -251,6 +362,23 @@ const assertEventManager = async (params: {
   await assertAdministrativeBillingAccess(params.congregationId);
 };
 
+export const listEventPlanningPeople = onCall(criticalCallableOptions, async (request): Promise<{ people: { uid: string; name: string }[] }> => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Debes iniciar sesión.');
+  const congregationId = request.data?.congregationId;
+  if (!isEventId(congregationId)) throw new HttpsError('invalid-argument', 'Congregación inválida.');
+  const requester = await getRequesterProfile(uid);
+  await assertEventManager({ requester, congregationId });
+  const profiles = await adminDb.collection('users').where('congregationId', '==', congregationId)
+    .where('isActive', '==', true).select('displayName').get();
+  return {
+    people: profiles.docs.flatMap((profile) => {
+      const name = asNonEmptyString(profile.get('displayName'));
+      return name ? [{ uid: profile.id, name }] : [];
+    }),
+  };
+});
+
 const cleanUndefined = (value: Record<string, unknown>): Record<string, unknown> => {
   const output: Record<string, unknown> = {};
   Object.entries(value).forEach(([key, child]) => {
@@ -263,7 +391,7 @@ const cleanUndefined = (value: Record<string, unknown>): Record<string, unknown>
 
 export const createEventByManager = onCall(
   {
-    region: REGION,
+    ...criticalCallableOptions,
     timeoutSeconds: 60,
     memory: '256MiB',
     maxInstances: 3,
@@ -273,29 +401,46 @@ export const createEventByManager = onCall(
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
     }
 
-    const payload = request.data as EventWritePayload;
+    const payload = (request.data ?? {}) as EventWritePayload;
     const congregationId = parseRequiredString(payload.congregationId, 'congregationId');
+    if (!isEventId(congregationId)) throw new HttpsError('invalid-argument', 'Identificador de congregación inválido.');
     const requester = await getRequesterProfile(request.auth.uid);
     await assertEventManager({ requester, congregationId });
 
-    const eventData = parseEventData(payload.eventData);
-    const ref = await adminDb.collection(EVENTS_COLLECTION).add(
-      cleanUndefined({
-        congregationId,
-        ...eventData,
-        createdBy: request.auth.uid,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      })
-    );
-
+    const uid = request.auth.uid;
+    if (payload.requestId !== undefined && (typeof payload.requestId !== 'string'
+      || !/^[a-f0-9-]{36}$/i.test(payload.requestId))) {
+      throw new HttpsError('invalid-argument', 'El identificador de guardado no es válido.');
+    }
+    const events = adminDb.collection(EVENTS_COLLECTION);
+    const ref = typeof payload.requestId === 'string'
+      ? events.doc(createHash('sha256').update(JSON.stringify([congregationId, uid, payload.requestId])).digest('hex'))
+      : events.doc();
+    try {
+      await adminDb.runTransaction(async (transaction) => {
+        if (payload.requestId && (await transaction.get(ref)).exists) return;
+        const { planning, ...eventData } = parseEventData(payload.eventData);
+        const resolved = await resolvePlanning(transaction, congregationId, planning);
+        await reserveEventShifts(transaction, congregationId, ref.id, [], resolved.schedules);
+        transaction.create(ref, cleanUndefined({
+          congregationId, ...eventData, ...resolved, revision: 1, createdBy: uid,
+          createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+        }));
+      });
+    } catch (error) {
+      // These validation errors occur after the transaction checks the request ID.
+      if (error instanceof HttpsError) {
+        throw new HttpsError(error.code, error.message, { publicationNotCommitted: true });
+      }
+      throw error;
+    }
     return { eventId: ref.id };
   }
 );
 
 export const updateEventByManager = onCall(
   {
-    region: REGION,
+    ...criticalCallableOptions,
     timeoutSeconds: 60,
     memory: '256MiB',
     maxInstances: 3,
@@ -305,42 +450,45 @@ export const updateEventByManager = onCall(
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
     }
 
-    const payload = request.data as EventWritePayload;
+    const payload = (request.data ?? {}) as EventWritePayload;
     const congregationId = parseRequiredString(payload.congregationId, 'congregationId');
     const eventId = parseRequiredString(payload.eventId, 'eventId');
+    if (!isEventId(congregationId)) throw new HttpsError('invalid-argument', 'Identificador de congregación inválido.');
     const requester = await getRequesterProfile(request.auth.uid);
     await assertEventManager({ requester, congregationId });
 
+    if (!isEventId(eventId)) throw new HttpsError('invalid-argument', 'Identificador de evento inválido.');
+    const uid = request.auth.uid;
     const ref = adminDb.collection(EVENTS_COLLECTION).doc(eventId);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      throw new HttpsError('not-found', 'Evento no encontrado.');
-    }
-
-    const existing = snap.data() as Record<string, unknown>;
-    if (existing.congregationId !== congregationId) {
-      throw new HttpsError('permission-denied', 'No tienes permisos para editar este evento.');
-    }
-
-    const eventData = parseEventData(payload.eventData);
-    await ref.set(
-      cleanUndefined({
-        congregationId,
-        ...eventData,
-        createdBy: existing.createdBy,
-        createdAt: existing.createdAt,
-        updatedBy: request.auth.uid,
-        updatedAt: FieldValue.serverTimestamp(),
-      })
-    );
-
+    await adminDb.runTransaction(async (transaction) => {
+      const existing = (await transaction.get(ref)).data();
+      if (!existing) throw new HttpsError('not-found', 'Evento no encontrado.');
+      if (existing.congregationId !== congregationId) {
+        throw new HttpsError('permission-denied', 'No tienes permisos para editar este evento.');
+      }
+      const revision = typeof existing.revision === 'number' ? existing.revision : 0;
+      const expected = payload.expectedRevision;
+      if (expected !== revision && !(expected === undefined && !existing.schedules?.length
+        && !existing.categories?.length && (!existing.audience || existing.audience.kind === 'congregation'))) {
+        throw new HttpsError('aborted', 'Otra persona actualizó el evento. Vuelve a abrirlo antes de guardar.');
+      }
+      const { planning, ...eventData } = parseEventData(payload.eventData);
+      const resolved = await resolvePlanning(transaction, congregationId, planning);
+      const next = cleanUndefined({ ...eventData, ...resolved });
+      if (!hasMaterialChange(existing, next)) return;
+      await reserveEventShifts(transaction, congregationId, eventId, existing.schedules ?? [], resolved.schedules);
+      transaction.set(ref, {
+        ...next, congregationId, createdBy: existing.createdBy, createdAt: existing.createdAt,
+        revision: revision + 1, updatedBy: uid, updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
     return { ok: true };
   }
 );
 
 export const deleteEventByManager = onCall(
   {
-    region: REGION,
+    ...criticalCallableOptions,
     timeoutSeconds: 60,
     memory: '256MiB',
     maxInstances: 3,
@@ -350,24 +498,24 @@ export const deleteEventByManager = onCall(
       throw new HttpsError('unauthenticated', 'Debes iniciar sesion.');
     }
 
-    const payload = request.data as EventWritePayload;
+    const payload = (request.data ?? {}) as EventWritePayload;
     const congregationId = parseRequiredString(payload.congregationId, 'congregationId');
     const eventId = parseRequiredString(payload.eventId, 'eventId');
+    if (!isEventId(congregationId)) throw new HttpsError('invalid-argument', 'Identificador de congregación inválido.');
     const requester = await getRequesterProfile(request.auth.uid);
     await assertEventManager({ requester, congregationId });
 
+    if (!isEventId(eventId)) throw new HttpsError('invalid-argument', 'Identificador de evento inválido.');
     const ref = adminDb.collection(EVENTS_COLLECTION).doc(eventId);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      return { ok: true };
-    }
-
-    const existing = snap.data() as Record<string, unknown>;
-    if (existing.congregationId !== congregationId) {
-      throw new HttpsError('permission-denied', 'No tienes permisos para eliminar este evento.');
-    }
-
-    await ref.delete();
+    await adminDb.runTransaction(async (transaction) => {
+      const existing = (await transaction.get(ref)).data();
+      if (!existing) return;
+      if (existing.congregationId !== congregationId) {
+        throw new HttpsError('permission-denied', 'No tienes permisos para eliminar este evento.');
+      }
+      await reserveEventShifts(transaction, congregationId, eventId, existing.schedules ?? [], []);
+      transaction.delete(ref);
+    });
     return { ok: true };
   }
 );
@@ -439,6 +587,9 @@ export const MATERIAL_EVENT_FIELDS = [
   'superintendentWifeName',
   'startDate',
   'endDate',
+  'categories',
+  'schedules',
+  'audience',
 ] as const;
 
 export const hasMaterialChange = (
@@ -455,7 +606,7 @@ export const hasMaterialChange = (
       return !previous.isEqual(next);
     }
 
-    return previous !== next;
+    return !isDeepStrictEqual(previous, next);
   });
 };
 
@@ -466,17 +617,27 @@ const chunk = <T>(items: readonly T[], size: number): T[][] =>
     return groups;
   }, []);
 
-const getEventNotificationTargets = async (congregationId: string): Promise<string[]> => {
-  const snap = await adminDb
-    .collection('users')
-    .where('congregationId', '==', congregationId)
-    .where('isActive', '==', true)
-    .get();
-
-  return snap.docs
+const getEventNotificationTargets = async (
+  congregationId: string, data: Record<string, unknown>
+): Promise<string[]> => {
+  const audience = data.audience as { kind?: string; memberIds?: unknown[] } | undefined;
+  let profiles;
+  if (audience?.kind && audience.kind !== 'congregation') {
+    const schedules = data.schedules as { people?: { uid?: unknown }[] }[] | undefined;
+    const ids = new Set([
+      ...(audience.memberIds ?? []),
+      ...(schedules ?? []).flatMap((schedule) => (schedule.people ?? []).map((person) => person.uid)),
+    ].filter(isEventId));
+    profiles = (await Promise.all(chunk([...ids], 100).map((group) =>
+      adminDb.getAll(...group.map((id) => adminDb.collection('users').doc(id)))))).flat();
+  } else {
+    profiles = (await adminDb.collection('users')
+      .where('congregationId', '==', congregationId).where('isActive', '==', true).get()).docs;
+  }
+  return profiles
     .filter((docSnap) => {
-      const data = docSnap.data() as Record<string, unknown>;
-      return data.notificationsEnabled !== false && data.eventsNotifications !== false;
+      const data = docSnap.data();
+      return data?.congregationId === congregationId && data.isActive === true && data.notificationsEnabled !== false && data.eventsNotifications !== false;
     })
     .map((docSnap) => docSnap.id);
 };
@@ -489,6 +650,7 @@ const createNotificationDocs = async (params: {
   body: string;
   url: string;
   eventType: EventType;
+  version: Timestamp;
   actorId: string | null;
 }) => {
   if (params.userIds.length === 0) {
@@ -500,41 +662,21 @@ const createNotificationDocs = async (params: {
   const eventNotificationId = `event_${params.eventId}`;
 
   for (const userIdGroup of chunk(params.userIds, PAGE_SIZE)) {
-    const batch = adminDb.batch();
-
-    userIdGroup.forEach((userId) => {
-      const notificationId = `${eventNotificationId}_${userId}`;
-      const payload = {
-        userId,
-        congregationId: params.congregationId,
-        type: 'event',
-        eventId: params.eventId,
-        eventType: params.eventType,
-        title: params.title,
-        body: params.body,
-        isRead: false,
-        createdAt: FieldValue.serverTimestamp(),
-        sentBy: params.actorId,
-        data: {
-          url: params.url,
-        },
-      };
-
-      batch.set(
-        adminDb
-          .collection('congregations')
-          .doc(params.congregationId)
-          .collection(NOTIFICATIONS_COLLECTION)
-          .doc(notificationId),
-        {
-          ...payload,
-          notificationId,
-          userIds: [userId],
-        }
-      );
+    const eventRef = adminDb.collection(EVENTS_COLLECTION).doc(params.eventId);
+    await adminDb.runTransaction(async (transaction) => {
+      const current = await transaction.get(eventRef);
+      if (!current.updateTime?.isEqual(params.version)) return;
+      for (const userId of userIdGroup) {
+        const notificationId = `${eventNotificationId}_${userId}`;
+        const ref = adminDb.collection('congregations').doc(params.congregationId)
+          .collection(NOTIFICATIONS_COLLECTION).doc(notificationId);
+        transaction.set(ref, {
+          userId, congregationId: params.congregationId, type: 'event', eventId: params.eventId, eventType: params.eventType,
+          title: params.title, body: params.body, isRead: false, createdAt: FieldValue.serverTimestamp(),
+          sentBy: params.actorId, data: { url: params.url }, notificationId, userIds: [userId],
+        });
+      }
     });
-
-    await batch.commit();
   }
 };
 
@@ -570,10 +712,11 @@ export const notifyEventChanges = onDocumentWritten(
 
     const eventId = event.params.eventId;
     const after = event.data.after.data() as Record<string, unknown>;
+    const version = event.data.after.updateTime;
     const congregationId = asNonEmptyString(after.congregationId);
     const eventType = isEventType(after.type) ? after.type : null;
 
-    if (!eventId || !congregationId || !eventType) {
+    if (!eventId || !congregationId || !eventType || !version) {
       return;
     }
 
@@ -594,7 +737,7 @@ export const notifyEventChanges = onDocumentWritten(
     }
 
     const message = buildNotificationMessage(eventId, after, isUpdate);
-    const userIds = await getEventNotificationTargets(congregationId);
+    const userIds = await getEventNotificationTargets(congregationId, after);
     const actorId =
       asNonEmptyString(after.updatedBy) ?? asNonEmptyString(after.createdBy);
 
@@ -606,6 +749,7 @@ export const notifyEventChanges = onDocumentWritten(
       body: message.body,
       url: message.url,
       eventType,
+      version,
       actorId,
     });
 
@@ -648,7 +792,6 @@ export const scheduledEventsCleanup = onSchedule(
   async () => {
     const now = Timestamp.now();
     let deletedEvents = 0;
-    let deletedNotifications = 0;
 
     let cursor: QueryDocumentSnapshot | undefined;
     while (true) {
@@ -670,9 +813,15 @@ export const scheduledEventsCleanup = onSchedule(
           continue;
         }
         try {
-          await docSnap.ref.delete({ lastUpdateTime: docSnap.updateTime });
+          const deleted = await adminDb.runTransaction(async (transaction) => {
+            const current = await transaction.get(docSnap.ref);
+            if (!current.updateTime?.isEqual(docSnap.updateTime)) return false;
+            await reserveEventShifts(transaction, congregationId, docSnap.id, data.schedules as EventSchedule[] ?? [], []);
+            transaction.delete(docSnap.ref);
+            return true;
+          });
+          if (!deleted) continue;
           deletedEvents += 1;
-          deletedNotifications += await deleteRelatedNotifications(congregationId, docSnap.id);
         } catch (error) {
           logger.warn('Event cleanup skipped or incomplete', { eventId: docSnap.id, error });
         }
@@ -681,7 +830,6 @@ export const scheduledEventsCleanup = onSchedule(
 
     logger.info('Events cleanup completed', {
       deletedEvents,
-      deletedNotifications,
     });
   }
 );

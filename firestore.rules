@@ -566,19 +566,6 @@ service cloud.firestore {
         && (isAdmin() || hasPermission('usuarios', 'delete') || hasPermission('usuarios', 'manage'));
     }
 
-    function canManageEvents() {
-      return administrativeWritesAllowed(myCongregationId())
-        && (
-          isAdmin()
-          || isGlobalScreenAccess()
-          || hasPermission('avisos', 'manage')
-          || (
-            hasPermission('avisos', 'create')
-            && hasPermission('avisos', 'edit')
-          )
-        );
-    }
-
     function canManagePersons() {
       return administrativeWritesAllowed(myCongregationId())
         && (
@@ -1211,86 +1198,6 @@ service cloud.firestore {
       return isSameUser(userId)
         && isActive()
         && sameKeysOnUpdate(['notificationTokens', 'pushTokenUpdatedAt', 'updatedAt', 'uid']);
-    }
-
-    function isValidEventType(type) {
-      return type in [
-        'conmemoracion',
-        'asamblea_circuito',
-        'asamblea_regional',
-        'visita_superintendente',
-        'reunion_especial',
-        'capacitacion',
-        'reunion_anual_precursores',
-        'reunion_precursores_visita_superintendente',
-        'reunion_ancianos_siervos_ministeriales'
-      ];
-    }
-
-    function validEventData(data) {
-      return hasOnlyKeys(data, [
-          'congregationId',
-          'type',
-          'title',
-          'superintendentName',
-          'superintendentWifeName',
-          'startDate',
-          'endDate',
-          'deleteAt',
-          'location',
-          'color',
-          'createdBy',
-          'updatedBy',
-          'createdAt',
-          'updatedAt'
-        ])
-        && data.congregationId == myCongregationId()
-        && isValidEventType(data.type)
-        && data.startDate is timestamp
-        && data.endDate is timestamp
-        && data.deleteAt is timestamp
-        && data.color is string
-        && data.createdBy is string
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp
-        && (
-          !('updatedBy' in data)
-          || data.updatedBy is string
-        )
-        && (
-          !('location' in data)
-          || data.location is string
-        )
-        && (
-          !('superintendentWifeName' in data)
-          || data.superintendentWifeName is string
-        )
-        && (
-          data.type == 'visita_superintendente'
-          ? (
-            isNonEmptyString(data.superintendentName)
-            && !('title' in data)
-          )
-          : (
-            isNonEmptyString(data.title)
-            && !('superintendentName' in data)
-            && !('superintendentWifeName' in data)
-          )
-        );
-    }
-
-    function validEventCreate() {
-      return canManageEvents()
-        && validEventData(request.resource.data)
-        && request.resource.data.createdBy == currentUid();
-    }
-
-    function validEventUpdate() {
-      return canManageEvents()
-        && resource.data.congregationId == myCongregationId()
-        && validEventData(request.resource.data)
-        && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.createdAt == resource.data.createdAt;
     }
 
     function validExpoPushTokenDoc(userId) {
@@ -2528,10 +2435,8 @@ service cloud.firestore {
       allow get, list: if isActive()
         && resource.data.congregationId == myCongregationId()
         && canAccessCongregationData(resource.data.congregationId);
-      allow create: if validEventCreate();
-      allow update: if validEventUpdate();
-      allow delete: if canManageEvents()
-        && resource.data.congregationId == myCongregationId();
+      // Escrituras exclusivamente por Cloud Functions para validar turnos y alcance.
+      allow create, update, delete: if false;
     }
 
     match /users/{userId} {
@@ -2777,6 +2682,11 @@ service cloud.firestore {
           && validOutgoingTalkData(request.resource.data, congregationId);
 
         allow delete: if false;
+      }
+
+      match /serviceGroups/{groupId} {
+        allow get, list: if canAccessCongregationData(congregationId);
+        allow create, update, delete: if false;
       }
 
       // -----------------------------------------------------------------------

@@ -30,19 +30,6 @@
         && (isAdmin() || hasPermission('usuarios', 'delete') || hasPermission('usuarios', 'manage'));
     }
 
-    function canManageEvents() {
-      return administrativeWritesAllowed(myCongregationId())
-        && (
-          isAdmin()
-          || isGlobalScreenAccess()
-          || hasPermission('avisos', 'manage')
-          || (
-            hasPermission('avisos', 'create')
-            && hasPermission('avisos', 'edit')
-          )
-        );
-    }
-
     function canManagePersons() {
       return administrativeWritesAllowed(myCongregationId())
         && (

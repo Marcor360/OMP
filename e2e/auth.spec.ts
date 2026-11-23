@@ -1,6 +1,6 @@
 import { test as base, expect, type Page } from '@playwright/test';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
@@ -356,4 +356,104 @@ test('retries a saved cleaning plan and shows history and possible duplicates', 
   await page.getByRole('button', { name: 'Historial de cambios' }).click();
   await expect(page.getByText('Apertura · Modificada')).toBeVisible();
   await expect(page.getByText(/Otro editor/)).toBeVisible();
+});
+
+test('restores a private event draft and publishes a complete custom roster', async ({ page, adminScenario, environment }) => {
+  test.setTimeout(60_000);
+  const extraPeople = ['Volunteer One', 'Volunteer Two', 'Volunteer Three', 'Volunteer Four'];
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'users', `person-${adminScenario.uid}`), {
+      displayName: 'Roster Volunteer', congregationId: adminScenario.congregationId, isActive: true, role: 'user',
+    });
+    await Promise.all(extraPeople.map((name, index) => setDoc(doc(db, 'users', `extra-${adminScenario.uid}-${index}`), {
+      displayName: name, congregationId: adminScenario.congregationId, isActive: true, role: 'user',
+    })));
+  });
+  await login(page, adminScenario, 'en');
+  await page.goto('/events/create');
+  await page.getByLabel('Event title').fill('Convention restroom assignment');
+  await page.getByRole('button', { name: 'Assembly', exact: true }).click();
+  await page.getByRole('button', { name: 'Cleaning', exact: true }).click();
+  await page.getByLabel('Location').fill('Main hall');
+  await page.getByRole('button', { name: 'Start date', exact: true }).click();
+  const localDay = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  const dateLabel = new Intl.DateTimeFormat('en-US', { dateStyle: 'full', timeZone: 'UTC' }).format(
+    new Date(`${localDay}T12:00:00Z`),
+  );
+  await page.getByRole('button', { name: dateLabel, exact: true }).click();
+  await page.getByRole('button', { name: 'Add shift roster', exact: true }).click();
+  await page.getByLabel('Roster name').fill('Restrooms');
+  await page.getByLabel('End time (24-hour)').fill('11:00');
+  await page.getByRole('button', { name: 'Apply hours', exact: true }).click();
+  await expect(page.getByText('1. Available place', { exact: true })).toHaveCount(2);
+  await expect(page.getByText('2. Available place', { exact: true })).toHaveCount(2);
+  const addPlace = page.getByRole('button', { name: 'Add place to the 09:00 – 10:00 shift', exact: true });
+  for (let count = 0; count < 4; count += 1) await addPlace.click();
+  await expect(addPlace).toBeDisabled();
+  await expect(page.getByRole('button', { name: /10:00 – 11:00.*0\/2/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Save draft on this device', exact: true }).click();
+  await expect(page).not.toHaveURL(/\/events\/create$/);
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const snapshot = await getDocs(query(collection(context.firestore(), 'events'), where('congregationId', '==', adminScenario.congregationId)));
+    expect(snapshot.size).toBe(0);
+  });
+
+  await page.goto('/events/create');
+  await expect(page.getByText('Draft restored from this device.')).toBeVisible();
+  await expect(page.getByLabel('Event title')).toHaveValue('Convention restroom assignment');
+  await expect(page.getByRole('button', { name: /09:00 – 10:00.*0\/6/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish event', exact: true }).click();
+  await expect(page.getByText('Fill every shift with the required number of distinct people.')).toBeVisible();
+  for (const start of ['09:00', '10:00']) {
+    await page.getByRole('button', { name: new RegExp(`^${start} –`) }).click();
+    await page.getByRole('button', { name: 'E2E Admin', exact: true }).click();
+    await page.getByRole('button', { name: 'Roster Volunteer', exact: true }).click();
+    if (start === '09:00') {
+      for (const name of extraPeople) await page.getByRole('button', { name, exact: true }).click();
+    }
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+  }
+  await page.getByRole('button', { name: 'Publish event', exact: true }).click();
+  await expect(page).not.toHaveURL(/\/events\/create$/, { timeout: 20_000 });
+  let eventId = '';
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const snapshot = await getDocs(query(collection(context.firestore(), 'events'), where('congregationId', '==', adminScenario.congregationId)));
+    expect(snapshot.size).toBe(1);
+    expect(snapshot.docs[0].get('categories')).toEqual(['asamblea', 'limpieza']);
+    expect(snapshot.docs[0].get('schedules')[0].teams.map(({ memberIds }: { memberIds: string[] }) => memberIds.length)).toEqual([6, 2]);
+    eventId = snapshot.docs[0].id;
+  });
+  await page.goto(`/events/${eventId}`);
+  await expect(page.getByText('Restrooms', { exact: true })).toBeVisible();
+  await expect(page.getByText('E2E Admin, Roster Volunteer', { exact: true })).toBeVisible();
+  await expect(page.getByText(`E2E Admin, Roster Volunteer, ${extraPeople.join(', ')}`, { exact: true })).toBeVisible();
+});
+
+test('saves a service group with two leaders and makes it selectable for an event', async ({ page, adminScenario, environment }) => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users', `assistant-${adminScenario.uid}`), {
+      displayName: 'Service Assistant', congregationId: adminScenario.congregationId, isActive: true, role: 'user',
+    });
+  });
+  await login(page, adminScenario, 'en');
+  await page.goto('/events/service-groups');
+  await page.getByRole('button', { name: 'New group', exact: true }).click();
+  await page.getByLabel('Group name').fill('North service group');
+  await page.getByRole('button', { name: 'Select people', exact: true }).nth(0).click();
+  await page.getByRole('button', { name: 'E2E Admin', exact: true }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('button', { name: 'Select people', exact: true }).nth(0).click();
+  await page.getByRole('button', { name: 'Service Assistant', exact: true }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('button', { name: 'Save group', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'North service group · Active', exact: true })).toBeVisible();
+
+  await page.goto('/events/create');
+  await page.getByRole('button', { name: 'Service group', exact: true }).click();
+  const group = page.getByRole('button', { name: 'North service group', exact: true });
+  await group.click();
+  await expect(group).toHaveAttribute('aria-pressed', 'true');
 });

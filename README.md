@@ -53,9 +53,9 @@ El producto administra información por congregación. Toda operación congregac
 | Dato | Valor |
 | --- | --- |
 | Nombre | OMP Suite |
-| Versión en el repositorio | `1.54.5` |
-| Android `versionCode` | `15405` |
-| iOS `buildNumber` | `1.54.5` |
+| Versión en el repositorio | `1.54.6` |
+| Android `versionCode` | `15406` |
+| iOS `buildNumber` | `1.54.6` |
 | Referencia de release EAS | Android `15400` · iOS `1.54.0` |
 | Android package | `com.marcor360.omp` |
 | iOS bundle identifier | `com.marcor360.omp` |
@@ -552,7 +552,7 @@ Perfiles disponibles:
 - `preview`: distribución interna y APK Android;
 - `production`: build de tienda con incremento remoto automático.
 
-`eas.json` usa `appVersionSource: remote`. La referencia local de la versión 1.54.5 es Android `15405` e iOS `1.54.5`; el perfil `production` incrementa el número de build remoto automáticamente. Antes de publicar, confirma el número que EAS asignará.
+`eas.json` usa `appVersionSource: remote`. La referencia local de la versión 1.54.6 es Android `15406` e iOS `1.54.6`; el perfil `production` incrementa el número de build remoto automáticamente. Antes de publicar, confirma el número que EAS asignará.
 
 ### Web
 
@@ -575,16 +575,16 @@ MAJOR.MINOR.PATCH
 - `MINOR`: funciones nuevas compatibles;
 - `PATCH`: correcciones compatibles.
 
-Estado de la versión `1.54.5`:
+Estado de la versión `1.54.6`:
 
 ```text
-package.json:                    1.54.5
-package-lock.json:               1.54.5
-app.json → expo.version:         1.54.5
-app.json → ios.buildNumber:      1.54.5
-app.json → android.versionCode:  15405
-android versionName:             1.54.5
-android versionCode:             15405
+package.json:                    1.54.6
+package-lock.json:               1.54.6
+app.json → expo.version:         1.54.6
+app.json → ios.buildNumber:      1.54.6
+app.json → android.versionCode:  15406
+android versionName:             1.54.6
+android versionCode:             15406
 ```
 
 Los nombres de lanzamiento son opcionales y no reemplazan la versión técnica. Pueden usarse en notas de release con el formato `OMP 1.54.0 — Nombre`.

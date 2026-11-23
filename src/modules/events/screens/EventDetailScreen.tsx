@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { buildEventShifts, EVENT_TIME_ZONE } from '@/functions/src/shared/event-planning';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { EventCard } from '@/src/components/cards/EventCard';
@@ -20,20 +21,20 @@ import { canManageEvents } from '@/src/utils/permissions/permissions';
 export function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { appUser, congregationId, loadingProfile, profileError } = useUser();
+  const { uid, appUser, congregationId, loadingProfile, profileError } = useUser();
   const { formatDate, t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const canManage = canManageEvents(appUser);
+  const canManage = appUser?.isActive && canManageEvents(appUser);
 
-  const requestKey = congregationId && id ? `${congregationId}:${id}` : null;
+  const requestKey = uid && congregationId && id ? JSON.stringify([uid, congregationId, id]) : null;
   const [eventState, setEventState] = useState<{
     requestKey: string | null;
     event: CongregationEvent | null;
     error: string | null;
   }>({ requestKey: null, event: null, error: null });
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (loadingProfile || !congregationId || !id || !requestKey) return;
 
     let active = true;
@@ -57,7 +58,7 @@ export function EventDetailScreen() {
     return () => {
       active = false;
     };
-  }, [congregationId, id, loadingProfile, requestKey, t]);
+  }, [congregationId, id, loadingProfile, requestKey, t]));
 
   const hasCurrentEvent = eventState.requestKey === requestKey;
   const loading = loadingProfile || Boolean(requestKey && !hasCurrentEvent);
@@ -74,7 +75,7 @@ export function EventDetailScreen() {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
-      timeZone: 'America/Mexico_City',
+      timeZone: EVENT_TIME_ZONE,
     });
   const dateRangeLabel = event.startDate.toMillis() === event.endDate.toMillis()
     || formatEventDate(event.startDate.toDate()) === formatEventDate(event.endDate.toDate())
@@ -89,7 +90,7 @@ export function EventDetailScreen() {
         actions={
           canManage ? (
             <TouchableOpacity
-              style={styles.editBtn}
+              accessibilityRole="button" accessibilityLabel={t('events.edit')} style={styles.editBtn}
               onPress={() => router.push(`/(protected)/events/edit/${event.id}` as never)}
             >
               <Ionicons name="pencil-outline" size={18} color={colors.primary} />
@@ -109,6 +110,8 @@ export function EventDetailScreen() {
             value={event.location ?? t('eventDetail.noLocation')}
             colors={colors}
           />
+          {event.audience && <DetailRow icon="people-outline" label={t('events.audience')}
+            value={event.audience.name ?? t(`events.audience.${event.audience.kind}`)} colors={colors} />}
           {event.superintendentName ? (
             <DetailRow
               icon="person-outline"
@@ -126,6 +129,24 @@ export function EventDetailScreen() {
             />
           ) : null}
         </View>
+        {[...event.schedules ?? []].sort((first, second) =>
+          first.date.localeCompare(second.date) || first.startTime.localeCompare(second.startTime)
+        ).map((schedule, index) => {
+          const names = new Map(schedule.people.map((person) => [person.uid, person.name]));
+          return (
+            <View key={`${schedule.date}/${index}`} style={styles.detailCard}>
+              <ThemedText style={styles.detailValue}>{schedule.name}</ThemedText>
+              <ThemedText style={styles.detailLabel}>{formatEventDate(new Date(`${schedule.date}T12:00:00Z`))}</ThemedText>
+              {buildEventShifts(schedule).map((shift, position) => {
+                const members = schedule.teams[position]?.memberIds ?? [];
+                const myShift = uid && members.includes(uid);
+                return <DetailRow key={shift.start} icon={myShift ? 'checkmark-circle-outline' : 'time-outline'}
+                  label={`${shift.start} – ${shift.end}${myShift ? ' · ' + t('events.myShift') : ''}`}
+                  value={members.map((member) => names.get(member) ?? t('events.member')).join(', ')} colors={colors} />;
+              })}
+            </View>
+          );
+        })}
       </ScrollView>
     </ScreenContainer>
   );

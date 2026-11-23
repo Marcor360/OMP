@@ -1,4 +1,5 @@
-import { Timestamp } from 'firebase/firestore';
+import type { EventAudience, EventCategory, EventSchedule, PublishedEventSchedule } from '@/functions/src/shared/event-planning';
+import type { Timestamp } from 'firebase/firestore';
 
 export type CongregationEventType =
   | 'conmemoracion'
@@ -7,12 +8,17 @@ export type CongregationEventType =
   | 'visita_superintendente'
   | 'reunion_especial'
   | 'capacitacion'
+  | 'personalizado'
   | 'reunion_anual_precursores'
   | 'reunion_precursores_visita_superintendente'
   | 'reunion_ancianos_siervos_ministeriales';
 
 export interface CongregationEvent {
   id: string;
+  revision?: number;
+  categories?: EventCategory[];
+  schedules?: PublishedEventSchedule[];
+  audience?: EventAudience & { name?: string };
   congregationId: string;
   type: CongregationEventType;
   title?: string;
@@ -37,6 +43,9 @@ export type CongregationEventFormValues = {
   startDate: string;
   endDate: string;
   location: string;
+  categories?: EventCategory[];
+  schedules?: EventSchedule[];
+  audience?: EventAudience;
 };
 
 export const EVENT_TYPE_LABELS: Record<CongregationEventType, string> = {
@@ -46,6 +55,7 @@ export const EVENT_TYPE_LABELS: Record<CongregationEventType, string> = {
   visita_superintendente: 'Visita del Superintendente de Circuito',
   reunion_especial: 'Reunion Especial',
   capacitacion: 'Capacitacion',
+  personalizado: 'Evento personalizado',
   reunion_anual_precursores: 'Reunion Anual de Precursores',
   reunion_precursores_visita_superintendente: 'Reunion con Precursores - Visita del Superintendente',
   reunion_ancianos_siervos_ministeriales: 'Reunion con Ancianos y Siervos Ministeriales',
@@ -58,6 +68,7 @@ export const EVENT_TYPE_COLORS: Record<CongregationEventType, string> = {
   visita_superintendente: '#16A34A',
   reunion_especial: '#F97316',
   capacitacion: '#0D9488',
+  personalizado: '#7C3AED',
   reunion_anual_precursores: '#6366F1',
   reunion_precursores_visita_superintendente: '#0891B2',
   reunion_ancianos_siervos_ministeriales: '#9333EA',
@@ -74,4 +85,5 @@ export const SINGLE_DAY_EVENT_TYPES: CongregationEventType[] = [
 export const OPTIONAL_END_DATE_EVENT_TYPES: CongregationEventType[] = [
   'reunion_especial',
   'capacitacion',
+  'personalizado',
 ];

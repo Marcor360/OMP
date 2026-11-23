@@ -1,8 +1,8 @@
 /**
  * Fuente UNICA de autorizacion de eventos (avisos).
  * PURO: prohibido importar firebase, firebase-admin o react-native aqui.
- * Espejo de canManageEvents() de src/utils/permissions/permissions.ts:408
- * y de canManageEvents() de firestore.rules:371.
+ * El cliente refleja estos permisos para navegación. Firestore bloquea las
+ * escrituras directas y las funciones vuelven a validar el perfil.
  */
 export type EventsAvisosAction = 'view' | 'create' | 'edit' | 'delete' | 'manage';
 

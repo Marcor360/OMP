@@ -6,10 +6,8 @@
       allow get, list: if isActive()
         && resource.data.congregationId == myCongregationId()
         && canAccessCongregationData(resource.data.congregationId);
-      allow create: if validEventCreate();
-      allow update: if validEventUpdate();
-      allow delete: if canManageEvents()
-        && resource.data.congregationId == myCongregationId();
+      // Escrituras exclusivamente por Cloud Functions para validar turnos y alcance.
+      allow create, update, delete: if false;
     }
 
     match /users/{userId} {

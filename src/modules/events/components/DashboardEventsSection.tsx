@@ -3,6 +3,7 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useI18n } from '@/src/i18n';
 import { EventCard } from '@/src/components/cards/EventCard';
 import { ThemedText } from '@/src/components/themed-text';
 import { deleteEvent } from '@/src/services/events/events-service';
@@ -19,15 +20,6 @@ interface DashboardEventsSectionProps {
   congregationId: string | null;
   onRefresh: () => void;
 }
-
-const confirmDelete = (title: string): Promise<boolean> =>
-  confirmAlert({
-    title: 'Eliminar evento',
-    message: `Deseas eliminar "${title}"?`,
-    confirmLabel: 'Eliminar',
-    cancelLabel: 'Cancelar',
-    destructive: true,
-  });
 
 const eventEditHref = (eventId: string): Href => ({
   pathname: '/(protected)/events/edit/[id]',
@@ -48,12 +40,16 @@ export function DashboardEventsSection({
   onRefresh,
 }: DashboardEventsSectionProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const colors = useAppColors();
   const styles = createStyles(colors);
 
   const handleDelete = async (event: CongregationEvent) => {
-    const title = event.title ?? event.superintendentName ?? 'evento';
-    const confirmed = await confirmDelete(title);
+    const title = event.title ?? event.superintendentName ?? t(`events.type.${event.type}`);
+    const confirmed = await confirmAlert({
+      title: t('events.delete'), message: t('events.deleteConfirm', { title }),
+      confirmLabel: t('events.delete'), cancelLabel: t('events.cancel'), destructive: true,
+    });
 
     if (!confirmed) return;
 
@@ -75,7 +71,7 @@ export function DashboardEventsSection({
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <ThemedText style={styles.sectionTitle}>Eventos</ThemedText>
+        <ThemedText style={styles.sectionTitle}>{t('events.title')}</ThemedText>
         {canManage ? (
           <TouchableOpacity
             style={styles.addButton}
@@ -83,30 +79,30 @@ export function DashboardEventsSection({
             activeOpacity={0.8}
           >
             <Ionicons name="add" size={16} color={colors.onPrimary} />
-            <ThemedText style={styles.addButtonText}>Nuevo</ThemedText>
+            <ThemedText style={styles.addButtonText}>{t('events.new')}</ThemedText>
           </TouchableOpacity>
         ) : null}
       </View>
 
       {loading ? (
-        <ThemedText style={styles.emptyText}>Cargando eventos...</ThemedText>
+        <ThemedText style={styles.emptyText}>{t('events.loading')}</ThemedText>
       ) : error ? (
         <View style={styles.noticeBox}>
           <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
           <ThemedText style={styles.noticeText}>
-            No se pudieron cargar los eventos por ahora.
+            {t('events.eventLoadError')}
           </ThemedText>
           <TouchableOpacity
             style={styles.retryButton}
             onPress={onRefresh}
             activeOpacity={0.8}
           >
-            <ThemedText style={styles.retryText}>Reintentar</ThemedText>
+            <ThemedText style={styles.retryText}>{t('common.retry')}</ThemedText>
           </TouchableOpacity>
         </View>
       ) : events.length === 0 ? (
         <ThemedText style={styles.emptyText}>
-          No hay eventos proximos por el momento.
+          {t('events.noEvents')}
         </ThemedText>
       ) : (
         <View style={styles.list}>

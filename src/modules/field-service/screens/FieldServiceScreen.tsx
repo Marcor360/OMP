@@ -29,6 +29,7 @@ import { isPioneer } from '@/src/types/user';
 import { LoadingState } from '@/src/components/common/LoadingState';
 import { ErrorState } from '@/src/components/common/ErrorState';
 import { EmptyState } from '@/src/components/common/EmptyState';
+import { EventButton } from '@/src/modules/events/components/EventPlanningFields';
 import { PageHeader } from '@/src/components/layout/PageHeader';
 import { useFieldService } from '@/src/modules/field-service/hooks/use-field-service';
 import { FieldServiceCalendar } from '@/src/modules/field-service/components/FieldServiceCalendar';
@@ -216,6 +217,9 @@ export function FieldServiceScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {appUser?.role === 'admin' && appUser.isActive && (
+          <EventButton label={t('events.serviceGroups')} onPress={() => router.push('/(protected)/events/service-groups' as never)} />
+        )}
         {/* ── Aviso de purga automática ── */}
         {purgeExecutedThisSession && (
           <View style={[styles.purgeBanner, { backgroundColor: colors.warning + '20', borderColor: colors.warning + '44' }]}>

@@ -4,13 +4,15 @@ import type {
 } from '@/src/types/event';
 
 export interface EventRepository {
-  listByCongregation(congregationId: string): Promise<CongregationEvent[]>;
+  listByCongregation(congregationId: string, forceServer?: boolean): Promise<CongregationEvent[]>;
   getById(eventId: string): Promise<CongregationEvent | null>;
   create(payload: {
+    requestId?: string;
     congregationId: string;
     eventData: CongregationEventFormValues;
   }): Promise<string>;
   update(payload: {
+    expectedRevision?: number;
     congregationId: string;
     eventId: string;
     eventData: CongregationEventFormValues;

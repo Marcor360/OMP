@@ -64,7 +64,7 @@ const resolveMainText = (event: CongregationEvent, i18n: I18nContextType | undef
     return event.superintendentName ?? (i18n?.t('components.cards.eventSuperintendentDefault') ?? 'Superintendente de Circuito');
   }
 
-  return event.title ?? EVENT_TYPE_LABELS[event.type];
+  return event.title ?? i18n?.t(`events.type.${event.type}`) ?? EVENT_TYPE_LABELS[event.type];
 };
 
 export function EventCard({
@@ -83,13 +83,15 @@ export function EventCard({
       <View style={styles.header}>
         <View style={[styles.badge, { backgroundColor: accent + '20', borderColor: accent + '70' }]}>
           <ThemedText style={[styles.badgeText, { color: accent }]}>
-            {EVENT_TYPE_LABELS[event.type]}
+            {i18n?.t(`events.type.${event.type}`) ?? EVENT_TYPE_LABELS[event.type]}
           </ThemedText>
         </View>
 
         {canManage ? (
           <View style={styles.actions}>
             <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={i18n?.t('events.edit') ?? 'Editar evento'}
               style={styles.iconButton}
               onPress={() => onEdit?.(event)}
               activeOpacity={0.75}
@@ -97,6 +99,8 @@ export function EventCard({
               <Ionicons name="create-outline" size={16} color={colors.textSecondary} />
             </TouchableOpacity>
             <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={i18n?.t('events.delete') ?? 'Eliminar evento'}
               style={[styles.iconButton, styles.deleteButton]}
               onPress={() => onDelete?.(event)}
               activeOpacity={0.75}
@@ -108,6 +112,11 @@ export function EventCard({
       </View>
 
       <ThemedText style={styles.title}>{resolveMainText(event, i18n)}</ThemedText>
+      {!!event.categories?.length && <View style={styles.categories}>
+        {event.categories.map((category) => <View key={category} style={[styles.badge, { borderColor: colors.border }]}>
+          <ThemedText style={styles.metaText}>{i18n?.t(`events.category.${category}`) ?? category}</ThemedText>
+        </View>)}
+      </View>}
       <View style={styles.metaRow}>
         <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
         <ThemedText style={styles.metaText}>{i18n?.t('components.cards.eventDate') ?? 'Fecha:'} {resolveDateLabel(event, i18n)}</ThemedText>
@@ -178,6 +187,7 @@ const createStyles = (colors: AppColorSet) =>
       backgroundColor: colors.error + '12',
       borderColor: colors.error + '45',
     },
+    categories: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
     title: {
       fontSize: 15,
       lineHeight: 20,

@@ -1,3 +1,4 @@
+import { eventDay, isEventDay } from '@/functions/src/shared/event-planning';
 import { firestoreEventRepository } from '@/src/services/repositories/firestore/firestore-event-repository';
 import type { EventRepository } from '@/src/services/repositories/ports/event-repository.port';
 import {
@@ -18,32 +19,7 @@ export const __resetEventRepositoryForTests = (): void => {
   eventRepository = firestoreEventRepository;
 };
 
-const MEXICO_CITY_OFFSET = '-06:00';
-
-const isValidDateInput = (value: string): boolean =>
-  /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
-
-const toMexicoCityDate = (value: string): Date => {
-  const trimmed = value.trim();
-  if (!isValidDateInput(trimmed)) {
-    throw new Error('Usa el formato YYYY-MM-DD.');
-  }
-
-  return new Date(`${trimmed}T00:00:00${MEXICO_CITY_OFFSET}`);
-};
-
-const toDateInput = (value: { toDate(): Date }): string => {
-  const date = value.toDate();
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Mexico_City',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  return formatter.format(date);
-};
-
-const normalizeEndDateInput = (
+export const normalizeEventEndDate = (
   type: CongregationEventType,
   startDate: string,
   endDate: string
@@ -66,9 +42,12 @@ export const eventToFormValues = (
   title: event?.title ?? '',
   superintendentName: event?.superintendentName ?? '',
   superintendentWifeName: event?.superintendentWifeName ?? '',
-  startDate: event ? toDateInput(event.startDate) : '',
-  endDate: event ? toDateInput(event.endDate) : '',
+  startDate: event ? eventDay(event.startDate.toDate()) : '',
+  endDate: event ? eventDay(event.endDate.toDate()) : '',
   location: event?.location ?? '',
+  categories: event?.categories ?? [],
+  schedules: event?.schedules?.map(({ people: _people, ...schedule }) => schedule) ?? [],
+  audience: event?.audience?.groupId ? { kind: event.audience.kind, groupId: event.audience.groupId } : { kind: 'congregation' },
 });
 
 export const validateEventForm = (
@@ -76,17 +55,17 @@ export const validateEventForm = (
 ): string[] => {
   const errors: string[] = [];
   const startDateInput = values.startDate.trim();
-  const endDateInput = normalizeEndDateInput(
+  const endDateInput = normalizeEventEndDate(
     values.type,
     startDateInput,
     values.endDate.trim()
   );
 
-  if (!isValidDateInput(startDateInput)) {
+  if (!isEventDay(startDateInput)) {
     errors.push('La fecha inicial es requerida en formato YYYY-MM-DD.');
   }
 
-  if (!isValidDateInput(endDateInput)) {
+  if (!isEventDay(endDateInput)) {
     errors.push('La fecha final es requerida en formato YYYY-MM-DD.');
   }
 
@@ -98,23 +77,19 @@ export const validateEventForm = (
     errors.push('El titulo del evento es requerido.');
   }
 
-  if (errors.length === 0) {
-    const start = toMexicoCityDate(startDateInput);
-    const end = toMexicoCityDate(endDateInput);
-
-    if (end.getTime() < start.getTime()) {
-      errors.push('La fecha final no puede ser menor que la fecha inicial.');
-    }
+  if (errors.length === 0 && endDateInput < startDateInput) {
+    errors.push('La fecha final no puede ser menor que la fecha inicial.');
   }
 
   return errors;
 };
 
 export const getActiveEvents = async (
-  congregationId: string
+  congregationId: string,
+  forceServer = false
 ): Promise<CongregationEvent[]> => {
   const nowMs = Date.now();
-  const events = await eventRepository.listByCongregation(congregationId);
+  const events = await eventRepository.listByCongregation(congregationId, forceServer);
 
   return events
     .filter((event) => event.deleteAt.toMillis() > nowMs)
@@ -132,6 +107,7 @@ export const getEventById = async (
 };
 
 export const createEvent = async (params: {
+  requestId?: string;
   values: CongregationEventFormValues;
   congregationId: string;
   uid: string;
@@ -142,12 +118,14 @@ export const createEvent = async (params: {
   }
 
   return eventRepository.create({
+    ...(params.requestId ? { requestId: params.requestId } : {}),
     congregationId: params.congregationId,
     eventData: params.values,
   });
 };
 
 export const updateEvent = async (params: {
+  expectedRevision?: number;
   eventId: string;
   values: CongregationEventFormValues;
   congregationId: string;
@@ -159,6 +137,7 @@ export const updateEvent = async (params: {
   }
 
   await eventRepository.update({
+    ...(params.expectedRevision !== undefined ? { expectedRevision: params.expectedRevision } : {}),
     congregationId: params.congregationId,
     eventId: params.eventId,
     eventData: params.values,

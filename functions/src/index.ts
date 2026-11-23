@@ -63,6 +63,7 @@ export {
 
 export {
   createEventByManager,
+  listEventPlanningPeople,
   updateEventByManager,
   deleteEventByManager,
   notifyEventChanges,
@@ -128,3 +129,5 @@ export {
   reconcileOrgChartOnUserWrite,
   regenerateOrgChart,
 } from './organization/triggers.js';
+
+export { saveServiceGroupByAdmin } from "./event-groups.js";
