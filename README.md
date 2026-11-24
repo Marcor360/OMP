@@ -1,205 +1,78 @@
 <div align="center">
 
+<img src="assets/images/icon.png" width="112" height="112" alt="Icono de OMP Suite" />
+
 # OMP Suite
 
-### Organization, Ministry & Programs
+**Organization, Ministry & Programs**
 
-Aplicación multiplataforma para la organización interna, administración y coordinación operativa de congregaciones.
+### Organización congregacional clara, segura y ordenada.
 
-`Web` · `Android` · `iOS` · `Expo` · `React Native` · `Firebase` · `Stripe`
+Reuniones, asignaciones, limpieza, predicación y comunicación interna en un mismo espacio de trabajo.
 
-**Versión actual:** `1.54.0`
+[Acceder a OMP](https://ompsuite.com/) · [Conocer las funciones](#qué-puedes-hacer-con-omp) · [Galería de interfaz](docs/screenshots/README.md) · [Documentación técnica](#documentación)
 
-**Estado:** beta avanzada en estabilización
-
-**Última actualización:** 27 de septiembre de 2026
+![Versión del código](https://img.shields.io/badge/versión-1.54.1-2563EB)
+![Estado](https://img.shields.io/badge/estado-beta%20avanzada-475569)
+![Plataformas](https://img.shields.io/badge/plataformas-Web%20%7C%20Android%20%7C%20iOS-0F172A)
 
 </div>
 
 > [!IMPORTANT]
-> OMP Suite es una herramienta tecnológica independiente. No es una aplicación oficial de JW.ORG ni está afiliada, respaldada, patrocinada o aprobada por ninguna entidad oficial de los Testigos de Jehová.
+> OMP Suite es un proyecto tecnológico independiente para uso interno congregacional. No es una aplicación oficial de JW.ORG ni está afiliada, respaldada, patrocinada o aprobada por ninguna entidad oficial de los Testigos de Jehová. El acceso a la aplicación requiere una cuenta autorizada.
 
-## Contenido
+## Qué puedes hacer con OMP
 
-- [Descripción](#descripción)
-- [Estado actual](#estado-actual)
-- [Funciones principales](#funciones-principales)
-- [Stack tecnológico](#stack-tecnológico)
-- [Arquitectura y seguridad](#arquitectura-y-seguridad)
-- [Modelo de datos](#modelo-de-datos)
-- [Planes y facturación](#planes-y-facturación)
-- [Internacionalización](#internacionalización)
-- [Estructura del repositorio](#estructura-del-repositorio)
-- [Instalación](#instalación)
-- [Variables y secretos](#variables-y-secretos)
-- [Comandos](#comandos)
-- [Pruebas e integración continua](#pruebas-e-integración-continua)
-- [Builds y despliegues](#builds-y-despliegues)
-- [Versionado](#versionado)
-- [Notificaciones](#notificaciones)
-- [Cache y costos de Firestore](#cache-y-costos-de-firestore)
-- [Estado de producción](#estado-de-producción)
-- [Documentación](#documentación)
-- [Licencia y uso](#licencia-y-uso)
+OMP reúne información que de otro modo queda dispersa entre documentos y mensajes. Cada cuenta ve las herramientas correspondientes a sus responsabilidades; los datos se organizan por congregación.
 
-## Descripción
+| Tu necesidad | Herramientas de OMP |
+| --- | --- |
+| Organizar reuniones | Calendario, borradores, publicación y consulta de próximas reuniones. |
+| Coordinar asignaciones | Responsabilidades por reunión o independientes; filtros, hospitalidad, micrófonos, lectores y salidas a discursar. |
+| Planificar limpieza | Grupos estándar o familiares, programas de limpieza y próximas responsabilidades personales. |
+| Consultar predicación | Informes mensuales, seguimiento según permisos y administración de territorios. El contador personal es local. |
+| Mantener la coordinación | Dashboard, eventos, avisos, notificaciones y organigrama. |
+| Administrar el acceso | Usuarios, roles, privilegios, departamentos y límites de cuentas activas por congregación. |
 
-OMP centraliza tareas que normalmente quedan repartidas entre documentos, mensajes y herramientas aisladas. La aplicación comparte una base de código entre Web, Android e iOS y usa Firebase como plataforma de identidad, datos y backend privilegiado.
+## Experiencia de usuario
 
-El producto administra información por congregación. Toda operación congregacional debe quedar aislada mediante `congregationId`; no se permiten consultas globales salvo flujos superadministrativos explícitos y protegidos.
+| Para quienes consultan | Para quienes coordinan |
+| --- | --- |
+| Consulta tus próximas asignaciones y responsabilidades. | Organiza reuniones y publica la planificación. |
+| Accede a la información autorizada desde tu dispositivo. | Revisa pendientes y administra los módulos a tu cargo. |
+| Utiliza el tema y el idioma que prefieras. | Gestiona usuarios y permisos según tu rol y departamento. |
 
-## Estado actual
+La interfaz comparte una base de código entre web, Android e iOS, con navegación adaptada al tamaño de pantalla, temas claro y oscuro y contenido en varios idiomas.
+
+### Galería del sistema
+
+La [guía de capturas](docs/screenshots/README.md) describe cómo obtener imágenes de la aplicación real con datos ficticios, mediante Playwright y los emuladores locales de Firebase. No se utilizan diseños generados por IA ni información de congregaciones reales. Las imágenes solo se incorporan después de comprobar que la captura es correcta.
+
+Consulta la ejecución de [GitHub Actions](https://github.com/Marcor360/OMP/actions) para encontrar los artefactos de la galería cuando estén disponibles. Las capturas web con viewport móvil no equivalen a capturas nativas de Android o iOS.
+
+## Estado del proyecto
 
 | Dato | Valor |
 | --- | --- |
-| Nombre | OMP Suite |
-| Versión pública | `1.54.0` |
-| Android `versionCode` | `15400` |
-| iOS `buildNumber` | `1.54.0` |
-| Referencia de release EAS | Android `15400` · iOS `1.54.0` |
-| Android package | `com.marcor360.omp` |
-| iOS bundle identifier | `com.marcor360.omp` |
+| Versión en los manifiestos del repositorio | `1.54.1` |
+| Android versionCode | `15401` |
+| iOS buildNumber | `1.54.1` |
 | Plataformas | Web, Android e iOS |
-| Estado | Beta avanzada |
+| Fase | Beta avanzada en estabilización |
 | Cliente | Expo / React Native |
 | Backend | Firebase Cloud Functions |
-| Base de datos | Cloud Firestore |
-| Autenticación | Firebase Authentication |
-| Pagos | Stripe Billing |
-| CI | GitHub Actions |
+| Datos y autenticación | Cloud Firestore / Firebase Authentication |
+| Facturación | Integración Stripe Billing |
 
-La versión visible proviene de `app.json → expo.version`. `package.json`, `package-lock.json`, `app.json` y la configuración nativa Android deben actualizarse juntos en cada release. EAS usa números remotos para builds de tienda.
+La versión del código no certifica qué versión está publicada en Google Play, App Store o el hosting web. Los números remotos de EAS se comprueban por separado. Los manifiestos y los números de build deben mantenerse sincronizados en cada release.
 
-### Cambios recientes
+### Última auditoría técnica documentada
 
-### Novedades de la versión 1.54.0
+El [informe del 18 de noviembre de 2026](docs/auditoria-tecnica-2026-11-18.md) registra correcciones de concurrencia en la creación de reuniones y deduplicación de solicitudes de caché, con pruebas locales. Persisten comprobaciones de edición concurrente, reglas, dispositivos físicos, despliegue y actualización web. No se afirma que esos resultados estén desplegados en producción.
 
-- se endureció la validación de redirecciones hacia rutas internas protegidas;
-- se retiró un efecto de inicio sin acciones;
-- se hizo explícito que la lectura de usuarios es de una sola consulta;
-- se sincronizaron los metadatos de versión para Android, iOS y el proyecto.
+## Contenido técnico
 
-### Novedades de la versión 1.50.0
-
-Esta versión consolida las mejoras entregadas desde `1.45.0` y actualiza los
-manifiestos Web, Android e iOS al mismo release público.
-
-#### Web
-
-- la sesión web por inactividad usa una única fuente de tiempo fuera del render,
-  evitando trabajo impuro durante la compilación de React;
-- la configuración de Firebase se valida al arrancar, con diagnóstico claro de
-  variables públicas faltantes durante builds y despliegues web;
-- los anuncios, notificaciones y datos de congregación se asocian al usuario y
-  congregación actuales, impidiendo que una respuesta previa se muestre al
-  cambiar de sesión o pestaña.
-
-#### Aplicación móvil y experiencia compartida
-
-- los detalles de reuniones, eventos y asignaciones cancelan solicitudes que
-  dejan de ser vigentes y muestran únicamente datos del contexto actual;
-- los formularios de usuarios normalizan rol, cargo y departamento al momento
-  de la interacción, evitando estados intermedios inválidos y puestos duplicados;
-- el contador de predicación mantiene el usuario hidratado como estado visible,
-  para no revelar datos locales del usuario anterior en dispositivos compartidos;
-- territorios, grupos de predicación, planes y dominios de correo usan estados
-  con clave de congregación para aislar resultados asíncronos;
-- la lectura de anuncios, notificaciones no leídas y permisos iniciales evita
-  suscripciones duplicadas y limpia suscripciones al desmontar.
-
-#### Seguridad, reglas y backend
-
-- las reglas Firestore validan primero la estructura de asignaciones, territorios,
-  grupos y programaciones antes de ejecutar comprobaciones administrativas más
-  costosas; los permisos efectivos no cambian;
-- la actualización de lectura de notificaciones valida primero los campos que
-  puede cambiar el destinatario;
-- las pruebas de reglas usan el proyecto local único `demo-omp`, cierran el
-  emulador de forma confiable y cubren 74 casos de autorización;
-- se modernizaron tipos de autorización del backend y se limpiaron directivas
-  ESLint obsoletas en scripts de mantenimiento.
-
-#### Calidad y refactorización
-
-- el lint principal y global quedan sin advertencias;
-- se corrigieron dependencias de memoización y accesos a refs durante render;
-- los módulos asíncronos aplican cancelación y estados con clave de solicitud
-  para reducir renders redundantes y condiciones de carrera;
-- se mantienen 46 suites de pruebas de aplicación, 33 de Cloud Functions y 8
-  de reglas Firestore como validación de regresión.
-
-- actualización compatible a Expo SDK 57, React Native 0.86 y Firebase Web SDK 12.19;
-- validación de Expo restaurada: `expo install --check` y Expo Doctor completan correctamente, excluyendo solo cuatro parches SDK 57 que todavía no están publicados en npm;
-- reconciliación diaria de permisos derivados paginada para no leer todos los usuarios de una sola vez;
-- operaciones administrativas de contraseña informan el resultado parcial cuando Auth se actualiza pero falla la metadata de Firestore;
-- App Check para callables críticos se controla centralmente con `ENFORCE_APPCHECK_CRITICAL_CALLABLES`; permanece desactivado mientras se implementa la atestación nativa real;
-- Functions desplegadas en `ormeprassig-public` después de validar lint, compilación y pruebas.
-
-## Funciones principales
-
-### Usuarios y congregaciones
-
-- inicio de sesión y rutas protegidas;
-- perfiles, estados y pertenencia a congregación;
-- creación, actualización, desactivación y eliminación mediante Cloud Functions;
-- roles técnicos `admin`, `supervisor` y `user`;
-- privilegios organizativos separados de los roles técnicos;
-- permisos por departamento y responsabilidad;
-- límites de usuarios activos según el plan contratado.
-
-### Reuniones y asignaciones
-
-- reuniones entre semana, de fin de semana y otros eventos;
-- borradores, publicación y administración protegida;
-- asignaciones vinculadas a reuniones o independientes;
-- filtros por fecha, categoría, subtipo, persona, estado y congregación;
-- discursos externos, estados y detección de conflictos;
-- sincronización de responsabilidades relacionadas.
-
-### Limpieza
-
-- grupos estándar o familiares;
-- integrantes válidos de la misma congregación;
-- alta, edición, desactivación y eliminación controladas;
-- programa de limpieza por rango de reuniones;
-- borradores, publicación y sincronización;
-- tarjeta de próximas responsabilidades personales;
-- cache local de datos consultados con frecuencia.
-
-### Hospitalidad, micrófonos y lectores
-
-- planificación por reunión;
-- roles de acomodación, micrófonos, lectores y responsabilidades relacionadas;
-- publicación y sustituciones autorizadas;
-- prevención de duplicados y conflictos;
-- sincronización con reuniones.
-
-### Predicación y territorios
-
-- informes mensuales según permisos;
-- horas para usuarios compatibles con el flujo de pioneros;
-- panel administrativo de enviados, faltantes, horas, estudios y cursos;
-- contador personal local, separado de los informes remotos;
-- catálogo, edición y asignación de territorios;
-- recordatorios y mantenimiento programado.
-
-### Dashboard, eventos y organización
-
-- resumen por congregación;
-- próximas reuniones y asignaciones pendientes;
-- eventos y avisos;
-- organigrama generado desde asignaciones de servicio;
-- navegación y tarjetas condicionadas por permisos;
-- anuncios internos del sistema.
-
-### Configuración y seguridad local
-
-- tema claro, oscuro o del sistema;
-- selección de idioma;
-- perfil y datos de la aplicación;
-- bloqueo por inactividad;
-- autenticación biométrica cuando el dispositivo la soporta;
-- cierre de sesión y limpieza de estado local sensible.
+[Stack tecnológico](#stack-tecnológico) · [Arquitectura y seguridad](#arquitectura-y-seguridad) · [Modelo de datos](#modelo-de-datos) · [Planes y facturación](#planes-y-facturación) · [Internacionalización](#internacionalización) · [Instalación](#instalación) · [Comandos](#comandos) · [Pruebas](#pruebas-e-integración-continua) · [Estado de producción](#estado-de-producción) · [Documentación](#documentación)
 
 ## Stack tecnológico
 
@@ -278,7 +151,7 @@ Authentication / Firestore / Stripe / Push
 
 ### App Check
 
-Los callables críticos comparten una bandera de backend `ENFORCE_APPCHECK_CRITICAL_CALLABLES`, desplegada actualmente como `false`. No debe activarse hasta completar el bridge Expo de atestación nativa y la verificación de backend; el detalle está en [app-check-native-implementation.md](docs/app-check-native-implementation.md).
+Los callables críticos comparten una bandera de backend `ENFORCE_APPCHECK_CRITICAL_CALLABLES`, documentada con valor `false` en el último estado conocido. No debe activarse hasta completar el bridge Expo de atestación nativa y la verificación de backend; el detalle está en [app-check-native-implementation.md](docs/app-check-native-implementation.md).
 
 ## Modelo de datos
 
@@ -451,7 +324,6 @@ Configúralos con Firebase Secrets. Nunca confirmes `.env`, keystores, certifica
 | `npm run android` | Ejecuta Android nativo |
 | `npm run android:release` | Ejecuta variante release Android |
 | `npm run ios` | Ejecuta iOS nativo |
-| `npm run web` | Inicia Web en desarrollo |
 | `npm run build:web` | Exporta Web a `dist/` y copia `.htaccess` |
 | `npm run preview:web` | Sirve `dist/` como SPA |
 | `npm run lint` | Ejecuta ESLint |
@@ -507,7 +379,7 @@ npm run build:web
 7. pruebas de Functions;
 8. Expo Doctor.
 
-GitHub Actions define tres trabajos:
+GitHub Actions valida el código mediante trabajos de CI:
 
 - aplicación: instalación, lint, typecheck, pruebas, Expo Doctor y build web;
 - Functions: instalación, lint, build y pruebas;
@@ -638,6 +510,8 @@ La aplicación está en beta avanzada. El código contiene flujos productivos, p
 
 ### Riesgos y trabajo pendiente
 
+Consulta también la [auditoría técnica del 18 de noviembre de 2026](docs/auditoria-tecnica-2026-11-18.md) para distinguir las correcciones comprobadas localmente de las verificaciones pendientes en producción.
+
 - QA físico completo de push en Android e iOS;
 - validación end-to-end de billing en cada ambiente;
 - App Check nativo;
@@ -651,6 +525,8 @@ La aplicación está en beta avanzada. El código contiene flujos productivos, p
 
 | Documento | Tema |
 | --- | --- |
+| [Galería de interfaz](docs/screenshots/README.md) | Capturas reproducibles del sistema web |
+| [Auditoría técnica](docs/auditoria-tecnica-2026-11-18.md) | Hallazgos, correcciones y riesgos pendientes |
 | [architecture.md](docs/architecture.md) | Arquitectura general |
 | [permissions-model.md](docs/permissions-model.md) | Modelo de permisos |
 | [permissions-matrix.md](docs/permissions-matrix.md) | Matriz de acceso |
