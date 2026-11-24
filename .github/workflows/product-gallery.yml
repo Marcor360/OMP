@@ -1,0 +1,48 @@
+name: Product gallery
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'src/**'
+      - 'assets/**'
+      - 'e2e/gallery.*'
+      - 'docs/screenshots/**'
+      - 'firestore.rules'
+      - 'package-lock.json'
+      - '.github/workflows/product-gallery.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run check:rules
+      - name: Capture real web screens against local emulators
+        run: npx firebase emulators:exec --only auth,firestore --project demo-omp "npx playwright test -c e2e/gallery.config.ts"
+      - name: Verify capture inventory
+        run: |
+          test "$(find tmp/omp-gallery -maxdepth 1 -name '*.png' | wc -l)" -eq 5
+          for f in tmp/omp-gallery/*.png; do test -s "$f"; done
+      - name: Upload approved-for-review candidate images
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: omp-product-gallery
+          path: tmp/omp-gallery/*.png
+          if-no-files-found: error
+          retention-days: 14

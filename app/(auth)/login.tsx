@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   StyleSheet,
+  Image,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
@@ -99,6 +100,8 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
         >
           <ThemedView style={styles.content}>
+            <Image source={require('@/assets/images/icon.png')} style={styles.brandIcon} resizeMode="contain" accessible={false} />
+            <ThemedText style={styles.brandName}>OMP Suite</ThemedText>
             <ThemedText type="title" style={styles.title}>
               {t('auth.login.title')}
             </ThemedText>
@@ -118,6 +121,8 @@ export default function LoginScreen() {
                 <TextInput
                   style={[styles.input, errors.email && styles.inputError]}
                   placeholder="tu@email.com"
+                  accessibilityLabel={t('auth.login.email')}
+                  autoComplete="email"
                   placeholderTextColor={colors.textDisabled}
                   value={email}
                   onChangeText={handleEmailChange}
@@ -140,6 +145,8 @@ export default function LoginScreen() {
                   <TextInput
                     style={styles.passwordInput}
                     placeholder="********"
+                    accessibilityLabel={t('auth.login.password')}
+                    autoComplete="current-password"
                     placeholderTextColor={colors.textDisabled}
                     value={password}
                     onChangeText={handlePasswordChange}
@@ -154,6 +161,7 @@ export default function LoginScreen() {
                     style={styles.eyeButton}
                     onPress={() => setShowPassword((prev) => !prev)}
                     activeOpacity={0.7}
+                    accessibilityRole="button"
                     accessibilityLabel={showPassword ? t('auth.password.hide') : t('auth.password.show')}
                   >
                     <Ionicons
@@ -206,8 +214,25 @@ const createStyles = (colors: AppColors) =>
       justifyContent: 'center',
     },
     content: {
+      width: '100%',
+      maxWidth: 440,
+      alignSelf: 'center',
       padding: 24,
       paddingBottom: 36,
+    },
+    brandIcon: {
+      width: 72,
+      height: 72,
+      borderRadius: 16,
+      alignSelf: 'center',
+      marginBottom: 12,
+    },
+    brandName: {
+      textAlign: 'center',
+      fontSize: 16,
+      fontWeight: '700',
+      marginBottom: 16,
+      color: colors.primary,
     },
     title: {
       fontSize: 32,
@@ -256,6 +281,8 @@ const createStyles = (colors: AppColors) =>
       borderWidth: 0,
     },
     eyeButton: {
+      minWidth: 44,
+      minHeight: 44,
       paddingHorizontal: 12,
       justifyContent: 'center',
       alignItems: 'center',
