@@ -1364,6 +1364,7 @@ export const en = {
   'events.groupValidation': "Enter a name and select two different leaders.",
   'events.groupSave': "Save group",
   'events.noEvents': "There are no upcoming events.",
+  'events.eventRefreshError': "Events could not be refreshed. Showing the last loaded list.",
   'events.eventLoadError': "Events could not be loaded.",
   'events.delete': "Delete event",
   'events.deleteConfirm': "Delete “{title}”?",

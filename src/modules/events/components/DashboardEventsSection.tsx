@@ -90,9 +90,10 @@ export function DashboardEventsSection({
         <View style={styles.noticeBox}>
           <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
           <ThemedText style={styles.noticeText}>
-            {t('events.eventLoadError')}
+            {t(events.length ? 'events.eventRefreshError' : 'events.eventLoadError')}
           </ThemedText>
           <TouchableOpacity
+            accessibilityRole="button"
             style={styles.retryButton}
             onPress={onRefresh}
             activeOpacity={0.8}
@@ -100,11 +101,15 @@ export function DashboardEventsSection({
             <ThemedText style={styles.retryText}>{t('common.retry')}</ThemedText>
           </TouchableOpacity>
         </View>
-      ) : events.length === 0 ? (
+      ) : null}
+
+      {!loading && !error && events.length === 0 ? (
         <ThemedText style={styles.emptyText}>
           {t('events.noEvents')}
         </ThemedText>
-      ) : (
+      ) : null}
+
+      {events.length > 0 && (
         <View style={styles.list}>
           {events.map((event) => (
             <TouchableOpacity

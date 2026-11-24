@@ -1364,6 +1364,7 @@ export const es = {
   'events.groupValidation': "Escribe un nombre y selecciona dos responsables distintos.",
   'events.groupSave': "Guardar grupo",
   'events.noEvents': "No hay eventos próximos.",
+  'events.eventRefreshError': "No se pudieron actualizar los eventos. Se muestra la última lista cargada.",
   'events.eventLoadError': "No se pudieron cargar los eventos.",
   'events.delete': "Eliminar evento",
   'events.deleteConfirm': "¿Quieres eliminar «{title}»?",

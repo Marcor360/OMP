@@ -17,7 +17,14 @@ export const useEvents = (congregationId: string | null, uid: string | null) => 
       const events = await getActiveEvents(congregationId, forceServer);
       if (sequenceId === sequence.current) setState({ scope, events, error: null, loading: false });
     } catch (error) {
-      if (sequenceId === sequence.current) setState({ scope, events: [], error: formatFirestoreError(error), loading: false });
+      if (sequenceId === sequence.current) {
+        setState((current) => ({
+          scope,
+          events: current?.scope === scope ? current.events : [],
+          error: formatFirestoreError(error),
+          loading: false,
+        }));
+      }
     }
   }, [congregationId, scope]);
 
