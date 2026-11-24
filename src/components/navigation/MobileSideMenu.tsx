@@ -67,7 +67,7 @@ export function MobileSideMenu({ visibleTabs }: MobileSideMenuProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [isOpen, setIsOpen] = useState(false);
-  const drawerWidth = Math.round(width * 0.5);
+  const drawerWidth = Math.min(320, Math.round(width * 0.82));
   const [slideX] = useState(() => new Animated.Value(-drawerWidth));
   const styles = useMemo(
     () => createStyles(colors, insets.top, insets.bottom, drawerWidth),
